@@ -143,9 +143,13 @@ interface LineItem {
   unidades_por_presentacion: number;
   stock: number;
   es_combo?: boolean;
+  comboItems?: { nombre: string; cantidad: number }[];
 }
 
-function ReceiptPrintView({ sale, config }: {
+function ReceiptPrintView({
+  sale,
+  config,
+}: {
   sale: {
     numero: string; total: number; subtotal: number; descuento: number; recargo: number;
     transferSurcharge: number; tipoComprobante: string; formaPago: string;
@@ -159,9 +163,22 @@ function ReceiptPrintView({ sale, config }: {
     new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
 
   return (
-    <div style={{ width: "210mm", minHeight: "297mm", padding: "8mm 10mm", fontFamily: "Arial, Helvetica, sans-serif", fontSize: `${fs}px`, color: "#000", background: "#fff", display: "flex", flexDirection: "column" }}>
-      {/* Header */}
+    <div
+      style={{
+        width: "210mm",
+        minHeight: "297mm",
+        padding: "8mm 10mm",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: `${fs}px`,
+        color: "#000",
+        background: "#fff",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* ── Header ── */}
       <div style={{ display: "flex", borderBottom: "2px solid #000", paddingBottom: "6px", marginBottom: "4px" }}>
+        {/* Left: Logo & company */}
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
             {config.mostrarLogo && config.logoUrl && (
@@ -177,13 +194,21 @@ function ReceiptPrintView({ sale, config }: {
             <div>{config.empresaDomicilio} | Tel: {config.empresaTelefono}</div>
           </div>
         </div>
+
+        {/* Center: X */}
         <div style={{ width: "55px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", borderLeft: "2px solid #000", borderRight: "2px solid #000", padding: "0 8px" }}>
           <div style={{ fontSize: "30px", fontWeight: "bold", lineHeight: 1 }}>X</div>
           <div style={{ fontSize: "8px", textAlign: "center", lineHeight: "1.2", marginTop: "2px" }}>Documento no válido como factura</div>
         </div>
+
+        {/* Right: Number & fiscal data */}
         <div style={{ flex: 1, paddingLeft: "10px" }}>
-          <div style={{ fontSize: `${fs + 4}px`, fontWeight: "bold", marginBottom: "4px" }}>{sale.tipoComprobante}</div>
-          <div style={{ fontSize: `${fs + 2}px`, fontWeight: "bold", marginBottom: "4px" }}>N° {sale.numero}</div>
+          <div style={{ fontSize: `${fs + 4}px`, fontWeight: "bold", marginBottom: "4px" }}>
+            {sale.tipoComprobante}
+          </div>
+          <div style={{ fontSize: `${fs + 2}px`, fontWeight: "bold", marginBottom: "4px" }}>
+            N° {sale.numero}
+          </div>
           <div style={{ fontSize: `${fs - 2}px`, lineHeight: "1.6" }}>
             <div>Fecha: {sale.fecha}</div>
             <div>CUIT: {config.empresaCuit}</div>
@@ -193,7 +218,8 @@ function ReceiptPrintView({ sale, config }: {
           </div>
         </div>
       </div>
-      {/* Client */}
+
+      {/* ── Client info ── */}
       <div style={{ border: "1px solid #ccc", padding: "4px 6px", marginBottom: "4px", fontSize: `${fs - 1}px`, lineHeight: "1.7" }}>
         <div style={{ display: "flex", gap: "20px" }}>
           <div style={{ flex: 1 }}><span>Cliente: {sale.cliente}</span></div>
@@ -203,7 +229,8 @@ function ReceiptPrintView({ sale, config }: {
           <div><span>Vendedor: {sale.vendedor}</span></div>
         )}
       </div>
-      {/* Items */}
+
+      {/* ── Items table ── */}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fs - 1}px`, flex: 1 }}>
         <thead>
           <tr style={{ borderBottom: "1px solid #000", borderTop: "1px solid #000" }}>
@@ -211,43 +238,103 @@ function ReceiptPrintView({ sale, config }: {
             <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Producto</th>
             <th style={{ textAlign: "center", padding: "4px 4px", fontWeight: "bold" }}>U/Med</th>
             <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Precio Un.</th>
-            {config.mostrarDescuento && <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Desc.%</th>}
+            {config.mostrarDescuento && (
+              <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Desc.%</th>
+            )}
             <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Importe</th>
           </tr>
         </thead>
         <tbody>
-          {sale.items.map((item, i) => (
-            <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.qty}</td>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.description}</td>
-              <td style={{ padding: "3px 4px", textAlign: "center" }}>{item.unit || "Un"}</td>
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(item.price)}</td>
-              {config.mostrarDescuento && <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.discount || 0}</td>}
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
-            </tr>
-          ))}
-          {sale.items.length < 20 && Array.from({ length: 20 - sale.items.length }).map((_, i) => (
-            <tr key={`empty-${i}`}>
-              <td style={{ padding: "3px 4px" }}>&nbsp;</td>
-              <td /><td /><td />
-              {config.mostrarDescuento && <td />}
-              <td />
-            </tr>
-          ))}
+          {sale.items.map((item, i) => {
+            const totalComboUnits = item.es_combo && item.comboItems && item.comboItems.length > 0
+              ? item.comboItems.reduce((s, ci) => s + ci.cantidad, 0)
+              : 0;
+            const precioUnitario = item.es_combo && totalComboUnits > 0
+              ? item.price / totalComboUnits
+              : item.unit === "Mt" && item.unidades_por_presentacion < 1
+                ? item.price / item.unidades_por_presentacion
+                : item.price;
+            const cleanDescription = item.description
+              .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+              .replace(/\s*\(Unidad\)$/, "");
+            return (
+              <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unit === "Mt" && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
+                <td style={{ padding: "3px 4px", textAlign: "left" }}>
+                  {item.es_combo && (
+                    <span style={{ fontSize: `${fs - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 3px", borderRadius: "2px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
+                  )}
+                  {cleanDescription}
+                  {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
+                    <div style={{ fontSize: `${fs - 3}px`, color: "#555", marginTop: "1px", lineHeight: "1.3" }}>
+                      Incl: {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
+                    </div>
+                  )}
+                </td>
+                <td style={{ padding: "3px 4px", textAlign: "center" }}>
+                  {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : item.unit || "Un"}
+                </td>
+                <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
+                {config.mostrarDescuento && (
+                  <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.discount || 0}</td>
+                )}
+                <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
+              </tr>
+            );
+          })}
+          {/* Empty rows to fill space */}
+          {sale.items.length < 20 &&
+            Array.from({ length: 20 - sale.items.length }).map((_, i) => (
+              <tr key={`empty-${i}`}>
+                <td style={{ padding: "3px 4px" }}>&nbsp;</td>
+                <td style={{ padding: "3px 4px" }}></td>
+                <td style={{ padding: "3px 4px" }}></td>
+                <td style={{ padding: "3px 4px" }}></td>
+                {config.mostrarDescuento && <td style={{ padding: "3px 4px" }}></td>}
+                <td style={{ padding: "3px 4px" }}></td>
+              </tr>
+            ))}
         </tbody>
       </table>
-      {/* Footer totals */}
+
+      {/* ── Footer totals ── */}
       <div style={{ borderTop: "2px solid #000", marginTop: "auto" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${fs}px`, gap: "30px" }}>
-          <div><span>Subtotal: </span><span style={{ fontWeight: "bold" }}>{fmtCur(sale.subtotal)}</span></div>
-          {sale.descuento > 0 && <div><span>Descuento: </span><span style={{ fontWeight: "bold" }}>-{fmtCur(sale.descuento)}</span></div>}
-          {sale.recargo > 0 && <div><span>Recargo: </span><span style={{ fontWeight: "bold" }}>+{fmtCur(sale.recargo)}</span></div>}
+          <div>
+            <span>Subtotal: </span>
+            <span style={{ fontWeight: "bold" }}>{fmtCur(sale.subtotal)}</span>
+          </div>
+          {sale.descuento > 0 && (
+            <div>
+              <span>Descuento: </span>
+              <span style={{ fontWeight: "bold" }}>-{fmtCur(sale.descuento)}</span>
+            </div>
+          )}
+          {sale.recargo > 0 && (
+            <div>
+              <span>Recargo: </span>
+              <span style={{ fontWeight: "bold" }}>+{fmtCur(sale.recargo)}</span>
+            </div>
+          )}
+          {sale.transferSurcharge > 0 && (
+            <div>
+              <span>Rec. Transferencia: </span>
+              <span style={{ fontWeight: "bold" }}>+{fmtCur(sale.transferSurcharge)}</span>
+            </div>
+          )}
         </div>
         <div style={{ borderTop: "2px solid #000", display: "flex", justifyContent: "flex-end", padding: "8px 4px" }}>
-          <div style={{ fontSize: `${fs + 6}px`, fontWeight: "bold" }}>TOTAL: {fmtCur(sale.total)}</div>
+          <div style={{ fontSize: `${fs + 6}px`, fontWeight: "bold" }}>
+            TOTAL: {fmtCur(sale.total)}
+          </div>
         </div>
-        {sale.formaPago === "Cuenta Corriente" && (
+        {/* Saldo info for Cuenta Corriente */}
+        {(sale.formaPago === "Cuenta Corriente" || (sale.formaPago === "Mixto" && sale.saldoNuevo !== sale.saldoAnterior)) && (
           <div style={{ borderTop: "1px solid #ccc", padding: "6px 4px", fontSize: `${fs - 1}px` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+              <span>Saldo anterior:</span>
+              <span>{sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} (a favor)` : fmtCur(sale.saldoAnterior)}</span>
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold" }}>
               <span>Saldo actual:</span>
               <span style={{ color: sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#ea580c" : "#000" }}>
@@ -733,6 +820,8 @@ export default function ListadoVentasPage() {
                 presentacion: "",
                 unidades_por_presentacion: 1,
                 stock: 0,
+                es_combo: false,
+                comboItems: [],
               })),
             }}
           />

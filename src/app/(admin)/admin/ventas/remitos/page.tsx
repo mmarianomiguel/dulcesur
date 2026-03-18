@@ -208,7 +208,7 @@ function RemitoPrintView({
             <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Producto</th>
             <th style={{ textAlign: "center", padding: "4px 4px", fontWeight: "bold" }}>U/Med</th>
             <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Precio Un.</th>
-            <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Desc.%</th>
+            <th style={{ textAlign: "center", padding: "4px 4px", fontWeight: "bold" }}>Desc.%</th>
             <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Importe</th>
           </tr>
         </thead>
@@ -219,7 +219,7 @@ function RemitoPrintView({
               <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.descripcion}</td>
               <td style={{ padding: "3px 4px", textAlign: "center" }}>{item.unidad_medida || "Un"}</td>
               <td style={{ padding: "3px 4px", textAlign: "right" }}>{formatCurrencyPDF(item.precio_unitario)}</td>
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.descuento || 0}</td>
+              <td style={{ padding: "3px 4px", textAlign: "center" }}>{item.descuento || 0}</td>
               <td style={{ padding: "3px 4px", textAlign: "right" }}>{formatCurrencyPDF(item.subtotal)}</td>
             </tr>
           ))}
