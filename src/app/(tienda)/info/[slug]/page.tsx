@@ -1,58 +1,61 @@
-import { supabase } from "@/lib/supabase";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { ArrowLeft, FileText, Loader2 } from "lucide-react";
 
-const SLUG_TITLES: Record<string, string> = {
-  "medios-de-pago": "Medios de pago",
-  "envios": "Envíos",
-  "como-comprar": "Cómo comprar",
-  "como-registrarse": "Cómo registrarse",
-  "faq": "Preguntas frecuentes",
-  "terminos": "Términos y condiciones",
-  "contacto": "Contacto",
-};
-
-interface Props {
-  params: Promise<{ slug: string }>;
+interface Pagina {
+  id: string;
+  titulo: string;
+  contenido: string;
 }
 
-export default async function InfoPage({ params }: Props) {
-  const { slug } = await params;
-  const titulo = SLUG_TITLES[slug] || slug;
+export default function InfoPage() {
+  const { slug } = useParams();
+  const [pagina, setPagina] = useState<Pagina | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  const { data } = await supabase
-    .from("tienda_config")
-    .select("footer_config")
-    .limit(1)
-    .single();
+  useEffect(() => {
+    if (!slug) return;
+    (async () => {
+      const { data } = await supabase
+        .from("paginas_info")
+        .select("id, titulo, contenido")
+        .eq("slug", slug)
+        .eq("activa", true)
+        .single();
+      if (data) setPagina(data as Pagina);
+      else setNotFound(true);
+      setLoading(false);
+    })();
+  }, [slug]);
 
-  const infoPages: { slug: string; contenido: string }[] =
-    (data as any)?.footer_config?.info_pages || [];
-  const page = infoPages.find((p) => p.slug === slug);
-  const contenido = page?.contenido || "";
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>;
+
+  if (notFound) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+        <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Página no encontrada</h1>
+        <p className="text-gray-500 mb-6">La página que buscás no existe o fue desactivada.</p>
+        <Link href="/" className="text-pink-600 hover:text-pink-700 font-medium">Volver al inicio</Link>
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <Link
-        href="/"
-        className="mb-6 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Volver al inicio
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <Link href="/" className="inline-flex items-center gap-2 text-gray-500 hover:text-pink-600 transition-colors mb-6 text-sm font-medium">
+        <ArrowLeft className="w-4 h-4" />Volver al inicio
       </Link>
-
-      <h1 className="mb-6 text-3xl font-bold text-gray-900">{titulo}</h1>
-
-      {contenido ? (
-        <div
-          className="prose prose-gray max-w-none"
-          dangerouslySetInnerHTML={{ __html: contenido }}
-        />
-      ) : (
-        <p className="text-gray-400 italic">
-          Esta página aún no tiene contenido cargado.
-        </p>
-      )}
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">{pagina?.titulo}</h1>
+      <div
+        className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
+        dangerouslySetInnerHTML={{ __html: pagina?.contenido || "" }}
+      />
     </div>
   );
 }

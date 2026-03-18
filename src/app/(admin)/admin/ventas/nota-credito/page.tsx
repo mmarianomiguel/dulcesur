@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Cliente, Producto, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,6 +96,7 @@ export default function NotaCreditoPage() {
   const [loadingList, setLoadingList] = useState(true);
   const [ncDetail, setNcDetail] = useState<NCDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [listSearch, setListSearch] = useState("");
 
   // Form state
   const [clients, setClients] = useState<Cliente[]>([]);
@@ -103,6 +104,8 @@ export default function NotaCreditoPage() {
   const [presMap, setPresMap] = useState<Record<string, { codigo: string }[]>>({});
   const [clientId, setClientId] = useState("");
   const [clientSearch, setClientSearch] = useState("");
+  const [clientOpen, setClientOpen] = useState(false);
+  const clientRef = useRef<HTMLDivElement>(null);
   const [origenId, setOrigenId] = useState("");
   const [clientVentas, setClientVentas] = useState<Venta[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
@@ -151,6 +154,16 @@ export default function NotaCreditoPage() {
     fetchNotas();
     fetchFormData();
   }, [fetchNotas, fetchFormData]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (clientRef.current && !clientRef.current.contains(e.target as Node)) {
+        setClientOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   // When client changes, fetch their ventas for origen
   useEffect(() => {
@@ -380,24 +393,52 @@ export default function NotaCreditoPage() {
 
     // Re-add stock
     for (const item of items) {
-      if (item.producto_id) {
-        const prod = products.find((p) => p.id === item.producto_id);
-        if (prod) {
-          const unitsToReturn = item.qty * (item.unidades_por_presentacion || 1);
-          const newStock = prod.stock + unitsToReturn;
-          await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+      if (!item.producto_id) continue;
+      const prod = products.find((p) => p.id === item.producto_id);
+      if (!prod) continue;
+
+      if ((prod as any).es_combo) {
+        // For combos: restore each component's stock
+        const { data: ciData } = await supabase
+          .from("combo_items")
+          .select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock)")
+          .eq("combo_id", item.producto_id);
+        for (const ci of (ciData || []) as any[]) {
+          const comp = ci.productos;
+          if (!comp) continue;
+          const unitsToReturn = item.qty * ci.cantidad;
+          const newStock = comp.stock + unitsToReturn;
+          await supabase.from("productos").update({ stock: newStock }).eq("id", comp.id);
           await supabase.from("stock_movimientos").insert({
-            producto_id: item.producto_id,
+            producto_id: comp.id,
             tipo: "devolucion",
-            cantidad_antes: prod.stock,
+            cantidad_antes: comp.stock,
             cantidad_despues: newStock,
             cantidad: unitsToReturn,
-            referencia: `Nota de Crédito: ${numero}`,
-            descripcion: `Devolución - ${item.description}`,
+            referencia: `NC ${numero}`,
+            descripcion: `Devolución combo ${item.description} - ${comp.nombre}`,
             usuario: "Admin Sistema",
             orden_id: venta.id,
           });
+          // Update local cache so subsequent iterations see updated stock
+          comp.stock = newStock;
         }
+      } else {
+        const unitsToReturn = item.qty * (item.unidades_por_presentacion || 1);
+        const newStock = prod.stock + unitsToReturn;
+        await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id,
+          tipo: "devolucion",
+          cantidad_antes: prod.stock,
+          cantidad_despues: newStock,
+          cantidad: unitsToReturn,
+          referencia: `NC ${numero}`,
+          descripcion: `Devolución - ${item.description}`,
+          usuario: "Admin Sistema",
+          orden_id: venta.id,
+        });
+        prod.stock = newStock;
       }
     }
 
@@ -415,23 +456,22 @@ export default function NotaCreditoPage() {
         referencia_tipo: "nota_credito",
       });
     }
-    // Si es Cuenta Corriente: no sale dinero, solo se acredita en CC
-
-    // ── Cuenta corriente: siempre registrar el haber ──
-    const nuevoSaldo = (selectedClient?.saldo || 0) - total;
-    await supabase.from("cuenta_corriente").insert({
-      cliente_id: clientId,
-      fecha: hoy,
-      comprobante: `NC ${numero}`,
-      descripcion: `Nota de Crédito ${numero} — devolución via ${metodoDev}`,
-      debe: 0,
-      haber: total,
-      saldo: nuevoSaldo,
-      forma_pago: metodoDev,
-      venta_id: venta.id,
-    });
-
-    await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clientId);
+    // ── Cuenta corriente: solo si el método es Cuenta Corriente ──
+    if (metodoDev === "Cuenta Corriente" && clientId) {
+      const nuevoSaldo = (selectedClient?.saldo || 0) - total;
+      await supabase.from("cuenta_corriente").insert({
+        cliente_id: clientId,
+        fecha: hoy,
+        comprobante: `NC ${numero}`,
+        descripcion: `Nota de Crédito ${numero} — devolución a cuenta corriente`,
+        debe: 0,
+        haber: total,
+        saldo: nuevoSaldo,
+        forma_pago: "Cuenta Corriente",
+        venta_id: venta.id,
+      });
+      await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clientId);
+    }
 
     // Reset form
     setItems([]);
@@ -444,11 +484,15 @@ export default function NotaCreditoPage() {
     fetchNotas();
     fetchFormData();
 
-    const saldoMsg = nuevoSaldo < 0
-      ? ` — Saldo a favor: ${formatCurrency(Math.abs(nuevoSaldo))}`
-      : nuevoSaldo > 0
-      ? ` — Deuda restante: ${formatCurrency(nuevoSaldo)}`
-      : " — Deuda saldada";
+    let saldoMsg = "";
+    if (metodoDev === "Cuenta Corriente" && clientId) {
+      const nuevoSaldo = (selectedClient?.saldo || 0) - total;
+      saldoMsg = nuevoSaldo < 0
+        ? ` — Saldo a favor: ${formatCurrency(Math.abs(nuevoSaldo))}`
+        : nuevoSaldo > 0
+        ? ` — Deuda restante: ${formatCurrency(nuevoSaldo)}`
+        : " — Deuda saldada";
+    }
     setSuccessMsg(`NC ${numero} emitida por ${formatCurrency(total)} via ${metodoDev}${saldoMsg}`);
 
     setSaving(false);
@@ -456,6 +500,9 @@ export default function NotaCreditoPage() {
 
   const totalNC = notas.reduce((acc, n) => acc + n.total, 0);
   const countMes = notas.filter((n) => n.fecha >= new Date().toISOString().slice(0, 7)).length;
+  const filteredNotas = notas.filter((n) =>
+    !listSearch || (n.clientes?.nombre || "").toLowerCase().includes(listSearch.toLowerCase()) || (n.numero || "").includes(listSearch)
+  );
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -483,15 +530,33 @@ export default function NotaCreditoPage() {
         {/* ── LISTADO ── */}
         <TabsContent value="listado" className="space-y-4">
           <Card>
+            <CardContent className="pt-6 pb-4">
+              <div className="relative max-w-sm mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por cliente o número..."
+                  value={listSearch}
+                  onChange={(e) => setListSearch(e.target.value)}
+                  className="pl-9"
+                />
+                {listSearch && (
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setListSearch("")}>
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
             <CardContent className="pt-6">
               {loadingList ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
-              ) : notas.length === 0 ? (
+              ) : filteredNotas.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No hay notas de crédito</p>
+                  <p className="text-sm">{listSearch ? "Sin resultados para la búsqueda" : "No hay notas de crédito"}</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -508,7 +573,7 @@ export default function NotaCreditoPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {notas.map((n) => (
+                      {filteredNotas.map((n) => (
                         <tr
                           key={n.id}
                           className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
@@ -547,35 +612,37 @@ export default function NotaCreditoPage() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                    <div className="space-y-2" ref={clientRef}>
                       <Label className="text-xs text-muted-foreground">Cliente</Label>
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           placeholder="Buscar cliente..."
-                          value={clientSearch}
+                          value={clientId ? (clients.find((c) => c.id === clientId)?.nombre ?? clientSearch) : clientSearch}
                           onChange={(e) => {
                             setClientSearch(e.target.value);
+                            setClientOpen(true);
                             if (clientId) { setClientId(""); setOrigenId(""); setItems([]); }
                           }}
+                          onFocus={() => setClientOpen(true)}
                           className="pl-9"
                         />
-                        {!clientId && clientSearch.length > 0 && (
+                        {clientId && (
+                          <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => { setClientId(""); setClientSearch(""); setOrigenId(""); setItems([]); setClientOpen(false); }}>
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                        {clientOpen && !clientId && (
                           <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
-                            {filteredClients.slice(0, 10).map((c) => (
+                            {filteredClients.slice(0, 20).map((c) => (
                               <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
-                                onClick={() => { setClientId(c.id); setClientSearch(c.nombre); }}>
+                                onClick={() => { setClientId(c.id); setClientSearch(c.nombre); setClientOpen(false); }}>
                                 {c.nombre}
                               </button>
                             ))}
                             {filteredClients.length === 0 && <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>}
                           </div>
-                        )}
-                        {clientId && (
-                          <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            onClick={() => { setClientId(""); setClientSearch(""); setOrigenId(""); setItems([]); }}>
-                            <X className="w-4 h-4" />
-                          </button>
                         )}
                       </div>
                     </div>
@@ -746,7 +813,7 @@ export default function NotaCreditoPage() {
                       </span>
                     </div>
                   )}
-                  {selectedClient && total > 0 && (
+                  {selectedClient && total > 0 && metodoDev === "Cuenta Corriente" && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Saldo después NC</span>
                       {(() => {
@@ -758,6 +825,15 @@ export default function NotaCreditoPage() {
                           </span>
                         );
                       })()}
+                    </div>
+                  )}
+                  {selectedClient && total > 0 && metodoDev !== "Cuenta Corriente" && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Saldo después NC</span>
+                      <span className={selectedClient.saldo < 0 ? "text-emerald-500 font-semibold" : selectedClient.saldo > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>
+                        {formatCurrency(selectedClient.saldo || 0)}
+                        <span className="text-xs ml-1 text-muted-foreground">(sin cambios)</span>
+                      </span>
                     </div>
                   )}
                   <div className="flex justify-between items-center pt-3 border-t">

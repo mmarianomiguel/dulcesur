@@ -349,12 +349,16 @@ export default function CajaPage() {
     .filter((m) => m.tipo === "egreso" && m.descripcion.toLowerCase().includes("gasto"))
     .reduce((a, m) => a + Math.abs(m.monto), 0);
 
+  const notasCreditoEgresos = movements
+    .filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito")
+    .reduce((a, m) => a + Math.abs(m.monto), 0);
+
   const retiros = movements
-    .filter((m) => m.tipo === "egreso" && !m.descripcion.toLowerCase().includes("gasto"))
+    .filter((m) => m.tipo === "egreso" && !m.descripcion.toLowerCase().includes("gasto") && m.referencia_tipo !== "nota_credito")
     .reduce((a, m) => a + Math.abs(m.monto), 0);
 
   const efectivoInicial = turno?.efectivo_inicial ?? 0;
-  const efectivoEsperado = efectivoInicial + ventasEfectivo + depositos - gastos - retiros;
+  const efectivoEsperado = efectivoInicial + ventasEfectivo + depositos - gastos - retiros - notasCreditoEgresos;
 
   const loading = turnoLoading || movLoading || ventasLoading;
 
@@ -485,6 +489,27 @@ export default function CajaPage() {
                         </div>
                       ) : <p className="text-xs text-muted-foreground">Sin transferencias</p>;
                     })()}
+                    {(() => {
+                      const ncMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito");
+                      if (ncMovs.length === 0) return null;
+                      const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                      const porMetodo: Record<string, number> = {};
+                      ncMovs.forEach((m) => { const k = m.metodo_pago || "Efectivo"; porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto); });
+                      return (
+                        <>
+                          <h4 className="text-sm font-semibold mt-4 mb-2">Notas de Crédito</h4>
+                          <div className="rounded-lg border p-3 bg-red-50 dark:bg-red-950/20 space-y-1">
+                            <p className="font-bold text-lg text-red-600">-{formatCurrency(totalNC)}</p>
+                            {Object.entries(porMetodo).map(([metodo, monto]) => (
+                              <div key={metodo} className="flex justify-between text-xs text-red-500">
+                                <span>→ {metodo}</span>
+                                <span>-{formatCurrency(monto)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                     <h4 className="text-sm font-semibold mt-4 mb-2">Movimientos ({histMovs.length})</h4>
                     {histMovs.length === 0 ? <p className="text-xs text-muted-foreground">Sin movimientos</p> : (
                       <div className="border rounded-lg overflow-hidden">
@@ -605,7 +630,7 @@ export default function CajaPage() {
             />
             <StatCard
               title="Egresos Caja"
-              value={formatCurrency(gastos + retiros)}
+              value={formatCurrency(gastos + retiros + notasCreditoEgresos)}
               icon={ArrowDownRight}
               iconColor="text-red-500"
               iconBg="bg-red-500/10"
@@ -888,6 +913,29 @@ export default function CajaPage() {
                     );
                   })()}
 
+                  {/* Notas de crédito */}
+                  {(() => {
+                    const ncMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito");
+                    if (ncMovs.length === 0) return null;
+                    const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                    const porMetodo: Record<string, number> = {};
+                    ncMovs.forEach((m) => { const k = m.metodo_pago || "Efectivo"; porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto); });
+                    return (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2">Notas de Crédito (devoluciones)</h4>
+                        <div className="rounded-lg border p-3 bg-red-50 dark:bg-red-950/20 space-y-1">
+                          <p className="font-bold text-lg text-red-600">-{formatCurrency(totalNC)}</p>
+                          {Object.entries(porMetodo).map(([metodo, monto]) => (
+                            <div key={metodo} className="flex justify-between text-xs text-red-500">
+                              <span>→ {metodo}</span>
+                              <span>-{formatCurrency(monto)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div>
                     <h4 className="text-sm font-semibold mb-2">Movimientos ({histMovs.length})</h4>
                     {histMovs.length === 0 ? (
@@ -1071,6 +1119,29 @@ export default function CajaPage() {
                     <span className="text-muted-foreground">Retiros</span>
                     <span className="text-red-500">-{formatCurrency(retiros)}</span>
                   </div>
+                  {notasCreditoEgresos > 0 && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Notas de Crédito</span>
+                        <span className="text-red-500">-{formatCurrency(notasCreditoEgresos)}</span>
+                      </div>
+                      {/* NC breakdown by metodo_pago */}
+                      {(() => {
+                        const ncMovs = movements.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito");
+                        const porMetodo: Record<string, number> = {};
+                        ncMovs.forEach((m) => {
+                          const k = m.metodo_pago || "Efectivo";
+                          porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto);
+                        });
+                        return Object.entries(porMetodo).map(([metodo, monto]) => (
+                          <div key={metodo} className="flex justify-between pl-3 text-xs">
+                            <span className="text-muted-foreground">→ {metodo}</span>
+                            <span className="text-red-400">-{formatCurrency(monto)}</span>
+                          </div>
+                        ));
+                      })()}
+                    </>
+                  )}
                 </div>
               </div>
 

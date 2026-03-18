@@ -80,6 +80,13 @@ interface CuentaBancaria {
   alias: string;
 }
 
+interface ComboItemRef {
+  producto_id: string;
+  cantidad: number;
+  nombre: string;
+  stock: number;
+}
+
 interface LineItem {
   id: string;
   producto_id: string;
@@ -93,6 +100,8 @@ interface LineItem {
   presentacion: string;
   unidades_por_presentacion: number;
   stock: number;
+  es_combo?: boolean;
+  comboItems?: ComboItemRef[];
 }
 
 // ---------- helpers ----------
@@ -249,18 +258,43 @@ function ReceiptPrintView({
           </tr>
         </thead>
         <tbody>
-          {sale.items.map((item, i) => (
-            <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unit === "Mt" && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.description.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)$/, "")}</td>
-              <td style={{ padding: "3px 4px", textAlign: "center" }}>{item.unit || "Un"}</td>
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.unit === "Mt" && item.unidades_por_presentacion < 1 ? fmtCur(item.price / item.unidades_por_presentacion) : fmtCur(item.price)}</td>
-              {config.mostrarDescuento && (
-                <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.discount || 0}</td>
-              )}
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
-            </tr>
-          ))}
+          {sale.items.map((item, i) => {
+            const totalComboUnits = item.es_combo && item.comboItems && item.comboItems.length > 0
+              ? item.comboItems.reduce((s, ci) => s + ci.cantidad, 0)
+              : 0;
+            const precioUnitario = item.es_combo && totalComboUnits > 0
+              ? item.price / totalComboUnits
+              : item.unit === "Mt" && item.unidades_por_presentacion < 1
+                ? item.price / item.unidades_por_presentacion
+                : item.price;
+            const cleanDescription = item.description
+              .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+              .replace(/\s*\(Unidad\)$/, "");
+            return (
+              <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unit === "Mt" && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
+                <td style={{ padding: "3px 4px", textAlign: "left" }}>
+                  {item.es_combo && (
+                    <span style={{ fontSize: `${fs - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 3px", borderRadius: "2px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
+                  )}
+                  {cleanDescription}
+                  {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
+                    <div style={{ fontSize: `${fs - 3}px`, color: "#555", marginTop: "1px", lineHeight: "1.3" }}>
+                      Incl: {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
+                    </div>
+                  )}
+                </td>
+                <td style={{ padding: "3px 4px", textAlign: "center" }}>
+                  {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : item.unit || "Un"}
+                </td>
+                <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
+                {config.mostrarDescuento && (
+                  <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.discount || 0}</td>
+                )}
+                <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
+              </tr>
+            );
+          })}
           {/* Empty rows to fill space */}
           {sale.items.length < 20 &&
             Array.from({ length: 20 - sale.items.length }).map((_, i) => (
@@ -337,6 +371,7 @@ export default function VentasPage() {
   const [products, setProducts] = useState<Producto[]>([]);
   const [clients, setClients] = useState<Cliente[]>([]);
   const [sellers, setSellers] = useState<Usuario[]>([]);
+  const [comboItemsMap, setComboItemsMap] = useState<Record<string, ComboItemRef[]>>({});
 
   // --- sale state ---
   const [items, setItems] = useState<LineItem[]>([]);
@@ -465,6 +500,21 @@ export default function VentasPage() {
     if (defaultList) setListaPrecioId((defaultList as any).id);
     if (sls && sls.length > 0) setVendedorId(sls[0].id);
 
+    // Pre-load combo items
+    const { data: allComboItems } = await supabase
+      .from("combo_items")
+      .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock)");
+    if (allComboItems) {
+      const cmap: Record<string, ComboItemRef[]> = {};
+      for (const ci of allComboItems as any[]) {
+        const p = ci.productos;
+        if (!p) continue;
+        if (!cmap[ci.combo_id]) cmap[ci.combo_id] = [];
+        cmap[ci.combo_id].push({ producto_id: p.id, cantidad: ci.cantidad, nombre: p.nombre, stock: p.stock });
+      }
+      setComboItemsMap(cmap);
+    }
+
     // Pre-load all presentaciones for search by code
     const { data: allPres } = await supabase.from("presentaciones").select("*");
     if (allPres) {
@@ -561,8 +611,18 @@ export default function VentasPage() {
 
   // ---------- cart operations ----------
   const tryAddItem = (product: Producto, presentacion?: Presentacion) => {
-    // Check stock
-    if (product.stock <= 0) {
+    // Check stock — combos use component stock
+    if ((product as any).es_combo) {
+      const components = comboItemsMap[product.id] || [];
+      if (components.length > 0) {
+        const comboStock = Math.min(...components.map((c) => Math.floor(c.stock / c.cantidad)));
+        if (comboStock <= 0) {
+          setStockWarning({ open: true, product, presentacion });
+          return;
+        }
+      }
+      // If no components loaded yet, allow adding (validated at finalize)
+    } else if (product.stock <= 0) {
       setStockWarning({ open: true, product, presentacion });
       return;
     }
@@ -573,6 +633,11 @@ export default function VentasPage() {
     const presName = presentacion ? presentacion.nombre : "Unidad";
     const presPrice = presentacion ? presentacion.precio : product.precio;
     const presUnits = presentacion ? presentacion.cantidad : 1;
+    const isCombo = !!(product as any).es_combo;
+    const components = isCombo ? (comboItemsMap[product.id] || []) : undefined;
+    const comboStock = isCombo && components && components.length > 0
+      ? Math.min(...components.map((c) => Math.floor(c.stock / c.cantidad)))
+      : product.stock;
 
     const existingIdx = items.findIndex((i) => i.producto_id === product.id && i.presentacion === presName);
     if (existingIdx >= 0) {
@@ -593,7 +658,9 @@ export default function VentasPage() {
           subtotal: presPrice,
           presentacion: presName,
           unidades_por_presentacion: presUnits,
-          stock: product.stock,
+          stock: comboStock,
+          es_combo: isCombo,
+          comboItems: components,
         },
       ];
       setItems(newItems);
@@ -995,6 +1062,23 @@ export default function VentasPage() {
     // Check stock for all items
     const issues: { item: LineItem; stockDisponible: number; unidadesFacturadas: number }[] = [];
     for (const item of items) {
+      if (item.es_combo) {
+        if (item.comboItems && item.comboItems.length > 0) {
+          // For combos: check each component individually
+          for (const ci of item.comboItems) {
+            const compProd = products.find((p) => p.id === ci.producto_id);
+            const compStock = compProd ? compProd.stock : ci.stock;
+            const needed = item.qty * ci.cantidad;
+            if (needed > compStock) {
+              const comboStockAvail = Math.floor(compStock / ci.cantidad);
+              issues.push({ item, stockDisponible: comboStockAvail, unidadesFacturadas: item.qty });
+              break;
+            }
+          }
+        }
+        // If no comboItems loaded, skip stock check for this combo (allow sale)
+        continue;
+      }
       const prod = products.find((p) => p.id === item.producto_id);
       if (!prod) continue;
       const unitsToDeduct = item.qty * (item.unidades_por_presentacion || 1);
@@ -1207,6 +1291,30 @@ export default function VentasPage() {
 
         // Update stock + log movements
         for (const item of items) {
+          if (item.es_combo && item.comboItems && item.comboItems.length > 0) {
+            // Deduct each component individually
+            for (const ci of item.comboItems) {
+              const compProd = products.find((p) => p.id === ci.producto_id);
+              if (!compProd) continue;
+              const unitsToDeduct = item.qty * ci.cantidad;
+              const newStock = compProd.stock - unitsToDeduct;
+              await supabase.from("productos").update({ stock: newStock }).eq("id", ci.producto_id);
+              await supabase.from("stock_movimientos").insert({
+                producto_id: ci.producto_id,
+                tipo: "venta",
+                cantidad_antes: compProd.stock,
+                cantidad_despues: newStock,
+                cantidad: unitsToDeduct,
+                referencia: `Venta #${numero}`,
+                descripcion: `Venta combo ${item.description} - ${ci.nombre}`,
+                usuario: "Admin Sistema",
+                orden_id: venta.id,
+              });
+              // Update local products cache so subsequent items see updated stock
+              compProd.stock = newStock;
+            }
+            continue;
+          }
           const prod = products.find((p) => p.id === item.producto_id);
           if (prod) {
             const unitsToDeduct = item.qty * (item.unidades_por_presentacion || 1);
@@ -1587,6 +1695,17 @@ export default function VentasPage() {
                           </div>
                         ) : null;
                       })()}
+                      {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
+                        <div className="px-3 lg:px-5 pb-2 flex flex-col gap-0.5">
+                          {item.comboItems.map((ci) => (
+                            <div key={ci.producto_id} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <span className="text-emerald-500">•</span>
+                              <span>{ci.nombre}</span>
+                              <span className="ml-auto">×{ci.cantidad}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2085,11 +2204,22 @@ export default function VentasPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold">{formatCurrency(matchedPres ? matchedPres.precio : p.precio)}</p>
-                      <p className={`text-xs font-mono ${p.stock <= 0 ? "text-red-500 font-semibold" : "text-muted-foreground"}`}>
-                        Stock: {matchedPres && Number(matchedPres.cantidad) > 1
-                          ? `${Math.floor((p.stock / Number(matchedPres.cantidad)) * 10) / 10} ${matchedPres.nombre.toLowerCase()}`
-                          : p.stock}
-                      </p>
+                      {(() => {
+                        const isComboP = !!(p as any).es_combo;
+                        const comboComponents = isComboP ? (comboItemsMap[p.id] || []) : [];
+                        const effectiveStock = isComboP && comboComponents.length > 0
+                          ? Math.min(...comboComponents.map((c) => Math.floor(c.stock / c.cantidad)))
+                          : isComboP ? null : p.stock;
+                        const displayStock = effectiveStock === null ? null :
+                          matchedPres && Number(matchedPres.cantidad) > 1 && !isComboP
+                            ? `${Math.floor((effectiveStock / Number(matchedPres.cantidad)) * 10) / 10} ${matchedPres.nombre.toLowerCase()}`
+                            : effectiveStock;
+                        return (
+                          <p className={`text-xs font-mono ${(effectiveStock ?? 1) <= 0 ? "text-red-500 font-semibold" : "text-muted-foreground"}`}>
+                            {effectiveStock === null ? "Stock: cargando..." : `Stock: ${displayStock}`}
+                          </p>
+                        );
+                      })()}
                     </div>
                   </button>
                   {pres.length > 0 && (

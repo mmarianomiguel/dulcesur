@@ -28,6 +28,11 @@ interface Subcategoria {
   categoria_id: string;
 }
 
+interface Marca {
+  id: string;
+  nombre: string;
+}
+
 interface Producto {
   id: string;
   codigo: string;
@@ -62,6 +67,7 @@ export default function CombosPage() {
   const [comboItemsCache, setComboItemsCache] = useState<Record<string, ComboItem[]>>({});
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [subcategorias, setSubcategorias] = useState<Subcategoria[]>([]);
+  const [marcas, setMarcas] = useState<Marca[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Create/Edit
@@ -69,7 +75,7 @@ export default function CombosPage() {
   const [editingCombo, setEditingCombo] = useState<Producto | null>(null);
   const [form, setForm] = useState({
     codigo: "", nombre: "", precio: 0, costo: 0,
-    stock: 0, categoria_id: "", subcategoria_id: "",
+    stock: 0, categoria_id: "", subcategoria_id: "", marca_id: "",
   });
   const [comboItems, setComboItems] = useState<ComboItem[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
@@ -84,17 +90,19 @@ export default function CombosPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: prods }, { data: cItems }, { data: cats }, { data: subs }] = await Promise.all([
+    const [{ data: prods }, { data: cItems }, { data: cats }, { data: subs }, { data: mrcs }] = await Promise.all([
       supabase.from("productos").select("*").eq("activo", true).order("nombre"),
       supabase.from("combo_items").select("*, productos!combo_items_producto_id_fkey(id, codigo, nombre, precio, costo, stock)"),
       supabase.from("categorias").select("*").order("nombre"),
       supabase.from("subcategorias").select("*").order("nombre"),
+      supabase.from("marcas").select("*").order("nombre"),
     ]);
     const products = (prods || []) as Producto[];
     setAllProducts(products.filter((p) => !p.es_combo));
     setCombos(products.filter((p) => p.es_combo));
     setCategorias((cats || []) as Categoria[]);
     setSubcategorias((subs || []) as Subcategoria[]);
+    setMarcas((mrcs || []) as Marca[]);
 
     const cache: Record<string, ComboItem[]> = {};
     for (const d of (cItems || []) as any[]) {
@@ -110,7 +118,7 @@ export default function CombosPage() {
 
   const openNew = () => {
     setEditingCombo(null);
-    setForm({ codigo: "", nombre: "", precio: 0, costo: 0, stock: 0, categoria_id: "", subcategoria_id: "" });
+    setForm({ codigo: "", nombre: "", precio: 0, costo: 0, stock: 0, categoria_id: "", subcategoria_id: "", marca_id: "" });
     setComboItems([]);
     setSelectedRow(null);
     setDialogOpen(true);
@@ -126,6 +134,7 @@ export default function CombosPage() {
       stock: combo.stock ?? 0,
       categoria_id: combo.categoria_id || "",
       subcategoria_id: combo.subcategoria_id || "",
+      marca_id: combo.marca_id || "",
     });
     setComboItems(comboItemsCache[combo.id] || []);
     setSelectedRow(null);
@@ -207,6 +216,7 @@ export default function CombosPage() {
         unidad_medida: "UN",
       };
       if (form.categoria_id) payload.categoria_id = form.categoria_id;
+      if (form.marca_id) payload.marca_id = form.marca_id;
 
       let comboId: string;
 
@@ -394,8 +404,8 @@ export default function CombosPage() {
               </div>
             </div>
 
-            {/* Row 2: Categoría + Subcategoría */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Row 2: Categoría + Subcategoría + Marca */}
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1">
                 <Label className="text-xs">Categoría</Label>
                 <Select
@@ -427,6 +437,23 @@ export default function CombosPage() {
                     <SelectItem value="none">Sin subcategoría</SelectItem>
                     {filteredSubs.map((s) => (
                       <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Marca</Label>
+                <Select
+                  value={form.marca_id || "none"}
+                  onValueChange={(v) => setForm({ ...form, marca_id: !v || v === "none" ? "" : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin marca</SelectItem>
+                    {marcas.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.nombre}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

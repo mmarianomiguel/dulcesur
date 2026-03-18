@@ -26,8 +26,18 @@ interface Producto {
   stock: number;
   categoria_id: string;
   marca_id: string | null;
+  es_combo?: boolean;
   categorias: { nombre: string } | null;
   marcas: { nombre: string } | null;
+}
+
+interface ComboComponente {
+  producto_id: string;
+  cantidad: number;
+  nombre: string;
+  stock: number;
+  precio: number;
+  imagen_url: string | null;
 }
 
 interface Presentacion {
@@ -58,6 +68,8 @@ export default function ProductoDetallePage() {
   const [relSelectedPres, setRelSelectedPres] = useState<Record<string, number>>({});
   const [relQty, setRelQty] = useState<Record<string, number>>({});
   const [relScroll, setRelScroll] = useState(0);
+  const [comboComponentes, setComboComponentes] = useState<ComboComponente[]>([]);
+  const [comboOpen, setComboOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [cartQtys, setCartQtys] = useState<Record<string, number>>({});
 
@@ -87,6 +99,23 @@ export default function ProductoDetallePage() {
 
       if (prod) {
         setProducto(prod as Producto);
+
+        // Load combo items if es_combo
+        if (prod.es_combo) {
+          const { data: ci } = await supabase
+            .from("combo_items")
+            .select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, precio, imagen_url)")
+            .eq("combo_id", id);
+          setComboComponentes((ci || []).map((d: any) => ({
+            producto_id: d.productos?.id || "",
+            cantidad: d.cantidad,
+            nombre: d.productos?.nombre || "",
+            stock: d.productos?.stock ?? 0,
+            precio: d.productos?.precio ?? 0,
+            imagen_url: d.productos?.imagen_url ?? null,
+          })));
+        }
+
         const { data: pres } = await supabase
           .from("presentaciones")
           .select("*")
@@ -149,7 +178,13 @@ export default function ProductoDetallePage() {
     }
     return sum;
   }, 0) : 0;
-  const availableStock = producto ? Math.max(0, producto.stock - totalUnitsInCart) : 0;
+  const comboStock = producto?.es_combo && comboComponentes.length > 0
+    ? Math.min(...comboComponentes.map((c) => Math.floor(c.stock / c.cantidad)))
+    : null;
+  const effectiveStock = producto?.es_combo
+    ? (comboStock ?? 0)
+    : (producto?.stock ?? 0);
+  const availableStock = producto ? Math.max(0, effectiveStock - totalUnitsInCart) : 0;
   const maxQty = Math.floor(availableStock / presQty);
   const canBuy = maxQty > 0;
 
@@ -262,7 +297,8 @@ export default function ProductoDetallePage() {
                 src={producto.imagen_url}
                 alt={producto.nombre}
                 fill
-                className="!relative object-contain p-8"
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-contain p-8"
               />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-3">
@@ -293,6 +329,19 @@ export default function ProductoDetallePage() {
                 por caja ({currentPres.cantidad} unidades)
               </p>
             )}
+            {producto.es_combo && comboComponentes.length > 0 && (() => {
+              const totalUnidades = comboComponentes.reduce((acc, c) => acc + c.cantidad, 0);
+              const precioPorUnidad = totalUnidades > 0 ? currentPrice / totalUnidades : 0;
+              return (
+                <div className="mt-2 inline-flex items-center gap-2 bg-pink-50 border border-pink-100 rounded-lg px-3 py-1.5">
+                  <Box className="w-3.5 h-3.5 text-pink-500 flex-shrink-0" />
+                  <span className="text-sm text-pink-700">
+                    <span className="font-semibold">{formatCurrency(precioPorUnidad)}</span>
+                    <span className="text-pink-500"> por unidad · {totalUnidades} unidades totales</span>
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Presentaciones */}
@@ -385,6 +434,69 @@ export default function ProductoDetallePage() {
           >
             {canBuy ? "Añadir al carrito" : presQty > 1 ? "Stock insuficiente para esta presentación" : "Sin stock"}
           </button>
+
+          {/* Combo contents */}
+          {producto.es_combo && comboComponentes.length > 0 && (() => {
+            const totalUnidades = comboComponentes.reduce((a, c) => a + c.cantidad, 0);
+            const valorIndividual = comboComponentes.reduce((a, c) => a + c.precio * c.cantidad, 0);
+            return (
+              <div className="mt-6 border border-pink-100 rounded-2xl overflow-hidden bg-pink-50/40">
+                {/* Header toggle */}
+                <button
+                  onClick={() => setComboOpen((o) => !o)}
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-pink-50/60 transition"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-pink-100">
+                      <Layers className="w-4 h-4 text-pink-600" />
+                    </span>
+                    <span className="text-left">
+                      <p className="text-sm font-semibold text-gray-900">¿Qué incluye este combo?</p>
+                      <p className="text-xs text-gray-500">{totalUnidades} productos incluidos</p>
+                    </span>
+                  </span>
+                  <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${comboOpen ? "-rotate-90" : "rotate-90"}`} />
+                </button>
+
+                {comboOpen && (
+                  <div className="border-t border-pink-100 bg-white">
+                    <p className="px-5 pt-4 pb-3 text-sm font-semibold text-gray-800">Productos incluidos en este combo</p>
+                    <div className="px-4 space-y-3 pb-4">
+                      {comboComponentes.map((c) => (
+                        <div key={c.producto_id} className="flex items-center gap-4 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="w-14 h-14 rounded-lg bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center border border-gray-200">
+                            {c.imagen_url ? (
+                              <Image src={c.imagen_url} alt={c.nombre} width={56} height={56} className="object-contain" />
+                            ) : (
+                              <Package className="w-6 h-6 text-gray-300" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{c.nombre}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Presentación: Unidad</p>
+                            <p className="text-xs text-gray-500">Precio unitario: {formatCurrency(c.precio)}</p>
+                          </div>
+                          <span className="shrink-0 bg-pink-100 text-pink-700 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap">
+                            {c.cantidad} {c.cantidad === 1 ? "unidad" : "unidades"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-gray-100 px-5 py-3 space-y-1 bg-gray-50/60">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Total de productos en el combo:</span>
+                        <span className="font-semibold text-gray-700">{totalUnidades} unidades</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Valor individual de los productos:</span>
+                        <span className="font-semibold text-gray-700">{formatCurrency(valorIndividual)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

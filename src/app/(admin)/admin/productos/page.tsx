@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,6 +45,7 @@ import {
   Clock,
   Filter,
   Settings,
+  Layers,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ImageUpload } from "@/components/image-upload";
@@ -119,17 +120,27 @@ export default function ProductosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductoWithRelations | null>(null);
   const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
-  const [ofertaFilter, setOfertaFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
-  const [precioCajaFilter, setPrecioCajaFilter] = useState("all");
-  const [aumentoFilter, setAumentoFilter] = useState("all");
+  const [comboFilter, setComboFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("nombre_asc");
   const [page, setPage] = useState(1);
+  // Combobox states
+  const [catSearch, setCatSearch] = useState("");
+  const [catOpen, setCatOpen] = useState(false);
+  const [subcatSearch, setSubcatSearch] = useState("");
+  const [subcatOpen, setSubcatOpen] = useState(false);
+  const [marcaSearch, setMarcaSearch] = useState("");
+  const [marcaOpen, setMarcaOpen] = useState(false);
+  const catRef = useRef<HTMLDivElement>(null);
+  const subcatRef = useRef<HTMLDivElement>(null);
+  const marcaRef = useRef<HTMLDivElement>(null);
   const [pageSize] = useState(50);
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -243,19 +254,54 @@ export default function ProductosPage() {
 
   const [selectedProveedores, setSelectedProveedores] = useState<string[]>([]);
   const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
+
+  // Combo state
+  const [isCombo, setIsCombo] = useState(false);
+  const [comboItems, setComboItems] = useState<{ producto_id: string; cantidad: number; descuento: number; producto?: { id: string; codigo: string; nombre: string; precio: number; costo: number; stock: number } }[]>([]);
+  const [allNonCombos, setAllNonCombos] = useState<{ id: string; codigo: string; nombre: string; precio: number; costo: number; stock: number }[]>([]);
+  const [comboSearchOpen, setComboSearchOpen] = useState(false);
+
+  // Auto-fill costo from combo components
+  useEffect(() => {
+    if (!isCombo || comboItems.length === 0) return;
+    const costoTotal = comboItems.reduce((a, i) => a + (i.producto?.costo || 0) * i.cantidad, 0);
+    setForm((prev) => ({ ...prev, costo: costoTotal }));
+  }, [comboItems, isCombo]);
+  const [comboProductSearch, setComboProductSearch] = useState("");
+  const [selectedComboRow, setSelectedComboRow] = useState<string | null>(null);
   const [presCodigoMap, setPresCodigoMap] = useState<Record<string, { codigo: string }[]>>({});
+  const [comboStockMap, setComboStockMap] = useState<Record<string, number>>({});
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
-    const [{ data }, { data: allPres }] = await Promise.all([
+    const [{ data }, { data: allPres }, { data: allCI }] = await Promise.all([
       supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre"),
       supabase.from("presentaciones").select("producto_id, sku"),
+      supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)"),
     ]);
-    setProducts((data as ProductoWithRelations[]) || []);
+    const allProds = (data as ProductoWithRelations[]) || [];
+    setProducts(allProds);
+    setAllNonCombos(allProds.filter((p: any) => !p.es_combo).map((p: any) => ({
+      id: p.id, codigo: p.codigo, nombre: p.nombre, precio: p.precio, costo: p.costo, stock: p.stock,
+    })));
     if (allPres) {
       const map: Record<string, { codigo: string }[]> = {};
       for (const pr of allPres) { if (!map[pr.producto_id]) map[pr.producto_id] = []; map[pr.producto_id].push({ codigo: pr.sku || "" }); }
       setPresCodigoMap(map);
+    }
+    // Build combo stock map: min(floor(componentStock / qty)) per combo
+    if (allCI) {
+      const byCombo: Record<string, { stock: number; cantidad: number }[]> = {};
+      for (const ci of allCI as any[]) {
+        const s = ci.productos?.stock ?? 0;
+        if (!byCombo[ci.combo_id]) byCombo[ci.combo_id] = [];
+        byCombo[ci.combo_id].push({ stock: s, cantidad: ci.cantidad });
+      }
+      const stockMap: Record<string, number> = {};
+      for (const [comboId, items] of Object.entries(byCombo)) {
+        stockMap[comboId] = items.length === 0 ? 0 : Math.min(...items.map((i) => Math.floor(i.stock / i.cantidad)));
+      }
+      setComboStockMap(stockMap);
     }
     setLoading(false);
   }, []);
@@ -292,6 +338,21 @@ export default function ProductosPage() {
     fetchProveedores();
   }, [fetchProducts, fetchCategories, fetchSubcategories, fetchMarcas, fetchProveedores]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false);
+      if (subcatRef.current && !subcatRef.current.contains(e.target as Node)) setSubcatOpen(false);
+      if (marcaRef.current && !marcaRef.current.contains(e.target as Node)) setMarcaOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
   const resetForm = () => {
     setForm({
       codigo: "",
@@ -313,6 +374,9 @@ export default function ProductosPage() {
     setPresentaciones([]);
     setEditingProduct(null);
     setShowDescription(false);
+    setIsCombo(false);
+    setComboItems([]);
+    setSelectedComboRow(null);
   };
 
   const openNew = () => {
@@ -370,14 +434,36 @@ export default function ProductosPage() {
     }
     setPresentaciones(loadedPres);
 
+    // Load combo items if applicable
+    if ((p as any).es_combo) {
+      setIsCombo(true);
+      setComboItems([]);
+      const { data: ciData } = await supabase
+        .from("combo_items")
+        .select("*, productos!combo_items_producto_id_fkey(id, codigo, nombre, precio, costo, stock)")
+        .eq("combo_id", p.id);
+      setComboItems((ciData || []).map((d: any) => ({
+        producto_id: d.producto_id,
+        cantidad: d.cantidad,
+        descuento: d.descuento ?? 0,
+        producto: d.productos,
+      })));
+    } else {
+      setIsCombo(false);
+      setComboItems([]);
+    }
+
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = {
-        codigo: form.codigo,
+      let codigo = form.codigo.trim();
+      if (!codigo && isCombo) codigo = `COMBO-${Date.now()}`;
+
+      const payload: Record<string, unknown> = {
+        codigo,
         nombre: form.nombre,
         categoria_id: form.categoria_id || null,
         subcategoria_id: form.subcategoria_id || null,
@@ -392,30 +478,51 @@ export default function ProductosPage() {
         visibilidad: form.visibilidad,
         imagen_url: form.imagen_url || null,
         fecha_actualizacion: new Date().toISOString(),
+        es_combo: isCombo,
+        activo: true,
       };
 
       let productId: string;
 
       if (editingProduct) {
-        await supabase.from("productos").update(payload).eq("id", editingProduct.id);
+        const { error } = await supabase.from("productos").update(payload).eq("id", editingProduct.id);
+        if (error) {
+          if (error.code === "23505") throw new Error(`El código "${codigo}" ya está en uso.`);
+          throw new Error(error.message);
+        }
         productId = editingProduct.id;
       } else {
-        const { data } = await supabase.from("productos").insert(payload).select("id").single();
-        productId = data!.id;
+        const { data, error } = await supabase.from("productos").insert(payload).select("id").single();
+        if (error || !data) {
+          if (error?.code === "23505") throw new Error(`El código "${codigo}" ya está en uso.`);
+          throw new Error(error?.message || "Error al crear producto");
+        }
+        productId = data.id;
       }
 
-      // Sync proveedores
-      await supabase.from("producto_proveedores").delete().eq("producto_id", productId);
-      if (selectedProveedores.length > 0) {
-        await supabase.from("producto_proveedores").insert(
-          selectedProveedores.map((proveedor_id) => ({
-            producto_id: productId,
-            proveedor_id,
-          }))
-        );
+      if (isCombo) {
+        // Sync combo items
+        await supabase.from("combo_items").delete().eq("combo_id", productId);
+        if (comboItems.length > 0) {
+          await supabase.from("combo_items").insert(
+            comboItems.map((i) => ({ combo_id: productId, producto_id: i.producto_id, cantidad: i.cantidad }))
+          );
+        }
+      } else {
+        // Sync proveedores
+        await supabase.from("producto_proveedores").delete().eq("producto_id", productId);
+        if (selectedProveedores.length > 0) {
+          await supabase.from("producto_proveedores").insert(
+            selectedProveedores.map((proveedor_id) => ({
+              producto_id: productId,
+              proveedor_id,
+            }))
+          );
+        }
       }
 
-      // Sync presentaciones
+      // Sync presentaciones (only for non-combos)
+      if (!isCombo) {
       const toKeep = presentaciones.filter((p) => !p._deleted);
       const toDelete = presentaciones.filter((p) => p._deleted && p.id);
 
@@ -441,6 +548,7 @@ export default function ProductosPage() {
           await supabase.from("presentaciones").insert(presPayload);
         }
       }
+      } // end if (!isCombo)
 
       setDialogOpen(false);
       resetForm();
@@ -451,6 +559,7 @@ export default function ProductosPage() {
   };
 
   const handleDelete = async (id: string) => {
+    await supabase.from("combo_items").delete().eq("combo_id", id);
     await supabase.from("productos").update({ activo: false }).eq("id", id);
     fetchProducts();
   };
@@ -836,25 +945,50 @@ export default function ProductosPage() {
     (s) => category === "all" || s.categoria_id === category
   );
 
-  const filtered = products.filter((p) => {
-    const matchesSearch =
-      p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      p.codigo.toLowerCase().includes(search.toLowerCase()) ||
-      (presCodigoMap[p.id] || []).some((pr) => (pr.codigo || "").toLowerCase().includes(search.toLowerCase()));
-    const matchesCategory = category === "all" || p.categoria_id === category;
-    const matchesSubcategory = subcategoryFilter === "all" || p.subcategoria_id === subcategoryFilter;
-    const matchesMarca = marcaFilter === "all" || p.marca_id === marcaFilter;
-    return matchesSearch && matchesCategory && matchesSubcategory && matchesMarca;
-  });
+  const filtered = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
+    const arr = products.filter((p) => {
+      const matchesSearch =
+        !q ||
+        p.nombre.toLowerCase().includes(q) ||
+        p.codigo.toLowerCase().includes(q) ||
+        (presCodigoMap[p.id] || []).some((pr) => (pr.codigo || "").toLowerCase().includes(q));
+      const matchesCategory = category === "all" || p.categoria_id === category;
+      const matchesSubcategory = subcategoryFilter === "all" || p.subcategoria_id === subcategoryFilter;
+      const matchesMarca = marcaFilter === "all" || p.marca_id === marcaFilter;
+      const effectiveStock = (p as any).es_combo ? (comboStockMap[p.id] ?? 0) : p.stock;
+      const matchesStock = stockFilter === "all" || (stockFilter === "si" ? effectiveStock > 0 : effectiveStock === 0);
+      const matchesCombo = comboFilter === "all" || (comboFilter === "si" ? !!(p as any).es_combo : !(p as any).es_combo);
+      return matchesSearch && matchesCategory && matchesSubcategory && matchesMarca && matchesStock && matchesCombo;
+    });
+    arr.sort((a, b) => {
+      if (sortBy === "nombre_asc") return a.nombre.localeCompare(b.nombre);
+      if (sortBy === "nombre_desc") return b.nombre.localeCompare(a.nombre);
+      if (sortBy === "updated_desc") return new Date((b as any).updated_at || 0).getTime() - new Date((a as any).updated_at || 0).getTime();
+      if (sortBy === "updated_asc") return new Date((a as any).updated_at || 0).getTime() - new Date((b as any).updated_at || 0).getTime();
+      return 0;
+    });
+    return arr;
+  }, [products, debouncedSearch, presCodigoMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, comboFilter, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safeCurrentPage = Math.min(page, totalPages);
-  const paginatedProducts = filtered.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+  const paginatedProducts = useMemo(
+    () => filtered.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize),
+    [filtered, safeCurrentPage, pageSize]
+  );
 
-  const outOfStock = products.filter((p) => p.stock === 0).length;
-  const lowStock = products.filter(
-    (p) => p.stock > 0 && p.stock <= (p.stock_minimo || 5)
-  ).length;
+  const { outOfStock, lowStock, comboCount } = useMemo(() => {
+    let oos = 0, low = 0, combos = 0;
+    for (const p of products) {
+      const isComboP = !!(p as any).es_combo;
+      if (isComboP) combos++;
+      const effectiveStock = isComboP ? (comboStockMap[p.id] ?? 0) : p.stock;
+      if (effectiveStock === 0) oos++;
+      else if (effectiveStock <= (p.stock_minimo || 5)) low++;
+    }
+    return { outOfStock: oos, lowStock: low, comboCount: combos };
+  }, [products, comboStockMap]);
 
 
   return (
@@ -890,7 +1024,7 @@ export default function ProductosPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -935,6 +1069,20 @@ export default function ProductosPage() {
             </div>
           </CardContent>
         </Card>
+        <Card
+          className="cursor-pointer hover:bg-muted/40 transition-colors"
+          onClick={() => { setComboFilter(comboFilter === "si" ? "all" : "si"); setPage(1); }}
+        >
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${comboFilter === "si" ? "bg-pink-500/20" : "bg-pink-500/10"}`}>
+              <Layers className={`w-5 h-5 ${comboFilter === "si" ? "text-pink-600" : "text-pink-500"}`} />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Combos</p>
+              <p className="text-xl font-bold">{comboCount}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
@@ -953,9 +1101,17 @@ export default function ProductosPage() {
                 />
               </div>
             </div>
-            <div className="flex-shrink-0 self-end">
+            <div className="flex-shrink-0 self-end flex gap-2">
               <Button
-                variant="default"
+                variant={comboFilter === "si" ? "default" : "outline"}
+                className="gap-2"
+                onClick={() => { setComboFilter(comboFilter === "si" ? "all" : "si"); setPage(1); }}
+              >
+                <Layers className="w-4 h-4" />
+                Combos
+              </Button>
+              <Button
+                variant="outline"
                 className="gap-2"
                 onClick={() => setShowFilters(!showFilters)}
               >
@@ -968,67 +1124,110 @@ export default function ProductosPage() {
           {showFilters && (
             <>
               <Separator />
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div ref={catRef}>
                   <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Categoría</Label>
-                  <Select value={category} onValueChange={(v) => { setCategory(v ?? "all"); setSubcategoryFilter("all"); setPage(1); }}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      {categories.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar categoría..."
+                      value={category !== "all" ? (categories.find((c) => c.id === category)?.nombre ?? catSearch) : catSearch}
+                      onChange={(e) => { setCatSearch(e.target.value); setCategory("all"); setSubcategoryFilter("all"); setCatOpen(true); setPage(1); }}
+                      onFocus={() => setCatOpen(true)}
+                      className="pl-9"
+                    />
+                    {category !== "all" && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setCategory("all"); setCatSearch(""); setSubcategoryFilter("all"); setPage(1); }}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {catOpen && category === "all" && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setCategory("all"); setCatSearch(""); setCatOpen(false); setPage(1); }}>Todas</button>
+                        {categories.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).map((c) => (
+                          <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setCategory(c.id); setCatSearch(""); setCatOpen(false); setSubcategoryFilter("all"); setPage(1); }}>
+                            {c.nombre}
+                          </button>
+                        ))}
+                        {categories.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
+                <div ref={subcatRef}>
                   <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Subcategoría</Label>
-                  <Select value={subcategoryFilter} onValueChange={(v) => { setSubcategoryFilter(v ?? "all"); setPage(1); }}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      {filteredSubcategoriesForFilter.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar subcategoría..."
+                      value={subcategoryFilter !== "all" ? (filteredSubcategoriesForFilter.find((s) => s.id === subcategoryFilter)?.nombre ?? subcatSearch) : subcatSearch}
+                      onChange={(e) => { setSubcatSearch(e.target.value); setSubcategoryFilter("all"); setSubcatOpen(true); setPage(1); }}
+                      onFocus={() => setSubcatOpen(true)}
+                      className="pl-9"
+                    />
+                    {subcategoryFilter !== "all" && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSubcategoryFilter("all"); setSubcatSearch(""); setPage(1); }}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {subcatOpen && subcategoryFilter === "all" && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setSubcategoryFilter("all"); setSubcatSearch(""); setSubcatOpen(false); setPage(1); }}>Todas</button>
+                        {filteredSubcategoriesForFilter.filter((s) => s.nombre.toLowerCase().includes(subcatSearch.toLowerCase())).map((s) => (
+                          <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setSubcategoryFilter(s.id); setSubcatSearch(""); setSubcatOpen(false); setPage(1); }}>
+                            {s.nombre}
+                          </button>
+                        ))}
+                        {filteredSubcategoriesForFilter.filter((s) => s.nombre.toLowerCase().includes(subcatSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
+                <div ref={marcaRef}>
                   <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Marca</Label>
-                  <Select value={marcaFilter} onValueChange={(v) => { setMarcaFilter(v ?? "all"); setPage(1); }}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      {marcas.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>{m.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">En Oferta</Label>
-                  <Select value={ofertaFilter} onValueChange={(v) => { setOfertaFilter(v ?? "all"); setPage(1); }}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="si">Sí</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar marca..."
+                      value={marcaFilter !== "all" ? (marcas.find((m) => m.id === marcaFilter)?.nombre ?? marcaSearch) : marcaSearch}
+                      onChange={(e) => { setMarcaSearch(e.target.value); setMarcaFilter("all"); setMarcaOpen(true); setPage(1); }}
+                      onFocus={() => setMarcaOpen(true)}
+                      className="pl-9"
+                    />
+                    {marcaFilter !== "all" && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setMarcaFilter("all"); setMarcaSearch(""); setPage(1); }}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {marcaOpen && marcaFilter === "all" && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setMarcaFilter("all"); setMarcaSearch(""); setMarcaOpen(false); setPage(1); }}>Todas</button>
+                        {marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())).map((m) => (
+                          <button key={m.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setMarcaFilter(m.id); setMarcaSearch(""); setMarcaOpen(false); setPage(1); }}>
+                            {m.nombre}
+                          </button>
+                        ))}
+                        {marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Hay Stock</Label>
                   <Select value={stockFilter} onValueChange={(v) => { setStockFilter(v ?? "all"); setPage(1); }}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Todos" />
+                      <SelectValue>
+                        {stockFilter === "all" ? "Todos" : stockFilter === "si" ? "Con stock" : "Sin stock"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
@@ -1037,14 +1236,19 @@ export default function ProductosPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Aumento</Label>
-                  <Select value={aumentoFilter} onValueChange={(v) => { setAumentoFilter(v ?? "all"); setPage(1); }}>
+                <div className="md:col-span-2">
+                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Ordenar por</Label>
+                  <Select value={sortBy} onValueChange={(v) => { setSortBy(v ?? "nombre_asc"); setPage(1); }}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Todos" />
+                      <SelectValue>
+                        {sortBy === "nombre_asc" ? "Nombre A→Z" : sortBy === "nombre_desc" ? "Nombre Z→A" : sortBy === "updated_desc" ? "Última actualización (más reciente)" : "Última actualización (más antigua)"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="nombre_asc">Nombre A→Z</SelectItem>
+                      <SelectItem value="nombre_desc">Nombre Z→A</SelectItem>
+                      <SelectItem value="updated_desc">Última actualización (más reciente)</SelectItem>
+                      <SelectItem value="updated_asc">Última actualización (más antigua)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1096,7 +1300,14 @@ export default function ProductosPage() {
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
                         {product.codigo}
                       </td>
-                      <td className="py-3 px-4 font-medium">{product.nombre}</td>
+                      <td className="py-3 px-4 font-medium">
+                        <div className="flex items-center gap-2">
+                          {product.nombre}
+                          {(product as any).es_combo && (
+                            <Badge className="text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700 border border-emerald-300">COMBO</Badge>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-4">
                         <Badge variant="secondary" className="text-xs font-normal">
                           {product.categorias?.nombre || "\u2014"}
@@ -1106,15 +1317,18 @@ export default function ProductosPage() {
                         {product.marcas?.nombre || "\u2014"}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        {product.stock === 0 ? (
-                          <Badge variant="destructive" className="text-xs font-normal">
-                            Sin stock
-                          </Badge>
-                        ) : product.stock <= (product.stock_minimo || 5) ? (
-                          <span className="text-orange-500 font-medium">{product.stock}</span>
-                        ) : (
-                          <span className="font-medium">{product.stock}</span>
-                        )}
+                        {(() => {
+                          const displayStock = (product as any).es_combo
+                            ? (comboStockMap[product.id] ?? 0)
+                            : product.stock;
+                          return displayStock === 0 ? (
+                            <Badge variant="destructive" className="text-xs font-normal">Sin stock</Badge>
+                          ) : displayStock <= (product.stock_minimo || 5) ? (
+                            <span className="text-orange-500 font-medium">{displayStock}</span>
+                          ) : (
+                            <span className="font-medium">{displayStock}</span>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-4 text-center text-xs text-muted-foreground">
                         {product.stock_minimo ?? 0} / {product.stock_maximo ?? 0}
@@ -1228,6 +1442,30 @@ export default function ProductosPage() {
 
           {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Combo toggle */}
+            {!editingProduct && (
+              <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                <Layers className="w-4 h-4 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">¿Es un combo?</p>
+                  <p className="text-xs text-muted-foreground">Agrupá varios productos en un único artículo combo</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCombo((prev) => !prev)}
+                  className={`relative w-11 h-6 rounded-full transition-colors focus:outline-none ${isCombo ? "bg-emerald-500" : "bg-input"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${isCombo ? "translate-x-5" : ""}`} />
+                </button>
+              </div>
+            )}
+            {editingProduct && (editingProduct as any).es_combo && (
+              <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                <Layers className="w-4 h-4" />
+                <span>Este producto es un <strong>combo</strong></span>
+              </div>
+            )}
+
             {/* Section 1: Product Info */}
             <div>
               <h3 className="text-sm font-medium mb-3 flex items-center gap-2 text-muted-foreground">
@@ -1467,8 +1705,76 @@ export default function ProductosPage() {
               })}
             </div>
 
+            {/* Section 4: Combo Items (only when isCombo) */}
+            {isCombo && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    Productos del combo
+                  </h3>
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setComboSearchOpen(true)}>
+                    <Plus className="w-3 h-3" />Agregar
+                  </Button>
+                </div>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-xs w-28">Cód</th>
+                        <th className="text-left px-3 py-2 font-medium text-xs">Descripción</th>
+                        <th className="text-center px-3 py-2 font-medium text-xs w-20">Cant</th>
+                        <th className="text-right px-3 py-2 font-medium text-xs w-28">Precio</th>
+                        <th className="text-right px-3 py-2 font-medium text-xs w-28">Subtotal</th>
+                        <th className="w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comboItems.length === 0 ? (
+                        <tr><td colSpan={6} className="text-center py-8 text-muted-foreground text-xs">Agregá productos al combo</td></tr>
+                      ) : comboItems.map((item) => (
+                        <tr
+                          key={item.producto_id}
+                          onClick={() => setSelectedComboRow(item.producto_id === selectedComboRow ? null : item.producto_id)}
+                          className={`border-t cursor-pointer transition-colors ${selectedComboRow === item.producto_id ? "bg-blue-50" : "hover:bg-muted/50"}`}
+                        >
+                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{item.producto?.codigo}</td>
+                          <td className="px-3 py-2">{item.producto?.nombre}</td>
+                          <td className="px-3 py-2 text-center">
+                            <Input
+                              type="number" min={1} value={item.cantidad}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                if (val < 1) { setComboItems(comboItems.filter((i) => i.producto_id !== item.producto_id)); setSelectedComboRow(null); return; }
+                                setComboItems(comboItems.map((i) => i.producto_id === item.producto_id ? { ...i, cantidad: val } : i));
+                              }}
+                              className="h-7 w-16 text-center mx-auto"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">{formatCurrency(item.producto?.precio || 0)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency((item.producto?.precio || 0) * item.cantidad)}</td>
+                          <td className="px-2 py-2">
+                            <button onClick={(e) => { e.stopPropagation(); setComboItems(comboItems.filter((i) => i.producto_id !== item.producto_id)); setSelectedComboRow(null); }} className="text-muted-foreground hover:text-destructive">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {comboItems.length > 0 && (
+                  <div className="mt-2 text-xs text-muted-foreground flex items-center gap-4">
+                    <span>Stock disponible: <strong>{Math.min(...comboItems.map((i) => Math.floor((i.producto?.stock || 0) / i.cantidad)))}</strong></span>
+                    <span>Costo total: <strong>{formatCurrency(comboItems.reduce((a, i) => a + (i.producto?.costo || 0) * i.cantidad, 0))}</strong></span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Section 4: Presentaciones - compact table */}
-            <div>
+            {!isCombo && <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-muted-foreground">Presentaciones</h3>
                 {presentaciones.some((p) => !p._deleted && p.cantidad !== 1) && (
@@ -1659,9 +1965,10 @@ export default function ProductosPage() {
                 </Button>
               </div>
             </div>
+            }
 
             {/* Section 5: Proveedores - compact */}
-            <div>
+            {!isCombo && <div>
               <h3 className="text-sm font-medium mb-3 text-muted-foreground">Proveedores</h3>
               <div className="border rounded-md p-3 max-h-28 overflow-y-auto">
                 <div className="grid grid-cols-3 gap-x-4 gap-y-1">
@@ -1685,6 +1992,7 @@ export default function ProductosPage() {
                 </div>
               </div>
             </div>
+            }
 
             {/* Description - collapsible */}
             <div>
@@ -1981,6 +2289,47 @@ export default function ProductosPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Combo product search dialog */}
+      <Dialog open={comboSearchOpen} onOpenChange={setComboSearchOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Agregar producto al combo</DialogTitle></DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre o código..."
+              value={comboProductSearch}
+              onChange={(e) => setComboProductSearch(e.target.value)}
+              className="pl-9"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto divide-y border rounded-lg">
+            {allNonCombos.filter((p) =>
+              p.nombre.toLowerCase().includes(comboProductSearch.toLowerCase()) ||
+              p.codigo.toLowerCase().includes(comboProductSearch.toLowerCase())
+            ).map((p) => (
+              <button
+                key={p.id}
+                className="w-full text-left px-4 py-2.5 hover:bg-muted/50 transition-colors"
+                onClick={() => {
+                  const existing = comboItems.find((i) => i.producto_id === p.id);
+                  if (existing) {
+                    setComboItems(comboItems.map((i) => i.producto_id === p.id ? { ...i, cantidad: i.cantidad + 1 } : i));
+                  } else {
+                    setComboItems([...comboItems, { producto_id: p.id, cantidad: 1, descuento: 0, producto: p }]);
+                  }
+                  setComboSearchOpen(false);
+                  setComboProductSearch("");
+                }}
+              >
+                <p className="text-sm font-medium">{p.nombre}</p>
+                <p className="text-xs text-muted-foreground font-mono">{p.codigo} · Stock: {p.stock}</p>
+              </button>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

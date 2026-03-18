@@ -2,446 +2,269 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
-  Layout,
-  Instagram,
-  Facebook,
-  Phone,
-  Mail,
-  MapPin,
-  Bell,
-  Shield,
-  Settings,
-  Loader2,
-  Check,
-  BookOpen,
+  Save, Loader2, Instagram, Facebook, Phone, MapPin, Mail, Check,
+  Pencil, Trash2, Plus,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 
-interface InfoPage {
-  slug: string;
-  titulo: string;
-  contenido: string;
-}
-
-const INFO_PAGES_DEFAULT: InfoPage[] = [
-  { slug: "medios-de-pago", titulo: "Medios de pago", contenido: "" },
-  { slug: "envios", titulo: "Envíos", contenido: "" },
-  { slug: "como-comprar", titulo: "Cómo comprar", contenido: "" },
-  { slug: "como-registrarse", titulo: "Cómo registrarse", contenido: "" },
-  { slug: "faq", titulo: "Preguntas frecuentes", contenido: "" },
-  { slug: "terminos", titulo: "Términos y condiciones", contenido: "" },
-  { slug: "contacto", titulo: "Contacto", contenido: "" },
-];
-
-interface FooterForm {
-  direccion: string;
-  telefono: string;
-  email: string;
+interface FooterConfig {
+  descripcion: string;
+  logo_url: string;
   instagram_url: string;
   facebook_url: string;
   whatsapp_url: string;
+  direccion: string;
+  telefono: string;
+  email: string;
   mostrar_newsletter: boolean;
   badges: string[];
-  info_pages: InfoPage[];
 }
 
-const DEFAULT_FORM: FooterForm = {
-  direccion: "",
-  telefono: "",
-  email: "",
+interface PaginaInfo {
+  id: string;
+  slug: string;
+  titulo: string;
+  contenido: string;
+  activa: boolean;
+  orden: number;
+}
+
+const DEFAULT_CONFIG: FooterConfig = {
+  descripcion: "",
+  logo_url: "",
   instagram_url: "",
   facebook_url: "",
   whatsapp_url: "",
+  direccion: "",
+  telefono: "",
+  email: "",
   mostrar_newsletter: true,
-  badges: [
-    "Envío a domicilio",
-    "Compra segura",
-    "Múltiples medios de pago",
-    "Atención personalizada",
-  ],
-  info_pages: INFO_PAGES_DEFAULT,
+  badges: ["Envío a domicilio", "Compra segura", "Múltiples medios de pago", "Atención personalizada"],
 };
 
-type Section = "contacto" | "newsletter" | "badges" | "info";
-
-const NAV_ITEMS: { key: Section; label: string; icon: React.ReactNode }[] = [
-  { key: "contacto", label: "Contacto y Redes", icon: <MapPin className="w-4 h-4" /> },
-  { key: "newsletter", label: "Newsletter", icon: <Bell className="w-4 h-4" /> },
-  { key: "badges", label: "Badges de confianza", icon: <Shield className="w-4 h-4" /> },
-  { key: "info", label: "Información General", icon: <BookOpen className="w-4 h-4" /> },
-];
-
 export default function FooterConfigPage() {
-  const [form, setForm] = useState<FooterForm>(DEFAULT_FORM);
-  const [configId, setConfigId] = useState<string | null>(null);
+  const [config, setConfig] = useState<FooterConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState<Section>("contacto");
-  const [activeInfoSlug, setActiveInfoSlug] = useState(INFO_PAGES_DEFAULT[0].slug);
+  const [saved, setSaved] = useState(false);
+
+  const [paginas, setPaginas] = useState<PaginaInfo[]>([]);
+  const [editPage, setEditPage] = useState<PaginaInfo | null>(null);
+  const [editForm, setEditForm] = useState({ titulo: "", slug: "", contenido: "", activa: true });
+  const [savingPage, setSavingPage] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("tienda_config")
-      .select("id, footer_config")
-      .limit(1)
-      .single();
-
-    if (data) {
-      setConfigId(data.id);
-      const fc = (data as any).footer_config || {};
-      const savedPages: InfoPage[] = fc.info_pages || [];
-      const mergedPages = INFO_PAGES_DEFAULT.map((def) => {
-        const saved = savedPages.find((p) => p.slug === def.slug);
-        return saved ? { ...def, contenido: saved.contenido } : def;
-      });
-      setForm({
-        ...DEFAULT_FORM,
-        ...fc,
-        info_pages: mergedPages,
-      });
+    const [{ data: tc }, { data: pgs }] = await Promise.all([
+      supabase.from("tienda_config").select("footer_config, descripcion, logo_url").limit(1).single(),
+      supabase.from("paginas_info").select("*").order("orden"),
+    ]);
+    if (tc) {
+      const fc = (tc as any).footer_config || {};
+      setConfig({ ...DEFAULT_CONFIG, ...fc, descripcion: fc.descripcion || tc.descripcion || "", logo_url: fc.logo_url || tc.logo_url || "" });
     }
+    setPaginas((pgs as PaginaInfo[]) || []);
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const update = <K extends keyof FooterForm>(key: K, value: FooterForm[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const updateBadge = (index: number, value: string) => {
-    const badges = [...form.badges];
-    badges[index] = value;
-    update("badges", badges);
-  };
-
-  const updateInfoPage = (slug: string, contenido: string) => {
-    const pages = form.info_pages.map((p) =>
-      p.slug === slug ? { ...p, contenido } : p
-    );
-    update("info_pages", pages);
-  };
-
-  const save = async () => {
-    if (!configId) return;
+  const handleSave = async () => {
     setSaving(true);
-    await supabase
-      .from("tienda_config")
-      .update({ footer_config: form })
-      .eq("id", configId);
+    const { data: tc } = await supabase.from("tienda_config").select("id").limit(1).single();
+    if (tc) await supabase.from("tienda_config").update({ footer_config: config } as any).eq("id", tc.id);
     setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  const updateBadge = (idx: number, value: string) => {
+    const b = [...config.badges]; b[idx] = value; setConfig({ ...config, badges: b });
+  };
 
-  const activeInfoPage = form.info_pages.find((p) => p.slug === activeInfoSlug);
+  const openEditPage = (p: PaginaInfo) => {
+    setEditPage(p);
+    setEditForm({ titulo: p.titulo, slug: p.slug, contenido: p.contenido, activa: p.activa });
+  };
+
+  const openNewPage = () => {
+    setEditPage({ id: "", slug: "", titulo: "", contenido: "", activa: true, orden: paginas.length });
+    setEditForm({ titulo: "", slug: "", contenido: "", activa: true });
+  };
+
+  const savePage = async () => {
+    setSavingPage(true);
+    const slug = editForm.slug || editForm.titulo.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    if (editPage?.id) {
+      await supabase.from("paginas_info").update({ titulo: editForm.titulo, slug, contenido: editForm.contenido, activa: editForm.activa, updated_at: new Date().toISOString() }).eq("id", editPage.id);
+    } else {
+      await supabase.from("paginas_info").insert({ titulo: editForm.titulo, slug, contenido: editForm.contenido, activa: editForm.activa, orden: paginas.length });
+    }
+    setEditPage(null);
+    fetchData();
+    setSavingPage(false);
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
   return (
-    <div className="min-h-full">
-      {/* Header */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-            <Settings className="w-3.5 h-3.5" />
-            <span>Configuración</span>
-            <span className="text-muted-foreground/50">/</span>
-            <span className="text-foreground font-medium">Footer</span>
+    <div className="p-6 lg:p-8 space-y-6 max-w-4xl">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Footer y Páginas de Info</h1>
+        <p className="text-muted-foreground text-sm">Configura el pie de página y las páginas de información de la tienda</p>
+      </div>
+
+      {/* Footer content */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Contenido del Footer</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Descripción de la tienda</Label>
+            <Textarea value={config.descripcion} onChange={(e) => setConfig({ ...config, descripcion: e.target.value })} placeholder="Tu tienda online..." rows={2} />
+          </div>
+          <div className="space-y-2">
+            <Label>URL del logo (footer)</Label>
+            <Input value={config.logo_url} onChange={(e) => setConfig({ ...config, logo_url: e.target.value })} placeholder="https://..." />
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Layout className="w-5 h-5 text-primary" />
+            <Switch checked={config.mostrar_newsletter} onCheckedChange={(v) => setConfig({ ...config, mostrar_newsletter: v })} />
+            <Label>Mostrar newsletter</Label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Social & Contact */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Redes Sociales y Contacto</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><Instagram className="w-3.5 h-3.5" />Instagram</Label>
+              <Input value={config.instagram_url} onChange={(e) => setConfig({ ...config, instagram_url: e.target.value })} placeholder="https://instagram.com/..." />
             </div>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight">
-                Configuración del Footer
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                Editá el pie de página y las páginas informativas de la tienda
-              </p>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><Facebook className="w-3.5 h-3.5" />Facebook</Label>
+              <Input value={config.facebook_url} onChange={(e) => setConfig({ ...config, facebook_url: e.target.value })} placeholder="https://facebook.com/..." />
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" />WhatsApp</Label>
+              <Input value={config.whatsapp_url} onChange={(e) => setConfig({ ...config, whatsapp_url: e.target.value })} placeholder="https://wa.me/5411..." />
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="flex px-6 lg:px-8 py-6 gap-6">
-        {/* Sidebar nav */}
-        <nav className="w-56 shrink-0 hidden md:block">
-          <div className="sticky top-6 space-y-1">
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setActiveSection(item.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
-                  activeSection === item.key
-                    ? "bg-accent text-accent-foreground border-l-2 border-primary pl-[10px]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />Dirección</Label>
+              <Input value={config.direccion} onChange={(e) => setConfig({ ...config, direccion: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" />Teléfono</Label>
+              <Input value={config.telefono} onChange={(e) => setConfig({ ...config, telefono: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />Email</Label>
+              <Input value={config.email} onChange={(e) => setConfig({ ...config, email: e.target.value })} />
+            </div>
           </div>
-        </nav>
+        </CardContent>
+      </Card>
 
-        {/* Mobile nav */}
-        <div className="flex gap-1 overflow-x-auto md:hidden pb-2 self-start">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setActiveSection(item.key)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                activeSection === item.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
+      {/* Badges */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Badges de confianza</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {config.badges.map((badge, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <Input value={badge} onChange={(e) => updateBadge(idx, e.target.value)} />
+              <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-destructive" onClick={() => setConfig({ ...config, badges: config.badges.filter((_, i) => i !== idx) })}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           ))}
-        </div>
+          <Button variant="outline" size="sm" onClick={() => setConfig({ ...config, badges: [...config.badges, ""] })}>
+            <Plus className="w-3.5 h-3.5 mr-1.5" />Agregar
+          </Button>
+        </CardContent>
+      </Card>
 
-        {/* Content */}
-        <div className="flex-1 max-w-3xl space-y-6 pb-20">
+      <Button onClick={handleSave} disabled={saving}>
+        {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+        Guardar Footer
+      </Button>
+      {saved && <span className="text-sm text-emerald-600 inline-flex items-center gap-1 ml-3"><Check className="w-4 h-4" />Guardado</span>}
 
-          {/* ── CONTACTO Y REDES ── */}
-          {activeSection === "contacto" && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-base">Información de contacto</CardTitle>
-                  <CardDescription>Se muestra en el footer de la tienda</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Dirección
-                    </Label>
-                    <Input
-                      value={form.direccion}
-                      onChange={(e) => update("direccion", e.target.value)}
-                      placeholder="Av. Corrientes 1234, Buenos Aires"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-muted-foreground" /> Teléfono
-                    </Label>
-                    <Input
-                      value={form.telefono}
-                      onChange={(e) => update("telefono", e.target.value)}
-                      placeholder="+54 11 1234-5678"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-muted-foreground" /> Email
-                    </Label>
-                    <Input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => update("email", e.target.value)}
-                      placeholder="info@mitienda.com"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+      <Separator />
 
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-base">Redes sociales</CardTitle>
-                  <CardDescription>Dejá vacío para ocultar el ícono</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Instagram className="w-3.5 h-3.5 text-muted-foreground" /> Instagram
-                    </Label>
-                    <Input
-                      value={form.instagram_url}
-                      onChange={(e) => update("instagram_url", e.target.value)}
-                      placeholder="https://instagram.com/mitienda"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Facebook className="w-3.5 h-3.5 text-muted-foreground" /> Facebook
-                    </Label>
-                    <Input
-                      value={form.facebook_url}
-                      onChange={(e) => update("facebook_url", e.target.value)}
-                      placeholder="https://facebook.com/mitienda"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-muted-foreground" /> WhatsApp
-                    </Label>
-                    <Input
-                      value={form.whatsapp_url}
-                      onChange={(e) => update("whatsapp_url", e.target.value)}
-                      placeholder="https://wa.me/5491112345678"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* ── NEWSLETTER ── */}
-          {activeSection === "newsletter" && (
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-pink-500/10 flex items-center justify-center">
-                      <Bell className="w-5 h-5 text-pink-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">Sección Newsletter</p>
-                      <p className="text-xs text-muted-foreground max-w-sm">
-                        Muestra u oculta la sección de suscripción por email en el footer
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => update("mostrar_newsletter", !form.mostrar_newsletter)}
-                    className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
-                      form.mostrar_newsletter ? "bg-emerald-500" : "bg-muted-foreground/30"
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
-                        form.mostrar_newsletter ? "translate-x-8" : "translate-x-1"
-                      }`}
-                    />
-                  </button>
+      {/* Info Pages */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div><CardTitle className="text-base">Páginas de Información</CardTitle><CardDescription>Cómo comprar, envíos, FAQ, etc.</CardDescription></div>
+            <Button size="sm" onClick={openNewPage}><Plus className="w-4 h-4 mr-1.5" />Nueva</Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-lg divide-y">
+            {paginas.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 p-3 hover:bg-muted/30">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{p.titulo}</p>
+                  <p className="text-xs text-muted-foreground">/info/{p.slug}</p>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                <Badge variant={p.activa ? "secondary" : "outline"} className="text-[10px]">{p.activa ? "Activa" : "Oculta"}</Badge>
+                <Switch checked={p.activa} onCheckedChange={(v) => supabase.from("paginas_info").update({ activa: v }).eq("id", p.id).then(() => fetchData())} />
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditPage(p)}><Pencil className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => supabase.from("paginas_info").delete().eq("id", p.id).then(() => fetchData())}><Trash2 className="w-3.5 h-3.5" /></Button>
+              </div>
+            ))}
+            {paginas.length === 0 && <div className="p-8 text-center text-muted-foreground text-sm">Sin páginas</div>}
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* ── BADGES ── */}
-          {activeSection === "badges" && (
-            <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base">Badges de confianza</CardTitle>
-                <CardDescription>
-                  Textos que se muestran en la barra inferior del footer
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {form.badges.map((badge, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
-                      {i + 1}
-                    </span>
-                    <Input
-                      value={badge}
-                      onChange={(e) => updateBadge(i, e.target.value)}
-                      placeholder={`Badge ${i + 1}`}
-                    />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── INFORMACIÓN GENERAL ── */}
-          {activeSection === "info" && (
-            <div className="space-y-4">
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Editá el contenido de cada página informativa de la tienda.
-                    Los clientes acceden desde los links del footer.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <div className="flex gap-4">
-                {/* Page list */}
-                <nav className="w-48 shrink-0 space-y-1">
-                  {form.info_pages.map((page) => (
-                    <button
-                      key={page.slug}
-                      onClick={() => setActiveInfoSlug(page.slug)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                        activeInfoSlug === page.slug
-                          ? "bg-accent text-accent-foreground font-medium border-l-2 border-primary pl-[10px]"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                      }`}
-                    >
-                      {page.titulo}
-                    </button>
-                  ))}
-                </nav>
-
-                {/* Editor */}
-                {activeInfoPage && (
-                  <div className="flex-1">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">{activeInfoPage.titulo}</CardTitle>
-                        <CardDescription>
-                          URL: <code className="text-xs bg-muted px-1 py-0.5 rounded">/info/{activeInfoPage.slug}</code>
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <Textarea
-                          value={activeInfoPage.contenido}
-                          onChange={(e) => updateInfoPage(activeInfoPage.slug, e.target.value)}
-                          placeholder={`Escribí aquí el contenido de "${activeInfoPage.titulo}"...`}
-                          className="min-h-[320px] resize-none font-mono text-sm"
-                        />
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Podés usar texto plano o HTML básico (&lt;b&gt;, &lt;ul&gt;, &lt;p&gt;, etc.)
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
+      {/* Edit dialog */}
+      <Dialog open={!!editPage} onOpenChange={(o) => !o && setEditPage(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editPage?.id ? "Editar página" : "Nueva página"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Título</Label>
+                <Input value={editForm.titulo} onChange={(e) => setEditForm({ ...editForm, titulo: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Slug</Label>
+                <Input value={editForm.slug} onChange={(e) => setEditForm({ ...editForm, slug: e.target.value })}
+                  placeholder={editForm.titulo.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")} />
               </div>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Save bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="flex items-center justify-end px-6 lg:px-8 py-3">
-          <Button onClick={save} disabled={saving} className="min-w-[160px]">
-            {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Check className="w-4 h-4 mr-2" />
-            )}
-            Guardar cambios
-          </Button>
-        </div>
-      </div>
+            <div className="space-y-2">
+              <Label>Contenido (HTML)</Label>
+              <Textarea value={editForm.contenido} onChange={(e) => setEditForm({ ...editForm, contenido: e.target.value })}
+                rows={12} className="font-mono text-sm" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch checked={editForm.activa} onCheckedChange={(v) => setEditForm({ ...editForm, activa: v })} />
+              <Label>Activa</Label>
+            </div>
+            <Button onClick={savePage} disabled={!editForm.titulo.trim() || savingPage} className="w-full">
+              {savingPage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              Guardar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Cliente } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,6 +83,9 @@ export default function ClientesPage() {
   const [editingClient, setEditingClient] = useState<Cliente | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [vendedores, setVendedores] = useState<{id:string;nombre:string}[]>([]);
+  const [vendedorFilter, setVendedorFilter] = useState("");
+  const [vendedorSearch, setVendedorSearch] = useState("");
+  const [vendedorOpen, setVendedorOpen] = useState(false);
   const [resetPw, setResetPw] = useState("");
   const [resetMsg, setResetMsg] = useState("");
   const [authEmail, setAuthEmail] = useState<string | null>(null);
@@ -97,6 +100,8 @@ export default function ClientesPage() {
   const [movHasta, setMovHasta] = useState("");
   const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, cobros: 0, totalGastado: 0 });
   const [movExpanded, setMovExpanded] = useState<string | null>(null);
+  const vendedorRef = useRef<HTMLDivElement>(null);
+
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -114,6 +119,16 @@ export default function ClientesPage() {
   useEffect(() => {
     fetchClients();
   }, [fetchClients]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (vendedorRef.current && !vendedorRef.current.contains(e.target as Node)) {
+        setVendedorOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const resetForm = () => { setForm(emptyForm); setEditingClient(null); setResetPw(""); setResetMsg(""); setAuthEmail(null); setAuthId(null); };
 
@@ -286,7 +301,9 @@ export default function ClientesPage() {
   };
 
   const filtered = clients.filter(
-    (c) => c.nombre.toLowerCase().includes(search.toLowerCase()) || (c.cuit || "").includes(search)
+    (c) =>
+      (c.nombre.toLowerCase().includes(search.toLowerCase()) || (c.cuit || "").includes(search)) &&
+      (!vendedorFilter || (c as any).vendedor_id === vendedorFilter)
   );
 
   const inscriptos = clients.filter((c) => c.situacion_iva === "Responsable Inscripto").length;
@@ -334,12 +351,50 @@ export default function ClientesPage() {
 
       <Card>
         <CardContent className="pt-6">
-          <div className="space-y-1.5">
-            <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Buscar por nombre o CUIT..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex flex-wrap gap-4">
+            <div className="space-y-1.5 flex-1 min-w-[200px]">
+              <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Buscar por nombre o CUIT..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              </div>
             </div>
+            {vendedores.length > 0 && (
+              <div className="space-y-1.5 min-w-[200px]" ref={vendedorRef}>
+                <span className="text-xs text-muted-foreground font-semibold tracking-wide">VENDEDOR</span>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filtrar por vendedor..."
+                    value={vendedorFilter ? (vendedores.find((v) => v.id === vendedorFilter)?.nombre ?? vendedorSearch) : vendedorSearch}
+                    onChange={(e) => { setVendedorSearch(e.target.value); setVendedorFilter(""); setVendedorOpen(true); }}
+                    onFocus={() => setVendedorOpen(true)}
+                    className="pl-9"
+                  />
+                  {vendedorFilter && (
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setVendedorFilter(""); setVendedorSearch(""); }}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  {vendedorOpen && !vendedorFilter && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                      <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setVendedorFilter(""); setVendedorSearch(""); setVendedorOpen(false); }}>
+                        Todos los vendedores
+                      </button>
+                      {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).map((v) => (
+                        <button key={v.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                          onClick={() => { setVendedorFilter(v.id); setVendedorSearch(""); setVendedorOpen(false); }}>
+                          {v.nombre}
+                        </button>
+                      ))}
+                      {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
