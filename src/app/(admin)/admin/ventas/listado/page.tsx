@@ -262,12 +262,12 @@ function ReceiptPrintView({
                 <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unit === "Mt" && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
                 <td style={{ padding: "3px 4px", textAlign: "left" }}>
                   {item.es_combo && (
-                    <span style={{ fontSize: `${fs - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 3px", borderRadius: "2px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
+                    <span style={{ fontSize: `${fs - 4}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 2px", borderRadius: "2px", marginRight: "3px", letterSpacing: "0.5px" }}>COMBO</span>
                   )}
                   {cleanDescription}
                   {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
-                    <div style={{ fontSize: `${fs - 3}px`, color: "#555", marginTop: "1px", lineHeight: "1.3" }}>
-                      Incl: {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
+                    <div style={{ fontSize: `${fs - 4}px`, color: "#777", marginTop: "0px", lineHeight: "1.1" }}>
+                      {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
                     </div>
                   )}
                 </td>
