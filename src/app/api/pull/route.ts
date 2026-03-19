@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   return new Promise<NextResponse>((resolve) => {
     exec(
-      'git -C /Users/santiago/Desktop/enexpro/cuenca pull origin main',
+      'git -C /Users/santiago/Desktop/enexpro/dulcesur pull origin main',
       (err, stdout, stderr) => {
         if (err) {
           resolve(NextResponse.json({ error: stderr }, { status: 500 }))

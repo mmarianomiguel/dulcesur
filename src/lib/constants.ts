@@ -1,5 +1,5 @@
 // ─── App Config ───
-export const APP_NAME = "Cuenca";
+export const APP_NAME = "Dulcesur";
 export const APP_DESCRIPTION = "Sistema de gestión comercial moderno";
 
 // ─── Locale ───

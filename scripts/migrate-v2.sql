@@ -1,5 +1,5 @@
 -- =============================================
--- CUENCA V2 - New Features Migration
+-- DULCESUR V2 - New Features Migration
 -- =============================================
 
 -- Subcategorias

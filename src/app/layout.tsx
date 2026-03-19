@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Cuenca - Gestión Comercial",
+  title: "Dulcesur - Gestión Comercial",
   description: "Sistema de gestión comercial moderno",
 };
 

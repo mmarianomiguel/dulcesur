@@ -314,7 +314,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           {!collapsed && (
             <div className="flex flex-col flex-1">
               <span className="text-base font-semibold tracking-tight text-sidebar-foreground">
-                {wl.system_name || "Cuenca"}
+                {wl.system_name || "Dulcesur"}
               </span>
               <span className="text-[11px] text-sidebar-foreground/50">
                 {wl.system_subtitle || "Gestión Comercial"}

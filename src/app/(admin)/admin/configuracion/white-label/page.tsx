@@ -80,7 +80,7 @@ export default function WhiteLabelPage() {
               <Input
                 value={config.system_name}
                 onChange={(e) => update({ system_name: e.target.value })}
-                placeholder="Cuenca"
+                placeholder="Dulcesur"
               />
             </div>
             <div className="space-y-2">
@@ -131,7 +131,7 @@ export default function WhiteLabelPage() {
               )}
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-white">
-                  {config.system_name || "Cuenca"}
+                  {config.system_name || "Dulcesur"}
                 </span>
                 <span className="text-[11px] text-white/50">
                   {config.system_subtitle || "Gestión Comercial"}

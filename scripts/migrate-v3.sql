@@ -1,5 +1,5 @@
 -- =============================================
--- CUENCA V3 - Ventas Module Full Features
+-- DULCESUR V3 - Ventas Module Full Features
 -- =============================================
 
 -- Add delivery/invoicing tracking to ventas

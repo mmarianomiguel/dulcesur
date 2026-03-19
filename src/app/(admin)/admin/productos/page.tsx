@@ -855,7 +855,7 @@ export default function ProductosPage() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Productos");
-    XLSX.writeFile(wb, `Productos_Cuenca_${new Date().toISOString().split("T")[0]}.xlsx`);
+    XLSX.writeFile(wb, `Productos_Dulcesur_${new Date().toISOString().split("T")[0]}.xlsx`);
   };
 
   // Import Excel

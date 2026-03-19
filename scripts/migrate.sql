@@ -1,5 +1,5 @@
 -- =============================================
--- CUENCA - Database Schema Migration
+-- DULCESUR - Database Schema Migration
 -- =============================================
 
 -- Enable UUID extension

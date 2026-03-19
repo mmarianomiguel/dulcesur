@@ -13,7 +13,7 @@ export interface WhiteLabelConfig {
 }
 
 const DEFAULT_CONFIG: WhiteLabelConfig = {
-  system_name: "Cuenca",
+  system_name: "Dulcesur",
   system_subtitle: "Gestión Comercial",
   logo_url: "",
   logo_initial: "C",

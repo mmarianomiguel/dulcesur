@@ -60,7 +60,7 @@ export default function LoginPage() {
               <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-bold text-lg">
                 C
               </div>
-              <span className="text-xl font-semibold tracking-tight">Cuenca</span>
+              <span className="text-xl font-semibold tracking-tight">Dulcesur</span>
             </div>
           </div>
 
@@ -91,7 +91,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-white/30 text-sm">
-            &copy; {new Date().getFullYear()} Cuenca. Todos los derechos reservados.
+            &copy; {new Date().getFullYear()} Dulcesur. Todos los derechos reservados.
           </p>
         </div>
       </div>
@@ -104,7 +104,7 @@ export default function LoginPage() {
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-lg">
               C
             </div>
-            <span className="text-xl font-semibold text-gray-900 tracking-tight">Cuenca</span>
+            <span className="text-xl font-semibold text-gray-900 tracking-tight">Dulcesur</span>
           </div>
 
           <div className="space-y-2 mb-8">
@@ -182,7 +182,7 @@ export default function LoginPage() {
           </form>
 
           <p className="text-center text-xs text-gray-400 mt-8 lg:hidden">
-            &copy; {new Date().getFullYear()} Cuenca
+            &copy; {new Date().getFullYear()} Dulcesur
           </p>
         </div>
       </div>
