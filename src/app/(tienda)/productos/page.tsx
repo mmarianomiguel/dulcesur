@@ -190,7 +190,9 @@ function ProductosContent() {
 
       const { data: prods } = await supabase
         .from("productos")
-        .select("categoria_id");
+        .select("categoria_id")
+        .eq("activo", true)
+        .eq("visibilidad", "visible");
 
       const countMap: Record<string, number> = {};
       prods?.forEach((p: { categoria_id: string }) => {
@@ -306,7 +308,9 @@ function ProductosContent() {
 
       const { data: prods } = await supabase
         .from("productos")
-        .select("marca_id");
+        .select("marca_id")
+        .eq("activo", true)
+        .eq("visibilidad", "visible");
 
       const countMap: Record<string, number> = {};
       prods?.forEach((p: { marca_id: string | null }) => {
@@ -333,6 +337,7 @@ function ProductosContent() {
         .from("productos")
         .select("*, categorias(nombre), marcas(nombre)", { count: "exact" });
 
+      query = query.eq("activo", true).eq("visibilidad", "visible");
       if (categoriaId) query = query.eq("categoria_id", categoriaId);
       if (subcategoriaId)
         query = query.eq("subcategoria_id", subcategoriaId);
