@@ -32,6 +32,20 @@ import {
   Store,
 } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   BarChart,
   Bar,
   XAxis,
@@ -104,6 +118,14 @@ export default function DashboardPage() {
   const [ventasPorCategoria, setVentasPorCategoria] = useState<{ name: string; value: number }[]>([]);
 
   // Web orders
+  interface PedidoItemWeb {
+    id: string;
+    nombre: string;
+    cantidad: number;
+    precio_unitario: number;
+    subtotal: number;
+    presentacion: string | null;
+  }
   interface PedidoWeb {
     id: string;
     numero: string;
@@ -114,11 +136,19 @@ export default function DashboardPage() {
     fecha_entrega: string | null;
     created_at: string;
     estado: string;
+    direccion: string | null;
+    localidad: string | null;
+    telefono: string | null;
+    observaciones: string | null;
   }
   const [pedidosHoy, setPedidosHoy] = useState<PedidoWeb[]>([]);
   const [pedidosProgramados, setPedidosProgramados] = useState<PedidoWeb[]>([]);
   const [pedidosVencidos, setPedidosVencidos] = useState<PedidoWeb[]>([]);
   const [pedidosTab, setPedidosTab] = useState<"hoy" | "programados" | "pendientes">("hoy");
+  const [pedidoDetailOpen, setPedidoDetailOpen] = useState(false);
+  const [pedidoDetail, setPedidoDetail] = useState<PedidoWeb | null>(null);
+  const [pedidoItems, setPedidoItems] = useState<PedidoItemWeb[]>([]);
+  const [pedidoItemsLoading, setPedidoItemsLoading] = useState(false);
 
   // ─── Compute date range from filter ───
   const getDateRange = useCallback((): { start: string; end: string } => {
@@ -299,9 +329,9 @@ export default function DashboardPage() {
     const today = todayARG();
     const { data: allPedidos } = await supabase
       .from("pedidos_tienda")
-      .select("id, numero, nombre_cliente, metodo_entrega, metodo_pago, total, fecha_entrega, created_at, estado")
+      .select("id, numero, nombre_cliente, metodo_entrega, metodo_pago, total, fecha_entrega, created_at, estado, direccion, localidad, telefono, observaciones")
       .in("estado", ["pendiente", "confirmado"])
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false });
 
     const pedidos = (allPedidos as PedidoWeb[]) || [];
     setPedidosHoy(pedidos.filter((p) => p.fecha_entrega === today));
@@ -312,6 +342,18 @@ export default function DashboardPage() {
   }, [getDateRange]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleViewPedido = async (pedido: PedidoWeb) => {
+    setPedidoDetail(pedido);
+    setPedidoDetailOpen(true);
+    setPedidoItemsLoading(true);
+    const { data } = await supabase
+      .from("pedido_tienda_items")
+      .select("id, nombre, cantidad, precio_unitario, subtotal, presentacion")
+      .eq("pedido_id", pedido.id);
+    setPedidoItems((data as PedidoItemWeb[]) || []);
+    setPedidoItemsLoading(false);
+  };
 
   const ganancia = gananciaPeriodo;
 
@@ -629,7 +671,7 @@ export default function DashboardPage() {
                                   variant="outline"
                                   size="sm"
                                   className="h-8 text-xs gap-1"
-                                  onClick={() => window.open(`/admin/ventas/listado?pedido=${p.id}`, "_self")}
+                                  onClick={() => handleViewPedido(p)}
                                 >
                                   <Eye className="w-3.5 h-3.5" />
                                   Ver pedido
@@ -864,6 +906,115 @@ export default function DashboardPage() {
           </Card>
         </>
       )}
+
+      {/* Pedido Detail Dialog */}
+      <Dialog open={pedidoDetailOpen} onOpenChange={setPedidoDetailOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              Pedido #{pedidoDetail?.numero}
+            </DialogTitle>
+          </DialogHeader>
+          {pedidoDetail && (
+            <div className="space-y-4 mt-2">
+              <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-lg p-4">
+                <div>
+                  <span className="text-muted-foreground">Cliente:</span>{" "}
+                  <span className="font-medium">{pedidoDetail.nombre_cliente}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Estado:</span>{" "}
+                  <Badge variant="secondary" className="text-xs ml-1">{pedidoDetail.estado}</Badge>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Entrega:</span>{" "}
+                  <span className="font-medium">{pedidoDetail.metodo_entrega === "envio" ? "Envio a domicilio" : "Retiro en local"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Pago:</span>{" "}
+                  <span className="font-medium">{pedidoDetail.metodo_pago || "---"}</span>
+                </div>
+                {pedidoDetail.direccion && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Direccion:</span>{" "}
+                    <span className="font-medium">
+                      {[pedidoDetail.direccion, pedidoDetail.localidad].filter(Boolean).join(", ")}
+                    </span>
+                  </div>
+                )}
+                {pedidoDetail.telefono && (
+                  <div>
+                    <span className="text-muted-foreground">Telefono:</span>{" "}
+                    <span className="font-medium">{pedidoDetail.telefono}</span>
+                  </div>
+                )}
+                {pedidoDetail.fecha_entrega && (
+                  <div>
+                    <span className="text-muted-foreground">Fecha entrega:</span>{" "}
+                    <span className="font-medium">
+                      {new Date(pedidoDetail.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-muted-foreground">Creado:</span>{" "}
+                  <span className="font-medium">
+                    {new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })}
+                  </span>
+                </div>
+              </div>
+
+              {pedidoDetail.observaciones && (
+                <div className="text-sm bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-900/30">
+                  <span className="text-muted-foreground font-medium">Observaciones:</span>{" "}
+                  {pedidoDetail.observaciones}
+                </div>
+              )}
+
+              {pedidoItemsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-center">Cant.</TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pedidoItems.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <span className="font-medium text-sm">{item.nombre}</span>
+                            {item.presentacion && item.presentacion !== "unidad" && (
+                              <span className="text-xs text-muted-foreground ml-1">({item.presentacion})</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">{item.cantidad}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2 border-t">
+                <div className="text-lg font-bold">
+                  Total: {formatCurrency(pedidoDetail.total)}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -103,6 +103,15 @@ export default function HojaDeRutaPage() {
   const [search, setSearch] = useState("");
   const [showAllPending, setShowAllPending] = useState(true);
 
+  // Historial de entregas
+  const [activeTab, setActiveTab] = useState<"pendientes" | "historial">("pendientes");
+  const [historialLoading, setHistorialLoading] = useState(false);
+  const [historialVentas, setHistorialVentas] = useState<VentaRow[]>([]);
+  const [historialPagos, setHistorialPagos] = useState<Record<string, { monto: number; metodo: string }[]>>({});
+  const [historialDateFrom, setHistorialDateFrom] = useState(getArgentinaToday());
+  const [historialDateTo, setHistorialDateTo] = useState(getArgentinaToday());
+  const [historialSearch, setHistorialSearch] = useState("");
+
 
   // Track how much was actually paid per order (from caja_movimientos)
   const [pagadoPorVenta, setPagadoPorVenta] = useState<Record<string, number>>({});
@@ -167,6 +176,69 @@ export default function HojaDeRutaPage() {
   useEffect(() => {
     fetchVentas();
   }, [fetchVentas]);
+
+  const fetchHistorial = useCallback(async () => {
+    setHistorialLoading(true);
+    const nextDay = new Date(historialDateTo + "T12:00:00");
+    nextDay.setDate(nextDay.getDate() + 1);
+    const endDate = nextDay.toISOString().split("T")[0];
+
+    const { data, error } = await supabase
+      .from("ventas")
+      .select(
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida)"
+      )
+      .eq("entregado", true)
+      .gte("fecha", historialDateFrom)
+      .lt("fecha", endDate)
+      .neq("estado", "anulada")
+      .order("fecha", { ascending: false });
+
+    const rows = (data || []) as unknown as VentaRow[];
+    setHistorialVentas(rows);
+
+    // Fetch payments for these orders
+    if (rows.length > 0) {
+      const ventaIds = rows.map((v) => v.id);
+      const { data: movs } = await supabase
+        .from("caja_movimientos")
+        .select("referencia_id, monto, metodo_pago")
+        .eq("tipo", "ingreso")
+        .eq("referencia_tipo", "venta")
+        .in("referencia_id", ventaIds);
+
+      const pagosMap: Record<string, { monto: number; metodo: string }[]> = {};
+      (movs || []).forEach((m: { referencia_id: string; monto: number; metodo_pago: string }) => {
+        if (!pagosMap[m.referencia_id]) pagosMap[m.referencia_id] = [];
+        pagosMap[m.referencia_id].push({ monto: m.monto, metodo: m.metodo_pago });
+      });
+      setHistorialPagos(pagosMap);
+    } else {
+      setHistorialPagos({});
+    }
+
+    setHistorialLoading(false);
+  }, [historialDateFrom, historialDateTo]);
+
+  useEffect(() => {
+    if (activeTab === "historial") {
+      fetchHistorial();
+    }
+  }, [activeTab, fetchHistorial]);
+
+  const filteredHistorial = historialVentas.filter((v) => {
+    if (historialSearch) {
+      const s = historialSearch.toLowerCase();
+      if (!v.numero.toLowerCase().includes(s) && !(v.clientes?.nombre || "").toLowerCase().includes(s)) return false;
+    }
+    return true;
+  });
+
+  const historialTotalVentas = filteredHistorial.reduce((s, v) => s + v.total, 0);
+  const historialTotalCobrado = filteredHistorial.reduce((s, v) => {
+    const pagos = historialPagos[v.id] || [];
+    return s + pagos.reduce((a, p) => a + p.monto, 0);
+  }, 0);
 
   const handleMarkDelivered = async (id: string) => {
     const { error } = await supabase
@@ -373,30 +445,211 @@ export default function HojaDeRutaPage() {
             <p className="text-sm text-gray-500">Gestiona entregas pendientes, cobros y hoja de ruta</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showAllPending}
-              onChange={(e) => setShowAllPending(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            Todas las pendientes
-          </label>
-          {!showAllPending && (
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-gray-400" />
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-44"
-              />
-            </div>
-          )}
-        </div>
       </div>
 
+      {/* Pendientes / Historial tabs */}
+      <div className="flex items-center justify-between">
+        <div className="bg-gray-100 rounded-lg p-1 inline-flex">
+          <button
+            onClick={() => setActiveTab("pendientes")}
+            className={`rounded-md px-5 py-2 text-sm transition-all ${
+              activeTab === "pendientes" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Package className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+            Entregas Pendientes
+          </button>
+          <button
+            onClick={() => setActiveTab("historial")}
+            className={`rounded-md px-5 py-2 text-sm transition-all ${
+              activeTab === "historial" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+            Historial de Entregas
+          </button>
+        </div>
+        {activeTab === "pendientes" && (
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllPending}
+                onChange={(e) => setShowAllPending(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Todas las pendientes
+            </label>
+            {!showAllPending && (
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-gray-400" />
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-44"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {activeTab === "historial" && (
+        <>
+          {/* Historial filters */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-500">Desde</span>
+              <Input
+                type="date"
+                value={historialDateFrom}
+                onChange={(e) => setHistorialDateFrom(e.target.value)}
+                className="w-40 h-9"
+              />
+              <span className="text-sm text-gray-500">Hasta</span>
+              <Input
+                type="date"
+                value={historialDateTo}
+                onChange={(e) => setHistorialDateTo(e.target.value)}
+                className="w-40 h-9"
+              />
+            </div>
+            <div className="relative flex-1 max-w-xs">
+              <input
+                type="text"
+                placeholder="Buscar por N° o cliente..."
+                value={historialSearch}
+                onChange={(e) => setHistorialSearch(e.target.value)}
+                className="w-full h-9 pl-3 pr-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300"
+              />
+            </div>
+          </div>
+
+          {/* Historial stats */}
+          <div className="grid grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                  <CheckCircle className="w-4 h-4" />
+                  Entregas Realizadas
+                </div>
+                <div className="text-2xl font-bold">{filteredHistorial.length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                  <DollarSign className="w-4 h-4" />
+                  Total Ventas
+                </div>
+                <div className="text-2xl font-bold">{formatCurrency(historialTotalVentas)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-green-500 text-sm mb-1">
+                  <CheckCircle className="w-4 h-4" />
+                  Total Cobrado
+                </div>
+                <div className="text-2xl font-bold text-green-600">{formatCurrency(historialTotalCobrado)}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Historial table */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Historial de Entregas</h2>
+                <Button variant="outline" size="sm" onClick={fetchHistorial} disabled={historialLoading}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${historialLoading ? "animate-spin" : ""}`} />
+                  Actualizar
+                </Button>
+              </div>
+
+              {historialLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : filteredHistorial.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <CheckCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium text-gray-500">No hay entregas en este periodo</p>
+                  <p className="text-sm mt-1">Selecciona otro rango de fechas</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-gray-500">
+                        <th className="pb-3 px-3">Fecha</th>
+                        <th className="pb-3 px-3">Nro. Venta</th>
+                        <th className="pb-3 px-3">Cliente</th>
+                        <th className="pb-3 px-3">Entrega</th>
+                        <th className="pb-3 px-3 text-right">Total</th>
+                        <th className="pb-3 px-3 text-right">Cobrado</th>
+                        <th className="pb-3 px-3">Metodo Pago</th>
+                        <th className="pb-3 px-3 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredHistorial.map((venta) => {
+                        const pagos = historialPagos[venta.id] || [];
+                        const totalCobrado = pagos.reduce((a, p) => a + p.monto, 0);
+                        const metodos = [...new Set(pagos.map((p) => p.metodo))].join(", ") || venta.forma_pago;
+
+                        return (
+                          <tr key={venta.id} className="border-b hover:bg-gray-50 transition-colors">
+                            <td className="py-3 px-3 text-xs text-gray-500">{venta.fecha}</td>
+                            <td className="py-3 px-3">
+                              <div className="font-mono text-xs font-semibold text-gray-700">{venta.numero}</div>
+                              <span className="text-xs text-gray-400">{venta.tipo_comprobante}</span>
+                            </td>
+                            <td className="py-3 px-3 font-medium text-gray-900">
+                              {venta.clientes?.nombre ?? "Sin cliente"}
+                            </td>
+                            <td className="py-3 px-3">
+                              <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : "bg-gray-100 text-gray-600 hover:bg-gray-100"}`}>
+                                {venta.metodo_entrega === "envio" ? "Envio" : "Retiro"}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-3 text-right font-semibold text-gray-900">
+                              {formatCurrency(venta.total)}
+                            </td>
+                            <td className="py-3 px-3 text-right text-green-600 font-medium">
+                              {formatCurrency(totalCobrado)}
+                            </td>
+                            <td className="py-3 px-3">
+                              <Badge variant="secondary" className="text-xs">{metodos || "---"}</Badge>
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="flex items-center justify-end">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleViewDetail(venta)}
+                                  title="Ver detalle"
+                                >
+                                  <Eye className="w-4 h-4 text-gray-500" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {activeTab === "pendientes" && (<>
       {/* Filter tabs: Envío / Retiro / Todos */}
       <div className="flex items-center gap-3">
         <div className="bg-gray-100 rounded-lg p-1 inline-flex">
@@ -693,6 +946,8 @@ export default function HojaDeRutaPage() {
           )}
         </CardContent>
       </Card>
+
+      </>)}
 
       {/* Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
