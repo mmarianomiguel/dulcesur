@@ -26,6 +26,8 @@ import {
   Download,
 } from "lucide-react";
 import type { Empresa } from "@/types/database";
+import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
+import type { ReceiptConfig, ReceiptLineItem } from "@/components/receipt-print-view";
 
 interface ClienteInfo {
   id: string;
@@ -71,227 +73,17 @@ interface VentaItemRow {
   precio_unitario: number;
   descuento: number;
   subtotal: number;
+  presentacion?: string;
+  unidades_por_presentacion?: number;
 }
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
 }
 
-function formatCurrencyPDF(value: number) {
-  return "$" + new Intl.NumberFormat("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
-}
-
-function formatCurrencyTotal(value: number) {
-  return "$ " + new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-}
-
 function formatDatePDF(fecha: string) {
   const d = new Date(fecha + "T12:00:00");
   return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
-}
-
-// ─── Remito PDF Component (matches the DulceSur format) ───
-function RemitoPrintView({
-  remito,
-  items,
-  empresa,
-  vendedorNombre,
-  clienteSaldo,
-}: {
-  remito: RemitoRow;
-  items: VentaItemRow[];
-  empresa: Empresa | null;
-  vendedorNombre: string;
-  clienteSaldo: number;
-}) {
-  const cliente = remito.clientes;
-  const clienteDomicilio = [
-    cliente?.domicilio,
-    cliente?.localidad,
-    cliente?.provincia,
-    cliente?.codigo_postal ? `CP ${cliente.codigo_postal}` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const saldoLabel = `Saldo al ${formatDatePDF(remito.fecha)}: ${formatCurrencyTotal(clienteSaldo)}`;
-
-  return (
-    <div
-      style={{
-        width: "210mm",
-        minHeight: "297mm",
-        padding: "8mm 10mm",
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "11px",
-        color: "#000",
-        background: "#fff",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* ── Header ── */}
-      <div style={{ display: "flex", borderBottom: "2px solid #000", paddingBottom: "6px", marginBottom: "4px" }}>
-        {/* Left: Logo & company */}
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="https://www.dulcesur.com/assets/logotipo.png" alt="Logo" style={{ height: "50px" }} />
-          </div>
-          <div style={{ fontSize: "9px", lineHeight: "1.4" }}>
-            <div style={{ fontWeight: "bold" }}>www.dulcesur.com</div>
-            <div>{empresa?.domicilio || "Francisco Canaro 4012"} | Tel: {empresa?.telefono || "116299-1571"}</div>
-          </div>
-        </div>
-
-        {/* Center: X */}
-        <div style={{ width: "50px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", borderLeft: "2px solid #000", borderRight: "2px solid #000", padding: "0 8px" }}>
-          <div style={{ fontSize: "28px", fontWeight: "bold", lineHeight: 1 }}>X</div>
-          <div style={{ fontSize: "7px", textAlign: "center", lineHeight: "1.2", marginTop: "2px" }}>Documento no válido como factura</div>
-          <div style={{ fontSize: "11px", fontWeight: "bold", marginTop: "4px" }}>Remito X</div>
-        </div>
-
-        {/* Right: Number & fiscal data */}
-        <div style={{ flex: 1, paddingLeft: "10px" }}>
-          <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "4px" }}>
-            N° {remito.numero}
-          </div>
-          <div style={{ fontSize: "9px", lineHeight: "1.5" }}>
-            <div>Fecha: {formatDatePDF(remito.fecha)}</div>
-            <div>CUIT: {empresa?.cuit || "20443387898"}</div>
-            <div>Ing.Brutos: {empresa?.cuit || "20443387898"}</div>
-            <div>Cond.IVA: {empresa?.situacion_iva || "Monotributista Social"}</div>
-            <div>Inicio de Actividad: 15/2/2021</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Client info ── */}
-      <div style={{ border: "1px solid #ccc", padding: "4px 6px", marginBottom: "4px", fontSize: "10px", lineHeight: "1.6" }}>
-        <div style={{ display: "flex", gap: "20px" }}>
-          <div style={{ flex: 1 }}>
-            <span>Cliente: {cliente?.numero_documento || ""} - {cliente?.nombre || "Consumidor Final"}</span>
-          </div>
-          <div>
-            <span>Tel.: {cliente?.telefono || ""}</span>
-          </div>
-          <div>
-            <span>Cond.Fiscal: {cliente?.situacion_iva || "Consumidor final"}</span>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "20px" }}>
-          <div style={{ flex: 1 }}>
-            <span>Domicilio: {clienteDomicilio || "—"}</span>
-          </div>
-          <div>
-            <span>CUIT: {cliente?.cuit || ""}</span>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "20px" }}>
-          <div style={{ flex: 1 }}>
-            <span>Forma de pago: {remito.forma_pago}</span>
-          </div>
-          <div>
-            <span>Moneda: {remito.moneda || "Peso"}</span>
-          </div>
-          <div>
-            <span>Vendedor: {vendedorNombre}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Items table ── */}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", flex: 1 }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid #000", borderTop: "1px solid #000" }}>
-            <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Cant.</th>
-            <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Producto</th>
-            <th style={{ textAlign: "center", padding: "4px 4px", fontWeight: "bold" }}>U/Med</th>
-            <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Precio Un.</th>
-            <th style={{ textAlign: "center", padding: "4px 4px", fontWeight: "bold" }}>Desc.%</th>
-            <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Importe</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={item.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.cantidad}</td>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.descripcion}</td>
-              <td style={{ padding: "3px 4px", textAlign: "center" }}>{item.unidad_medida || "Un"}</td>
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{formatCurrencyPDF(item.precio_unitario)}</td>
-              <td style={{ padding: "3px 4px", textAlign: "center" }}>{item.descuento || 0}</td>
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{formatCurrencyPDF(item.subtotal)}</td>
-            </tr>
-          ))}
-          {/* Empty rows to fill space */}
-          {items.length < 20 &&
-            Array.from({ length: 20 - items.length }).map((_, i) => (
-              <tr key={`empty-${i}`}>
-                <td style={{ padding: "3px 4px" }}>&nbsp;</td>
-                <td style={{ padding: "3px 4px" }}></td>
-                <td style={{ padding: "3px 4px" }}></td>
-                <td style={{ padding: "3px 4px" }}></td>
-                <td style={{ padding: "3px 4px" }}></td>
-                <td style={{ padding: "3px 4px" }}></td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-
-      {/* ── Footer totals ── */}
-      <div style={{ borderTop: "2px solid #000", marginTop: "auto" }}>
-        <div style={{ display: "flex", fontSize: "9px", borderBottom: "1px solid #ccc", padding: "4px 0" }}>
-          <div style={{ flex: 1 }}>
-            <span>Subtotal</span>
-          </div>
-          <div style={{ width: "70px", textAlign: "right" }}>
-            <span>IVA 0%</span>
-          </div>
-          <div style={{ width: "70px", textAlign: "right" }}>
-            <span>IVA 10.5%</span>
-          </div>
-          <div style={{ width: "70px", textAlign: "right" }}>
-            <span>IVA 21%</span>
-          </div>
-          <div style={{ width: "70px", textAlign: "right" }}>
-            <span>Percep.IIBB</span>
-          </div>
-          <div style={{ width: "70px", textAlign: "right" }}>
-            <span>Descuento</span>
-          </div>
-          <div style={{ width: "70px", textAlign: "right" }}>
-            <span>C.F.T.%</span>
-          </div>
-          <div style={{ width: "120px", textAlign: "right", fontWeight: "bold", fontSize: "11px", background: "#e5e7eb", padding: "2px 6px" }}>
-            Total
-          </div>
-        </div>
-        <div style={{ display: "flex", fontSize: "10px", padding: "4px 0", fontWeight: "bold" }}>
-          <div style={{ flex: 1 }}>{new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(remito.subtotal)}</div>
-          <div style={{ width: "70px", textAlign: "right" }}></div>
-          <div style={{ width: "70px", textAlign: "right" }}></div>
-          <div style={{ width: "70px", textAlign: "right" }}></div>
-          <div style={{ width: "70px", textAlign: "right" }}></div>
-          <div style={{ width: "70px", textAlign: "right" }}></div>
-          <div style={{ width: "70px", textAlign: "right" }}></div>
-          <div style={{ width: "120px", textAlign: "right", fontSize: "14px", background: "#e5e7eb", padding: "2px 6px" }}>
-            {formatCurrencyTotal(remito.total)}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Bottom ── */}
-      <div style={{ display: "flex", borderTop: "1px solid #ccc", padding: "4px 0", fontSize: "9px", marginTop: "4px" }}>
-        <div style={{ flex: 1 }}>Despacho:</div>
-        <div style={{ textAlign: "right" }}>{saldoLabel}</div>
-      </div>
-      {clienteSaldo > 0 && (
-        <div style={{ borderTop: "1px solid #e00", padding: "6px 0", fontSize: "10px", marginTop: "2px", color: "#c00", fontWeight: "bold" }}>
-          DEUDA DEL CLIENTE: {formatCurrencyTotal(clienteSaldo)}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function RemitosPage() {
@@ -309,9 +101,10 @@ export default function RemitosPage() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([]);
 
-  // Print state
+  // Print state - using ReceiptPrintView
+  const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
   const [printRemito, setPrintRemito] = useState<RemitoRow | null>(null);
-  const [printItems, setPrintItems] = useState<VentaItemRow[]>([]);
+  const [printLineItems, setPrintLineItems] = useState<ReceiptLineItem[]>([]);
   const [printReady, setPrintReady] = useState(false);
   const [printClienteSaldo, setPrintClienteSaldo] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
@@ -346,9 +139,12 @@ export default function RemitosPage() {
 
   useEffect(() => {
     fetchRemitos();
-    // Load empresa & vendedores
     supabase.from("empresa").select("*").limit(1).single().then(({ data }) => setEmpresa(data));
     supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data }) => setVendedores(data || []));
+    try {
+      const stored = localStorage.getItem("receipt_config");
+      if (stored) setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
+    } catch {}
   }, [fetchRemitos]);
 
   const openDetail = async (r: RemitoRow) => {
@@ -433,21 +229,58 @@ export default function RemitosPage() {
       .select("*")
       .eq("venta_id", r.id)
       .order("created_at");
-    // Fetch client saldo (debt)
+    const items = (data as VentaItemRow[]) || [];
+
+    // Fetch client saldo
     let saldo = 0;
     if (r.cliente_id) {
       const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", r.cliente_id).single();
       saldo = clienteData?.saldo || 0;
     }
+
+    // Load combo data
+    const productIds = items.map((i) => i.producto_id).filter(Boolean) as string[];
+    const comboItemsMap: Record<string, { nombre: string; cantidad: number }[]> = {};
+    const comboIds = new Set<string>();
+    if (productIds.length > 0) {
+      const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", productIds);
+      for (const p of prods || []) {
+        if ((p as any).es_combo) comboIds.add(p.id);
+      }
+      for (const comboId of comboIds) {
+        const { data: ciData } = await supabase
+          .from("combo_items")
+          .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
+          .eq("combo_id", comboId);
+        comboItemsMap[comboId] = (ciData || []).map((ci: any) => ({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad }));
+      }
+    }
+
+    const lineItems: ReceiptLineItem[] = items.map((item) => ({
+      id: item.id,
+      producto_id: item.producto_id || "",
+      code: item.codigo,
+      description: item.descripcion,
+      qty: item.cantidad,
+      unit: item.unidad_medida || "Un",
+      price: item.precio_unitario,
+      discount: item.descuento,
+      subtotal: item.subtotal,
+      presentacion: item.presentacion || "",
+      unidades_por_presentacion: item.unidades_por_presentacion ?? 1,
+      stock: 0,
+      es_combo: comboIds.has(item.producto_id || ""),
+      comboItems: comboItemsMap[item.producto_id || ""] || [],
+    }));
+
     setPrintClienteSaldo(saldo);
     setPrintRemito(r);
-    setPrintItems((data as VentaItemRow[]) || []);
+    setPrintLineItems(lineItems);
     setPrintReady(true);
   };
 
   useEffect(() => {
     if (printReady && printRef.current) {
-      // Small delay to ensure render
       const timeout = setTimeout(() => {
         const printWindow = window.open("", "_blank");
         if (!printWindow) return;
@@ -480,41 +313,7 @@ export default function RemitosPage() {
   }, [printReady, printRemito]);
 
   const exportPDF = async (r: RemitoRow) => {
-    const { data } = await supabase
-      .from("venta_items")
-      .select("*")
-      .eq("venta_id", r.id)
-      .order("created_at");
-    setPrintRemito(r);
-    setPrintItems((data as VentaItemRow[]) || []);
-
-    // Use html2canvas + jsPDF approach via print dialog with save as PDF
-    setTimeout(() => {
-      const printWindow = window.open("", "_blank");
-      if (!printWindow || !printRef.current) return;
-
-      const content = printRef.current.innerHTML;
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Remito ${r.numero}</title>
-          <style>
-            @page { size: A4; margin: 0; }
-            body { margin: 0; padding: 0; }
-            @media print {
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body>${content}</body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      // User can choose "Save as PDF" from the print dialog
-      printWindow.print();
-    }, 200);
+    await preparePrint(r);
   };
 
   const getVendedorNombre = (vendedorId: string | null) => {
@@ -721,18 +520,42 @@ export default function RemitosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Hidden print view */}
-      <div ref={printRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
-        {printRemito && (
-          <RemitoPrintView
-            remito={printRemito}
-            items={printItems}
-            empresa={empresa}
-            vendedorNombre={getVendedorNombre(printRemito.vendedor_id)}
-            clienteSaldo={printClienteSaldo}
+      {/* Hidden print view - using shared ReceiptPrintView */}
+      {printRemito && (
+        <div ref={printRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
+          <ReceiptPrintView
+            config={{
+              ...receiptConfig,
+              empresaDomicilio: empresa?.domicilio || receiptConfig.empresaDomicilio,
+              empresaTelefono: empresa?.telefono || receiptConfig.empresaTelefono,
+              empresaCuit: empresa?.cuit || receiptConfig.empresaCuit,
+              empresaIva: empresa?.situacion_iva || receiptConfig.empresaIva,
+              empresaIngrBrutos: empresa?.cuit || receiptConfig.empresaIngrBrutos,
+              empresaNombre: empresa?.nombre || receiptConfig.empresaNombre,
+            }}
+            sale={{
+              numero: printRemito.numero,
+              total: printRemito.total,
+              subtotal: printRemito.subtotal,
+              descuento: Math.round(printRemito.subtotal * (printRemito.descuento_porcentaje || 0) / 100),
+              recargo: Math.round(printRemito.subtotal * (printRemito.recargo_porcentaje || 0) / 100),
+              transferSurcharge: 0,
+              tipoComprobante: printRemito.tipo_comprobante,
+              formaPago: printRemito.forma_pago,
+              moneda: printRemito.moneda || "ARS",
+              cliente: printRemito.clientes?.nombre || "Consumidor Final",
+              clienteDireccion: [printRemito.clientes?.domicilio, printRemito.clientes?.localidad].filter(Boolean).join(", ") || null,
+              clienteTelefono: printRemito.clientes?.telefono || null,
+              clienteCondicionIva: printRemito.clientes?.situacion_iva || null,
+              vendedor: getVendedorNombre(printRemito.vendedor_id),
+              fecha: formatDatePDF(printRemito.fecha),
+              saldoAnterior: printClienteSaldo,
+              saldoNuevo: printClienteSaldo,
+              items: printLineItems,
+            }}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

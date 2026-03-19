@@ -86,9 +86,12 @@ interface ClienteInfo {
 
 interface VentaItemRow {
   id: string;
+  producto_id: string | null;
+  codigo: string | null;
   descripcion: string;
   cantidad: number;
   precio_unitario: number;
+  descuento: number;
   subtotal: number;
   unidad_medida: string | null;
   presentacion: string | null;
@@ -166,6 +169,10 @@ export default function DashboardPage() {
   const [pedidoDetailOpen, setPedidoDetailOpen] = useState(false);
   const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // ─── Combo data for preview ───
+  const [comboProductIds, setComboProductIds] = useState<Set<string>>(new Set());
+  const [comboItemsMap, setComboItemsMap] = useState<Record<string, { nombre: string; cantidad: number }[]>>({});
 
   // ─── Print state ───
   const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
@@ -249,7 +256,7 @@ export default function DashboardPage() {
   const fetchPedidosOnline = useCallback(async () => {
     const { data: ventasOnline } = await supabase
       .from("ventas")
-      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
+      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, producto_id, codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
       .eq("origen", "tienda")
       .eq("entregado", false)
       .neq("estado", "anulada")
@@ -257,6 +264,30 @@ export default function DashboardPage() {
 
     const rows = (ventasOnline || []) as unknown as PedidoVenta[];
     setPedidosOnline(rows);
+
+    // Fetch combo data for preview
+    const allProductIds = rows.flatMap((v) => v.venta_items.map((i) => i.producto_id)).filter(Boolean) as string[];
+    if (allProductIds.length > 0) {
+      const uniqueIds = [...new Set(allProductIds)];
+      const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", uniqueIds);
+      const cIds = new Set<string>();
+      for (const p of prods || []) {
+        if ((p as any).es_combo) cIds.add(p.id);
+      }
+      setComboProductIds(cIds);
+      const cMap: Record<string, { nombre: string; cantidad: number }[]> = {};
+      for (const comboId of cIds) {
+        const { data: ciData } = await supabase
+          .from("combo_items")
+          .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
+          .eq("combo_id", comboId);
+        cMap[comboId] = (ciData || []).map((ci: any) => ({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad }));
+      }
+      setComboItemsMap(cMap);
+    } else {
+      setComboProductIds(new Set());
+      setComboItemsMap({});
+    }
 
     const numeros = rows.map((v) => v.numero);
     if (numeros.length > 0) {
@@ -383,21 +414,50 @@ export default function DashboardPage() {
     setActionLoading(null);
   };
 
-  const handlePrintRemito = (venta: PedidoVenta) => {
+  const handlePrintRemito = async (venta: PedidoVenta) => {
     const cliente = venta.clientes;
-    const saleItems: ReceiptLineItem[] = venta.venta_items.map((item) => ({
+
+    // Fetch product IDs to check for combos
+    const { data: ventaItemsDB } = await supabase
+      .from("venta_items")
+      .select("id, producto_id, codigo, descripcion, cantidad, unidad_medida, precio_unitario, descuento, subtotal, presentacion, unidades_por_presentacion")
+      .eq("venta_id", venta.id)
+      .order("created_at");
+    const itemsForPrint = (ventaItemsDB || []) as VentaItemRow[];
+
+    // Load combo data
+    const productIds = itemsForPrint.map((i) => i.producto_id).filter(Boolean) as string[];
+    const comboItemsMap: Record<string, { nombre: string; cantidad: number }[]> = {};
+    const comboIds = new Set<string>();
+    if (productIds.length > 0) {
+      const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", productIds);
+      for (const p of prods || []) {
+        if ((p as any).es_combo) comboIds.add(p.id);
+      }
+      for (const comboId of comboIds) {
+        const { data: ciData } = await supabase
+          .from("combo_items")
+          .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
+          .eq("combo_id", comboId);
+        comboItemsMap[comboId] = (ciData || []).map((ci: any) => ({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad }));
+      }
+    }
+
+    const saleItems: ReceiptLineItem[] = itemsForPrint.map((item) => ({
       id: item.id,
-      producto_id: "",
-      code: "",
+      producto_id: item.producto_id || "",
+      code: item.codigo || "",
       description: item.descripcion,
       qty: item.cantidad,
       unit: item.unidad_medida || "Un",
       price: item.precio_unitario,
-      discount: 0,
+      discount: item.descuento || 0,
       subtotal: item.subtotal,
       presentacion: item.presentacion || "Unidad",
       unidades_por_presentacion: item.unidades_por_presentacion || 1,
       stock: 0,
+      es_combo: comboIds.has(item.producto_id || ""),
+      comboItems: comboItemsMap[item.producto_id || ""] || [],
     }));
 
     const sale: ReceiptSale = {
@@ -581,7 +641,7 @@ export default function DashboardPage() {
                     {tabPedidos.map((p) => {
                       const createdDate = new Date(p.created_at);
                       const dateStr = createdDate.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
-                      const timeStr = createdDate.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
+                      const timeStr = createdDate.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
                       const isOverdue = effectiveTab === "_pending";
                       const isLoading = actionLoading === p.id;
                       const pedidoEstado = pedidoEstadoMap[p.numero] || "pendiente";
@@ -793,7 +853,7 @@ export default function DashboardPage() {
                   {pedidoEntregaMap[pedidoDetail.numero] && (
                     <div><span className="text-muted-foreground">Fecha entrega:</span> <span className="font-medium">{new Date(pedidoEntregaMap[pedidoDetail.numero] + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</span></div>
                   )}
-                  <div><span className="text-muted-foreground">Pedido:</span> <span className="font-medium">{new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })}</span></div>
+                  <div><span className="text-muted-foreground">Pedido:</span> <span className="font-medium">{new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}</span></div>
                 </div>
 
                 {pedidoDetail.observacion && (
@@ -811,14 +871,35 @@ export default function DashboardPage() {
                       <TableHead className="text-right">Subtotal</TableHead>
                     </TableRow></TableHeader>
                     <TableBody>
-                      {pedidoDetail.venta_items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell><span className="font-medium text-sm">{cleanItemDescription(item.descripcion, item.presentacion)}</span></TableCell>
-                          <TableCell className="text-center">{item.cantidad}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
-                          <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
-                        </TableRow>
-                      ))}
+                      {pedidoDetail.venta_items.map((item) => {
+                        const isCombo = comboProductIds.has(item.producto_id || "");
+                        const comboItems = comboItemsMap[item.producto_id || ""] || [];
+                        const upp = item.unidades_por_presentacion ?? 1;
+                        const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
+                        return (
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              <div>
+                                {isCombo && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white mr-1.5 tracking-wider">COMBO</span>
+                                )}
+                                <span className="font-medium text-sm">{cleanItemDescription(item.descripcion, item.presentacion)}</span>
+                                {item.descuento > 0 && (
+                                  <span className="ml-1.5 text-xs text-red-500 font-medium">(-{item.descuento}%)</span>
+                                )}
+                              </div>
+                              {isCombo && comboItems.length > 0 && (
+                                <div className="text-[11px] text-muted-foreground mt-0.5">
+                                  {comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">{displayQty}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

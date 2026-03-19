@@ -480,7 +480,7 @@ export default function ListadoVentasPage() {
                         <div>{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR")}</div>
                         {v.created_at && (
                           <div className="text-xs text-muted-foreground/70">
-                            {new Date(v.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })}
+                            {new Date(v.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
                           </div>
                         )}
                       </td>
