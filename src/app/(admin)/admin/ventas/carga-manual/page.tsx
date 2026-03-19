@@ -111,7 +111,7 @@ export default function CargaManualPage() {
   const fetchData = useCallback(async () => {
     const [{ data: cls }, { data: prods }, { data: sls }] = await Promise.all([
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
-      supabase.from("productos").select("*").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
       supabase.from("usuarios").select("*").eq("activo", true),
     ]);
     setClients(cls || []);

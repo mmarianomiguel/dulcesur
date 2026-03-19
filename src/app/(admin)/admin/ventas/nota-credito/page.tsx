@@ -155,7 +155,7 @@ export default function NotaCreditoPage() {
   const fetchFormData = useCallback(async () => {
     const [{ data: cls }, { data: prods }] = await Promise.all([
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
-      supabase.from("productos").select("*").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
     ]);
     setClients(cls || []);
     setProducts(prods || []);

@@ -91,7 +91,7 @@ export default function CombosPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [{ data: prods }, { data: cItems }, { data: cats }, { data: subs }, { data: mrcs }] = await Promise.all([
-      supabase.from("productos").select("*").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
       supabase.from("combo_items").select("*, productos!combo_items_producto_id_fkey(id, codigo, nombre, precio, costo, stock)"),
       supabase.from("categorias").select("*").order("nombre"),
       supabase.from("subcategorias").select("*").order("nombre"),

@@ -106,7 +106,7 @@ export default function ListasPreciosPage() {
   const openDetail = async (l: Lista) => {
     setDetailLista(l);
     const [{ data: prods }, { data: items }] = await Promise.all([
-      supabase.from("productos").select("id, codigo, nombre, precio, costo").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("id, codigo, nombre, precio, costo").eq("activo", true).order("nombre").limit(10000),
       supabase.from("lista_precio_items").select("*").eq("lista_id", l.id),
     ]);
     setProductos((prods as Producto[]) || []);

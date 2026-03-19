@@ -185,7 +185,7 @@ export default function DescuentosPage() {
     const [{ data: cats }, { data: subs }, { data: prods }, { data: marcasData }] = await Promise.all([
       supabase.from("categorias").select("id, nombre").order("nombre"),
       supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
-      supabase.from("productos").select("id, nombre, codigo").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("id, nombre, codigo").eq("activo", true).order("nombre").limit(10000),
       supabase.from("marcas").select("id, nombre").order("nombre"),
     ]);
     setCategorias(cats ?? []);

@@ -273,7 +273,7 @@ export default function DashboardPage() {
     setGananciaPeriodo(gananciaTotal);
 
     // Capital en mercadería (always current)
-    const { data: prods } = await supabase.from("productos").select("stock, precio, costo").eq("activo", true);
+    const { data: prods } = await supabase.from("productos").select("stock, precio, costo").eq("activo", true).limit(10000);
     setCapitalMercaderia((prods || []).reduce((a, p) => a + p.stock * (p.costo || p.precio), 0));
 
     // Cuentas a cobrar (always current)

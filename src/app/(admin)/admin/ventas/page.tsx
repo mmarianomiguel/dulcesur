@@ -255,7 +255,7 @@ export default function VentasPage() {
   // ---------- data fetch ----------
   const fetchData = useCallback(async () => {
     const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }] = await Promise.all([
-      supabase.from("productos").select("*").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
       supabase.from("clientes").select("id, nombre, email, telefono, domicilio, saldo, situacion_iva, tipo_documento, numero_documento, tipo_factura, razon_social, domicilio_fiscal, provincia, localidad, codigo_postal, vendedor_id").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),

@@ -86,7 +86,7 @@ export default function ReportesPage() {
       supabase.from("compras").select("id, fecha, total, forma_pago")
         .gte("fecha", dEff).lte("fecha", hEff)
         .order("fecha", { ascending: false }),
-      supabase.from("productos").select("id, nombre, codigo, stock, precio, costo, categoria_id, subcategoria_id, marca_id").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("id, nombre, codigo, stock, precio, costo, categoria_id, subcategoria_id, marca_id").eq("activo", true).order("nombre").limit(10000),
     ]);
 
     setVentas((vts || []).map((v: any) => ({ ...v, clientes: Array.isArray(v.clientes) ? v.clientes[0] || null : v.clientes })) as VentaRow[]);

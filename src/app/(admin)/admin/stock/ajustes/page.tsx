@@ -130,7 +130,7 @@ export default function AjustesStockPage() {
 
     const [{ data: aj }, { data: prods }] = await Promise.all([
       ajQuery,
-      supabase.from("productos").select("id, codigo, nombre, stock, costo, unidad_medida").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("id, codigo, nombre, stock, costo, unidad_medida").eq("activo", true).order("nombre").limit(10000),
     ]);
     setAjustes((aj as Ajuste[]) || []);
     setProductos((prods as Producto[]) || []);
