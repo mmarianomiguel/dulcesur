@@ -165,6 +165,19 @@ export default function ConfiguracionPage() {
     ]);
     setEmpresa(emp);
     setUsuarios(users || []);
+
+    // Auto-populate receipt config from empresa if not yet customized
+    if (emp && !localStorage.getItem("receipt_config")) {
+      const autoConfig: Partial<ReceiptConfig> = {
+        empresaNombre: emp.nombre || defaultReceiptConfig.empresaNombre,
+        empresaDomicilio: emp.domicilio || defaultReceiptConfig.empresaDomicilio,
+        empresaTelefono: emp.telefono || defaultReceiptConfig.empresaTelefono,
+        empresaCuit: emp.cuit || defaultReceiptConfig.empresaCuit,
+        empresaIva: emp.situacion_iva || defaultReceiptConfig.empresaIva,
+      };
+      setRcfg((prev) => ({ ...prev, ...autoConfig }));
+    }
+
     setLoading(false);
   }, []);
 
@@ -501,20 +514,37 @@ export default function ConfiguracionPage() {
                   </CardContent>
                 </Card>
 
-                {/* Info adicional group */}
+                {/* Sección 1: Datos del Mayorista */}
                 <Card>
                   <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2">
-                      <Info className="w-4 h-4 text-muted-foreground" />
-                      <CardTitle className="text-sm">Información adicional</CardTitle>
-                    </div>
-                    <CardDescription className="text-xs">Datos extra que se imprimen en el comprobante</CardDescription>
+                    <CardTitle className="text-sm">Sección 1 — Datos del Mayorista</CardTitle>
+                    <CardDescription className="text-xs">Encabezado con logo, nombre y datos fiscales que aparecen en el comprobante</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Nombre de la empresa</Label>
+                        <Input value={rcfg.empresaNombre} onChange={(ev) => setRcfg({ ...rcfg, empresaNombre: ev.target.value })} className="h-9" />
+                      </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground">Sitio web</Label>
                         <Input value={rcfg.empresaWeb} onChange={(ev) => setRcfg({ ...rcfg, empresaWeb: ev.target.value })} className="h-9" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Domicilio</Label>
+                        <Input value={rcfg.empresaDomicilio} onChange={(ev) => setRcfg({ ...rcfg, empresaDomicilio: ev.target.value })} className="h-9" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Teléfono</Label>
+                        <Input value={rcfg.empresaTelefono} onChange={(ev) => setRcfg({ ...rcfg, empresaTelefono: ev.target.value })} className="h-9" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">CUIT</Label>
+                        <Input value={rcfg.empresaCuit} onChange={(ev) => setRcfg({ ...rcfg, empresaCuit: ev.target.value })} className="h-9" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Condición IVA</Label>
+                        <Input value={rcfg.empresaIva} onChange={(ev) => setRcfg({ ...rcfg, empresaIva: ev.target.value })} className="h-9" />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground">Ingresos Brutos</Label>
@@ -524,22 +554,12 @@ export default function ConfiguracionPage() {
                         <Label className="text-xs text-muted-foreground">Inicio de Actividad</Label>
                         <Input value={rcfg.empresaInicioAct} onChange={(ev) => setRcfg({ ...rcfg, empresaInicioAct: ev.target.value })} className="h-9" />
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Texto pie de página</Label>
-                        <Input value={rcfg.footerTexto} onChange={(ev) => setRcfg({ ...rcfg, footerTexto: ev.target.value })} className="h-9" />
-                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Sección 1: Datos del Mayorista */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">Sección 1 — Datos del Mayorista</CardTitle>
-                    <CardDescription className="text-xs">Encabezado con logo, nombre y datos fiscales</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Texto pie de página</Label>
+                      <Input value={rcfg.footerTexto} onChange={(ev) => setRcfg({ ...rcfg, footerTexto: ev.target.value })} className="h-9" />
+                    </div>
+                    <div className="flex items-center gap-3 pt-2 border-t">
                       <Label className="text-xs text-muted-foreground whitespace-nowrap">Tamaño fuente:</Label>
                       <Input type="number" value={rcfg.fontSizeEmpresa || rcfg.fontSize} onChange={(ev) => setRcfg({ ...rcfg, fontSizeEmpresa: Number(ev.target.value) })} className="h-8 w-20" min={8} max={18} />
                       <span className="text-xs text-muted-foreground">px</span>
@@ -641,11 +661,11 @@ export default function ConfiguracionPage() {
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={rcfg.logoUrl} alt="" style={{ height: `${rcfg.logoHeight}px`, marginBottom: "4px" }} />
                             ) : (
-                              <div style={{ fontSize: `${rcfg.fontSize + 8}px`, fontWeight: "bold", marginBottom: "4px" }}>{empresa?.nombre || "EMPRESA"}</div>
+                              <div style={{ fontSize: `${rcfg.fontSize + 8}px`, fontWeight: "bold", marginBottom: "4px" }}>{rcfg.empresaNombre}</div>
                             )}
                             <div style={{ fontSize: `${rcfg.fontSize - 2}px`, lineHeight: "1.5" }}>
                               {rcfg.empresaWeb && <div style={{ fontWeight: "bold" }}>{rcfg.empresaWeb}</div>}
-                              <div>{empresa?.domicilio || "Dirección"} | Tel: {empresa?.telefono || "000-000"}</div>
+                              <div>{rcfg.empresaDomicilio} | Tel: {rcfg.empresaTelefono}</div>
                             </div>
                           </div>
                           <div style={{ width: "55px", display: "flex", flexDirection: "column", alignItems: "center", borderLeft: "2px solid #000", borderRight: "2px solid #000", padding: "0 8px" }}>
@@ -657,9 +677,9 @@ export default function ConfiguracionPage() {
                             <div style={{ fontSize: `${rcfg.fontSize + 2}px`, fontWeight: "bold" }}>N° 0001-00000001</div>
                             <div style={{ fontSize: `${rcfg.fontSize - 2}px`, lineHeight: "1.6", marginTop: "4px" }}>
                               <div>Fecha: 16/03/2026</div>
-                              <div>CUIT: {empresa?.cuit || "00-00000000-0"}</div>
+                              <div>CUIT: {rcfg.empresaCuit}</div>
                               <div>Ing.Brutos: {rcfg.empresaIngrBrutos}</div>
-                              <div>Cond.IVA: {empresa?.situacion_iva || "—"}</div>
+                              <div>Cond.IVA: {rcfg.empresaIva}</div>
                               <div>Inicio Act.: {rcfg.empresaInicioAct}</div>
                             </div>
                           </div>

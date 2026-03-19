@@ -25,7 +25,6 @@ import {
   Printer,
   Download,
 } from "lucide-react";
-import type { Empresa } from "@/types/database";
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptLineItem } from "@/components/receipt-print-view";
 
@@ -99,7 +98,6 @@ export default function RemitosPage() {
   const [detailComboIds, setDetailComboIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([]);
 
   // Print state - using ReceiptPrintView
@@ -140,7 +138,6 @@ export default function RemitosPage() {
 
   useEffect(() => {
     fetchRemitos();
-    supabase.from("empresa").select("*").limit(1).single().then(({ data }) => setEmpresa(data));
     supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data }) => setVendedores(data || []));
     try {
       const stored = localStorage.getItem("receipt_config");
@@ -550,15 +547,7 @@ export default function RemitosPage() {
       {printRemito && (
         <div ref={printRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
           <ReceiptPrintView
-            config={{
-              ...receiptConfig,
-              empresaDomicilio: empresa?.domicilio || receiptConfig.empresaDomicilio,
-              empresaTelefono: empresa?.telefono || receiptConfig.empresaTelefono,
-              empresaCuit: empresa?.cuit || receiptConfig.empresaCuit,
-              empresaIva: empresa?.situacion_iva || receiptConfig.empresaIva,
-              empresaIngrBrutos: empresa?.cuit || receiptConfig.empresaIngrBrutos,
-              empresaNombre: empresa?.nombre || receiptConfig.empresaNombre,
-            }}
+            config={receiptConfig}
             sale={{
               numero: printRemito.numero,
               total: printRemito.total,

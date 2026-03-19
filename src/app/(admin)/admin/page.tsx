@@ -208,17 +208,16 @@ export default function DashboardPage() {
     return `${from} — ${to}`;
   };
 
-  // ─── Build day tabs from configured delivery days ───
+  // ─── Build day tabs: Hoy first, then Lun-Sáb for the next 6 days ───
   const buildDayTabs = useCallback(() => {
     const today = todayARG();
-    const configuredDayNums = diasEntrega.map((d) => DIA_TO_NUM[d]).filter((n) => n !== undefined);
+    const todayDate = new Date(today + "T12:00:00");
     const tabs: { key: string; label: string; sublabel: string; isToday?: boolean; isPending?: boolean }[] = [];
 
     // Pendientes tab
     tabs.push({ key: "_pending", label: "Pendientes", sublabel: "", isPending: true });
 
-    // Hoy (always first)
-    const todayDate = new Date(today + "T12:00:00");
+    // Hoy always first
     tabs.push({
       key: today,
       label: "Hoy",
@@ -226,31 +225,21 @@ export default function DashboardPage() {
       isToday: true,
     });
 
-    // Next configured delivery days (up to 10 days ahead)
-    if (configuredDayNums.length > 0) {
-      const added = new Set<string>();
-      added.add(today);
-      for (let i = 1; i <= 14 && added.size <= 7; i++) {
-        const d = new Date(today + "T12:00:00");
-        d.setDate(d.getDate() + i);
-        const dayNum = d.getDay();
-        if (configuredDayNums.includes(dayNum)) {
-          const dateStr = d.toISOString().split("T")[0];
-          if (!added.has(dateStr)) {
-            added.add(dateStr);
-            const dayName = d.toLocaleDateString("es-AR", { weekday: "short" });
-            tabs.push({
-              key: dateStr,
-              label: i === 1 ? "Manana" : dayName.charAt(0).toUpperCase() + dayName.slice(1),
-              sublabel: d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }),
-            });
-          }
-        }
-      }
+    // Next 6 days (Lun-Sáb)
+    const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(today + "T12:00:00");
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toISOString().split("T")[0];
+      tabs.push({
+        key: dateStr,
+        label: DAY_NAMES[d.getDay()],
+        sublabel: d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }),
+      });
     }
 
     return tabs;
-  }, [diasEntrega]);
+  }, []);
 
   // ─── Fetch pedidos online ───
   const fetchPedidosOnline = useCallback(async () => {
