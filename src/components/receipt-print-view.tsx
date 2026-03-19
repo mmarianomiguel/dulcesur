@@ -225,7 +225,7 @@ export function ReceiptPrintView({
                 </td>
                 <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
                 {config.mostrarDescuento && (
-                  <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.discount || 0}</td>
+                  <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.discount ? `(-${item.discount}%)` : "0"}</td>
                 )}
                 <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
               </tr>
