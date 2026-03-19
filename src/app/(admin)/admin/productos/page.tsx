@@ -598,12 +598,24 @@ export default function ProductosPage() {
     if (!window.confirm(`¿Estás seguro de eliminar "${product.nombre}" permanentemente? Esta acción no se puede deshacer.`)) return;
 
     try {
+      // Delete all related records first
       await supabase.from("combo_items").delete().eq("combo_id", id);
+      await supabase.from("combo_items").delete().eq("producto_id", id);
       await supabase.from("presentaciones").delete().eq("producto_id", id);
       await supabase.from("producto_proveedores").delete().eq("producto_id", id);
+      await supabase.from("stock_movimientos").delete().eq("producto_id", id);
       const { error } = await supabase.from("productos").delete().eq("id", id);
-      if (error) throw error;
-      showAdminToast("Producto eliminado permanentemente", "success");
+      if (error) {
+        // If foreign key error, try soft delete instead
+        if (error.code === "23503") {
+          await supabase.from("productos").update({ activo: false, visibilidad: "oculto" }).eq("id", id);
+          showAdminToast("El producto tiene ventas asociadas. Se ocultó en lugar de eliminarse.", "info");
+        } else {
+          throw error;
+        }
+      } else {
+        showAdminToast("Producto eliminado permanentemente", "success");
+      }
       fetchProducts();
     } catch (err: any) {
       showAdminToast(err.message || "Error al eliminar producto", "error");
