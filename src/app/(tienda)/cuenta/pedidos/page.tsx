@@ -226,14 +226,14 @@ export default function PedidosPage() {
       const extraPedidos: Pedido[] = webVentasExtra.map((v) => ({
         id: parseInt(v.id.replace(/\D/g, "").slice(0, 8)) || 0,
         numero: v.numero,
-        created_at: v.fecha,
+        created_at: v.created_at || v.fecha,
         estado: "entregado",
         total: v.total,
         items: [],
         venta: v,
       }));
       setPedidos([...pedidosList, ...extraPedidos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-      setVentasPOS(posOnly);
+      setVentasPOS(posOnly.sort((a, b) => new Date(b.created_at || b.fecha).getTime() - new Date(a.created_at || a.fecha).getTime()));
 
       setLoading(false);
     };
