@@ -103,7 +103,7 @@ export default function ListadoVentasPage() {
   const [filterOrigen, setFilterOrigen] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
-  const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("day");
+  const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("month");
   const [filterDay, setFilterDay] = useState(new Date().toISOString().split("T")[0]);
   const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));

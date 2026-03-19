@@ -12,6 +12,7 @@ interface PedidoItem {
   unidades_por_presentacion?: number;
   cantidad: number;
   precio_unitario: number;
+  descuento?: number;
 }
 
 interface NotaCredito {
@@ -35,10 +36,11 @@ interface VentaRecord {
   numero: string;
   tipo_comprobante: string;
   fecha: string;
+  created_at: string;
   forma_pago: string;
   total: number;
   origen: string;
-  items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; presentacion?: string; unidades_por_presentacion?: number }[];
+  items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; presentacion?: string; unidades_por_presentacion?: number; descuento?: number }[];
   notas_credito: NotaCredito[];
   pagos: PagoDetalle[];
   saldo_pendiente: number;
@@ -101,7 +103,7 @@ export default function PedidosPage() {
       if (clienteId) {
         const { data: ventas } = await supabase
           .from("ventas")
-          .select("id, numero, tipo_comprobante, fecha, forma_pago, total, origen, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion)")
+          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, origen, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento)")
           .eq("cliente_id", clienteId)
           .not("tipo_comprobante", "ilike", "Nota de Crédito%")
           .not("tipo_comprobante", "ilike", "Nota de Débito%")
@@ -115,7 +117,7 @@ export default function PedidosPage() {
       if (ventaIds.length > 0) {
         const { data: ncs } = await supabase
           .from("ventas")
-          .select("id, numero, fecha, total, remito_origen_id, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion)")
+          .select("id, numero, fecha, total, remito_origen_id, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento)")
           .in("remito_origen_id", ventaIds)
           .ilike("tipo_comprobante", "Nota de Crédito%");
         for (const nc of ncs || []) {
@@ -190,6 +192,7 @@ export default function PedidosPage() {
           numero: v.numero,
           tipo_comprobante: v.tipo_comprobante,
           fecha: v.fecha,
+          created_at: v.created_at,
           forma_pago: v.forma_pago,
           total: v.total,
           origen: v.origen || "admin",
@@ -325,7 +328,7 @@ export default function PedidosPage() {
                 </span>
                 <span className="text-gray-200">|</span>
                 <span>
-                  {pedido.items.length} {pedido.items.length === 1 ? "producto" : "productos"}
+                  {(pedido.items.length > 0 ? pedido.items.length : (pedido.venta?.items?.length || 0))} {(pedido.items.length > 0 ? pedido.items.length : (pedido.venta?.items?.length || 0)) === 1 ? "producto" : "productos"}
                 </span>
               </div>
             </div>
@@ -376,6 +379,7 @@ export default function PedidosPage() {
                     unidades_por_presentacion: item.unidades_por_presentacion,
                     cantidad: item.cantidad,
                     precio_unitario: item.precio_unitario,
+                    descuento: item.descuento || 0,
                   })) : (pedido.venta?.items || []).map((item, idx) => ({
                     id: idx,
                     nombre: item.descripcion,
@@ -383,6 +387,7 @@ export default function PedidosPage() {
                     unidades_por_presentacion: item.unidades_por_presentacion,
                     cantidad: item.cantidad,
                     precio_unitario: item.precio_unitario,
+                    descuento: item.descuento || 0,
                   }))).map((item) => {
                     const isMedio = item.presentacion && (item.presentacion.toLowerCase().includes("medio") || (item.unidades_por_presentacion != null && item.unidades_por_presentacion <= 0.5 && item.unidades_por_presentacion > 0));
                     const isBox = item.presentacion && item.presentacion !== "Unidad" && (item.unidades_por_presentacion || 1) > 1;
@@ -406,6 +411,11 @@ export default function PedidosPage() {
                         {isCombo && (item.unidades_por_presentacion || 1) > 1 && (
                           <span className="block text-[10px] text-gray-400 mt-0.5">
                             Combo de {item.unidades_por_presentacion} unidades
+                          </span>
+                        )}
+                        {item.descuento != null && item.descuento > 0 && (
+                          <span className="block text-[10px] text-emerald-600 mt-0.5">
+                            {item.descuento}% dto.
                           </span>
                         )}
                       </td>
@@ -562,8 +572,10 @@ export default function PedidosPage() {
               <div className="flex items-center gap-3 text-sm text-gray-400">
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5" />
-                  {formatDate(v.fecha + "T12:00:00")}
+                  {formatDate(v.created_at || (v.fecha + "T12:00:00"), true)}
                 </span>
+                <span className="text-gray-200">|</span>
+                <span>{v.items.length} {v.items.length === 1 ? "producto" : "productos"}</span>
                 <span className="text-gray-200">|</span>
                 <span>{v.forma_pago}</span>
               </div>
@@ -620,6 +632,11 @@ export default function PedidosPage() {
                         {isCombo && (item.unidades_por_presentacion || 1) > 1 && (
                           <span className="block text-[10px] text-gray-400 mt-0.5">
                             Combo de {item.unidades_por_presentacion} unidades
+                          </span>
+                        )}
+                        {item.descuento != null && item.descuento > 0 && (
+                          <span className="block text-[10px] text-emerald-600 mt-0.5">
+                            {item.descuento}% dto.
                           </span>
                         )}
                       </td>
