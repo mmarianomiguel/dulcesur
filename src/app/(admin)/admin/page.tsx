@@ -26,6 +26,10 @@ import {
   Calendar,
   ShoppingCart,
   Truck,
+  Clock,
+  AlertTriangle,
+  Eye,
+  Store,
 } from "lucide-react";
 import {
   BarChart,
@@ -105,11 +109,16 @@ export default function DashboardPage() {
     numero: string;
     nombre_cliente: string;
     metodo_entrega: string;
+    metodo_pago: string;
     total: number;
     fecha_entrega: string | null;
+    created_at: string;
+    estado: string;
   }
   const [pedidosHoy, setPedidosHoy] = useState<PedidoWeb[]>([]);
-  const [pedidosProgramados, setPedidosProgramados] = useState<Record<string, PedidoWeb[]>>({});
+  const [pedidosProgramados, setPedidosProgramados] = useState<PedidoWeb[]>([]);
+  const [pedidosVencidos, setPedidosVencidos] = useState<PedidoWeb[]>([]);
+  const [pedidosTab, setPedidosTab] = useState<"hoy" | "programados" | "pendientes">("hoy");
 
   // ─── Compute date range from filter ───
   const getDateRange = useCallback((): { start: string; end: string } => {
@@ -286,29 +295,18 @@ export default function DashboardPage() {
         .sort((a, b) => b.value - a.value)
     );
 
-    // Web orders - pending for today
+    // Web orders - fetch all pending/confirmado orders
     const today = todayARG();
-    const { data: pedHoy } = await supabase
+    const { data: allPedidos } = await supabase
       .from("pedidos_tienda")
-      .select("id, numero, nombre_cliente, metodo_entrega, total, fecha_entrega")
-      .eq("estado", "pendiente")
-      .eq("fecha_entrega", today);
-    setPedidosHoy((pedHoy as PedidoWeb[]) || []);
+      .select("id, numero, nombre_cliente, metodo_entrega, metodo_pago, total, fecha_entrega, created_at, estado")
+      .in("estado", ["pendiente", "confirmado"])
+      .order("created_at", { ascending: true });
 
-    // Web orders - scheduled (future)
-    const { data: pedFuturo } = await supabase
-      .from("pedidos_tienda")
-      .select("id, numero, nombre_cliente, metodo_entrega, total, fecha_entrega")
-      .eq("estado", "pendiente")
-      .gt("fecha_entrega", today)
-      .order("fecha_entrega");
-    const grouped: Record<string, PedidoWeb[]> = {};
-    (pedFuturo || []).forEach((p: any) => {
-      const key = p.fecha_entrega || "Sin fecha";
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(p as PedidoWeb);
-    });
-    setPedidosProgramados(grouped);
+    const pedidos = (allPedidos as PedidoWeb[]) || [];
+    setPedidosHoy(pedidos.filter((p) => p.fecha_entrega === today));
+    setPedidosProgramados(pedidos.filter((p) => p.fecha_entrega && p.fecha_entrega > today));
+    setPedidosVencidos(pedidos.filter((p) => p.fecha_entrega && p.fecha_entrega < today));
 
     setLoading(false);
   }, [getDateRange]);
@@ -495,94 +493,155 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Pedidos web pendientes de hoy */}
-          {pedidosHoy.length > 0 && (
+          {/* Pedidos web pendientes - Tabbed section */}
+          {(pedidosHoy.length > 0 || pedidosProgramados.length > 0 || pedidosVencidos.length > 0) && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ShoppingCart className="w-4 h-4 text-orange-500" />
-                  Pedidos web pendientes de hoy
-                  <Badge variant="secondary" className="ml-1">{pedidosHoy.length}</Badge>
-                </CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-primary" />
+                    Pedidos Web
+                  </CardTitle>
+                  <div className="flex border rounded-lg overflow-hidden">
+                    {([
+                      { key: "hoy" as const, label: "Hoy", count: pedidosHoy.length },
+                      { key: "programados" as const, label: "Programados", count: pedidosProgramados.length },
+                      { key: "pendientes" as const, label: "Pendientes", count: pedidosVencidos.length },
+                    ]).map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setPedidosTab(tab.key)}
+                        className={`px-4 py-1.5 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                          pedidosTab === tab.key
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background hover:bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {tab.label}
+                        {tab.count > 0 && (
+                          <span className={`text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center ${
+                            pedidosTab === tab.key
+                              ? "bg-primary-foreground/20 text-primary-foreground"
+                              : tab.key === "pendientes" && tab.count > 0
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                : "bg-muted text-muted-foreground"
+                          }`}>
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2 px-3 font-medium">N°</th>
-                        <th className="text-left py-2 px-3 font-medium">Cliente</th>
-                        <th className="text-left py-2 px-3 font-medium">Entrega</th>
-                        <th className="text-right py-2 px-3 font-medium">Total</th>
-                        <th className="text-left py-2 px-3 font-medium">Fecha entrega</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pedidosHoy.map((p) => (
-                        <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50">
-                          <td className="py-2 px-3 font-mono text-xs">#{p.numero}</td>
-                          <td className="py-2 px-3 font-medium">{p.nombre_cliente}</td>
-                          <td className="py-2 px-3">
-                            <Badge variant="outline" className="text-xs">{p.metodo_entrega === "envio" ? "Envio" : "Retiro"}</Badge>
-                          </td>
-                          <td className="py-2 px-3 text-right font-semibold">{formatCurrency(p.total)}</td>
-                          <td className="py-2 px-3 text-xs text-muted-foreground">
-                            {p.fecha_entrega ? new Date(p.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                {(() => {
+                  const currentList =
+                    pedidosTab === "hoy" ? pedidosHoy :
+                    pedidosTab === "programados" ? pedidosProgramados :
+                    pedidosVencidos;
 
-          {/* Pedidos programados (futuros) */}
-          {Object.keys(pedidosProgramados).length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-blue-500" />
-                  Pedidos programados
-                  <Badge variant="secondary" className="ml-1">
-                    {Object.values(pedidosProgramados).reduce((a, b) => a + b.length, 0)}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {Object.entries(pedidosProgramados).map(([fecha, pedidos]) => (
-                  <div key={fecha}>
-                    <p className="text-sm font-medium mb-2 text-muted-foreground">
-                      {new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
-                      <Badge variant="outline" className="ml-2 text-xs">{pedidos.length}</Badge>
-                    </p>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b text-muted-foreground">
-                            <th className="text-left py-2 px-3 font-medium">N°</th>
-                            <th className="text-left py-2 px-3 font-medium">Cliente</th>
-                            <th className="text-left py-2 px-3 font-medium">Entrega</th>
-                            <th className="text-right py-2 px-3 font-medium">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {pedidos.map((p) => (
-                            <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50">
-                              <td className="py-2 px-3 font-mono text-xs">#{p.numero}</td>
-                              <td className="py-2 px-3 font-medium">{p.nombre_cliente}</td>
-                              <td className="py-2 px-3">
-                                <Badge variant="outline" className="text-xs">{p.metodo_entrega === "envio" ? "Envio" : "Retiro"}</Badge>
-                              </td>
-                              <td className="py-2 px-3 text-right font-semibold">{formatCurrency(p.total)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  if (currentList.length === 0) {
+                    return (
+                      <div className="text-center py-10 text-muted-foreground">
+                        <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                        <p className="text-sm">
+                          {pedidosTab === "hoy" && "No hay pedidos para hoy"}
+                          {pedidosTab === "programados" && "No hay pedidos programados"}
+                          {pedidosTab === "pendientes" && "No hay pedidos vencidos"}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid gap-3">
+                      {currentList.map((p) => {
+                        const isOverdue = pedidosTab === "pendientes";
+                        const createdDate = new Date(p.created_at);
+                        const timeStr = createdDate.toLocaleTimeString("es-AR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          timeZone: "America/Argentina/Buenos_Aires",
+                        });
+
+                        return (
+                          <div
+                            key={p.id}
+                            className={`rounded-lg border p-4 transition-colors hover:bg-muted/30 ${
+                              isOverdue ? "border-red-200 bg-red-50/50 dark:border-red-900/30 dark:bg-red-950/20" : ""
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                                  isOverdue
+                                    ? "bg-red-100 dark:bg-red-900/30"
+                                    : p.metodo_entrega === "envio"
+                                      ? "bg-blue-100 dark:bg-blue-900/30"
+                                      : "bg-emerald-100 dark:bg-emerald-900/30"
+                                }`}>
+                                  {isOverdue ? (
+                                    <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                  ) : p.metodo_entrega === "envio" ? (
+                                    <Truck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                  ) : (
+                                    <Store className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm">#{p.numero}</span>
+                                    <span className="font-medium text-sm truncate">{p.nombre_cliente}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <Badge variant="outline" className="text-xs">
+                                      {p.metodo_entrega === "envio" ? "Envio" : "Retiro en local"}
+                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {p.metodo_pago || "—"}
+                                    </Badge>
+                                    {p.estado === "confirmado" && (
+                                      <Badge className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
+                                        Confirmado
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 sm:gap-6 shrink-0">
+                                <div className="text-right">
+                                  <p className="font-bold text-sm">{formatCurrency(p.total)}</p>
+                                  <div className="flex items-center gap-1 justify-end mt-0.5">
+                                    <Calendar className="w-3 h-3 text-muted-foreground" />
+                                    <span className={`text-xs ${isOverdue ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}`}>
+                                      {p.fecha_entrega
+                                        ? new Date(p.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })
+                                        : "Sin fecha"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 justify-end mt-0.5">
+                                    <Clock className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">{timeStr}</span>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-xs gap-1"
+                                  onClick={() => window.open(`/admin/ventas/listado?pedido=${p.id}`, "_self")}
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  Ver pedido
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                ))}
+                  );
+                })()}
               </CardContent>
             </Card>
           )}

@@ -595,27 +595,15 @@ export default function ProductosPage() {
   const handleDelete = async (id: string) => {
     const product = products.find((p) => p.id === id);
     if (!product) return;
-    const isInactive = product.activo === false;
-    const msg = isInactive
-      ? "Este producto esta inactivo. ¿Deseas eliminarlo permanentemente?"
-      : "¿Estas seguro de eliminar este producto? Se marcara como inactivo.";
-    if (!window.confirm(msg)) return;
+    if (!window.confirm(`¿Estás seguro de eliminar "${product.nombre}" permanentemente? Esta acción no se puede deshacer.`)) return;
 
     try {
-      if (isInactive) {
-        // Actually delete inactive products
-        await supabase.from("combo_items").delete().eq("combo_id", id);
-        await supabase.from("presentaciones").delete().eq("producto_id", id);
-        await supabase.from("producto_proveedores").delete().eq("producto_id", id);
-        const { error } = await supabase.from("productos").delete().eq("id", id);
-        if (error) throw error;
-        showAdminToast("Producto eliminado permanentemente", "success");
-      } else {
-        await supabase.from("combo_items").delete().eq("combo_id", id);
-        const { error } = await supabase.from("productos").update({ activo: false }).eq("id", id);
-        if (error) throw error;
-        showAdminToast("Producto desactivado correctamente", "success");
-      }
+      await supabase.from("combo_items").delete().eq("combo_id", id);
+      await supabase.from("presentaciones").delete().eq("producto_id", id);
+      await supabase.from("producto_proveedores").delete().eq("producto_id", id);
+      const { error } = await supabase.from("productos").delete().eq("id", id);
+      if (error) throw error;
+      showAdminToast("Producto eliminado permanentemente", "success");
       fetchProducts();
     } catch (err: any) {
       showAdminToast(err.message || "Error al eliminar producto", "error");

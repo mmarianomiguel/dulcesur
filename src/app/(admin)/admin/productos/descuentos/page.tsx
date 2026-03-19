@@ -35,6 +35,7 @@ import {
   Clock,
   AlertCircle,
 } from "lucide-react";
+import { showAdminToast } from "@/components/admin-toast";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-AR", {
@@ -55,6 +56,7 @@ interface Descuento {
   categorias_ids: string[];
   subcategorias_ids: string[];
   productos_ids: string[];
+  marcas_ids: string[];
   presentacion: string;
   activo: boolean;
   created_at: string;
@@ -76,6 +78,11 @@ interface ProductoOption {
   id: string;
   nombre: string;
   codigo: string;
+}
+
+interface Marca {
+  id: string;
+  nombre: string;
 }
 
 const STEPS = [
@@ -128,6 +135,7 @@ export default function DescuentosPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // wizard state
   const [step, setStep] = useState(0);
@@ -141,6 +149,7 @@ export default function DescuentosPage() {
   const [subcategoriasIds, setSubcategoriasIds] = useState<string[]>([]);
   const [presentacion, setPresentacion] = useState("todas");
   const [productosIds, setProductosIds] = useState<string[]>([]);
+  const [marcasIds, setMarcasIds] = useState<string[]>([]);
 
   // categories for step 4
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -152,28 +161,37 @@ export default function DescuentosPage() {
   const [productosAll, setProductosAll] = useState<ProductoOption[]>([]);
   const [prodSearch, setProdSearch] = useState("");
 
+  // marcas for step 4
+  const [marcas, setMarcas] = useState<Marca[]>([]);
+  const [marcaSearch, setMarcaSearch] = useState("");
+
   // editing
   const [editId, setEditId] = useState<string | null>(null);
 
   const fetchDescuentos = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("descuentos")
       .select("*")
       .order("created_at", { ascending: false });
+    if (error) {
+      showAdminToast("Error al cargar descuentos: " + error.message, "error");
+    }
     setDescuentos(data ?? []);
     setLoading(false);
   }, []);
 
   const fetchCategorias = useCallback(async () => {
-    const [{ data: cats }, { data: subs }, { data: prods }] = await Promise.all([
+    const [{ data: cats }, { data: subs }, { data: prods }, { data: marcasData }] = await Promise.all([
       supabase.from("categorias").select("id, nombre").order("nombre"),
       supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
       supabase.from("productos").select("id, nombre, codigo").eq("activo", true).order("nombre"),
+      supabase.from("marcas").select("id, nombre").order("nombre"),
     ]);
     setCategorias(cats ?? []);
     setSubcategorias(subs ?? []);
     setProductosAll(prods ?? []);
+    setMarcas(marcasData ?? []);
   }, []);
 
   useEffect(() => {
@@ -192,11 +210,14 @@ export default function DescuentosPage() {
     setCategoriasIds([]);
     setSubcategoriasIds([]);
     setProductosIds([]);
+    setMarcasIds([]);
     setPresentacion("todas");
     setEditId(null);
     setCatSearch("");
     setExpandedCats([]);
     setProdSearch("");
+    setMarcaSearch("");
+    setSaveError(null);
   };
 
   const openCreate = () => {
@@ -216,13 +237,16 @@ export default function DescuentosPage() {
     setCategoriasIds(d.categorias_ids ?? []);
     setSubcategoriasIds(d.subcategorias_ids ?? []);
     setProductosIds(d.productos_ids ?? []);
+    setMarcasIds(d.marcas_ids ?? []);
     setPresentacion(d.presentacion);
+    setSaveError(null);
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
-    const payload = {
+    setSaveError(null);
+    const payload: Record<string, any> = {
       nombre,
       descripcion: descripcion || null,
       porcentaje,
@@ -232,33 +256,49 @@ export default function DescuentosPage() {
       categorias_ids: aplicaA === "categorias" ? categoriasIds : [],
       subcategorias_ids: aplicaA === "subcategorias" ? subcategoriasIds : [],
       productos_ids: aplicaA === "productos" ? productosIds : [],
+      marcas_ids: marcasIds,
       presentacion,
       updated_at: new Date().toISOString(),
     };
 
-    if (editId) {
-      await supabase.from("descuentos").update(payload).eq("id", editId);
-    } else {
-      const { error } = await supabase.from("descuentos").insert({ ...payload, activo: true });
-      if (error) {
-        console.error("Error creating descuento:", error);
-        setSaving(false);
-        return;
+    try {
+      if (editId) {
+        const { error } = await supabase.from("descuentos").update(payload).eq("id", editId);
+        if (error) throw error;
+        showAdminToast("Descuento actualizado correctamente", "success");
+      } else {
+        const { error } = await supabase.from("descuentos").insert({ ...payload, activo: true });
+        if (error) throw error;
+        showAdminToast("Descuento creado correctamente", "success");
       }
+      setSaving(false);
+      setDialogOpen(false);
+      fetchDescuentos();
+    } catch (err: any) {
+      const msg = err.message || "Error al guardar el descuento";
+      setSaveError(msg);
+      showAdminToast(msg, "error");
+      setSaving(false);
     }
-    setSaving(false);
-    setDialogOpen(false);
-    fetchDescuentos();
   };
 
   const toggleActivo = async (d: Descuento) => {
-    await supabase.from("descuentos").update({ activo: !d.activo, updated_at: new Date().toISOString() }).eq("id", d.id);
+    const { error } = await supabase.from("descuentos").update({ activo: !d.activo, updated_at: new Date().toISOString() }).eq("id", d.id);
+    if (error) {
+      showAdminToast("Error al cambiar estado: " + error.message, "error");
+      return;
+    }
     fetchDescuentos();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar este descuento?")) return;
-    await supabase.from("descuentos").delete().eq("id", id);
+    const { error } = await supabase.from("descuentos").delete().eq("id", id);
+    if (error) {
+      showAdminToast("Error al eliminar: " + error.message, "error");
+      return;
+    }
+    showAdminToast("Descuento eliminado", "success");
     fetchDescuentos();
   };
 
@@ -304,6 +344,17 @@ export default function DescuentosPage() {
     );
   };
 
+  // marca helpers
+  const filteredMarcas = marcas.filter((m) =>
+    m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())
+  );
+
+  const toggleMarcaSelect = (id: string) => {
+    setMarcasIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   const addDuration = (days: number | null) => {
     if (days === null) {
       setFechaFin("");
@@ -341,6 +392,15 @@ export default function DescuentosPage() {
       case "caja": return "Solo caja cerrada";
       default: return v;
     }
+  };
+
+  // Get marca names for display
+  const getMarcaNames = (ids: string[]) => {
+    if (!ids || ids.length === 0) return "";
+    return ids.map((id) => {
+      const m = marcas.find((marca) => marca.id === id);
+      return m ? m.nombre : "";
+    }).filter(Boolean).join(", ");
   };
 
   return (
@@ -409,6 +469,7 @@ export default function DescuentosPage() {
                     <th className="text-left px-4 py-3 font-medium">Porcentaje</th>
                     <th className="text-left px-4 py-3 font-medium">Vigencia</th>
                     <th className="text-left px-4 py-3 font-medium">Aplica a</th>
+                    <th className="text-left px-4 py-3 font-medium">Marcas</th>
                     <th className="text-left px-4 py-3 font-medium">Presentación</th>
                     <th className="text-left px-4 py-3 font-medium">Estado</th>
                     <th className="text-right px-4 py-3 font-medium">Acciones</th>
@@ -432,6 +493,11 @@ export default function DescuentosPage() {
                             : "Permanente"}
                         </td>
                         <td className="px-4 py-3 capitalize">{aplicaALabel(d.aplica_a)}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {d.marcas_ids && d.marcas_ids.length > 0
+                            ? getMarcaNames(d.marcas_ids) || `${d.marcas_ids.length} marca(s)`
+                            : "Todas"}
+                        </td>
                         <td className="px-4 py-3 capitalize">{presentacionLabel(d.presentacion)}</td>
                         <td className="px-4 py-3">{estadoBadge(estado)}</td>
                         <td className="px-4 py-3">
@@ -908,6 +974,73 @@ export default function DescuentosPage() {
 
               <Separator />
 
+              {/* Marca selector - combinable with any aplica_a option */}
+              <div className="space-y-3">
+                <Label>Filtrar por Marca (opcional, combinable)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Si seleccionás marcas, el descuento solo aplica a productos de esas marcas (combinado con la selección anterior).
+                </p>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Buscar marcas..."
+                    value={marcaSearch}
+                    onChange={(e) => setMarcaSearch(e.target.value)}
+                  />
+                </div>
+                {marcasIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {marcasIds.map((id) => {
+                      const m = marcas.find((marca) => marca.id === id);
+                      return (
+                        <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                          {m ? m.nombre : id}
+                          <button
+                            onClick={() => toggleMarcaSelect(id)}
+                            className="ml-1 rounded-full hover:bg-muted p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
+                  {filteredMarcas.length === 0 ? (
+                    <div className="px-3 py-4 text-sm text-center text-muted-foreground">
+                      No se encontraron marcas
+                    </div>
+                  ) : (
+                    filteredMarcas.map((marca) => {
+                      const selected = marcasIds.includes(marca.id);
+                      return (
+                        <div
+                          key={marca.id}
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer"
+                          onClick={() => toggleMarcaSelect(marca.id)}
+                        >
+                          <div
+                            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                              selected ? "bg-primary border-primary" : "border-muted-foreground/40"
+                            }`}
+                          >
+                            {selected && <Check className="w-3 h-3 text-primary-foreground" />}
+                          </div>
+                          <span className="text-sm flex-1">{marca.nombre}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {marcasIds.length} marca(s) seleccionada(s){marcasIds.length === 0 ? " (aplica a todas las marcas)" : ""}
+                </p>
+              </div>
+
+              <Separator />
+
               {/* Presentación */}
               <div className="space-y-2">
                 <Label>Presentación</Label>
@@ -964,11 +1097,27 @@ export default function DescuentosPage() {
                     </span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-muted-foreground">Marcas</span>
+                    <span className="font-medium">
+                      {marcasIds.length > 0
+                        ? `${marcasIds.map((id) => marcas.find((m) => m.id === id)?.nombre || "").filter(Boolean).join(", ")}`
+                        : "Todas"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Presentación</span>
                     <span className="font-medium">{presentacionLabel(presentacion)}</span>
                   </div>
                 </div>
               </div>
+
+              {/* Error message */}
+              {saveError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 p-3 flex items-start gap-2 text-sm text-red-700 dark:text-red-400">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{saveError}</span>
+                </div>
+              )}
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(2)}>
