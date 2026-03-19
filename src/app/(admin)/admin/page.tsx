@@ -578,12 +578,12 @@ export default function DashboardPage() {
                       Total: <span className="font-bold text-foreground">{formatCurrency(allPedidosWeb.reduce((s, p) => s + p.total, 0))}</span>
                     </span>
                   )}
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
-                    <Link href="/admin/ventas/hoja-ruta">
+                  <Link href="/admin/ventas/hoja-ruta">
+                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
                       <Truck className="w-3.5 h-3.5" />
                       Hoja de Ruta
-                    </Link>
-                  </Button>
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </CardHeader>
