@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Cliente } from "@/types/database";
+import type { Cliente, ZonaEntrega } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,11 @@ import {
   X,
   ExternalLink,
   ChevronDown,
+  DollarSign,
+  CreditCard,
+  Eye,
+  Download,
+  MapPin,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -49,6 +54,8 @@ const PROVINCIAS = [
   "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz", "Santa Fe",
   "Santiago del Estero", "Tierra del Fuego", "Tucumán",
 ];
+
+const DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
@@ -72,13 +79,30 @@ const emptyForm = {
   observacion: "",
   barrio: "",
   vendedor_id: "",
+  zona_entrega: "",
 };
+
+interface CuentaMovimiento {
+  id: string;
+  fecha: string;
+  comprobante: string | null;
+  descripcion: string | null;
+  debe: number;
+  haber: number;
+  saldo: number;
+  forma_pago: string | null;
+  venta_id: string | null;
+  ventas?: { tipo_comprobante: string; numero: string } | null;
+}
 
 export default function ClientesPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"listado" | "cobranzas">("listado");
   const [clients, setClients] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterDomicilio, setFilterDomicilio] = useState("");
+  const [filterZona, setFilterZona] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Cliente | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -90,6 +114,7 @@ export default function ClientesPage() {
   const [resetMsg, setResetMsg] = useState("");
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [authId, setAuthId] = useState<string | null>(null);
+  const [zonas, setZonas] = useState<ZonaEntrega[]>([]);
 
   // Movements
   const [movClient, setMovClient] = useState<Cliente | null>(null);
@@ -108,12 +133,26 @@ export default function ClientesPage() {
   const [payMovSaving, setPayMovSaving] = useState(false);
   const vendedorRef = useRef<HTMLDivElement>(null);
 
+  // Cobranzas state
+  const [cobranzasSearch, setCobranzasSearch] = useState("");
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedCobranzaClient, setSelectedCobranzaClient] = useState<Cliente | null>(null);
+  const [cobranzaMovimientos, setCobranzaMovimientos] = useState<CuentaMovimiento[]>([]);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [cobranzaFilterFrom, setCobranzaFilterFrom] = useState("");
+  const [cobranzaFilterTo, setCobranzaFilterTo] = useState("");
+  const [cobroOpen, setCobroOpen] = useState(false);
+  const [cobroClient, setCobroClient] = useState<Cliente | null>(null);
+  const [cobroMonto, setCobroMonto] = useState(0);
+  const [cobroFormaPago, setCobroFormaPago] = useState("Efectivo");
+  const [cobroObs, setCobroObs] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("clientes")
-      .select("id, nombre, tipo_documento, numero_documento, cuit, situacion_iva, tipo_factura, razon_social, domicilio, domicilio_fiscal, telefono, email, provincia, localidad, codigo_postal, observacion, barrio, vendedor_id, saldo, origen, activo")
+      .select("id, nombre, tipo_documento, numero_documento, cuit, situacion_iva, tipo_factura, razon_social, domicilio, domicilio_fiscal, telefono, email, provincia, localidad, codigo_postal, observacion, barrio, vendedor_id, saldo, origen, activo, zona_entrega, dias_entrega")
       .eq("activo", true)
       .order("nombre");
     setClients((data || []) as unknown as Cliente[]);
@@ -122,9 +161,15 @@ export default function ClientesPage() {
     setLoading(false);
   }, []);
 
+  const fetchZonas = useCallback(async () => {
+    const { data } = await supabase.from("zonas_entrega").select("*").order("nombre");
+    setZonas((data || []) as ZonaEntrega[]);
+  }, []);
+
   useEffect(() => {
     fetchClients();
-  }, [fetchClients]);
+    fetchZonas();
+  }, [fetchClients, fetchZonas]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -160,6 +205,7 @@ export default function ClientesPage() {
       observacion: c.observacion || "",
       barrio: (c as any).barrio || "",
       vendedor_id: (c as any).vendedor_id || "",
+      zona_entrega: c.zona_entrega || "",
     });
     setResetPw("");
     setResetMsg("");
@@ -176,6 +222,7 @@ export default function ClientesPage() {
   };
 
   const handleSave = async () => {
+    const selectedZona = zonas.find((z) => z.id === form.zona_entrega);
     const payload = {
       nombre: form.nombre,
       tipo_documento: form.tipo_documento || null,
@@ -194,6 +241,8 @@ export default function ClientesPage() {
       observacion: form.observacion || null,
       barrio: form.barrio || null,
       vendedor_id: form.vendedor_id || null,
+      zona_entrega: form.zona_entrega || null,
+      dias_entrega: selectedZona ? selectedZona.dias : null,
     };
     if (editingClient) {
       await supabase.from("clientes").update(payload).eq("id", editingClient.id);
@@ -234,7 +283,6 @@ export default function ClientesPage() {
 
   const fetchMovimientos = async (clienteId: string, desde: string, hasta: string) => {
     setMovLoading(true);
-    // Fetch ventas (includes NC) with items
     const { data: ventas } = await supabase
       .from("ventas")
       .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
@@ -243,7 +291,6 @@ export default function ClientesPage() {
       .lte("fecha", hasta)
       .order("created_at", { ascending: false });
 
-    // Fetch cobros
     const { data: cobros } = await supabase
       .from("cobros")
       .select("id, fecha, created_at, monto, metodo_pago, observacion")
@@ -252,7 +299,6 @@ export default function ClientesPage() {
       .lte("fecha", hasta)
       .order("created_at", { ascending: false });
 
-    // Fetch cuenta corriente
     const { data: cc } = await supabase
       .from("cuenta_corriente")
       .select("id, fecha, comprobante, descripcion, debe, haber, saldo, forma_pago, venta_id")
@@ -261,7 +307,6 @@ export default function ClientesPage() {
       .lte("fecha", hasta)
       .order("fecha", { ascending: false });
 
-    // Compute pending balance per venta from cuenta_corriente
     const ventaIds = (ventas || []).map((v: any) => v.id);
     const saldoPorVenta: Record<string, number> = {};
     if (ventaIds.length > 0) {
@@ -274,7 +319,6 @@ export default function ClientesPage() {
       }
     }
 
-    // Also fetch payments per venta from caja_movimientos
     const pagadoPorVenta: Record<string, number> = {};
     if (ventaIds.length > 0) {
       const { data: cajaMovs } = await supabase
@@ -288,7 +332,6 @@ export default function ClientesPage() {
       }
     }
 
-    // Build unified list
     const all: any[] = [];
     for (const v of ventas || []) {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
@@ -330,7 +373,6 @@ export default function ClientesPage() {
     all.sort((a, b) => (b.created_at || b.fecha).localeCompare(a.created_at || a.fecha));
     setMovimientos(all);
 
-    // Totals
     const totalVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
     const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
     const totalCobros = (cobros || []).reduce((s: number, c: any) => s + (c.monto || 0), 0);
@@ -354,7 +396,6 @@ export default function ClientesPage() {
     const montoReal = Math.min(payMovMonto, saldoPend);
     const restante = saldoPend - montoReal;
 
-    // Register payment in caja
     await supabase.from("caja_movimientos").insert({
       fecha: hoy, hora, tipo: "ingreso",
       descripcion: `Cobro deuda ${payMovVenta.descripcion} — ${clients.find((c) => c.id === movClient?.id)?.nombre || ""}`,
@@ -364,7 +405,6 @@ export default function ClientesPage() {
       referencia_tipo: "venta",
     });
 
-    // Update cuenta_corriente
     const cli = clients.find((c) => c.id === movClient?.id);
     const currentSaldo = cli?.saldo || 0;
     const newSaldo = currentSaldo - montoReal;
@@ -383,19 +423,112 @@ export default function ClientesPage() {
 
     setPayMovSaving(false);
     setPayMovOpen(false);
-    // Refresh
     if (movClient?.id) fetchMovimientos(movClient.id, movDesde, movHasta);
     fetchClients();
   };
 
+  // Cobranzas functions
+  const clientsConDeuda = useMemo(() => clients.filter((c) => c.saldo > 0).sort((a, b) => b.saldo - a.saldo), [clients]);
+  const totalPendiente = useMemo(() => clientsConDeuda.reduce((a, c) => a + c.saldo, 0), [clientsConDeuda]);
+
+  const filteredCobranzas = useMemo(() => {
+    if (!cobranzasSearch) return clientsConDeuda;
+    const s = cobranzasSearch.toLowerCase();
+    return clientsConDeuda.filter((c) => c.nombre.toLowerCase().includes(s));
+  }, [clientsConDeuda, cobranzasSearch]);
+
+  const openCobranzaDetail = async (client: Cliente) => {
+    setSelectedCobranzaClient(client);
+    setDetailOpen(true);
+    setLoadingDetail(true);
+
+    let query = supabase
+      .from("cuenta_corriente")
+      .select("*")
+      .eq("cliente_id", client.id)
+      .order("fecha", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (cobranzaFilterFrom) query = query.gte("fecha", cobranzaFilterFrom);
+    if (cobranzaFilterTo) query = query.lte("fecha", cobranzaFilterTo);
+
+    const { data } = await query;
+    setCobranzaMovimientos((data as CuentaMovimiento[]) || []);
+    setLoadingDetail(false);
+  };
+
+  const openCobro = (client: Cliente) => {
+    setCobroClient(client);
+    setCobroMonto(client.saldo);
+    setCobroFormaPago("Efectivo");
+    setCobroObs("");
+    setCobroOpen(true);
+  };
+
+  const handleCobro = async () => {
+    if (!cobroClient || cobroMonto <= 0) return;
+    setSaving(true);
+
+    await supabase.from("cobros").insert({
+      cliente_id: cobroClient.id,
+      monto: cobroMonto,
+      forma_pago: cobroFormaPago,
+      observacion: cobroObs || null,
+    });
+
+    const currentSaldo = cobroClient.saldo - cobroMonto;
+    await supabase.from("cuenta_corriente").insert({
+      cliente_id: cobroClient.id,
+      fecha: new Date().toISOString().split("T")[0],
+      comprobante: `RE ${new Date().toISOString().split("T")[0]}`,
+      descripcion: `Cobro - ${cobroFormaPago}`,
+      debe: 0,
+      haber: cobroMonto,
+      saldo: currentSaldo,
+      forma_pago: cobroFormaPago,
+    });
+
+    await supabase
+      .from("clientes")
+      .update({ saldo: cobroClient.saldo - cobroMonto })
+      .eq("id", cobroClient.id);
+
+    await supabase.from("caja_movimientos").insert({
+      fecha: new Date().toISOString().split("T")[0],
+      hora: new Date().toTimeString().split(" ")[0],
+      tipo: "ingreso",
+      descripcion: `Cobro a ${cobroClient.nombre}`,
+      metodo_pago: cobroFormaPago,
+      monto: cobroMonto,
+    });
+
+    setSaving(false);
+    setCobroOpen(false);
+    fetchClients();
+  };
+
+  const exportCSV = () => {
+    const header = "ID,Cliente,Saldo\n";
+    const rows = clientsConDeuda.map((c) => `"${c.id}","${c.nombre}",${c.saldo}`).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "cobranzas.csv";
+    a.click();
+  };
+
   const filtered = useMemo(() => {
     const searchLower = search.toLowerCase();
+    const domicilioLower = filterDomicilio.toLowerCase();
     return clients.filter(
       (c) =>
         (c.nombre.toLowerCase().includes(searchLower) || (c.cuit || "").includes(search)) &&
-        (!vendedorFilter || (c as any).vendedor_id === vendedorFilter)
+        (!vendedorFilter || (c as any).vendedor_id === vendedorFilter) &&
+        (!filterDomicilio || (c.domicilio || "").toLowerCase().includes(domicilioLower)) &&
+        (!filterZona || c.zona_entrega === filterZona)
     );
-  }, [clients, search, vendedorFilter]);
+  }, [clients, search, vendedorFilter, filterDomicilio, filterZona]);
 
   const inscriptos = useMemo(() => clients.filter((c) => c.situacion_iva === "Responsable Inscripto").length, [clients]);
   const withBalance = useMemo(() => clients.filter((c) => c.saldo > 0).length, [clients]);
@@ -410,152 +543,304 @@ export default function ClientesPage() {
           <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
           <p className="text-muted-foreground text-sm">{clients.length} clientes registrados</p>
         </div>
-        <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo cliente</Button>
+        <div className="flex gap-2">
+          {activeTab === "cobranzas" && (
+            <Button variant="outline" size="sm" onClick={exportCSV}>
+              <Download className="w-4 h-4 mr-2" />Exportar
+            </Button>
+          )}
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo cliente</Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="w-5 h-5 text-primary" /></div>
-            <div><p className="text-xs text-muted-foreground">Total clientes</p><p className="text-xl font-bold">{clients.length}</p></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Building2 className="w-5 h-5 text-emerald-500" /></div>
-            <div><p className="text-xs text-muted-foreground">Resp. Inscriptos</p><p className="text-xl font-bold">{inscriptos}</p></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-orange-500" /></div>
-            <div><p className="text-xs text-muted-foreground">Con saldo pendiente</p><p className="text-xl font-bold">{withBalance}</p></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-emerald-500" /></div>
-            <div><p className="text-xs text-muted-foreground">Con saldo a favor</p><p className="text-xl font-bold">{withFavor}</p></div>
-          </CardContent>
-        </Card>
+      {/* Main Tabs: Listado / Cobranzas */}
+      <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTab("listado")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "listado" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Users className="w-4 h-4 inline mr-2" />Listado
+        </button>
+        <button
+          onClick={() => setActiveTab("cobranzas")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "cobranzas" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <DollarSign className="w-4 h-4 inline mr-2" />Cobranzas
+        </button>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="space-y-1.5 flex-1 min-w-[200px]">
-              <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Buscar por nombre o CUIT..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-              </div>
-            </div>
-            {vendedores.length > 0 && (
-              <div className="space-y-1.5 min-w-[200px]" ref={vendedorRef}>
-                <span className="text-xs text-muted-foreground font-semibold tracking-wide">VENDEDOR</span>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Filtrar por vendedor..."
-                    value={vendedorFilter ? (vendedores.find((v) => v.id === vendedorFilter)?.nombre ?? vendedorSearch) : vendedorSearch}
-                    onChange={(e) => { setVendedorSearch(e.target.value); setVendedorFilter(""); setVendedorOpen(true); }}
-                    onFocus={() => setVendedorOpen(true)}
-                    className="pl-9"
-                  />
-                  {vendedorFilter && (
-                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setVendedorFilter(""); setVendedorSearch(""); }}>
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                  {vendedorOpen && !vendedorFilter && (
-                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
-                      <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setVendedorFilter(""); setVendedorSearch(""); setVendedorOpen(false); }}>
-                        Todos los vendedores
-                      </button>
-                      {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).map((v) => (
-                        <button key={v.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
-                          onClick={() => { setVendedorFilter(v.id); setVendedorSearch(""); setVendedorOpen(false); }}>
-                          {v.nombre}
-                        </button>
-                      ))}
-                      {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).length === 0 && (
-                        <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+      {activeTab === "listado" && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="w-5 h-5 text-primary" /></div>
+                <div><p className="text-xs text-muted-foreground">Total clientes</p><p className="text-xl font-bold">{clients.length}</p></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Building2 className="w-5 h-5 text-emerald-500" /></div>
+                <div><p className="text-xs text-muted-foreground">Resp. Inscriptos</p><p className="text-xl font-bold">{inscriptos}</p></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-orange-500" /></div>
+                <div><p className="text-xs text-muted-foreground">Con saldo pendiente</p><p className="text-xl font-bold">{withBalance}</p></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-emerald-500" /></div>
+                <div><p className="text-xs text-muted-foreground">Con saldo a favor</p><p className="text-xl font-bold">{withFavor}</p></div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardContent className="pt-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Cliente</th>
-                    <th className="text-left py-3 px-4 font-medium">CUIT</th>
-                    <th className="text-left py-3 px-4 font-medium">Situación IVA</th>
-                    <th className="text-left py-3 px-4 font-medium">Contacto</th>
-                    <th className="text-right py-3 px-4 font-medium">Saldo</th>
-                    <th className="text-right py-3 px-4 font-medium w-24">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((client) => (
-                    <tr key={client.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-medium">
-                        <div className="flex items-center gap-2">
-                          {client.nombre}
-                          {(client as unknown as Record<string, unknown>).origen === "tienda" && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-pink-300 text-pink-600 bg-pink-50">Tienda</Badge>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-wrap gap-4">
+                <div className="space-y-1.5 flex-1 min-w-[200px]">
+                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">NOMBRE / CUIT</span>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Buscar por nombre o CUIT..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+                  </div>
+                </div>
+                <div className="space-y-1.5 min-w-[180px]">
+                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">DOMICILIO</span>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Filtrar por domicilio..." value={filterDomicilio} onChange={(e) => setFilterDomicilio(e.target.value)} className="pl-9" />
+                  </div>
+                </div>
+                <div className="space-y-1.5 min-w-[180px]">
+                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">ZONA DE ENTREGA</span>
+                  <Select value={filterZona} onValueChange={(v) => setFilterZona(v === "all" ? "" : (v || ""))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas las zonas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las zonas</SelectItem>
+                      {zonas.map((z) => (
+                        <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {vendedores.length > 0 && (
+                  <div className="space-y-1.5 min-w-[200px]" ref={vendedorRef}>
+                    <span className="text-xs text-muted-foreground font-semibold tracking-wide">VENDEDOR</span>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Filtrar por vendedor..."
+                        value={vendedorFilter ? (vendedores.find((v) => v.id === vendedorFilter)?.nombre ?? vendedorSearch) : vendedorSearch}
+                        onChange={(e) => { setVendedorSearch(e.target.value); setVendedorFilter(""); setVendedorOpen(true); }}
+                        onFocus={() => setVendedorOpen(true)}
+                        className="pl-9"
+                      />
+                      {vendedorFilter && (
+                        <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setVendedorFilter(""); setVendedorSearch(""); }}>
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                      {vendedorOpen && !vendedorFilter && (
+                        <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                          <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setVendedorFilter(""); setVendedorSearch(""); setVendedorOpen(false); }}>
+                            Todos los vendedores
+                          </button>
+                          {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).map((v) => (
+                            <button key={v.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                              onClick={() => { setVendedorFilter(v.id); setVendedorSearch(""); setVendedorOpen(false); }}>
+                              {v.nombre}
+                            </button>
+                          ))}
+                          {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).length === 0 && (
+                            <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                           )}
                         </div>
-                      </td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{client.cuit || "—"}</td>
-                      <td className="py-3 px-4">
-                        <Badge variant={client.situacion_iva === "Responsable Inscripto" ? "default" : "secondary"} className="text-xs font-normal">
-                          {client.situacion_iva}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3 text-muted-foreground text-xs">
-                          {client.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{client.telefono}</span>}
-                          {client.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{client.email}</span>}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        {client.saldo > 0 ? (
-                          <span className="font-semibold text-orange-500">{formatCurrency(client.saldo)}</span>
-                        ) : client.saldo < 0 ? (
-                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                            A favor: {formatCurrency(Math.abs(client.saldo))}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openMovimientos(client)} title="Movimientos"><History className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(client)} title="Editar"><Edit className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(client.id)} title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-0">
+              {loading ? (
+                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-3 px-4 font-medium">Cliente</th>
+                        <th className="text-left py-3 px-4 font-medium">CUIT</th>
+                        <th className="text-left py-3 px-4 font-medium">Situación IVA</th>
+                        <th className="text-left py-3 px-4 font-medium">Zona</th>
+                        <th className="text-left py-3 px-4 font-medium">Contacto</th>
+                        <th className="text-right py-3 px-4 font-medium">Saldo</th>
+                        <th className="text-right py-3 px-4 font-medium w-24">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((client) => {
+                        const zona = zonas.find((z) => z.id === client.zona_entrega);
+                        return (
+                          <tr key={client.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="py-3 px-4 font-medium">
+                              <div className="flex items-center gap-2">
+                                {client.nombre}
+                                {(client as unknown as Record<string, unknown>).origen === "tienda" && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-pink-300 text-pink-600 bg-pink-50">Tienda</Badge>
+                                )}
+                              </div>
+                              {client.domicilio && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{client.domicilio}</p>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{client.cuit || "—"}</td>
+                            <td className="py-3 px-4">
+                              <Badge variant={client.situacion_iva === "Responsable Inscripto" ? "default" : "secondary"} className="text-xs font-normal">
+                                {client.situacion_iva}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              {zona ? (
+                                <div>
+                                  <Badge variant="outline" className="text-xs font-normal border-blue-300 text-blue-700 bg-blue-50">
+                                    <MapPin className="w-3 h-3 mr-1" />{zona.nombre}
+                                  </Badge>
+                                  {zona.dias && zona.dias.length > 0 && (
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">{zona.dias.join(", ")}</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3 text-muted-foreground text-xs">
+                                {client.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{client.telefono}</span>}
+                                {client.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{client.email}</span>}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {client.saldo > 0 ? (
+                                <span className="font-semibold text-orange-500">{formatCurrency(client.saldo)}</span>
+                              ) : client.saldo < 0 ? (
+                                <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                                  A favor: {formatCurrency(Math.abs(client.saldo))}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openMovimientos(client)} title="Movimientos"><History className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(client)} title="Editar"><Edit className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(client.id)} title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {activeTab === "cobranzas" && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="w-5 h-5 text-primary" /></div>
+                <div><p className="text-xs text-muted-foreground">Clientes con deuda</p><p className="text-xl font-bold">{clientsConDeuda.length}</p></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-orange-500" /></div>
+                <div><p className="text-xs text-muted-foreground">Total pendiente</p><p className="text-xl font-bold text-orange-500">{formatCurrency(totalPendiente)}</p></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><CreditCard className="w-5 h-5 text-emerald-500" /></div>
+                <div><p className="text-xs text-muted-foreground">Mayor deudor</p><p className="text-xl font-bold">{clientsConDeuda[0]?.nombre || "—"}</p></div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="space-y-1.5">
+                <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
+                <div className="relative max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input placeholder="Filtrar cliente..." value={cobranzasSearch} onChange={(e) => setCobranzasSearch(e.target.value)} className="pl-9" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-0">
+              {loading ? (
+                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+              ) : filteredCobranzas.length === 0 ? (
+                <p className="text-center text-muted-foreground py-12 text-sm">No hay clientes con saldo pendiente</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-3 px-4 font-medium">Cliente</th>
+                        <th className="text-left py-3 px-4 font-medium">CUIT</th>
+                        <th className="text-right py-3 px-4 font-medium">Saldo deudor</th>
+                        <th className="text-right py-3 px-4 font-medium w-48">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCobranzas.map((c) => (
+                        <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                          <td className="py-3 px-4 font-medium">{c.nombre}</td>
+                          <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{c.cuit || "—"}</td>
+                          <td className="py-3 px-4 text-right font-semibold text-orange-500">{formatCurrency(c.saldo)}</td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="outline" size="sm" onClick={() => openCobranzaDetail(c)}>
+                                <Eye className="w-3.5 h-3.5 mr-1" />Resumen
+                              </Button>
+                              <Button size="sm" onClick={() => openCobro(c)}>
+                                <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="flex justify-end border-t pt-3 px-4">
+                    <span className="text-sm text-muted-foreground mr-4">Saldo total:</span>
+                    <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente)}</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Movements Dialog */}
       <Dialog open={movOpen} onOpenChange={setMovOpen}>
@@ -581,7 +866,6 @@ export default function ClientesPage() {
             </Button>
           </div>
 
-          {/* Summary cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
             <div className="rounded-lg border p-3">
               <p className="text-xs text-muted-foreground">Ventas</p>
@@ -601,7 +885,6 @@ export default function ClientesPage() {
             </div>
           </div>
 
-          {/* Movements table */}
           {movLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
           ) : movimientos.length === 0 ? (
@@ -679,7 +962,6 @@ export default function ClientesPage() {
                                     {m.items.map((it: any, idx: number) => {
                                       const isBox = it.presentacion && it.presentacion !== "Unidad" && (it.unidades_por_presentacion || 1) > 1;
                                       const unitPrice = isBox ? it.precio_unitario / (it.unidades_por_presentacion || 1) : it.precio_unitario;
-                                      // Clean "(Unidad)" and duplicate presentation from description
                                       let displayName = (it.descripcion || "")
                                         .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
                                         .replace(/\s*\(Unidad\)$/, "")
@@ -762,6 +1044,138 @@ export default function ClientesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Cobranzas - Resumen de Cuenta Dialog */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Resumen de Cuenta — {selectedCobranzaClient?.nombre}</DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-2 items-end mb-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Desde</Label>
+              <Input type="date" value={cobranzaFilterFrom} onChange={(e) => setCobranzaFilterFrom(e.target.value)} className="w-36 h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Hasta</Label>
+              <Input type="date" value={cobranzaFilterTo} onChange={(e) => setCobranzaFilterTo(e.target.value)} className="w-36 h-8 text-xs" />
+            </div>
+            <Button variant="outline" size="sm" onClick={() => selectedCobranzaClient && openCobranzaDetail(selectedCobranzaClient)}>Filtrar</Button>
+          </div>
+
+          {loadingDetail ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : cobranzaMovimientos.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8 text-sm">No hay movimientos registrados</p>
+          ) : (
+            <div className="overflow-x-auto border rounded-lg">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50 text-muted-foreground">
+                    <th className="text-left py-2 px-3 font-medium">Fecha</th>
+                    <th className="text-left py-2 px-3 font-medium">Comprobante</th>
+                    <th className="text-right py-2 px-3 font-medium">Debe</th>
+                    <th className="text-right py-2 px-3 font-medium">Haber</th>
+                    <th className="text-right py-2 px-3 font-medium">Saldo</th>
+                    <th className="text-left py-2 px-3 font-medium">Cond. Pago</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cobranzaMovimientos.map((m) => (
+                    <tr key={m.id} className="border-b last:border-0">
+                      <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha).toLocaleDateString("es-AR")}</td>
+                      <td className="py-2 px-3 font-mono text-xs">{m.comprobante || "—"}</td>
+                      <td className="py-2 px-3 text-right">{m.debe > 0 ? formatCurrency(m.debe) : ""}</td>
+                      <td className="py-2 px-3 text-right">{m.haber > 0 ? formatCurrency(m.haber) : ""}</td>
+                      <td className={`py-2 px-3 text-right font-semibold ${m.saldo < 0 ? "text-red-500" : ""}`}>
+                        {formatCurrency(m.saldo)}
+                      </td>
+                      <td className="py-2 px-3 text-xs text-muted-foreground">{m.forma_pago || ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {selectedCobranzaClient && (
+            <div className="flex justify-between items-center pt-4 border-t">
+              <span className="text-sm font-semibold">Saldo deudor actual</span>
+              <span className="text-lg font-bold text-orange-500">{formatCurrency(selectedCobranzaClient.saldo)}</span>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cobro Dialog */}
+      <Dialog open={cobroOpen} onOpenChange={setCobroOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Registrar cobro — {cobroClient?.nombre}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 mt-2">
+            {cobroClient && cobroClient.saldo > 0 && (
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-orange-800">Deuda pendiente</p>
+                  <p className="text-xs text-orange-600 mt-0.5">El cliente debe abonar este monto</p>
+                </div>
+                <p className="text-2xl font-bold text-orange-600">{formatCurrency(cobroClient.saldo)}</p>
+              </div>
+            )}
+            {cobroClient && cobroClient.saldo < 0 && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-emerald-800">Saldo a favor</p>
+                  <p className="text-xs text-emerald-600 mt-0.5">El cliente tiene crédito disponible</p>
+                </div>
+                <p className="text-2xl font-bold text-emerald-600">{formatCurrency(Math.abs(cobroClient.saldo))}</p>
+              </div>
+            )}
+            {cobroClient && cobroClient.saldo === 0 && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
+                <p className="text-sm font-medium text-gray-600">Este cliente no tiene deuda pendiente</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Monto a cobrar</Label>
+              <Input type="number" value={cobroMonto} onChange={(e) => setCobroMonto(Number(e.target.value))} />
+              {cobroClient && cobroMonto > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Saldo después del cobro: <span className="font-semibold">{formatCurrency(cobroClient.saldo - cobroMonto)}</span>
+                  {cobroClient.saldo - cobroMonto < 0 && <span className="text-emerald-600 ml-1">(queda a favor)</span>}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Forma de pago</Label>
+              <Select value={cobroFormaPago} onValueChange={(v) => setCobroFormaPago(v || "Efectivo")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Efectivo">Efectivo</SelectItem>
+                  <SelectItem value="Transferencia">Transferencia</SelectItem>
+                  <SelectItem value="Tarjeta">Tarjeta</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Observación</Label>
+              <Input value={cobroObs} onChange={(e) => setCobroObs(e.target.value)} placeholder="Opcional" />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setCobroOpen(false)}>Cancelar</Button>
+              <Button onClick={handleCobro} disabled={saving || cobroMonto <= 0}>
+                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Registrar cobro
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -829,6 +1243,37 @@ export default function ClientesPage() {
                 <div className="space-y-2">
                   <Label>Código Postal</Label>
                   <Input value={form.codigo_postal} onChange={(e) => f("codigo_postal", e.target.value)} />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <Label>Zona de entrega</Label>
+                  <Select value={form.zona_entrega} onValueChange={(v) => f("zona_entrega", v === "none" ? "" : (v || ""))}>
+                    <SelectTrigger><SelectValue placeholder="Sin zona asignada" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin zona asignada</SelectItem>
+                      {zonas.map((z) => (
+                        <SelectItem key={z.id} value={z.id}>
+                          {z.nombre} — {z.dias.join(", ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.zona_entrega && (() => {
+                    const selectedZona = zonas.find((z) => z.id === form.zona_entrega);
+                    if (!selectedZona) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {DIAS_SEMANA.map((dia) => (
+                          <Badge
+                            key={dia}
+                            variant={selectedZona.dias.includes(dia) ? "default" : "outline"}
+                            className={`text-xs ${selectedZona.dias.includes(dia) ? "bg-blue-600" : "opacity-40"}`}
+                          >
+                            {dia.substring(0, 3)}
+                          </Badge>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label>Vendedor</Label>

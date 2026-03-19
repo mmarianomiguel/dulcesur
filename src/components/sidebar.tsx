@@ -76,7 +76,6 @@ const navigation: NavItem[] = [
     icon: Users,
     children: [
       { name: "Listado", href: "/admin/clientes", icon: List },
-      { name: "Cobranzas", href: "/admin/clientes/cobranzas", icon: Banknote },
     ],
   },
   {

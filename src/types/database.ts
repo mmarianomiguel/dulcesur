@@ -142,9 +142,18 @@ export interface Cliente {
   observacion: string | null;
   fecha_nacimiento: string | null;
   saldo: number;
+  zona_entrega: string | null;
+  dias_entrega: string[] | null;
   activo: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ZonaEntrega {
+  id: string;
+  nombre: string;
+  dias: string[];
+  created_at: string;
 }
 
 export interface Proveedor {
