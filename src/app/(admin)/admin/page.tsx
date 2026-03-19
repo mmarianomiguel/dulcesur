@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +20,11 @@ import {
   ShoppingCart,
   Truck,
   Clock,
-  AlertTriangle,
   Eye,
   Store,
+  CheckCircle,
+  Printer,
+  MapPin,
 } from "lucide-react";
 import {
   Dialog,
@@ -63,6 +65,46 @@ const PIE_COLORS = ["oklch(0.55 0.2 264)", "oklch(0.65 0.18 160)", "oklch(0.7 0.
 
 type FilterMode = "diario" | "mensual" | "rango";
 
+interface ClienteInfo {
+  nombre: string;
+  domicilio: string | null;
+  localidad: string | null;
+  telefono: string | null;
+  saldo: number;
+}
+
+interface VentaItemRow {
+  id: string;
+  descripcion: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+  unidad_medida: string | null;
+}
+
+interface PedidoVenta {
+  id: string;
+  numero: string;
+  fecha: string;
+  forma_pago: string;
+  total: number;
+  estado: string;
+  observacion: string | null;
+  entregado: boolean;
+  metodo_entrega: string | null;
+  created_at: string;
+  clientes: ClienteInfo | null;
+  venta_items: VentaItemRow[];
+}
+
+interface EmpresaInfo {
+  nombre: string | null;
+  domicilio: string | null;
+  telefono: string | null;
+  cuit: string | null;
+  situacion_iva: string | null;
+}
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
@@ -88,35 +130,16 @@ export default function DashboardPage() {
   const [monthlyData, setMonthlyData] = useState<{ name: string; ventas: number; egresos: number }[]>([]);
   const [ventasPorCategoria, setVentasPorCategoria] = useState<{ name: string; value: number }[]>([]);
 
-  // Web orders
-  interface PedidoItemWeb {
-    id: string;
-    nombre: string;
-    cantidad: number;
-    precio_unitario: number;
-    subtotal: number;
-    presentacion: string | null;
-  }
-  interface PedidoWeb {
-    id: string;
-    numero: string;
-    nombre_cliente: string;
-    metodo_entrega: string;
-    metodo_pago: string;
-    total: number;
-    fecha_entrega: string | null;
-    created_at: string;
-    estado: string;
-    direccion_texto: string | null;
-    telefono: string | null;
-    observacion: string | null;
-  }
-  const [allPedidosWeb, setAllPedidosWeb] = useState<PedidoWeb[]>([]);
-  const [selectedDayTab, setSelectedDayTab] = useState<string>("_today");
+  // ─── Pedidos Online state ───
+  const [pedidosOnline, setPedidosOnline] = useState<PedidoVenta[]>([]);
+  const [pedidoEntregaMap, setPedidoEntregaMap] = useState<Record<string, string>>({}); // numero -> fecha_entrega
+  const [pedidoFilter, setPedidoFilter] = useState<"todos" | "envio" | "retiro">("todos");
+  const [pedidoFechaFilter, setPedidoFechaFilter] = useState("");
   const [pedidoDetailOpen, setPedidoDetailOpen] = useState(false);
-  const [pedidoDetail, setPedidoDetail] = useState<PedidoWeb | null>(null);
-  const [pedidoItems, setPedidoItems] = useState<PedidoItemWeb[]>([]);
-  const [pedidoItemsLoading, setPedidoItemsLoading] = useState(false);
+  const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   // ─── Compute date range from filter ───
   const getDateRange = useCallback((): { start: string; end: string } => {
@@ -131,7 +154,6 @@ export default function DashboardPage() {
       const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
       return { start, end };
     }
-    // rango
     const next = new Date(filterTo + "T12:00:00");
     next.setDate(next.getDate() + 1);
     return { start: filterFrom, end: next.toISOString().split("T")[0] };
@@ -151,6 +173,35 @@ export default function DashboardPage() {
     return `${from} — ${to}`;
   };
 
+  // ─── Fetch pedidos online (separate from dashboard filters) ───
+  const fetchPedidosOnline = useCallback(async () => {
+    const { data: ventasOnline } = await supabase
+      .from("ventas")
+      .select("id, numero, fecha, forma_pago, total, estado, observacion, entregado, metodo_entrega, created_at, clientes(nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida)")
+      .eq("origen", "tienda")
+      .eq("entregado", false)
+      .neq("estado", "anulada")
+      .order("created_at", { ascending: false });
+
+    const rows = (ventasOnline || []) as unknown as PedidoVenta[];
+    setPedidosOnline(rows);
+
+    // Get delivery dates from pedidos_tienda
+    const numeros = rows.map((v) => v.numero);
+    if (numeros.length > 0) {
+      const { data: pedidosTienda } = await supabase
+        .from("pedidos_tienda")
+        .select("numero, fecha_entrega")
+        .in("numero", numeros);
+      const map: Record<string, string> = {};
+      (pedidosTienda || []).forEach((p: { numero: string; fecha_entrega: string | null }) => {
+        if (p.fecha_entrega) map[p.numero] = p.fecha_entrega;
+      });
+      setPedidoEntregaMap(map);
+    } else {
+      setPedidoEntregaMap({});
+    }
+  }, []);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -182,7 +233,7 @@ export default function DashboardPage() {
       .eq("tipo", "egreso");
     setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
 
-    // Ganancia = sum of (precio_unitario - costo) * cantidad for sold items in period
+    // Ganancia
     const { data: ventaIds } = await supabase
       .from("ventas")
       .select("id")
@@ -200,26 +251,25 @@ export default function DashboardPage() {
         const cantidad = Number(item.cantidad) || 0;
         const precioUnitario = Number(item.precio_unitario) || 0;
         const unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
-        // For boxes: cost = unit cost × units per presentation
         const costoVenta = costoUnitario * unidadesPorPres;
         return acc + (precioUnitario - costoVenta) * cantidad;
       }, 0);
     }
     setGananciaPeriodo(gananciaTotal);
 
-    // Capital en mercadería (always current)
+    // Capital en mercaderia
     const { data: prods } = await supabase.from("productos").select("stock, precio, costo").eq("activo", true).limit(10000);
     setCapitalMercaderia((prods || []).reduce((a, p) => a + p.stock * (p.costo || p.precio), 0));
 
-    // Cuentas a cobrar (always current)
+    // Cuentas a cobrar
     const { data: cls } = await supabase.from("clientes").select("saldo").eq("activo", true);
     setCuentasCobrar((cls || []).reduce((a, c) => a + (c.saldo > 0 ? c.saldo : 0), 0));
 
-    // Cuentas a pagar (always current)
+    // Cuentas a pagar
     const { data: provs } = await supabase.from("proveedores").select("saldo").eq("activo", true);
     setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
 
-    // Monthly data (last 6 months - always shown)
+    // Monthly data (last 6 months)
     const months: { name: string; ventas: number; egresos: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
@@ -228,10 +278,8 @@ export default function DashboardPage() {
       const month = d.getMonth() + 1;
       const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
       const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-
       const { data: mv } = await supabase.from("ventas").select("total").gte("fecha", mStart).lt("fecha", mEnd);
       const { data: me } = await supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd);
-
       months.push({
         name: d.toLocaleDateString("es-AR", { month: "short" }),
         ventas: (mv || []).reduce((a, v) => a + v.total, 0),
@@ -240,7 +288,7 @@ export default function DashboardPage() {
     }
     setMonthlyData(months);
 
-    // Ventas por categoría (within period)
+    // Ventas por categoria
     const { data: ventasCat } = await supabase
       .from("venta_items")
       .select("subtotal, productos(categoria_id, categorias(nombre))")
@@ -248,7 +296,7 @@ export default function DashboardPage() {
       .lt("created_at", end + "T00:00:00");
     const catMap: Record<string, number> = {};
     (ventasCat || []).forEach((vi: any) => {
-      const catName = vi.productos?.categorias?.nombre || "Sin categoría";
+      const catName = vi.productos?.categorias?.nombre || "Sin categoria";
       catMap[catName] = (catMap[catName] || 0) + (vi.subtotal || 0);
     });
     setVentasPorCategoria(
@@ -257,37 +305,116 @@ export default function DashboardPage() {
         .sort((a, b) => b.value - a.value)
     );
 
-    // Web orders - fetch all pending/confirmado orders
-    const today = todayARG();
-    const { data: allPedidos } = await supabase
-      .from("pedidos_tienda")
-      .select("id, numero, nombre_cliente, metodo_entrega, metodo_pago, total, fecha_entrega, created_at, estado, direccion_texto, telefono, observacion")
-      .in("estado", ["pendiente", "confirmado"])
-      .order("created_at", { ascending: false });
+    // Empresa info (for remito printing)
+    const { data: empData } = await supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").single();
+    if (empData) setEmpresa(empData as EmpresaInfo);
 
-    const pedidos = (allPedidos as PedidoWeb[]) || [];
-    setAllPedidosWeb(pedidos);
+    // Pedidos online
+    await fetchPedidosOnline();
 
     setLoading(false);
-  }, [getDateRange]);
+  }, [getDateRange, fetchPedidosOnline]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleViewPedido = async (pedido: PedidoWeb) => {
-    setPedidoDetail(pedido);
-    setPedidoDetailOpen(true);
-    setPedidoItemsLoading(true);
-    const { data } = await supabase
-      .from("pedido_tienda_items")
-      .select("id, nombre, cantidad, precio_unitario, subtotal, presentacion")
-      .eq("pedido_id", pedido.id);
-    setPedidoItems((data as PedidoItemWeb[]) || []);
-    setPedidoItemsLoading(false);
+  // ─── Pedido actions ───
+  const handleMarkDelivered = async (venta: PedidoVenta) => {
+    if (!confirm(`Marcar pedido #${venta.numero} como entregado?`)) return;
+    setActionLoading(venta.id);
+    await supabase.from("ventas").update({ entregado: true }).eq("id", venta.id);
+    await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
+    setPedidosOnline((prev) => prev.filter((p) => p.id !== venta.id));
+    setActionLoading(null);
   };
 
-  const ganancia = gananciaPeriodo;
+  const handlePrintRemito = (venta: PedidoVenta) => {
+    const cliente = venta.clientes;
+    const fechaEntrega = pedidoEntregaMap[venta.numero];
+    const fechaEntregaStr = fechaEntrega
+      ? new Date(fechaEntrega + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
+      : "—";
 
-  const periodLabel = filterMode === "diario" ? "del día" : filterMode === "mensual" ? "del mes" : "del período";
+    const itemsHtml = venta.venta_items.map((item) => `
+      <tr>
+        <td style="padding:4px 6px;border-bottom:1px solid #eee">${item.cantidad}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid #eee">${item.descripcion}</td>
+        <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #eee">${item.unidad_medida || "Un"}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee">$${item.precio_unitario.toLocaleString("es-AR")}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee">$${item.subtotal.toLocaleString("es-AR")}</td>
+      </tr>
+    `).join("");
+
+    const html = `<!DOCTYPE html><html><head><title>Remito ${venta.numero}</title>
+      <style>@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif;font-size:11px;color:#000;margin:0;padding:8mm 10mm}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
+      <div style="display:flex;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px">
+        <div style="flex:1">
+          <img src="https://www.dulcesur.com/assets/logotipo.png" alt="Logo" style="height:50px;margin-bottom:4px"/>
+          <div style="font-size:9px;line-height:1.4">
+            <div style="font-weight:bold">www.dulcesur.com</div>
+            <div>${empresa?.domicilio || "Francisco Canaro 4012"} | Tel: ${empresa?.telefono || "116299-1571"}</div>
+          </div>
+        </div>
+        <div style="width:50px;display:flex;flex-direction:column;align-items:center;border-left:2px solid #000;border-right:2px solid #000;padding:0 8px">
+          <div style="font-size:28px;font-weight:bold;line-height:1">X</div>
+          <div style="font-size:7px;text-align:center;line-height:1.2;margin-top:2px">Documento no valido como factura</div>
+        </div>
+        <div style="flex:1;padding-left:10px">
+          <div style="font-size:14px;font-weight:bold;margin-bottom:4px">N° ${venta.numero}</div>
+          <div style="font-size:9px;line-height:1.5">
+            <div>Fecha: ${new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR")}</div>
+            <div>CUIT: ${empresa?.cuit || "20443387898"}</div>
+            <div>Cond.IVA: ${empresa?.situacion_iva || "Monotributista Social"}</div>
+          </div>
+        </div>
+      </div>
+      <div style="border:1px solid #ccc;padding:6px 8px;margin-bottom:8px;font-size:10px;line-height:1.8">
+        <div><b>Cliente:</b> ${cliente?.nombre || "Consumidor Final"} &nbsp;&nbsp; <b>Tel:</b> ${cliente?.telefono || "—"}</div>
+        <div><b>Domicilio:</b> ${[cliente?.domicilio, cliente?.localidad].filter(Boolean).join(", ") || "—"}</div>
+        <div><b>Forma de pago:</b> ${venta.forma_pago} &nbsp;&nbsp; <b>Entrega:</b> ${venta.metodo_entrega === "envio" ? "Envio a domicilio" : "Retiro en local"} &nbsp;&nbsp; <b>Fecha entrega:</b> ${fechaEntregaStr}</div>
+        ${venta.observacion ? `<div><b>Obs:</b> ${venta.observacion}</div>` : ""}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead><tr style="border-bottom:1px solid #000;border-top:1px solid #000">
+          <th style="text-align:left;padding:4px 6px">Cant.</th>
+          <th style="text-align:left;padding:4px 6px">Producto</th>
+          <th style="text-align:center;padding:4px 6px">U/Med</th>
+          <th style="text-align:right;padding:4px 6px">Precio Un.</th>
+          <th style="text-align:right;padding:4px 6px">Importe</th>
+        </tr></thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+      <div style="border-top:2px solid #000;margin-top:20px;padding-top:8px;text-align:right;font-size:14px;font-weight:bold">
+        Total: $${venta.total.toLocaleString("es-AR")}
+      </div>
+      ${cliente && cliente.saldo > 0 ? `<div style="margin-top:8px;text-align:right;font-size:11px;color:red;font-weight:bold">Saldo adeudado: $${cliente.saldo.toLocaleString("es-AR")}</div>` : ""}
+    </body></html>`;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 200);
+  };
+
+  // ─── Filtered pedidos ───
+  const filteredPedidos = pedidosOnline.filter((p) => {
+    if (pedidoFilter === "envio" && p.metodo_entrega !== "envio") return false;
+    if (pedidoFilter === "retiro" && p.metodo_entrega !== "retiro") return false;
+    if (pedidoFechaFilter) {
+      const fechaEntrega = pedidoEntregaMap[p.numero];
+      if (!fechaEntrega || fechaEntrega !== pedidoFechaFilter) return false;
+    }
+    return true;
+  });
+
+  const totalPedidos = filteredPedidos.reduce((s, p) => s + p.total, 0);
+  const countEnvio = pedidosOnline.filter((p) => p.metodo_entrega === "envio").length;
+  const countRetiro = pedidosOnline.filter((p) => p.metodo_entrega === "retiro").length;
+
+  const ganancia = gananciaPeriodo;
+  const periodLabel = filterMode === "diario" ? "del dia" : filterMode === "mensual" ? "del mes" : "del periodo";
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -300,6 +427,212 @@ export default function DashboardPage() {
         <Badge variant="outline" className="text-xs w-fit">DulceSur</Badge>
       </div>
 
+      {/* ─── Pedidos Online ─── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShoppingCart className="w-4 h-4 text-primary" />
+              Pedidos Online
+              {pedidosOnline.length > 0 && (
+                <Badge variant="secondary" className="text-xs">{pedidosOnline.length} pendiente{pedidosOnline.length !== 1 ? "s" : ""}</Badge>
+              )}
+            </CardTitle>
+            <Link href="/admin/ventas/hoja-ruta">
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                <Truck className="w-3.5 h-3.5" />
+                Hoja de Ruta
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex border rounded-lg overflow-hidden">
+              {([
+                { key: "todos" as const, label: "Todos", count: pedidosOnline.length },
+                { key: "envio" as const, label: "Envio", count: countEnvio },
+                { key: "retiro" as const, label: "Retiro", count: countRetiro },
+              ]).map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setPedidoFilter(tab.key)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                    pedidoFilter === tab.key
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {tab.key === "envio" && <Truck className="w-3 h-3" />}
+                  {tab.key === "retiro" && <Store className="w-3 h-3" />}
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={`text-[10px] rounded-full px-1.5 font-bold ${
+                      pedidoFilter === tab.key ? "bg-primary-foreground/20" : "bg-muted-foreground/20"
+                    }`}>{tab.count}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Fecha entrega:</span>
+              <Input
+                type="date"
+                value={pedidoFechaFilter}
+                onChange={(ev) => setPedidoFechaFilter(ev.target.value)}
+                className="h-8 w-40 text-xs"
+              />
+              {pedidoFechaFilter && (
+                <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setPedidoFechaFilter("")}>
+                  Limpiar
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Pedidos list */}
+          {filteredPedidos.length === 0 ? (
+            <div className="text-center py-10">
+              <ShoppingCart className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">
+                {pedidosOnline.length === 0 ? "No hay pedidos online pendientes" : "No hay pedidos con los filtros seleccionados"}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between text-sm px-1">
+                <span className="text-muted-foreground">
+                  {filteredPedidos.length} pedido{filteredPedidos.length !== 1 ? "s" : ""}
+                </span>
+                <span className="font-bold">{formatCurrency(totalPedidos)}</span>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead className="hidden sm:table-cell">Pago</TableHead>
+                      <TableHead className="hidden md:table-cell">Pedido</TableHead>
+                      <TableHead className="hidden md:table-cell">Entrega</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right w-[140px]">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPedidos.map((p) => {
+                      const createdDate = new Date(p.created_at);
+                      const dateStr = createdDate.toLocaleDateString("es-AR", {
+                        day: "2-digit", month: "2-digit",
+                        timeZone: "America/Argentina/Buenos_Aires",
+                      });
+                      const timeStr = createdDate.toLocaleTimeString("es-AR", {
+                        hour: "2-digit", minute: "2-digit",
+                        timeZone: "America/Argentina/Buenos_Aires",
+                      });
+                      const fechaEntrega = pedidoEntregaMap[p.numero];
+                      const fechaEntregaStr = fechaEntrega
+                        ? new Date(fechaEntrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })
+                        : "—";
+                      const today = todayARG();
+                      const isOverdue = fechaEntrega ? fechaEntrega < today : false;
+                      const isToday = fechaEntrega === today;
+                      const isLoading = actionLoading === p.id;
+
+                      return (
+                        <TableRow key={p.id} className={isOverdue ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
+                          <TableCell>
+                            <div className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                              p.metodo_entrega === "envio"
+                                ? "bg-blue-100 dark:bg-blue-900/30"
+                                : "bg-emerald-100 dark:bg-emerald-900/30"
+                            }`}>
+                              {p.metodo_entrega === "envio" ? (
+                                <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <span className="font-medium text-sm">{p.clientes?.nombre || "Sin cliente"}</span>
+                              <span className="text-xs text-muted-foreground ml-2">#{p.numero}</span>
+                            </div>
+                            {p.clientes?.domicilio && p.metodo_entrega === "envio" && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                <span className="truncate max-w-[200px]">
+                                  {[p.clientes.domicilio, p.clientes.localidad].filter(Boolean).join(", ")}
+                                </span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            <Badge variant="outline" className="text-[10px] font-normal">{p.forma_pago}</Badge>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="w-3 h-3" />
+                              {dateStr} {timeStr}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <span className={`text-xs font-medium ${
+                              isOverdue ? "text-red-600" : isToday ? "text-primary font-semibold" : ""
+                            }`}>
+                              {isOverdue ? "Vencido - " : ""}{fechaEntregaStr}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="font-bold text-sm">{formatCurrency(p.total)}</span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                title="Ver detalle"
+                                onClick={() => { setPedidoDetail(p); setPedidoDetailOpen(true); }}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                title="Imprimir remito"
+                                onClick={() => handlePrintRemito(p)}
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                title="Marcar entregado"
+                                disabled={isLoading}
+                                onClick={() => handleMarkDelivered(p)}
+                              >
+                                {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ─── Date filter ─── */}
       <Card>
         <CardContent className="pt-5 pb-4">
@@ -308,8 +641,6 @@ export default function DashboardPage() {
               <Calendar className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm font-medium">Resumen de Actividad</span>
             </div>
-
-            {/* Mode tabs */}
             <div className="flex border rounded-lg overflow-hidden">
               {(["diario", "mensual", "rango"] as FilterMode[]).map((mode) => (
                 <button
@@ -325,47 +656,25 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
-
-            {/* Date inputs */}
             <div className="flex items-center gap-2 flex-1">
               {filterMode === "diario" && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por día</span>
-                  <Input
-                    type="date"
-                    value={filterDate}
-                    onChange={(ev) => setFilterDate(ev.target.value)}
-                    className="h-9 w-44"
-                  />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por dia</span>
+                  <Input type="date" value={filterDate} onChange={(ev) => setFilterDate(ev.target.value)} className="h-9 w-44" />
                 </div>
               )}
               {filterMode === "mensual" && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground whitespace-nowrap">Mes</span>
-                  <Input
-                    type="month"
-                    value={filterMonth}
-                    onChange={(ev) => setFilterMonth(ev.target.value)}
-                    className="h-9 w-44"
-                  />
+                  <Input type="month" value={filterMonth} onChange={(ev) => setFilterMonth(ev.target.value)} className="h-9 w-44" />
                 </div>
               )}
               {filterMode === "rango" && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground whitespace-nowrap">Desde</span>
-                  <Input
-                    type="date"
-                    value={filterFrom}
-                    onChange={(ev) => setFilterFrom(ev.target.value)}
-                    className="h-9 w-40"
-                  />
+                  <Input type="date" value={filterFrom} onChange={(ev) => setFilterFrom(ev.target.value)} className="h-9 w-40" />
                   <span className="text-sm text-muted-foreground whitespace-nowrap">Hasta</span>
-                  <Input
-                    type="date"
-                    value={filterTo}
-                    onChange={(ev) => setFilterTo(ev.target.value)}
-                    className="h-9 w-40"
-                  />
+                  <Input type="date" value={filterTo} onChange={(ev) => setFilterTo(ev.target.value)} className="h-9 w-40" />
                 </div>
               )}
             </div>
@@ -440,7 +749,7 @@ export default function DashboardPage() {
               <CardContent className="pt-6 flex items-center gap-4">
                 <Package className="w-8 h-8 text-primary/60" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Capital en mercadería</p>
+                  <p className="text-xs text-muted-foreground">Capital en mercaderia</p>
                   <p className="text-lg font-semibold">{formatCurrency(capitalMercaderia)}</p>
                 </div>
               </CardContent>
@@ -468,7 +777,7 @@ export default function DashboardPage() {
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-2">
-              <CardHeader><CardTitle className="text-base">Ventas y egresos — últimos 6 meses</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Ventas y egresos — ultimos 6 meses</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -489,7 +798,7 @@ export default function DashboardPage() {
               <CardHeader><CardTitle className="text-base">Formas de pago ({periodLabel})</CardTitle></CardHeader>
               <CardContent>
                 {paymentBreakdown.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este período</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p>
                 ) : (
                   <>
                     <div className="h-[200px]">
@@ -519,12 +828,12 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Ventas por categoría */}
+          {/* Ventas por categoria */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Ventas por categoría — {periodLabel}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Ventas por categoria — {periodLabel}</CardTitle></CardHeader>
             <CardContent>
               {ventasPorCategoria.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Sin datos en este período</p>
+                <p className="text-sm text-muted-foreground text-center py-8">Sin datos en este periodo</p>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="h-[280px]">
@@ -560,210 +869,6 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* Pedidos Online — por día de entrega */}
-          {(() => {
-            const today = todayARG();
-
-            // Build day tabs: pendientes + today + next 5 days
-            const dayTabs: { key: string; label: string; sublabel: string; isToday?: boolean; isPending?: boolean }[] = [];
-
-            // Pending (overdue) orders
-            const pendientes = allPedidosWeb.filter((p) => {
-              if (!p.fecha_entrega) return true; // sin fecha = pendiente
-              return p.fecha_entrega < today;
-            });
-            dayTabs.push({ key: "_pending", label: "Pendientes", sublabel: `${pendientes.length}`, isPending: true });
-
-            // Today + next 5 days
-            for (let i = 0; i <= 5; i++) {
-              const d = new Date(today + "T12:00:00");
-              d.setDate(d.getDate() + i);
-              const dateStr = d.toISOString().split("T")[0];
-              const dayName = d.toLocaleDateString("es-AR", { weekday: "short", timeZone: "America/Argentina/Buenos_Aires" });
-              const dayNum = d.toLocaleDateString("es-AR", { day: "numeric", month: "short", timeZone: "America/Argentina/Buenos_Aires" });
-              dayTabs.push({
-                key: dateStr,
-                label: i === 0 ? "Hoy" : i === 1 ? "Mañana" : dayName.charAt(0).toUpperCase() + dayName.slice(1),
-                sublabel: dayNum,
-                isToday: i === 0,
-              });
-            }
-
-            // Count orders per tab
-            const countByTab: Record<string, number> = {};
-            for (const tab of dayTabs) {
-              if (tab.key === "_pending") {
-                countByTab[tab.key] = pendientes.length;
-              } else {
-                countByTab[tab.key] = allPedidosWeb.filter((p) => p.fecha_entrega === tab.key).length;
-              }
-            }
-
-            // Resolve selected tab — default to today
-            const activeTab = selectedDayTab === "_today" ? today : selectedDayTab;
-            const effectiveTab = dayTabs.find((t) => t.key === activeTab) ? activeTab : today;
-
-            // Filter orders for active tab
-            const filteredPedidos = effectiveTab === "_pending"
-              ? pendientes
-              : allPedidosWeb.filter((p) => p.fecha_entrega === effectiveTab);
-
-            const tabTotal = filteredPedidos.reduce((s, p) => s + p.total, 0);
-
-            return (
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4 text-primary" />
-                      Pedidos Online
-                      {allPedidosWeb.length > 0 && (
-                        <Badge variant="secondary" className="text-xs">{allPedidosWeb.length} total</Badge>
-                      )}
-                    </CardTitle>
-                    <Link href="/admin/ventas/hoja-ruta">
-                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                        <Truck className="w-3.5 h-3.5" />
-                        Hoja de Ruta
-                      </Button>
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Day tabs */}
-                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                    {dayTabs.map((tab) => {
-                      const count = countByTab[tab.key] || 0;
-                      const isActive = effectiveTab === tab.key;
-                      return (
-                        <button
-                          key={tab.key}
-                          onClick={() => setSelectedDayTab(tab.key === today ? "_today" : tab.key)}
-                          className={`flex flex-col items-center min-w-[72px] px-3 py-2 rounded-xl border-2 transition-all text-center shrink-0 ${
-                            isActive
-                              ? tab.isPending
-                                ? "border-red-500 bg-red-50 dark:bg-red-950/20"
-                                : "border-primary bg-primary/5"
-                              : count > 0
-                                ? "border-muted bg-muted/50 hover:border-muted-foreground/30"
-                                : "border-transparent bg-muted/30 hover:bg-muted/50"
-                          }`}
-                        >
-                          <span className={`text-xs font-semibold ${
-                            isActive
-                              ? tab.isPending ? "text-red-700 dark:text-red-400" : "text-primary"
-                              : "text-muted-foreground"
-                          }`}>
-                            {tab.label}
-                          </span>
-                          <span className={`text-[10px] ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
-                            {tab.isPending ? (
-                              count > 0 ? <AlertTriangle className="w-3 h-3 text-red-500 inline" /> : "—"
-                            ) : tab.sublabel}
-                          </span>
-                          {count > 0 && (
-                            <span className={`mt-0.5 text-[10px] font-bold rounded-full px-1.5 ${
-                              isActive
-                                ? tab.isPending
-                                  ? "bg-red-500 text-white"
-                                  : "bg-primary text-primary-foreground"
-                                : "bg-muted-foreground/20 text-muted-foreground"
-                            }`}>
-                              {count}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Orders for selected day */}
-                  {filteredPedidos.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-sm text-muted-foreground">
-                        {effectiveTab === "_pending"
-                          ? "No hay pedidos pendientes de días anteriores"
-                          : "No hay pedidos para este día"}
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between text-sm px-1">
-                        <span className="text-muted-foreground">
-                          {filteredPedidos.length} pedido{filteredPedidos.length !== 1 ? "s" : ""}
-                        </span>
-                        <span className="font-bold">{formatCurrency(tabTotal)}</span>
-                      </div>
-                      <div className="space-y-2">
-                        {filteredPedidos.map((p) => {
-                          const createdDate = new Date(p.created_at);
-                          const dateStr = createdDate.toLocaleDateString("es-AR", {
-                            day: "2-digit", month: "2-digit",
-                            timeZone: "America/Argentina/Buenos_Aires",
-                          });
-                          const timeStr = createdDate.toLocaleTimeString("es-AR", {
-                            hour: "2-digit", minute: "2-digit",
-                            timeZone: "America/Argentina/Buenos_Aires",
-                          });
-                          const isOverdue = effectiveTab === "_pending";
-
-                          return (
-                            <div
-                              key={p.id}
-                              className={`rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30 cursor-pointer ${
-                                isOverdue ? "border-red-200 dark:border-red-900/30" : ""
-                              }`}
-                              onClick={() => handleViewPedido(p)}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
-                                    p.metodo_entrega === "envio"
-                                      ? "bg-blue-100 dark:bg-blue-900/30"
-                                      : "bg-emerald-100 dark:bg-emerald-900/30"
-                                  }`}>
-                                    {p.metodo_entrega === "envio" ? (
-                                      <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                                    ) : (
-                                      <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-sm truncate">{p.nombre_cliente}</span>
-                                      <span className="font-mono text-xs text-muted-foreground">#{p.numero}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        Pedido {dateStr} {timeStr}
-                                      </span>
-                                      {isOverdue && p.fecha_entrega && (
-                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-300 text-red-600">
-                                          Entrega era {new Date(p.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })}
-                                        </Badge>
-                                      )}
-                                      {p.estado === "confirmado" && (
-                                        <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
-                                          Confirmado
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                                <span className="font-bold text-sm shrink-0">{formatCurrency(p.total)}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })()}
         </>
       )}
 
@@ -781,7 +886,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-lg p-4">
                 <div>
                   <span className="text-muted-foreground">Cliente:</span>{" "}
-                  <span className="font-medium">{pedidoDetail.nombre_cliente}</span>
+                  <span className="font-medium">{pedidoDetail.clientes?.nombre || "Sin cliente"}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Estado:</span>{" "}
@@ -793,30 +898,32 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Pago:</span>{" "}
-                  <span className="font-medium">{pedidoDetail.metodo_pago || "---"}</span>
+                  <span className="font-medium">{pedidoDetail.forma_pago}</span>
                 </div>
-                {pedidoDetail.direccion_texto && (
+                {pedidoDetail.clientes?.domicilio && (
                   <div className="col-span-2">
                     <span className="text-muted-foreground">Direccion:</span>{" "}
-                    <span className="font-medium">{pedidoDetail.direccion_texto}</span>
+                    <span className="font-medium">
+                      {[pedidoDetail.clientes.domicilio, pedidoDetail.clientes.localidad].filter(Boolean).join(", ")}
+                    </span>
                   </div>
                 )}
-                {pedidoDetail.telefono && (
+                {pedidoDetail.clientes?.telefono && (
                   <div>
                     <span className="text-muted-foreground">Telefono:</span>{" "}
-                    <span className="font-medium">{pedidoDetail.telefono}</span>
+                    <span className="font-medium">{pedidoDetail.clientes.telefono}</span>
                   </div>
                 )}
-                {pedidoDetail.fecha_entrega && (
+                {pedidoEntregaMap[pedidoDetail.numero] && (
                   <div>
                     <span className="text-muted-foreground">Fecha entrega:</span>{" "}
                     <span className="font-medium">
-                      {new Date(pedidoDetail.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                      {new Date(pedidoEntregaMap[pedidoDetail.numero] + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
                     </span>
                   </div>
                 )}
                 <div>
-                  <span className="text-muted-foreground">Creado:</span>{" "}
+                  <span className="text-muted-foreground">Pedido:</span>{" "}
                   <span className="font-medium">
                     {new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })}
                   </span>
@@ -830,41 +937,53 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {pedidoItemsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Producto</TableHead>
-                        <TableHead className="text-center">Cant.</TableHead>
-                        <TableHead className="text-right">Precio Unit.</TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-center">Cant.</TableHead>
+                      <TableHead className="text-right">Precio Unit.</TableHead>
+                      <TableHead className="text-right">Subtotal</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pedidoDetail.venta_items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <span className="font-medium text-sm">{item.descripcion}</span>
+                        </TableCell>
+                        <TableCell className="text-center">{item.cantidad}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pedidoItems.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>
-                            <span className="font-medium text-sm">{item.nombre}</span>
-                            {item.presentacion && item.presentacion !== "unidad" && (
-                              <span className="text-xs text-muted-foreground ml-1">({item.presentacion})</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-center">{item.cantidad}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
-                          <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
-              <div className="flex justify-end pt-2 border-t">
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); }}
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Imprimir Remito
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                    disabled={actionLoading === pedidoDetail.id}
+                    onClick={() => { setPedidoDetailOpen(false); handleMarkDelivered(pedidoDetail); }}
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Marcar Entregado
+                  </Button>
+                </div>
                 <div className="text-lg font-bold">
                   Total: {formatCurrency(pedidoDetail.total)}
                 </div>
@@ -873,6 +992,9 @@ export default function DashboardPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Hidden print container */}
+      <div ref={printRef} className="hidden" />
     </div>
   );
 }
