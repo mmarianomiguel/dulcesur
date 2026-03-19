@@ -107,10 +107,9 @@ export default function DashboardPage() {
     fecha_entrega: string | null;
     created_at: string;
     estado: string;
-    direccion: string | null;
-    localidad: string | null;
+    direccion_texto: string | null;
     telefono: string | null;
-    observaciones: string | null;
+    observacion: string | null;
   }
   const [allPedidosWeb, setAllPedidosWeb] = useState<PedidoWeb[]>([]);
   const [selectedDayTab, setSelectedDayTab] = useState<string>("_today");
@@ -262,7 +261,7 @@ export default function DashboardPage() {
     const today = todayARG();
     const { data: allPedidos } = await supabase
       .from("pedidos_tienda")
-      .select("id, numero, nombre_cliente, metodo_entrega, metodo_pago, total, fecha_entrega, created_at, estado, direccion, localidad, telefono, observaciones")
+      .select("id, numero, nombre_cliente, metodo_entrega, metodo_pago, total, fecha_entrega, created_at, estado, direccion_texto, telefono, observacion")
       .in("estado", ["pendiente", "confirmado"])
       .order("created_at", { ascending: false });
 
@@ -796,12 +795,10 @@ export default function DashboardPage() {
                   <span className="text-muted-foreground">Pago:</span>{" "}
                   <span className="font-medium">{pedidoDetail.metodo_pago || "---"}</span>
                 </div>
-                {pedidoDetail.direccion && (
+                {pedidoDetail.direccion_texto && (
                   <div className="col-span-2">
                     <span className="text-muted-foreground">Direccion:</span>{" "}
-                    <span className="font-medium">
-                      {[pedidoDetail.direccion, pedidoDetail.localidad].filter(Boolean).join(", ")}
-                    </span>
+                    <span className="font-medium">{pedidoDetail.direccion_texto}</span>
                   </div>
                 )}
                 {pedidoDetail.telefono && (
@@ -826,10 +823,10 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {pedidoDetail.observaciones && (
+              {pedidoDetail.observacion && (
                 <div className="text-sm bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-900/30">
                   <span className="text-muted-foreground font-medium">Observaciones:</span>{" "}
-                  {pedidoDetail.observaciones}
+                  {pedidoDetail.observacion}
                 </div>
               )}
 
