@@ -10,10 +10,19 @@ export interface ReceiptConfig {
   empresaIngrBrutos: string;
   footerTexto: string;
   fontSize: number;
+  fontSizeEmpresa: number;
+  fontSizeCliente: number;
+  fontSizeProductos: number;
+  fontSizeResumen: number;
   logoHeight: number;
   mostrarLogo: boolean;
   mostrarVendedor: boolean;
   mostrarDescuento: boolean;
+  mostrarVuelto: boolean;
+  mostrarDireccion: boolean;
+  mostrarTelefono: boolean;
+  mostrarFormaPago: boolean;
+  mostrarMoneda: boolean;
 }
 
 export const defaultReceiptConfig: ReceiptConfig = {
@@ -28,10 +37,19 @@ export const defaultReceiptConfig: ReceiptConfig = {
   empresaIngrBrutos: "20443387898",
   footerTexto: "Gracias por su compra",
   fontSize: 12,
+  fontSizeEmpresa: 12,
+  fontSizeCliente: 11,
+  fontSizeProductos: 11,
+  fontSizeResumen: 14,
   logoHeight: 60,
   mostrarLogo: true,
   mostrarVendedor: true,
   mostrarDescuento: true,
+  mostrarVuelto: false,
+  mostrarDireccion: true,
+  mostrarTelefono: true,
+  mostrarFormaPago: true,
+  mostrarMoneda: true,
 };
 
 export interface ReceiptLineItem {
@@ -81,7 +99,10 @@ export function ReceiptPrintView({
   sale: ReceiptSale;
   config: ReceiptConfig;
 }) {
-  const fs = config.fontSize;
+  const fsEmpresa = config.fontSizeEmpresa || config.fontSize;
+  const fsCliente = config.fontSizeCliente || config.fontSize - 1;
+  const fsProductos = config.fontSizeProductos || config.fontSize - 1;
+  const fsResumen = config.fontSizeResumen || config.fontSize + 6;
   const fmtCur = (v: number) =>
     new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
 
@@ -92,7 +113,7 @@ export function ReceiptPrintView({
         minHeight: "297mm",
         padding: "8mm 10mm",
         fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: `${fs}px`,
+        fontSize: `${config.fontSize}px`,
         color: "#000",
         background: "#fff",
         display: "flex",
@@ -109,10 +130,10 @@ export function ReceiptPrintView({
               <img src={config.logoUrl} alt="Logo" style={{ height: `${config.logoHeight}px` }} />
             )}
             {!config.mostrarLogo && (
-              <div style={{ fontSize: `${fs + 8}px`, fontWeight: "bold" }}>{config.empresaNombre}</div>
+              <div style={{ fontSize: `${fsEmpresa + 8}px`, fontWeight: "bold" }}>{config.empresaNombre}</div>
             )}
           </div>
-          <div style={{ fontSize: `${fs - 2}px`, lineHeight: "1.5" }}>
+          <div style={{ fontSize: `${fsEmpresa - 2}px`, lineHeight: "1.5" }}>
             {config.empresaWeb && <div style={{ fontWeight: "bold" }}>{config.empresaWeb}</div>}
             <div>{config.empresaDomicilio} | Tel: {config.empresaTelefono}</div>
           </div>
@@ -121,18 +142,18 @@ export function ReceiptPrintView({
         {/* Center: X */}
         <div style={{ width: "55px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", borderLeft: "2px solid #000", borderRight: "2px solid #000", padding: "0 8px" }}>
           <div style={{ fontSize: "30px", fontWeight: "bold", lineHeight: 1 }}>X</div>
-          <div style={{ fontSize: "8px", textAlign: "center", lineHeight: "1.2", marginTop: "2px" }}>Documento no válido como factura</div>
+          <div style={{ fontSize: "8px", textAlign: "center", lineHeight: "1.2", marginTop: "2px" }}>Documento no valido como factura</div>
         </div>
 
         {/* Right: Number & fiscal data */}
         <div style={{ flex: 1, paddingLeft: "10px" }}>
-          <div style={{ fontSize: `${fs + 4}px`, fontWeight: "bold", marginBottom: "4px" }}>
+          <div style={{ fontSize: `${fsEmpresa + 4}px`, fontWeight: "bold", marginBottom: "4px" }}>
             {sale.tipoComprobante}
           </div>
-          <div style={{ fontSize: `${fs + 2}px`, fontWeight: "bold", marginBottom: "4px" }}>
+          <div style={{ fontSize: `${fsEmpresa + 2}px`, fontWeight: "bold", marginBottom: "4px" }}>
             N° {sale.numero}
           </div>
-          <div style={{ fontSize: `${fs - 2}px`, lineHeight: "1.6" }}>
+          <div style={{ fontSize: `${fsEmpresa - 2}px`, lineHeight: "1.6" }}>
             <div>Fecha: {sale.fecha}</div>
             <div>CUIT: {config.empresaCuit}</div>
             <div>Ing.Brutos: {config.empresaIngrBrutos}</div>
@@ -143,21 +164,18 @@ export function ReceiptPrintView({
       </div>
 
       {/* ── Client info ── */}
-      <div style={{ border: "1px solid #ccc", padding: "4px 6px", marginBottom: "4px", fontSize: `${fs - 1}px`, lineHeight: "1.7" }}>
+      <div style={{ border: "1px solid #ccc", padding: "4px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.7" }}>
         <div style={{ display: "flex", gap: "10px" }}>
-          {/* Left: Cliente, Domicilio, Forma de pago */}
           <div style={{ flex: 1 }}>
             <div><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}</div>
-            {sale.clienteDireccion && <div><span style={{ fontWeight: "bold" }}>Domicilio:</span> {sale.clienteDireccion}</div>}
-            <div><span style={{ fontWeight: "bold" }}>Forma de pago:</span> {sale.formaPago}</div>
+            {config.mostrarDireccion && sale.clienteDireccion && <div><span style={{ fontWeight: "bold" }}>Domicilio:</span> {sale.clienteDireccion}</div>}
+            {config.mostrarFormaPago && <div><span style={{ fontWeight: "bold" }}>Forma de pago:</span> {sale.formaPago}</div>}
           </div>
-          {/* Center: Teléfono, Moneda */}
           <div style={{ flex: 1, textAlign: "center" }}>
-            {sale.clienteTelefono && <div><span style={{ fontWeight: "bold" }}>Teléfono:</span> {sale.clienteTelefono}</div>}
-            <div><span style={{ fontWeight: "bold" }}>Moneda:</span> {sale.moneda || "ARS"}</div>
+            {config.mostrarTelefono && sale.clienteTelefono && <div><span style={{ fontWeight: "bold" }}>Telefono:</span> {sale.clienteTelefono}</div>}
+            {config.mostrarMoneda && <div><span style={{ fontWeight: "bold" }}>Moneda:</span> {sale.moneda || "ARS"}</div>}
             {sale.clienteCondicionIva && <div><span style={{ fontWeight: "bold" }}>Cond. IVA:</span> {sale.clienteCondicionIva}</div>}
           </div>
-          {/* Right: Vendedor */}
           <div style={{ flex: 1, textAlign: "right" }}>
             {config.mostrarVendedor && (
               <div><span style={{ fontWeight: "bold" }}>Vendedor:</span> {sale.vendedor || (sale.tipoComprobante === "Pedido Web" ? "Pedido Online" : "")}</div>
@@ -167,7 +185,7 @@ export function ReceiptPrintView({
       </div>
 
       {/* ── Items table ── */}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fs - 1}px`, flex: 1 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fsProductos}px`, flex: 1 }}>
         <thead>
           <tr style={{ borderBottom: "1px solid #000", borderTop: "1px solid #000" }}>
             <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Cant.</th>
@@ -197,11 +215,9 @@ export function ReceiptPrintView({
             let cleanDescription = item.description
               .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
               .replace(/\s*\(Unidad\)$/, "")
-              // Replace "Caja (x0.5)" or "Caja x0.5" with "Medio Cartón"
-              .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
-              // Clean up duplicate "Medio Cartón" / "(Medio Cartón)"
+              .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Carton")
               .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
-            // Remove duplicate presentation: e.g. "Producto (Caja x40) (Caja x40)" → "Producto (Caja x40)"
+            // Remove duplicate presentation: e.g. "Producto (Caja x40) (Caja x40)"
             if (item.presentacion && item.presentacion !== "Unidad") {
               const escaped = item.presentacion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
               cleanDescription = cleanDescription.replace(new RegExp(`(\\(?${escaped}\\)?)\\s*\\(?${escaped}\\)?`, "gi"), "$1");
@@ -211,11 +227,11 @@ export function ReceiptPrintView({
                 <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
                 <td style={{ padding: "3px 4px", textAlign: "left" }}>
                   {item.es_combo && (
-                    <span style={{ fontSize: `${fs - 4}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 2px", borderRadius: "2px", marginRight: "3px", letterSpacing: "0.5px" }}>COMBO</span>
+                    <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 2px", borderRadius: "2px", marginRight: "3px", letterSpacing: "0.5px" }}>COMBO</span>
                   )}
                   {cleanDescription}
                   {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
-                    <div style={{ fontSize: `${fs - 4}px`, color: "#777", marginTop: "0px", lineHeight: "1.1" }}>
+                    <div style={{ fontSize: `${fsProductos - 3}px`, color: "#777", marginTop: "0px", lineHeight: "1.1" }}>
                       {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
                     </div>
                   )}
@@ -231,7 +247,6 @@ export function ReceiptPrintView({
               </tr>
             );
           })}
-          {/* Empty rows to fill space */}
           {sale.items.length < 20 &&
             Array.from({ length: 20 - sale.items.length }).map((_, i) => (
               <tr key={`empty-${i}`}>
@@ -248,7 +263,7 @@ export function ReceiptPrintView({
 
       {/* ── Footer totals ── */}
       <div style={{ borderTop: "2px solid #000", marginTop: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${fs}px`, gap: "30px" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${config.fontSize}px`, gap: "30px" }}>
           <div>
             <span>Subtotal: </span>
             <span style={{ fontWeight: "bold" }}>{fmtCur(sale.subtotal)}</span>
@@ -273,13 +288,13 @@ export function ReceiptPrintView({
           )}
         </div>
         <div style={{ borderTop: "2px solid #000", display: "flex", justifyContent: "flex-end", padding: "8px 4px" }}>
-          <div style={{ fontSize: `${fs + 6}px`, fontWeight: "bold" }}>
+          <div style={{ fontSize: `${fsResumen}px`, fontWeight: "bold" }}>
             TOTAL: {fmtCur(sale.total)}
           </div>
         </div>
         {/* Cash change info */}
-        {sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0 && (
-          <div style={{ borderTop: "1px solid #ccc", padding: "6px 4px", fontSize: `${fs - 1}px` }}>
+        {config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0 && (
+          <div style={{ borderTop: "1px solid #ccc", padding: "6px 4px", fontSize: `${config.fontSize - 1}px` }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
               <span>Recibido:</span>
               <span>{fmtCur(sale.cashReceived)}</span>
@@ -292,7 +307,7 @@ export function ReceiptPrintView({
         )}
         {/* Saldo info for Cuenta Corriente */}
         {(sale.formaPago === "Cuenta Corriente" || (sale.formaPago === "Mixto" && sale.saldoNuevo !== sale.saldoAnterior)) && (
-          <div style={{ borderTop: "1px solid #ccc", padding: "6px 4px", fontSize: `${fs - 1}px` }}>
+          <div style={{ borderTop: "1px solid #ccc", padding: "6px 4px", fontSize: `${config.fontSize - 1}px` }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
               <span>Saldo anterior:</span>
               <span>{sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} (a favor)` : fmtCur(sale.saldoAnterior)}</span>
@@ -305,9 +320,9 @@ export function ReceiptPrintView({
             </div>
           </div>
         )}
-        <div style={{ textAlign: "center", padding: "8px 0", fontSize: `${fs - 2}px`, borderTop: "1px solid #ccc" }}>
+        <div style={{ textAlign: "center", padding: "8px 0", fontSize: `${config.fontSize - 2}px`, borderTop: "1px solid #ccc" }}>
           <div>{config.footerTexto}</div>
-          <div style={{ marginTop: "2px" }}>{sale.items.length} artículo{sale.items.length !== 1 ? "s" : ""}</div>
+          <div style={{ marginTop: "2px" }}>{sale.items.length} articulo{sale.items.length !== 1 ? "s" : ""}</div>
         </div>
       </div>
     </div>

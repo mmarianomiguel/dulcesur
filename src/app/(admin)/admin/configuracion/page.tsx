@@ -48,50 +48,9 @@ import {
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
-// ─── Receipt config (shared with POS) ───
-interface ReceiptConfig {
-  logoUrl: string;
-  empresaWeb: string;
-  empresaInicioAct: string;
-  empresaIngrBrutos: string;
-  footerTexto: string;
-  fontSize: number;
-  fontSizeEmpresa: number;
-  fontSizeCliente: number;
-  fontSizeProductos: number;
-  fontSizeResumen: number;
-  logoHeight: number;
-  mostrarLogo: boolean;
-  mostrarVendedor: boolean;
-  mostrarDescuento: boolean;
-  mostrarVuelto: boolean;
-  mostrarDireccion: boolean;
-  mostrarTelefono: boolean;
-  mostrarFormaPago: boolean;
-  mostrarMoneda: boolean;
-}
-
-const defaultReceiptConfig: ReceiptConfig = {
-  logoUrl: "https://www.dulcesur.com/assets/logotipo.png",
-  empresaWeb: "www.dulcesur.com",
-  empresaInicioAct: "15/2/2021",
-  empresaIngrBrutos: "20443387898",
-  footerTexto: "Gracias por su compra",
-  fontSize: 12,
-  fontSizeEmpresa: 12,
-  fontSizeCliente: 11,
-  fontSizeProductos: 11,
-  fontSizeResumen: 14,
-  logoHeight: 60,
-  mostrarLogo: true,
-  mostrarVendedor: true,
-  mostrarDescuento: true,
-  mostrarVuelto: false,
-  mostrarDireccion: true,
-  mostrarTelefono: true,
-  mostrarFormaPago: true,
-  mostrarMoneda: true,
-};
+// ─── Receipt config (shared with POS via receipt-print-view.tsx) ───
+import type { ReceiptConfig } from "@/components/receipt-print-view";
+import { defaultReceiptConfig } from "@/components/receipt-print-view";
 
 // ─── Bank accounts config ───
 interface CuentaBancaria {

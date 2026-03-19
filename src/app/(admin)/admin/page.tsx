@@ -13,7 +13,7 @@ import {
   TrendingDown,
   Receipt,
   Users,
-  Package,
+  Package as PackageIcon,
   CreditCard,
   Loader2,
   Calendar,
@@ -25,6 +25,8 @@ import {
   CheckCircle,
   Printer,
   MapPin,
+  AlertTriangle,
+  PackageCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -52,6 +54,8 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
+import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
@@ -63,6 +67,12 @@ function todayARG() {
 
 const PIE_COLORS = ["oklch(0.55 0.2 264)", "oklch(0.65 0.18 160)", "oklch(0.7 0.15 50)", "oklch(0.6 0.2 300)"];
 
+// Map Spanish day names to JS getDay() values
+const DIA_TO_NUM: Record<string, number> = {
+  Domingo: 0, Lunes: 1, Martes: 2, "Miercoles": 3, "Miércoles": 3,
+  Jueves: 4, Viernes: 5, "Sabado": 6, "Sábado": 6,
+};
+
 type FilterMode = "diario" | "mensual" | "rango";
 
 interface ClienteInfo {
@@ -71,6 +81,7 @@ interface ClienteInfo {
   localidad: string | null;
   telefono: string | null;
   saldo: number;
+  situacion_iva: string | null;
 }
 
 interface VentaItemRow {
@@ -80,6 +91,8 @@ interface VentaItemRow {
   precio_unitario: number;
   subtotal: number;
   unidad_medida: string | null;
+  presentacion: string | null;
+  unidades_por_presentacion: number | null;
 }
 
 interface PedidoVenta {
@@ -88,6 +101,7 @@ interface PedidoVenta {
   fecha: string;
   forma_pago: string;
   total: number;
+  subtotal: number;
   estado: string;
   observacion: string | null;
   entregado: boolean;
@@ -97,12 +111,24 @@ interface PedidoVenta {
   venta_items: VentaItemRow[];
 }
 
-interface EmpresaInfo {
-  nombre: string | null;
-  domicilio: string | null;
-  telefono: string | null;
-  cuit: string | null;
-  situacion_iva: string | null;
+function loadReceiptConfig(): ReceiptConfig {
+  try {
+    const stored = localStorage.getItem("receipt_config");
+    if (stored) return { ...defaultReceiptConfig, ...JSON.parse(stored) };
+  } catch {}
+  return defaultReceiptConfig;
+}
+
+// Clean up description to avoid "Unidad (Unidad)" or "Caja (x16) (Caja (x16))"
+function cleanItemDescription(desc: string, presentacion?: string | null): string {
+  let clean = desc
+    .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+    .replace(/\s*\(Unidad\)\s*$/, "");
+  if (presentacion && presentacion !== "Unidad") {
+    const escaped = presentacion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    clean = clean.replace(new RegExp(`(\\(?${escaped}\\)?)\\s*\\(?${escaped}\\)?`, "gi"), "$1");
+  }
+  return clean;
 }
 
 export default function DashboardPage() {
@@ -132,13 +158,18 @@ export default function DashboardPage() {
 
   // ─── Pedidos Online state ───
   const [pedidosOnline, setPedidosOnline] = useState<PedidoVenta[]>([]);
-  const [pedidoEntregaMap, setPedidoEntregaMap] = useState<Record<string, string>>({}); // numero -> fecha_entrega
+  const [pedidoEntregaMap, setPedidoEntregaMap] = useState<Record<string, string>>({});
+  const [pedidoEstadoMap, setPedidoEstadoMap] = useState<Record<string, string>>({});
   const [pedidoFilter, setPedidoFilter] = useState<"todos" | "envio" | "retiro">("todos");
-  const [pedidoFechaFilter, setPedidoFechaFilter] = useState("");
+  const [selectedDayTab, setSelectedDayTab] = useState<string>("_today");
+  const [diasEntrega, setDiasEntrega] = useState<string[]>([]);
   const [pedidoDetailOpen, setPedidoDetailOpen] = useState(false);
   const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
+
+  // ─── Print state ───
+  const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
+  const [printSale, setPrintSale] = useState<ReceiptSale | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   // ─── Compute date range from filter ───
@@ -160,24 +191,65 @@ export default function DashboardPage() {
   }, [filterMode, filterDate, filterMonth, filterFrom, filterTo]);
 
   const getFilterLabel = () => {
-    if (filterMode === "diario") {
-      return new Date(filterDate + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
-    }
+    if (filterMode === "diario") return new Date(filterDate + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
     if (filterMode === "mensual") {
       const [y, m] = filterMonth.split("-").map(Number);
-      const d = new Date(y, m - 1, 1);
-      return d.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+      return new Date(y, m - 1, 1).toLocaleDateString("es-AR", { month: "long", year: "numeric" });
     }
     const from = new Date(filterFrom + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short" });
     const to = new Date(filterTo + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" });
     return `${from} — ${to}`;
   };
 
-  // ─── Fetch pedidos online (separate from dashboard filters) ───
+  // ─── Build day tabs from configured delivery days ───
+  const buildDayTabs = useCallback(() => {
+    const today = todayARG();
+    const configuredDayNums = diasEntrega.map((d) => DIA_TO_NUM[d]).filter((n) => n !== undefined);
+    const tabs: { key: string; label: string; sublabel: string; isToday?: boolean; isPending?: boolean }[] = [];
+
+    // Pendientes tab
+    tabs.push({ key: "_pending", label: "Pendientes", sublabel: "", isPending: true });
+
+    // Hoy (always first)
+    const todayDate = new Date(today + "T12:00:00");
+    tabs.push({
+      key: today,
+      label: "Hoy",
+      sublabel: todayDate.toLocaleDateString("es-AR", { day: "numeric", month: "short" }),
+      isToday: true,
+    });
+
+    // Next configured delivery days (up to 10 days ahead)
+    if (configuredDayNums.length > 0) {
+      const added = new Set<string>();
+      added.add(today);
+      for (let i = 1; i <= 14 && added.size <= 7; i++) {
+        const d = new Date(today + "T12:00:00");
+        d.setDate(d.getDate() + i);
+        const dayNum = d.getDay();
+        if (configuredDayNums.includes(dayNum)) {
+          const dateStr = d.toISOString().split("T")[0];
+          if (!added.has(dateStr)) {
+            added.add(dateStr);
+            const dayName = d.toLocaleDateString("es-AR", { weekday: "short" });
+            tabs.push({
+              key: dateStr,
+              label: i === 1 ? "Manana" : dayName.charAt(0).toUpperCase() + dayName.slice(1),
+              sublabel: d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }),
+            });
+          }
+        }
+      }
+    }
+
+    return tabs;
+  }, [diasEntrega]);
+
+  // ─── Fetch pedidos online ───
   const fetchPedidosOnline = useCallback(async () => {
     const { data: ventasOnline } = await supabase
       .from("ventas")
-      .select("id, numero, fecha, forma_pago, total, estado, observacion, entregado, metodo_entrega, created_at, clientes(nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida)")
+      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
       .eq("origen", "tienda")
       .eq("entregado", false)
       .neq("estado", "anulada")
@@ -186,20 +258,23 @@ export default function DashboardPage() {
     const rows = (ventasOnline || []) as unknown as PedidoVenta[];
     setPedidosOnline(rows);
 
-    // Get delivery dates from pedidos_tienda
     const numeros = rows.map((v) => v.numero);
     if (numeros.length > 0) {
       const { data: pedidosTienda } = await supabase
         .from("pedidos_tienda")
-        .select("numero, fecha_entrega")
+        .select("numero, fecha_entrega, estado")
         .in("numero", numeros);
-      const map: Record<string, string> = {};
-      (pedidosTienda || []).forEach((p: { numero: string; fecha_entrega: string | null }) => {
-        if (p.fecha_entrega) map[p.numero] = p.fecha_entrega;
+      const entregaMap: Record<string, string> = {};
+      const estadoMap: Record<string, string> = {};
+      (pedidosTienda || []).forEach((p: { numero: string; fecha_entrega: string | null; estado: string }) => {
+        if (p.fecha_entrega) entregaMap[p.numero] = p.fecha_entrega;
+        estadoMap[p.numero] = p.estado;
       });
-      setPedidoEntregaMap(map);
+      setPedidoEntregaMap(entregaMap);
+      setPedidoEstadoMap(estadoMap);
     } else {
       setPedidoEntregaMap({});
+      setPedidoEstadoMap({});
     }
   }, []);
 
@@ -207,115 +282,89 @@ export default function DashboardPage() {
     setLoading(true);
     const { start, end } = getDateRange();
 
+    // Load receipt config from localStorage
+    setReceiptConfig(loadReceiptConfig());
+
+    // Fetch tienda config for delivery days
+    const { data: tiendaConfig } = await supabase.from("tienda_config").select("dias_entrega").single();
+    if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
+
     // Period sales
-    const { data: periodSales } = await supabase
-      .from("ventas")
-      .select("total, forma_pago")
-      .gte("fecha", start)
-      .lt("fecha", end);
+    const { data: periodSales } = await supabase.from("ventas").select("total, forma_pago").gte("fecha", start).lt("fecha", end);
     const salesTotal = (periodSales || []).reduce((a, v) => a + v.total, 0);
     setVentasPeriodo(salesTotal);
     setTicketsPeriodo((periodSales || []).length);
 
-    // Payment breakdown
     const paymentMap: Record<string, number> = {};
-    (periodSales || []).forEach((v) => {
-      paymentMap[v.forma_pago] = (paymentMap[v.forma_pago] || 0) + v.total;
-    });
+    (periodSales || []).forEach((v) => { paymentMap[v.forma_pago] = (paymentMap[v.forma_pago] || 0) + v.total; });
     setPaymentBreakdown(Object.entries(paymentMap).map(([name, value]) => ({ name, value })));
 
-    // Period expenses
-    const { data: periodExpenses } = await supabase
-      .from("caja_movimientos")
-      .select("monto")
-      .gte("fecha", start)
-      .lt("fecha", end)
-      .eq("tipo", "egreso");
+    const { data: periodExpenses } = await supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso");
     setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
 
-    // Ganancia
-    const { data: ventaIds } = await supabase
-      .from("ventas")
-      .select("id")
-      .gte("fecha", start)
-      .lt("fecha", end);
+    const { data: ventaIds } = await supabase.from("ventas").select("id").gte("fecha", start).lt("fecha", end);
     let gananciaTotal = 0;
     if (ventaIds && ventaIds.length > 0) {
       const ids = ventaIds.map((v) => v.id);
-      const { data: items } = await supabase
-        .from("venta_items")
-        .select("cantidad, precio_unitario, unidades_por_presentacion, productos(costo)")
-        .in("venta_id", ids);
+      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, unidades_por_presentacion, productos(costo)").in("venta_id", ids);
       gananciaTotal = (items || []).reduce((acc, item: any) => {
         const costoUnitario = item.productos?.costo || 0;
         const cantidad = Number(item.cantidad) || 0;
         const precioUnitario = Number(item.precio_unitario) || 0;
         const unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
-        const costoVenta = costoUnitario * unidadesPorPres;
-        return acc + (precioUnitario - costoVenta) * cantidad;
+        return acc + (precioUnitario - costoUnitario * unidadesPorPres) * cantidad;
       }, 0);
     }
     setGananciaPeriodo(gananciaTotal);
 
-    // Capital en mercaderia
     const { data: prods } = await supabase.from("productos").select("stock, precio, costo").eq("activo", true).limit(10000);
     setCapitalMercaderia((prods || []).reduce((a, p) => a + p.stock * (p.costo || p.precio), 0));
-
-    // Cuentas a cobrar
     const { data: cls } = await supabase.from("clientes").select("saldo").eq("activo", true);
     setCuentasCobrar((cls || []).reduce((a, c) => a + (c.saldo > 0 ? c.saldo : 0), 0));
-
-    // Cuentas a pagar
     const { data: provs } = await supabase.from("proveedores").select("saldo").eq("activo", true);
     setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
 
-    // Monthly data (last 6 months)
     const months: { name: string; ventas: number; egresos: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const year = d.getFullYear();
-      const month = d.getMonth() + 1;
+      const d = new Date(); d.setMonth(d.getMonth() - i);
+      const year = d.getFullYear(); const month = d.getMonth() + 1;
       const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
       const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
       const { data: mv } = await supabase.from("ventas").select("total").gte("fecha", mStart).lt("fecha", mEnd);
       const { data: me } = await supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd);
-      months.push({
-        name: d.toLocaleDateString("es-AR", { month: "short" }),
-        ventas: (mv || []).reduce((a, v) => a + v.total, 0),
-        egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
-      });
+      months.push({ name: d.toLocaleDateString("es-AR", { month: "short" }), ventas: (mv || []).reduce((a, v) => a + v.total, 0), egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0) });
     }
     setMonthlyData(months);
 
-    // Ventas por categoria
-    const { data: ventasCat } = await supabase
-      .from("venta_items")
-      .select("subtotal, productos(categoria_id, categorias(nombre))")
-      .gte("created_at", start + "T00:00:00")
-      .lt("created_at", end + "T00:00:00");
+    const { data: ventasCat } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre))").gte("created_at", start + "T00:00:00").lt("created_at", end + "T00:00:00");
     const catMap: Record<string, number> = {};
-    (ventasCat || []).forEach((vi: any) => {
-      const catName = vi.productos?.categorias?.nombre || "Sin categoria";
-      catMap[catName] = (catMap[catName] || 0) + (vi.subtotal || 0);
-    });
-    setVentasPorCategoria(
-      Object.entries(catMap)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value)
-    );
+    (ventasCat || []).forEach((vi: any) => { catMap[vi.productos?.categorias?.nombre || "Sin categoria"] = (catMap[vi.productos?.categorias?.nombre || "Sin categoria"] || 0) + (vi.subtotal || 0); });
+    setVentasPorCategoria(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
 
-    // Empresa info (for remito printing)
-    const { data: empData } = await supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").single();
-    if (empData) setEmpresa(empData as EmpresaInfo);
-
-    // Pedidos online
     await fetchPedidosOnline();
-
     setLoading(false);
   }, [getDateRange, fetchPedidosOnline]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // ─── Print effect ───
+  useEffect(() => {
+    if (printSale && printRef.current) {
+      const timeout = setTimeout(() => {
+        const printWindow = window.open("", "_blank");
+        if (!printWindow || !printRef.current) return;
+        const content = printRef.current.innerHTML;
+        printWindow.document.write(`<!DOCTYPE html><html><head><title>${printSale.tipoComprobante} ${printSale.numero}</title>
+          <style>@page{size:A4;margin:0}body{margin:0;padding:0}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
+          </head><body>${content}</body></html>`);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        setPrintSale(null);
+      }, 150);
+      return () => clearTimeout(timeout);
+    }
+  }, [printSale]);
 
   // ─── Pedido actions ───
   const handleMarkDelivered = async (venta: PedidoVenta) => {
@@ -327,89 +376,83 @@ export default function DashboardPage() {
     setActionLoading(null);
   };
 
+  const handleMarkArmado = async (venta: PedidoVenta) => {
+    setActionLoading(venta.id);
+    await supabase.from("pedidos_tienda").update({ estado: "armado" }).eq("numero", venta.numero);
+    setPedidoEstadoMap((prev) => ({ ...prev, [venta.numero]: "armado" }));
+    setActionLoading(null);
+  };
+
   const handlePrintRemito = (venta: PedidoVenta) => {
     const cliente = venta.clientes;
-    const fechaEntrega = pedidoEntregaMap[venta.numero];
-    const fechaEntregaStr = fechaEntrega
-      ? new Date(fechaEntrega + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
-      : "—";
+    const saleItems: ReceiptLineItem[] = venta.venta_items.map((item) => ({
+      id: item.id,
+      producto_id: "",
+      code: "",
+      description: item.descripcion,
+      qty: item.cantidad,
+      unit: item.unidad_medida || "Un",
+      price: item.precio_unitario,
+      discount: 0,
+      subtotal: item.subtotal,
+      presentacion: item.presentacion || "Unidad",
+      unidades_por_presentacion: item.unidades_por_presentacion || 1,
+      stock: 0,
+    }));
 
-    const itemsHtml = venta.venta_items.map((item) => `
-      <tr>
-        <td style="padding:4px 6px;border-bottom:1px solid #eee">${item.cantidad}</td>
-        <td style="padding:4px 6px;border-bottom:1px solid #eee">${item.descripcion}</td>
-        <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #eee">${item.unidad_medida || "Un"}</td>
-        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee">$${item.precio_unitario.toLocaleString("es-AR")}</td>
-        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee">$${item.subtotal.toLocaleString("es-AR")}</td>
-      </tr>
-    `).join("");
-
-    const html = `<!DOCTYPE html><html><head><title>Remito ${venta.numero}</title>
-      <style>@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif;font-size:11px;color:#000;margin:0;padding:8mm 10mm}
-      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
-      <div style="display:flex;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px">
-        <div style="flex:1">
-          <img src="https://www.dulcesur.com/assets/logotipo.png" alt="Logo" style="height:50px;margin-bottom:4px"/>
-          <div style="font-size:9px;line-height:1.4">
-            <div style="font-weight:bold">www.dulcesur.com</div>
-            <div>${empresa?.domicilio || "Francisco Canaro 4012"} | Tel: ${empresa?.telefono || "116299-1571"}</div>
-          </div>
-        </div>
-        <div style="width:50px;display:flex;flex-direction:column;align-items:center;border-left:2px solid #000;border-right:2px solid #000;padding:0 8px">
-          <div style="font-size:28px;font-weight:bold;line-height:1">X</div>
-          <div style="font-size:7px;text-align:center;line-height:1.2;margin-top:2px">Documento no valido como factura</div>
-        </div>
-        <div style="flex:1;padding-left:10px">
-          <div style="font-size:14px;font-weight:bold;margin-bottom:4px">N° ${venta.numero}</div>
-          <div style="font-size:9px;line-height:1.5">
-            <div>Fecha: ${new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR")}</div>
-            <div>CUIT: ${empresa?.cuit || "20443387898"}</div>
-            <div>Cond.IVA: ${empresa?.situacion_iva || "Monotributista Social"}</div>
-          </div>
-        </div>
-      </div>
-      <div style="border:1px solid #ccc;padding:6px 8px;margin-bottom:8px;font-size:10px;line-height:1.8">
-        <div><b>Cliente:</b> ${cliente?.nombre || "Consumidor Final"} &nbsp;&nbsp; <b>Tel:</b> ${cliente?.telefono || "—"}</div>
-        <div><b>Domicilio:</b> ${[cliente?.domicilio, cliente?.localidad].filter(Boolean).join(", ") || "—"}</div>
-        <div><b>Forma de pago:</b> ${venta.forma_pago} &nbsp;&nbsp; <b>Entrega:</b> ${venta.metodo_entrega === "envio" ? "Envio a domicilio" : "Retiro en local"} &nbsp;&nbsp; <b>Fecha entrega:</b> ${fechaEntregaStr}</div>
-        ${venta.observacion ? `<div><b>Obs:</b> ${venta.observacion}</div>` : ""}
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:10px">
-        <thead><tr style="border-bottom:1px solid #000;border-top:1px solid #000">
-          <th style="text-align:left;padding:4px 6px">Cant.</th>
-          <th style="text-align:left;padding:4px 6px">Producto</th>
-          <th style="text-align:center;padding:4px 6px">U/Med</th>
-          <th style="text-align:right;padding:4px 6px">Precio Un.</th>
-          <th style="text-align:right;padding:4px 6px">Importe</th>
-        </tr></thead>
-        <tbody>${itemsHtml}</tbody>
-      </table>
-      <div style="border-top:2px solid #000;margin-top:20px;padding-top:8px;text-align:right;font-size:14px;font-weight:bold">
-        Total: $${venta.total.toLocaleString("es-AR")}
-      </div>
-      ${cliente && cliente.saldo > 0 ? `<div style="margin-top:8px;text-align:right;font-size:11px;color:red;font-weight:bold">Saldo adeudado: $${cliente.saldo.toLocaleString("es-AR")}</div>` : ""}
-    </body></html>`;
-
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 200);
+    const sale: ReceiptSale = {
+      numero: venta.numero,
+      total: venta.total,
+      subtotal: venta.subtotal || venta.total,
+      descuento: 0,
+      recargo: 0,
+      transferSurcharge: 0,
+      tipoComprobante: "Pedido Web",
+      formaPago: venta.forma_pago,
+      moneda: "ARS",
+      cliente: cliente?.nombre || "Consumidor Final",
+      clienteDireccion: [cliente?.domicilio, cliente?.localidad].filter(Boolean).join(", ") || null,
+      clienteTelefono: cliente?.telefono || null,
+      clienteCondicionIva: cliente?.situacion_iva || null,
+      vendedor: "Pedido Online",
+      items: saleItems,
+      fecha: new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR"),
+      saldoAnterior: 0,
+      saldoNuevo: 0,
+    };
+    setPrintSale(sale);
   };
 
   // ─── Filtered pedidos ───
-  const filteredPedidos = pedidosOnline.filter((p) => {
-    if (pedidoFilter === "envio" && p.metodo_entrega !== "envio") return false;
-    if (pedidoFilter === "retiro" && p.metodo_entrega !== "retiro") return false;
-    if (pedidoFechaFilter) {
-      const fechaEntrega = pedidoEntregaMap[p.numero];
-      if (!fechaEntrega || fechaEntrega !== pedidoFechaFilter) return false;
-    }
-    return true;
+  const today = todayARG();
+  const dayTabs = buildDayTabs();
+  const activeTab = selectedDayTab === "_today" ? today : selectedDayTab;
+  const effectiveTab = dayTabs.find((t) => t.key === activeTab) ? activeTab : today;
+
+  const pendientes = pedidosOnline.filter((p) => {
+    const fe = pedidoEntregaMap[p.numero];
+    if (!fe) return true;
+    return fe < today;
   });
 
-  const totalPedidos = filteredPedidos.reduce((s, p) => s + p.total, 0);
+  const countByTab: Record<string, number> = {};
+  for (const tab of dayTabs) {
+    if (tab.key === "_pending") {
+      countByTab[tab.key] = pendientes.length;
+    } else {
+      countByTab[tab.key] = pedidosOnline.filter((p) => pedidoEntregaMap[p.numero] === tab.key).length;
+    }
+  }
+
+  let tabPedidos = effectiveTab === "_pending"
+    ? pendientes
+    : pedidosOnline.filter((p) => pedidoEntregaMap[p.numero] === effectiveTab);
+
+  // Apply envio/retiro filter
+  if (pedidoFilter === "envio") tabPedidos = tabPedidos.filter((p) => p.metodo_entrega === "envio");
+  if (pedidoFilter === "retiro") tabPedidos = tabPedidos.filter((p) => p.metodo_entrega === "retiro");
+
+  const totalPedidos = tabPedidos.reduce((s, p) => s + p.total, 0);
   const countEnvio = pedidosOnline.filter((p) => p.metodo_entrega === "envio").length;
   const countRetiro = pedidosOnline.filter((p) => p.metodo_entrega === "retiro").length;
 
@@ -447,13 +490,48 @@ export default function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          {/* Day tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {dayTabs.map((tab) => {
+              const count = countByTab[tab.key] || 0;
+              const isActive = effectiveTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setSelectedDayTab(tab.key === today ? "_today" : tab.key)}
+                  className={`flex flex-col items-center min-w-[72px] px-3 py-2 rounded-xl border-2 transition-all text-center shrink-0 ${
+                    isActive
+                      ? tab.isPending
+                        ? "border-red-500 bg-red-50 dark:bg-red-950/20"
+                        : "border-primary bg-primary/5"
+                      : count > 0
+                        ? "border-muted bg-muted/50 hover:border-muted-foreground/30"
+                        : "border-transparent bg-muted/30 hover:bg-muted/50"
+                  }`}
+                >
+                  <span className={`text-xs font-semibold ${
+                    isActive ? tab.isPending ? "text-red-700 dark:text-red-400" : "text-primary" : "text-muted-foreground"
+                  }`}>{tab.label}</span>
+                  <span className={`text-[10px] ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                    {tab.isPending ? (count > 0 ? <AlertTriangle className="w-3 h-3 text-red-500 inline" /> : "—") : tab.sublabel}
+                  </span>
+                  {count > 0 && (
+                    <span className={`mt-0.5 text-[10px] font-bold rounded-full px-1.5 ${
+                      isActive ? tab.isPending ? "bg-red-500 text-white" : "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
+                    }`}>{count}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Entrega filter */}
+          <div className="flex items-center gap-3">
             <div className="flex border rounded-lg overflow-hidden">
               {([
-                { key: "todos" as const, label: "Todos", count: pedidosOnline.length },
-                { key: "envio" as const, label: "Envio", count: countEnvio },
-                { key: "retiro" as const, label: "Retiro", count: countRetiro },
+                { key: "todos" as const, label: "Todos" },
+                { key: "envio" as const, label: "Envio", icon: Truck },
+                { key: "retiro" as const, label: "Retiro", icon: Store },
               ]).map((tab) => (
                 <button
                   key={tab.key}
@@ -464,36 +542,15 @@ export default function DashboardPage() {
                       : "bg-background hover:bg-muted text-muted-foreground"
                   }`}
                 >
-                  {tab.key === "envio" && <Truck className="w-3 h-3" />}
-                  {tab.key === "retiro" && <Store className="w-3 h-3" />}
+                  {tab.icon && <tab.icon className="w-3 h-3" />}
                   {tab.label}
-                  {tab.count > 0 && (
-                    <span className={`text-[10px] rounded-full px-1.5 font-bold ${
-                      pedidoFilter === tab.key ? "bg-primary-foreground/20" : "bg-muted-foreground/20"
-                    }`}>{tab.count}</span>
-                  )}
                 </button>
               ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Fecha entrega:</span>
-              <Input
-                type="date"
-                value={pedidoFechaFilter}
-                onChange={(ev) => setPedidoFechaFilter(ev.target.value)}
-                className="h-8 w-40 text-xs"
-              />
-              {pedidoFechaFilter && (
-                <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setPedidoFechaFilter("")}>
-                  Limpiar
-                </Button>
-              )}
             </div>
           </div>
 
           {/* Pedidos list */}
-          {filteredPedidos.length === 0 ? (
+          {tabPedidos.length === 0 ? (
             <div className="text-center py-10">
               <ShoppingCart className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
               <p className="text-sm text-muted-foreground">
@@ -503,9 +560,7 @@ export default function DashboardPage() {
           ) : (
             <>
               <div className="flex items-center justify-between text-sm px-1">
-                <span className="text-muted-foreground">
-                  {filteredPedidos.length} pedido{filteredPedidos.length !== 1 ? "s" : ""}
-                </span>
+                <span className="text-muted-foreground">{tabPedidos.length} pedido{tabPedidos.length !== 1 ? "s" : ""}</span>
                 <span className="font-bold">{formatCurrency(totalPedidos)}</span>
               </div>
 
@@ -517,44 +572,29 @@ export default function DashboardPage() {
                       <TableHead>Cliente</TableHead>
                       <TableHead className="hidden sm:table-cell">Pago</TableHead>
                       <TableHead className="hidden md:table-cell">Pedido</TableHead>
-                      <TableHead className="hidden md:table-cell">Entrega</TableHead>
+                      <TableHead className="hidden md:table-cell">Estado</TableHead>
                       <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right w-[140px]">Acciones</TableHead>
+                      <TableHead className="text-right w-[160px]">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPedidos.map((p) => {
+                    {tabPedidos.map((p) => {
                       const createdDate = new Date(p.created_at);
-                      const dateStr = createdDate.toLocaleDateString("es-AR", {
-                        day: "2-digit", month: "2-digit",
-                        timeZone: "America/Argentina/Buenos_Aires",
-                      });
-                      const timeStr = createdDate.toLocaleTimeString("es-AR", {
-                        hour: "2-digit", minute: "2-digit",
-                        timeZone: "America/Argentina/Buenos_Aires",
-                      });
-                      const fechaEntrega = pedidoEntregaMap[p.numero];
-                      const fechaEntregaStr = fechaEntrega
-                        ? new Date(fechaEntrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })
-                        : "—";
-                      const today = todayARG();
-                      const isOverdue = fechaEntrega ? fechaEntrega < today : false;
-                      const isToday = fechaEntrega === today;
+                      const dateStr = createdDate.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
+                      const timeStr = createdDate.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
+                      const isOverdue = effectiveTab === "_pending";
                       const isLoading = actionLoading === p.id;
+                      const pedidoEstado = pedidoEstadoMap[p.numero] || "pendiente";
+                      const isArmado = pedidoEstado === "armado";
+                      const isRetiro = p.metodo_entrega === "retiro";
 
                       return (
                         <TableRow key={p.id} className={isOverdue ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
                           <TableCell>
                             <div className={`w-8 h-8 rounded-md flex items-center justify-center ${
-                              p.metodo_entrega === "envio"
-                                ? "bg-blue-100 dark:bg-blue-900/30"
-                                : "bg-emerald-100 dark:bg-emerald-900/30"
+                              p.metodo_entrega === "envio" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-emerald-100 dark:bg-emerald-900/30"
                             }`}>
-                              {p.metodo_entrega === "envio" ? (
-                                <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                              ) : (
-                                <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                              )}
+                              {p.metodo_entrega === "envio" ? <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> : <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -565,9 +605,7 @@ export default function DashboardPage() {
                             {p.clientes?.domicilio && p.metodo_entrega === "envio" && (
                               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                                 <MapPin className="w-3 h-3 shrink-0" />
-                                <span className="truncate max-w-[200px]">
-                                  {[p.clientes.domicilio, p.clientes.localidad].filter(Boolean).join(", ")}
-                                </span>
+                                <span className="truncate max-w-[200px]">{[p.clientes.domicilio, p.clientes.localidad].filter(Boolean).join(", ")}</span>
                               </div>
                             )}
                           </TableCell>
@@ -581,43 +619,35 @@ export default function DashboardPage() {
                             </div>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
-                            <span className={`text-xs font-medium ${
-                              isOverdue ? "text-red-600" : isToday ? "text-primary font-semibold" : ""
-                            }`}>
-                              {isOverdue ? "Vencido - " : ""}{fechaEntregaStr}
-                            </span>
+                            {isArmado ? (
+                              <Badge className="text-[10px] px-1.5 py-0 bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400">Armado</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Pendiente</Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <span className="font-bold text-sm">{formatCurrency(p.total)}</span>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0"
-                                title="Ver detalle"
-                                onClick={() => { setPedidoDetail(p); setPedidoDetailOpen(true); }}
-                              >
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Ver detalle"
+                                onClick={() => { setPedidoDetail(p); setPedidoDetailOpen(true); }}>
                                 <Eye className="w-3.5 h-3.5" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0"
-                                title="Imprimir remito"
-                                onClick={() => handlePrintRemito(p)}
-                              >
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Imprimir remito"
+                                onClick={() => handlePrintRemito(p)}>
                                 <Printer className="w-3.5 h-3.5" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                title="Marcar entregado"
-                                disabled={isLoading}
-                                onClick={() => handleMarkDelivered(p)}
-                              >
+                              {isRetiro && !isArmado && (
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                  title="Marcar como armado" disabled={isLoading}
+                                  onClick={() => handleMarkArmado(p)}>
+                                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackageCheck className="w-3.5 h-3.5" />}
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                title="Marcar entregado" disabled={isLoading}
+                                onClick={() => handleMarkDelivered(p)}>
                                 {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                               </Button>
                             </div>
@@ -643,15 +673,8 @@ export default function DashboardPage() {
             </div>
             <div className="flex border rounded-lg overflow-hidden">
               {(["diario", "mensual", "rango"] as FilterMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setFilterMode(mode)}
-                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                    filterMode === mode
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted text-muted-foreground"
-                  }`}
-                >
+                <button key={mode} onClick={() => setFilterMode(mode)}
+                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${filterMode === mode ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"}`}>
                   {mode === "diario" ? "Diario" : mode === "mensual" ? "Mensual" : "Entre Fechas"}
                 </button>
               ))}
@@ -683,145 +706,37 @@ export default function DashboardPage() {
       </Card>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
+        <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
       ) : (
         <>
           {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Ventas {periodLabel}</p>
-                    <p className="text-2xl font-bold mt-1">{formatCurrency(ventasPeriodo)}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-primary" /></div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Ganancia</p>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-bold">{formatCurrency(ganancia)}</p>
-                      <span className={`text-sm font-semibold ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                        {ventasPeriodo > 0 ? `${((ganancia / ventasPeriodo) * 100).toFixed(1)}%` : "—"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ganancia >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
-                    {ganancia >= 0 ? <TrendingUp className="w-5 h-5 text-emerald-500" /> : <TrendingDown className="w-5 h-5 text-red-500" />}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Gastos</p>
-                    <p className="text-2xl font-bold mt-1">{formatCurrency(gastosPeriodo)}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><TrendingDown className="w-5 h-5 text-orange-500" /></div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Tickets</p>
-                    <p className="text-2xl font-bold mt-1">{ticketsPeriodo}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-violet-500" /></div>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Ventas {periodLabel}</p><p className="text-2xl font-bold mt-1">{formatCurrency(ventasPeriodo)}</p></div><div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-primary" /></div></div></CardContent></Card>
+            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Ganancia</p><div className="flex items-baseline gap-2 mt-1"><p className="text-2xl font-bold">{formatCurrency(ganancia)}</p><span className={`text-sm font-semibold ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{ventasPeriodo > 0 ? `${((ganancia / ventasPeriodo) * 100).toFixed(1)}%` : "—"}</span></div></div><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ganancia >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}`}>{ganancia >= 0 ? <TrendingUp className="w-5 h-5 text-emerald-500" /> : <TrendingDown className="w-5 h-5 text-red-500" />}</div></div></CardContent></Card>
+            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Gastos</p><p className="text-2xl font-bold mt-1">{formatCurrency(gastosPeriodo)}</p></div><div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><TrendingDown className="w-5 h-5 text-orange-500" /></div></div></CardContent></Card>
+            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Tickets</p><p className="text-2xl font-bold mt-1">{ticketsPeriodo}</p></div><div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-violet-500" /></div></div></CardContent></Card>
           </div>
 
           {/* Balance cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="bg-primary/5 border-primary/10">
-              <CardContent className="pt-6 flex items-center gap-4">
-                <Package className="w-8 h-8 text-primary/60" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Capital en mercaderia</p>
-                  <p className="text-lg font-semibold">{formatCurrency(capitalMercaderia)}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-emerald-500/5 border-emerald-500/10">
-              <CardContent className="pt-6 flex items-center gap-4">
-                <Users className="w-8 h-8 text-emerald-500/60" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Cuentas a cobrar</p>
-                  <p className="text-lg font-semibold">{formatCurrency(cuentasCobrar)}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-orange-500/5 border-orange-500/10">
-              <CardContent className="pt-6 flex items-center gap-4">
-                <CreditCard className="w-8 h-8 text-orange-500/60" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Cuentas a pagar</p>
-                  <p className="text-lg font-semibold">{formatCurrency(cuentasPagar)}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <Card className="bg-primary/5 border-primary/10"><CardContent className="pt-6 flex items-center gap-4"><PackageIcon className="w-8 h-8 text-primary/60" /><div><p className="text-xs text-muted-foreground">Capital en mercaderia</p><p className="text-lg font-semibold">{formatCurrency(capitalMercaderia)}</p></div></CardContent></Card>
+            <Card className="bg-emerald-500/5 border-emerald-500/10"><CardContent className="pt-6 flex items-center gap-4"><Users className="w-8 h-8 text-emerald-500/60" /><div><p className="text-xs text-muted-foreground">Cuentas a cobrar</p><p className="text-lg font-semibold">{formatCurrency(cuentasCobrar)}</p></div></CardContent></Card>
+            <Card className="bg-orange-500/5 border-orange-500/10"><CardContent className="pt-6 flex items-center gap-4"><CreditCard className="w-8 h-8 text-orange-500/60" /><div><p className="text-xs text-muted-foreground">Cuentas a pagar</p><p className="text-lg font-semibold">{formatCurrency(cuentasPagar)}</p></div></CardContent></Card>
           </div>
 
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-2">
               <CardHeader><CardTitle className="text-base">Ventas y egresos — ultimos 6 meses</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyData} barGap={4}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
-                      <Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} />
-                      <Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="egresos" name="Egresos" fill="oklch(0.7 0.15 50)" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
+              <CardContent><div className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.7 0.15 50)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></CardContent>
             </Card>
-
             <Card>
               <CardHeader><CardTitle className="text-base">Formas de pago ({periodLabel})</CardTitle></CardHeader>
               <CardContent>
-                {paymentBreakdown.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p>
-                ) : (
+                {paymentBreakdown.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p> : (
                   <>
-                    <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={paymentBreakdown} innerRadius={55} outerRadius={80} dataKey="value" stroke="none">
-                            {paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}
-                          </Pie>
-                          <Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="space-y-2 mt-2">
-                      {paymentBreakdown.map((m, i) => (
-                        <div key={m.name} className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                            <span className="text-muted-foreground">{m.name}</span>
-                          </div>
-                          <span className="font-medium">{formatCurrency(m.value)}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <div className="h-[200px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={paymentBreakdown} innerRadius={55} outerRadius={80} dataKey="value" stroke="none">{paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /></PieChart></ResponsiveContainer></div>
+                    <div className="space-y-2 mt-2">{paymentBreakdown.map((m, i) => (<div key={m.name} className="flex items-center justify-between text-sm"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span className="text-muted-foreground">{m.name}</span></div><span className="font-medium">{formatCurrency(m.value)}</span></div>))}</div>
                   </>
                 )}
               </CardContent>
@@ -832,39 +747,10 @@ export default function DashboardPage() {
           <Card>
             <CardHeader><CardTitle className="text-base">Ventas por categoria — {periodLabel}</CardTitle></CardHeader>
             <CardContent>
-              {ventasPorCategoria.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Sin datos en este periodo</p>
-              ) : (
+              {ventasPorCategoria.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin datos en este periodo</p> : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={ventasPorCategoria} layout="vertical" barSize={20}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" />
-                        <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={120} />
-                        <Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} />
-                        <Bar dataKey="value" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[0, 6, 6, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="space-y-2">
-                    {ventasPorCategoria.map((cat, i) => {
-                      const totalCat = ventasPorCategoria.reduce((a, c) => a + c.value, 0);
-                      const pct = totalCat > 0 ? ((cat.value / totalCat) * 100).toFixed(1) : "0";
-                      return (
-                        <div key={cat.name} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                            <span>{cat.name}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-muted-foreground text-xs">{pct}%</span>
-                            <span className="font-medium">{formatCurrency(cat.value)}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <div className="h-[280px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={ventasPorCategoria} layout="vertical" barSize={20}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={120} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="value" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[0, 6, 6, 0]} /></BarChart></ResponsiveContainer></div>
+                  <div className="space-y-2">{ventasPorCategoria.map((cat, i) => { const totalCat = ventasPorCategoria.reduce((a, c) => a + c.value, 0); const pct = totalCat > 0 ? ((cat.value / totalCat) * 100).toFixed(1) : "0"; return (<div key={cat.name} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span>{cat.name}</span></div><div className="flex items-center gap-3"><span className="text-muted-foreground text-xs">{pct}%</span><span className="font-medium">{formatCurrency(cat.value)}</span></div></div>); })}</div>
                 </div>
               )}
             </CardContent>
@@ -881,120 +767,93 @@ export default function DashboardPage() {
               Pedido #{pedidoDetail?.numero}
             </DialogTitle>
           </DialogHeader>
-          {pedidoDetail && (
-            <div className="space-y-4 mt-2">
-              <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-lg p-4">
-                <div>
-                  <span className="text-muted-foreground">Cliente:</span>{" "}
-                  <span className="font-medium">{pedidoDetail.clientes?.nombre || "Sin cliente"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Estado:</span>{" "}
-                  <Badge variant="secondary" className="text-xs ml-1">{pedidoDetail.estado}</Badge>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Entrega:</span>{" "}
-                  <span className="font-medium">{pedidoDetail.metodo_entrega === "envio" ? "Envio a domicilio" : "Retiro en local"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Pago:</span>{" "}
-                  <span className="font-medium">{pedidoDetail.forma_pago}</span>
-                </div>
-                {pedidoDetail.clientes?.domicilio && (
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Direccion:</span>{" "}
-                    <span className="font-medium">
-                      {[pedidoDetail.clientes.domicilio, pedidoDetail.clientes.localidad].filter(Boolean).join(", ")}
-                    </span>
+          {pedidoDetail && (() => {
+            const pedidoEstado = pedidoEstadoMap[pedidoDetail.numero] || "pendiente";
+            const isRetiro = pedidoDetail.metodo_entrega === "retiro";
+            const isArmado = pedidoEstado === "armado";
+            return (
+              <div className="space-y-4 mt-2">
+                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-lg p-4">
+                  <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{pedidoDetail.clientes?.nombre || "Sin cliente"}</span></div>
+                  <div><span className="text-muted-foreground">Estado:</span>{" "}
+                    {isArmado ? (
+                      <Badge className="text-xs ml-1 bg-violet-100 text-violet-700 hover:bg-violet-100">Armado</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs ml-1">Pendiente</Badge>
+                    )}
                   </div>
-                )}
-                {pedidoDetail.clientes?.telefono && (
-                  <div>
-                    <span className="text-muted-foreground">Telefono:</span>{" "}
-                    <span className="font-medium">{pedidoDetail.clientes.telefono}</span>
-                  </div>
-                )}
-                {pedidoEntregaMap[pedidoDetail.numero] && (
-                  <div>
-                    <span className="text-muted-foreground">Fecha entrega:</span>{" "}
-                    <span className="font-medium">
-                      {new Date(pedidoEntregaMap[pedidoDetail.numero] + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <span className="text-muted-foreground">Pedido:</span>{" "}
-                  <span className="font-medium">
-                    {new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })}
-                  </span>
+                  <div><span className="text-muted-foreground">Entrega:</span> <span className="font-medium">{pedidoDetail.metodo_entrega === "envio" ? "Envio a domicilio" : "Retiro en local"}</span></div>
+                  <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium">{pedidoDetail.forma_pago}</span></div>
+                  {pedidoDetail.clientes?.domicilio && (
+                    <div className="col-span-2"><span className="text-muted-foreground">Direccion:</span> <span className="font-medium">{[pedidoDetail.clientes.domicilio, pedidoDetail.clientes.localidad].filter(Boolean).join(", ")}</span></div>
+                  )}
+                  {pedidoDetail.clientes?.telefono && (
+                    <div><span className="text-muted-foreground">Telefono:</span> <span className="font-medium">{pedidoDetail.clientes.telefono}</span></div>
+                  )}
+                  {pedidoEntregaMap[pedidoDetail.numero] && (
+                    <div><span className="text-muted-foreground">Fecha entrega:</span> <span className="font-medium">{new Date(pedidoEntregaMap[pedidoDetail.numero] + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</span></div>
+                  )}
+                  <div><span className="text-muted-foreground">Pedido:</span> <span className="font-medium">{new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })}</span></div>
                 </div>
-              </div>
 
-              {pedidoDetail.observacion && (
-                <div className="text-sm bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-900/30">
-                  <span className="text-muted-foreground font-medium">Observaciones:</span>{" "}
-                  {pedidoDetail.observacion}
-                </div>
-              )}
+                {pedidoDetail.observacion && (
+                  <div className="text-sm bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-900/30">
+                    <span className="text-muted-foreground font-medium">Observaciones:</span> {pedidoDetail.observacion}
+                  </div>
+                )}
 
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader><TableRow>
                       <TableHead>Producto</TableHead>
                       <TableHead className="text-center">Cant.</TableHead>
                       <TableHead className="text-right">Precio Unit.</TableHead>
                       <TableHead className="text-right">Subtotal</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pedidoDetail.venta_items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <span className="font-medium text-sm">{item.descripcion}</span>
-                        </TableCell>
-                        <TableCell className="text-center">{item.cantidad}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {pedidoDetail.venta_items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell><span className="font-medium text-sm">{cleanItemDescription(item.descripcion, item.presentacion)}</span></TableCell>
+                          <TableCell className="text-center">{item.cantidad}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
 
-              <div className="flex items-center justify-between pt-2 border-t">
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={() => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); }}
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    Imprimir Remito
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                    disabled={actionLoading === pedidoDetail.id}
-                    onClick={() => { setPedidoDetailOpen(false); handleMarkDelivered(pedidoDetail); }}
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Marcar Entregado
-                  </Button>
-                </div>
-                <div className="text-lg font-bold">
-                  Total: {formatCurrency(pedidoDetail.total)}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5"
+                      onClick={() => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); }}>
+                      <Printer className="w-3.5 h-3.5" /> Imprimir Remito
+                    </Button>
+                    {isRetiro && !isArmado && (
+                      <Button variant="outline" size="sm" className="gap-1.5 text-violet-600 border-violet-200 hover:bg-violet-50"
+                        disabled={actionLoading === pedidoDetail.id}
+                        onClick={() => { handleMarkArmado(pedidoDetail); }}>
+                        <PackageCheck className="w-3.5 h-3.5" /> Marcar Armado
+                      </Button>
+                    )}
+                    <Button variant="default" size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                      disabled={actionLoading === pedidoDetail.id}
+                      onClick={() => { setPedidoDetailOpen(false); handleMarkDelivered(pedidoDetail); }}>
+                      <CheckCircle className="w-3.5 h-3.5" /> Marcar Entregado
+                    </Button>
+                  </div>
+                  <div className="text-lg font-bold">Total: {formatCurrency(pedidoDetail.total)}</div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
       {/* Hidden print container */}
-      <div ref={printRef} className="hidden" />
+      <div ref={printRef} className="hidden">
+        {printSale && <ReceiptPrintView sale={printSale} config={receiptConfig} />}
+      </div>
     </div>
   );
 }

@@ -74,6 +74,7 @@ const formatPrice = (value: number) =>
 
 const estadoBadge: Record<string, { bg: string; text: string; dot: string }> = {
   pendiente: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  armado: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-400" },
   confirmado: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-400" },
   entregado: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-400" },
   cancelado: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
