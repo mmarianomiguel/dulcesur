@@ -289,7 +289,7 @@ export default function ProductosPage() {
       supabase.from("presentaciones").select("producto_id, sku, nombre, cantidad"),
       supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)"),
     ]);
-    const allProds = (data as ProductoWithRelations[]) || [];
+    const allProds = (data as unknown as ProductoWithRelations[]) || [];
     setProducts(allProds);
     setAllNonCombos(allProds.filter((p: any) => !p.es_combo).map((p: any) => ({
       id: p.id, codigo: p.codigo, nombre: p.nombre, precio: p.precio, costo: p.costo, stock: p.stock,
@@ -328,7 +328,7 @@ export default function ProductosPage() {
 
   const fetchCategories = useCallback(async () => {
     const { data } = await supabase.from("categorias").select("id, nombre").order("nombre");
-    setCategories(data || []);
+    setCategories((data || []) as unknown as Categoria[]);
   }, []);
 
   const fetchSubcategories = useCallback(async () => {

@@ -865,7 +865,7 @@ export default function HojaDeRutaPage() {
                     {payTransferencia > 0 && cuentasBancarias.length > 0 && (
                       <div className="space-y-1.5">
                         <Label className="text-xs">Cuenta bancaria</Label>
-                        <Select value={payCuentaBancariaId} onValueChange={setPayCuentaBancariaId}>
+                        <Select value={payCuentaBancariaId} onValueChange={(v) => setPayCuentaBancariaId(v || "")}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                           <SelectContent>
                             {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
@@ -884,7 +884,7 @@ export default function HojaDeRutaPage() {
                     {payMetodo === "Transferencia" && cuentasBancarias.length > 0 && (
                       <div className="space-y-1.5 mt-2">
                         <Label className="text-xs">Cuenta bancaria</Label>
-                        <Select value={payCuentaBancariaId} onValueChange={setPayCuentaBancariaId}>
+                        <Select value={payCuentaBancariaId} onValueChange={(v) => setPayCuentaBancariaId(v || "")}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                           <SelectContent>
                             {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}

@@ -116,7 +116,7 @@ export default function ClientesPage() {
       .select("id, nombre, tipo_documento, numero_documento, cuit, situacion_iva, tipo_factura, razon_social, domicilio, domicilio_fiscal, telefono, email, provincia, localidad, codigo_postal, observacion, barrio, vendedor_id, saldo, origen, activo")
       .eq("activo", true)
       .order("nombre");
-    setClients(data || []);
+    setClients((data || []) as unknown as Cliente[]);
     const { data: vends } = await supabase.from("usuarios").select("id, nombre").eq("activo", true).order("nombre");
     setVendedores(vends || []);
     setLoading(false);

@@ -185,8 +185,8 @@ export default function ComprasPage() {
         .eq("activo", true)
         .order("nombre"),
     ]);
-    setPurchases((c as CompraRow[]) || []);
-    setProviders(p || []);
+    setPurchases((c as unknown as CompraRow[]) || []);
+    setProviders((p || []) as unknown as Proveedor[]);
     setLoading(false);
   }, [purchaseFilterMode, purchaseFilterDay, purchaseFilterMonth, purchaseFilterYear, purchaseFilterFrom, purchaseFilterTo]);
 

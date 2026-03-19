@@ -261,8 +261,8 @@ export default function VentasPage() {
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
     ]);
     setProducts(prods || []);
-    setClients(cls || []);
-    setSellers(sls || []);
+    setClients((cls || []) as unknown as Cliente[]);
+    setSellers((sls || []) as unknown as Usuario[]);
     setListasPrecio((listas || []) as any[]);
     const defaultList = (listas || []).find((l: any) => l.es_default);
     if (defaultList) setListaPrecioId((defaultList as any).id);
