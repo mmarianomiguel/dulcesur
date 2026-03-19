@@ -113,6 +113,7 @@ export default function DashboardPage() {
     observaciones: string | null;
   }
   const [allPedidosWeb, setAllPedidosWeb] = useState<PedidoWeb[]>([]);
+  const [selectedDayTab, setSelectedDayTab] = useState<string>("_today");
   const [pedidoDetailOpen, setPedidoDetailOpen] = useState(false);
   const [pedidoDetail, setPedidoDetail] = useState<PedidoWeb | null>(null);
   const [pedidoItems, setPedidoItems] = useState<PedidoItemWeb[]>([]);
@@ -561,150 +562,209 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Pedidos Online */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ShoppingCart className="w-4 h-4 text-primary" />
-                  Pedidos Online
-                  {allPedidosWeb.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">{allPedidosWeb.length}</Badge>
-                  )}
-                </CardTitle>
-                <div className="flex items-center gap-3">
-                  {allPedidosWeb.length > 0 && (
-                    <span className="text-sm text-muted-foreground">
-                      Total: <span className="font-bold text-foreground">{formatCurrency(allPedidosWeb.reduce((s, p) => s + p.total, 0))}</span>
-                    </span>
-                  )}
-                  <Link href="/admin/ventas/hoja-ruta">
-                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                      <Truck className="w-3.5 h-3.5" />
-                      Hoja de Ruta
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {allPedidosWeb.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No hay pedidos pendientes</p>
-              ) : (() => {
-                const today = todayARG();
-                const tomorrow = (() => { const d = new Date(today + "T12:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
+          {/* Pedidos Online — por día de entrega */}
+          {(() => {
+            const today = todayARG();
 
-                const byDate: Record<string, PedidoWeb[]> = {};
-                for (const p of allPedidosWeb) {
-                  const key = p.fecha_entrega || "_sin_fecha";
-                  if (!byDate[key]) byDate[key] = [];
-                  byDate[key].push(p);
-                }
-                const sortedDates = Object.keys(byDate).sort((a, b) => {
-                  if (a === "_sin_fecha") return 1;
-                  if (b === "_sin_fecha") return -1;
-                  return a.localeCompare(b);
-                });
+            // Build day tabs: pendientes + today + next 5 days
+            const dayTabs: { key: string; label: string; sublabel: string; isToday?: boolean; isPending?: boolean }[] = [];
 
-                const getDateLabel = (key: string) => {
-                  if (key === "_sin_fecha") return "Sin fecha de entrega";
-                  if (key === today) return "Hoy";
-                  if (key === tomorrow) return "Mañana";
-                  if (key < today) return `Vencido — ${new Date(key + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" })}`;
-                  return new Date(key + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" });
-                };
+            // Pending (overdue) orders
+            const pendientes = allPedidosWeb.filter((p) => {
+              if (!p.fecha_entrega) return true; // sin fecha = pendiente
+              return p.fecha_entrega < today;
+            });
+            dayTabs.push({ key: "_pending", label: "Pendientes", sublabel: `${pendientes.length}`, isPending: true });
 
-                return (
-                  <div className="space-y-4">
-                    {sortedDates.map((dateKey) => {
-                      const pedidos = byDate[dateKey];
-                      const isOverdue = dateKey !== "_sin_fecha" && dateKey < today;
-                      const isToday = dateKey === today;
-                      const dateTotal = pedidos.reduce((s, p) => s + p.total, 0);
+            // Today + next 5 days
+            for (let i = 0; i <= 5; i++) {
+              const d = new Date(today + "T12:00:00");
+              d.setDate(d.getDate() + i);
+              const dateStr = d.toISOString().split("T")[0];
+              const dayName = d.toLocaleDateString("es-AR", { weekday: "short", timeZone: "America/Argentina/Buenos_Aires" });
+              const dayNum = d.toLocaleDateString("es-AR", { day: "numeric", month: "short", timeZone: "America/Argentina/Buenos_Aires" });
+              dayTabs.push({
+                key: dateStr,
+                label: i === 0 ? "Hoy" : i === 1 ? "Mañana" : dayName.charAt(0).toUpperCase() + dayName.slice(1),
+                sublabel: dayNum,
+                isToday: i === 0,
+              });
+            }
 
+            // Count orders per tab
+            const countByTab: Record<string, number> = {};
+            for (const tab of dayTabs) {
+              if (tab.key === "_pending") {
+                countByTab[tab.key] = pendientes.length;
+              } else {
+                countByTab[tab.key] = allPedidosWeb.filter((p) => p.fecha_entrega === tab.key).length;
+              }
+            }
+
+            // Resolve selected tab — default to today
+            const activeTab = selectedDayTab === "_today" ? today : selectedDayTab;
+            const effectiveTab = dayTabs.find((t) => t.key === activeTab) ? activeTab : today;
+
+            // Filter orders for active tab
+            const filteredPedidos = effectiveTab === "_pending"
+              ? pendientes
+              : allPedidosWeb.filter((p) => p.fecha_entrega === effectiveTab);
+
+            const tabTotal = filteredPedidos.reduce((s, p) => s + p.total, 0);
+
+            return (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-primary" />
+                      Pedidos Online
+                      {allPedidosWeb.length > 0 && (
+                        <Badge variant="secondary" className="text-xs">{allPedidosWeb.length} total</Badge>
+                      )}
+                    </CardTitle>
+                    <Link href="/admin/ventas/hoja-ruta">
+                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                        <Truck className="w-3.5 h-3.5" />
+                        Hoja de Ruta
+                      </Button>
+                    </Link>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Day tabs */}
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                    {dayTabs.map((tab) => {
+                      const count = countByTab[tab.key] || 0;
+                      const isActive = effectiveTab === tab.key;
                       return (
-                        <div key={dateKey}>
-                          <div className={`flex items-center justify-between px-3 py-2 rounded-lg mb-2 ${
-                            isOverdue ? "bg-red-50 dark:bg-red-950/20" : isToday ? "bg-primary/5" : "bg-muted/50"
+                        <button
+                          key={tab.key}
+                          onClick={() => setSelectedDayTab(tab.key === today ? "_today" : tab.key)}
+                          className={`flex flex-col items-center min-w-[72px] px-3 py-2 rounded-xl border-2 transition-all text-center shrink-0 ${
+                            isActive
+                              ? tab.isPending
+                                ? "border-red-500 bg-red-50 dark:bg-red-950/20"
+                                : "border-primary bg-primary/5"
+                              : count > 0
+                                ? "border-muted bg-muted/50 hover:border-muted-foreground/30"
+                                : "border-transparent bg-muted/30 hover:bg-muted/50"
+                          }`}
+                        >
+                          <span className={`text-xs font-semibold ${
+                            isActive
+                              ? tab.isPending ? "text-red-700 dark:text-red-400" : "text-primary"
+                              : "text-muted-foreground"
                           }`}>
-                            <div className="flex items-center gap-2">
-                              {isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
-                              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className={`text-sm font-semibold capitalize ${isOverdue ? "text-red-700 dark:text-red-400" : ""}`}>
-                                {getDateLabel(dateKey)}
-                              </span>
-                              <span className="text-xs text-muted-foreground">({pedidos.length})</span>
-                            </div>
-                            <span className="text-sm font-semibold">{formatCurrency(dateTotal)}</span>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            {pedidos.map((p) => {
-                              const createdDate = new Date(p.created_at);
-                              const dateStr = createdDate.toLocaleDateString("es-AR", {
-                                day: "2-digit",
-                                month: "2-digit",
-                                timeZone: "America/Argentina/Buenos_Aires",
-                              });
-                              const timeStr = createdDate.toLocaleTimeString("es-AR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                timeZone: "America/Argentina/Buenos_Aires",
-                              });
-
-                              return (
-                                <div
-                                  key={p.id}
-                                  className={`rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30 cursor-pointer ${
-                                    isOverdue ? "border-red-200 dark:border-red-900/30" : ""
-                                  }`}
-                                  onClick={() => handleViewPedido(p)}
-                                >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                                      <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
-                                        p.metodo_entrega === "envio"
-                                          ? "bg-blue-100 dark:bg-blue-900/30"
-                                          : "bg-emerald-100 dark:bg-emerald-900/30"
-                                      }`}>
-                                        {p.metodo_entrega === "envio" ? (
-                                          <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                                        ) : (
-                                          <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                                        )}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-medium text-sm truncate">{p.nombre_cliente}</span>
-                                          <span className="font-mono text-xs text-muted-foreground">#{p.numero}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                                          <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3" />
-                                            {dateStr} {timeStr}
-                                          </span>
-                                          {p.estado === "confirmado" && (
-                                            <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
-                                              Confirmado
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <span className="font-bold text-sm shrink-0">{formatCurrency(p.total)}</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+                            {tab.label}
+                          </span>
+                          <span className={`text-[10px] ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                            {tab.isPending ? (
+                              count > 0 ? <AlertTriangle className="w-3 h-3 text-red-500 inline" /> : "—"
+                            ) : tab.sublabel}
+                          </span>
+                          {count > 0 && (
+                            <span className={`mt-0.5 text-[10px] font-bold rounded-full px-1.5 ${
+                              isActive
+                                ? tab.isPending
+                                  ? "bg-red-500 text-white"
+                                  : "bg-primary text-primary-foreground"
+                                : "bg-muted-foreground/20 text-muted-foreground"
+                            }`}>
+                              {count}
+                            </span>
+                          )}
+                        </button>
                       );
                     })}
                   </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
+
+                  {/* Orders for selected day */}
+                  {filteredPedidos.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">
+                        {effectiveTab === "_pending"
+                          ? "No hay pedidos pendientes de días anteriores"
+                          : "No hay pedidos para este día"}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between text-sm px-1">
+                        <span className="text-muted-foreground">
+                          {filteredPedidos.length} pedido{filteredPedidos.length !== 1 ? "s" : ""}
+                        </span>
+                        <span className="font-bold">{formatCurrency(tabTotal)}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {filteredPedidos.map((p) => {
+                          const createdDate = new Date(p.created_at);
+                          const dateStr = createdDate.toLocaleDateString("es-AR", {
+                            day: "2-digit", month: "2-digit",
+                            timeZone: "America/Argentina/Buenos_Aires",
+                          });
+                          const timeStr = createdDate.toLocaleTimeString("es-AR", {
+                            hour: "2-digit", minute: "2-digit",
+                            timeZone: "America/Argentina/Buenos_Aires",
+                          });
+                          const isOverdue = effectiveTab === "_pending";
+
+                          return (
+                            <div
+                              key={p.id}
+                              className={`rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30 cursor-pointer ${
+                                isOverdue ? "border-red-200 dark:border-red-900/30" : ""
+                              }`}
+                              onClick={() => handleViewPedido(p)}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+                                    p.metodo_entrega === "envio"
+                                      ? "bg-blue-100 dark:bg-blue-900/30"
+                                      : "bg-emerald-100 dark:bg-emerald-900/30"
+                                  }`}>
+                                    {p.metodo_entrega === "envio" ? (
+                                      <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                    ) : (
+                                      <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-sm truncate">{p.nombre_cliente}</span>
+                                      <span className="font-mono text-xs text-muted-foreground">#{p.numero}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="w-3 h-3" />
+                                        Pedido {dateStr} {timeStr}
+                                      </span>
+                                      {isOverdue && p.fecha_entrega && (
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-300 text-red-600">
+                                          Entrega era {new Date(p.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })}
+                                        </Badge>
+                                      )}
+                                      {p.estado === "confirmado" && (
+                                        <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
+                                          Confirmado
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="font-bold text-sm shrink-0">{formatCurrency(p.total)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
         </>
       )}
 
