@@ -1423,7 +1423,7 @@ export default function VentasPage() {
 
   // ---------- RENDER ----------
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
+    <div className="h-[calc(100vh-3rem)] lg:h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
       {/* Main two-column layout */}
       <div className="flex-1 flex flex-col lg:flex-row gap-2 lg:gap-3 p-2 lg:p-3 overflow-hidden">
         {/* LEFT COLUMN */}

@@ -23,6 +23,7 @@ import {
   ClipboardList,
   BarChart3,
   PackageMinus,
+  X,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -138,7 +139,12 @@ const navigation: NavItem[] = [
 
 const ALWAYS_VISIBLE = ["Dashboard", "Configuración"];
 
-export function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { config: wl } = useWhiteLabel();
@@ -147,6 +153,15 @@ export function Sidebar() {
   const [modulosConfig, setModulosConfig] = useState<Record<string, boolean> | null>(null);
   const [permisosMap, setPermisosMap] = useState<Record<string, boolean> | null>(null);
   const permsFetched = useRef(false);
+
+  // Close mobile sidebar on route change
+  const prevPathname = useRef(pathname);
+  useEffect(() => {
+    if (prevPathname.current !== pathname) {
+      prevPathname.current = pathname;
+      onMobileClose?.();
+    }
+  }, [pathname, onMobileClose]);
 
   // Fetch permissions from supabase based on current auth user
   useEffect(() => {
@@ -269,14 +284,24 @@ export function Sidebar() {
 
   return (
     <TooltipProvider>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={onMobileClose}
+        />
+      )}
       <aside
         className={cn(
           "flex flex-col h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-300 ease-in-out",
-          collapsed ? "w-[72px]" : "w-[260px]"
+          collapsed ? "w-[72px]" : "w-[260px]",
+          // Mobile: fixed overlay sidebar, hidden by default
+          "fixed z-50 lg:relative lg:z-auto",
+          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 h-16 shrink-0">
+        <div className="flex items-center gap-3 px-5 h-16 shrink-0 relative">
           {wl.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={wl.logo_url} alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
@@ -286,7 +311,7 @@ export function Sidebar() {
             </div>
           )}
           {!collapsed && (
-            <div className="flex flex-col">
+            <div className="flex flex-col flex-1">
               <span className="text-base font-semibold tracking-tight text-sidebar-foreground">
                 {wl.system_name || "Cuenca"}
               </span>
@@ -295,6 +320,13 @@ export function Sidebar() {
               </span>
             </div>
           )}
+          {/* Mobile close button */}
+          <button
+            onClick={onMobileClose}
+            className="lg:hidden p-1.5 rounded-lg hover:bg-sidebar-accent/50 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <Separator className="bg-sidebar-border" />
@@ -433,7 +465,7 @@ export function Sidebar() {
 
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="flex items-center justify-center w-full py-2 rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
+            className="hidden lg:flex items-center justify-center w-full py-2 rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
           >
             {collapsed ? (
               <ChevronRight className="w-4 h-4" />
