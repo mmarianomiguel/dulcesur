@@ -96,6 +96,7 @@ export default function RemitosPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailRemito, setDetailRemito] = useState<RemitoRow | null>(null);
   const [detailItems, setDetailItems] = useState<VentaItemRow[]>([]);
+  const [detailComboIds, setDetailComboIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
@@ -154,7 +155,20 @@ export default function RemitosPage() {
       .select("*")
       .eq("venta_id", r.id)
       .order("created_at");
-    setDetailItems((data as VentaItemRow[]) || []);
+    const items = (data as VentaItemRow[]) || [];
+    setDetailItems(items);
+
+    // Check for combos
+    const productIds = items.map((i) => i.producto_id).filter(Boolean) as string[];
+    if (productIds.length > 0) {
+      const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", productIds);
+      const cIds = new Set<string>();
+      for (const p of prods || []) { if ((p as any).es_combo) cIds.add(p.id); }
+      setDetailComboIds(cIds);
+    } else {
+      setDetailComboIds(new Set());
+    }
+
     setDetailOpen(true);
   };
 
@@ -492,23 +506,35 @@ export default function RemitosPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50 text-muted-foreground">
-                      <th className="text-left py-2 px-3 font-medium">Codigo</th>
-                      <th className="text-left py-2 px-3 font-medium">Articulo</th>
+                      <th className="text-left py-2 px-3 font-medium">Código</th>
+                      <th className="text-left py-2 px-3 font-medium">Artículo</th>
                       <th className="text-center py-2 px-3 font-medium">Cant</th>
                       <th className="text-right py-2 px-3 font-medium">Precio</th>
+                      <th className="text-right py-2 px-3 font-medium">Desc.%</th>
                       <th className="text-right py-2 px-3 font-medium">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detailItems.map((item) => (
+                    {detailItems.map((item) => {
+                      const isCombo = detailComboIds.has(item.producto_id || "");
+                      const upp = item.unidades_por_presentacion ?? 1;
+                      const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
+                      return (
                       <tr key={item.id} className="border-b last:border-0">
                         <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.codigo}</td>
-                        <td className="py-2 px-3">{item.descripcion}</td>
-                        <td className="py-2 px-3 text-center">{item.cantidad}</td>
+                        <td className="py-2 px-3">
+                          {isCombo && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white mr-1.5 tracking-wider">COMBO</span>
+                          )}
+                          {item.descripcion}
+                        </td>
+                        <td className="py-2 px-3 text-center">{displayQty}</td>
                         <td className="py-2 px-3 text-right">{formatCurrency(item.precio_unitario)}</td>
+                        <td className="py-2 px-3 text-right">{item.descuento > 0 ? `(-${item.descuento}%)` : ""}</td>
                         <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

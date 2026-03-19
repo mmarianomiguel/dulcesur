@@ -862,46 +862,41 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader><TableRow>
-                      <TableHead>Producto</TableHead>
-                      <TableHead className="text-center">Cant.</TableHead>
-                      <TableHead className="text-right">Precio Unit.</TableHead>
-                      <TableHead className="text-right">Subtotal</TableHead>
-                    </TableRow></TableHeader>
-                    <TableBody>
+                <div className="overflow-x-auto border rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50 text-muted-foreground">
+                        <th className="text-left py-2 px-3 font-medium">Código</th>
+                        <th className="text-left py-2 px-3 font-medium">Artículo</th>
+                        <th className="text-center py-2 px-3 font-medium">Cant</th>
+                        <th className="text-right py-2 px-3 font-medium">Precio</th>
+                        <th className="text-right py-2 px-3 font-medium">Desc.%</th>
+                        <th className="text-right py-2 px-3 font-medium">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                       {pedidoDetail.venta_items.map((item) => {
                         const isCombo = comboProductIds.has(item.producto_id || "");
-                        const comboItems = comboItemsMap[item.producto_id || ""] || [];
                         const upp = item.unidades_por_presentacion ?? 1;
                         const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
                         return (
-                          <TableRow key={item.id}>
-                            <TableCell>
-                              <div>
-                                {isCombo && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white mr-1.5 tracking-wider">COMBO</span>
-                                )}
-                                <span className="font-medium text-sm">{cleanItemDescription(item.descripcion, item.presentacion)}</span>
-                                {item.descuento > 0 && (
-                                  <span className="ml-1.5 text-xs text-red-500 font-medium">(-{item.descuento}%)</span>
-                                )}
-                              </div>
-                              {isCombo && comboItems.length > 0 && (
-                                <div className="text-[11px] text-muted-foreground mt-0.5">
-                                  {comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
-                                </div>
+                          <tr key={item.id} className="border-b last:border-0">
+                            <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.codigo || ""}</td>
+                            <td className="py-2 px-3">
+                              {isCombo && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white mr-1.5 tracking-wider">COMBO</span>
                               )}
-                            </TableCell>
-                            <TableCell className="text-center">{displayQty}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(item.precio_unitario)}</TableCell>
-                            <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
-                          </TableRow>
+                              {cleanItemDescription(item.descripcion, item.presentacion)}
+                            </td>
+                            <td className="py-2 px-3 text-center">{displayQty}</td>
+                            <td className="py-2 px-3 text-right">{formatCurrency(item.precio_unitario)}</td>
+                            <td className="py-2 px-3 text-right">{item.descuento > 0 ? `(-${item.descuento}%)` : ""}</td>
+                            <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                          </tr>
                         );
                       })}
-                    </TableBody>
-                  </Table>
+                    </tbody>
+                  </table>
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t">
