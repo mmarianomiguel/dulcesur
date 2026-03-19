@@ -6,13 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import Link from "next/link";
 import {
   DollarSign,
   TrendingUp,
@@ -21,7 +15,6 @@ import {
   Users,
   Package,
   CreditCard,
-  Banknote,
   Loader2,
   Calendar,
   ShoppingCart,
@@ -68,17 +61,6 @@ function todayARG() {
 
 const PIE_COLORS = ["oklch(0.55 0.2 264)", "oklch(0.65 0.18 160)", "oklch(0.7 0.15 50)", "oklch(0.6 0.2 300)"];
 
-interface VentaRow {
-  id: string;
-  numero: string;
-  total: number;
-  forma_pago: string;
-  tipo_comprobante: string;
-  fecha: string;
-  created_at: string;
-  clientes: { nombre: string } | null;
-}
-
 type FilterMode = "diario" | "mensual" | "rango";
 
 export default function DashboardPage() {
@@ -102,17 +84,6 @@ export default function DashboardPage() {
   const [capitalMercaderia, setCapitalMercaderia] = useState(0);
   const [cuentasCobrar, setCuentasCobrar] = useState(0);
   const [cuentasPagar, setCuentasPagar] = useState(0);
-  const [recentSales, setRecentSales] = useState<VentaRow[]>([]);
-  const [salesFilterMode, setSalesFilterMode] = useState<FilterMode>("diario");
-  const [salesFilterDate, setSalesFilterDate] = useState(todayARG());
-  const [salesFilterMonth, setSalesFilterMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
-  const [salesFilterFrom, setSalesFilterFrom] = useState(todayARG());
-  const [salesFilterTo, setSalesFilterTo] = useState(todayARG());
-  const [salesFilterComprobante, setSalesFilterComprobante] = useState("all");
-  const [salesLoading, setSalesLoading] = useState(false);
   const [paymentBreakdown, setPaymentBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [monthlyData, setMonthlyData] = useState<{ name: string; ventas: number; egresos: number }[]>([]);
   const [ventasPorCategoria, setVentasPorCategoria] = useState<{ name: string; value: number }[]>([]);
@@ -180,42 +151,6 @@ export default function DashboardPage() {
     return `${from} — ${to}`;
   };
 
-  const getSalesDateRange = useCallback((): { start: string; end: string } => {
-    if (salesFilterMode === "diario") {
-      const next = new Date(salesFilterDate + "T12:00:00");
-      next.setDate(next.getDate() + 1);
-      return { start: salesFilterDate, end: next.toISOString().split("T")[0] };
-    }
-    if (salesFilterMode === "mensual") {
-      const [y, m] = salesFilterMonth.split("-").map(Number);
-      const start = `${y}-${String(m).padStart(2, "0")}-01`;
-      const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
-      return { start, end };
-    }
-    const next = new Date(salesFilterTo + "T12:00:00");
-    next.setDate(next.getDate() + 1);
-    return { start: salesFilterFrom, end: next.toISOString().split("T")[0] };
-  }, [salesFilterMode, salesFilterDate, salesFilterMonth, salesFilterFrom, salesFilterTo]);
-
-  const fetchSales = useCallback(async () => {
-    setSalesLoading(true);
-    const { start, end } = getSalesDateRange();
-    let query = supabase
-      .from("ventas")
-      .select("id, numero, total, forma_pago, tipo_comprobante, fecha, created_at, clientes(nombre)")
-      .gte("fecha", start)
-      .lt("fecha", end)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (salesFilterComprobante !== "all") {
-      query = query.eq("tipo_comprobante", salesFilterComprobante);
-    }
-    const { data } = await query;
-    setRecentSales((data as unknown as VentaRow[]) || []);
-    setSalesLoading(false);
-  }, [getSalesDateRange, salesFilterComprobante]);
-
-  useEffect(() => { fetchSales(); }, [fetchSales]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -530,144 +465,6 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Pedidos web pendientes - Grouped by delivery date */}
-          {allPedidosWeb.length > 0 && (() => {
-            const today = todayARG();
-            const tomorrow = (() => { const d = new Date(today + "T12:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
-            const totalAmount = allPedidosWeb.reduce((s, p) => s + p.total, 0);
-
-            // Group by fecha_entrega
-            const byDate: Record<string, PedidoWeb[]> = {};
-            for (const p of allPedidosWeb) {
-              const key = p.fecha_entrega || "_sin_fecha";
-              if (!byDate[key]) byDate[key] = [];
-              byDate[key].push(p);
-            }
-            // Sort: overdue first, then today, then future, then sin fecha
-            const sortedDates = Object.keys(byDate).sort((a, b) => {
-              if (a === "_sin_fecha") return 1;
-              if (b === "_sin_fecha") return -1;
-              return a.localeCompare(b);
-            });
-
-            const getDateLabel = (key: string) => {
-              if (key === "_sin_fecha") return "Sin fecha de entrega";
-              if (key === today) return "Hoy";
-              if (key === tomorrow) return "Manana";
-              if (key < today) return `Vencido — ${new Date(key + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" })}`;
-              return new Date(key + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" });
-            };
-
-            return (
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4 text-primary" />
-                      Pedidos Web Pendientes
-                    </CardTitle>
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-muted-foreground">Pedidos:</span>
-                        <span className="font-bold">{allPedidosWeb.length}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-muted-foreground">Total:</span>
-                        <span className="font-bold">{formatCurrency(totalAmount)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {sortedDates.map((dateKey) => {
-                    const pedidos = byDate[dateKey];
-                    const isOverdue = dateKey !== "_sin_fecha" && dateKey < today;
-                    const isToday = dateKey === today;
-                    const dateTotal = pedidos.reduce((s, p) => s + p.total, 0);
-                    const label = getDateLabel(dateKey);
-
-                    return (
-                      <div key={dateKey}>
-                        {/* Date header */}
-                        <div className={`flex items-center justify-between px-3 py-2 rounded-lg mb-2 ${
-                          isOverdue ? "bg-red-50 dark:bg-red-950/20" : isToday ? "bg-primary/5" : "bg-muted/50"
-                        }`}>
-                          <div className="flex items-center gap-2">
-                            {isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
-                            <span className={`text-sm font-semibold capitalize ${isOverdue ? "text-red-700 dark:text-red-400" : ""}`}>{label}</span>
-                            <span className="text-xs text-muted-foreground">({pedidos.length})</span>
-                          </div>
-                          <span className="text-sm font-semibold">{formatCurrency(dateTotal)}</span>
-                        </div>
-                        {/* Orders for this date */}
-                        <div className="space-y-2">
-                          {pedidos.map((p) => {
-                            const createdDate = new Date(p.created_at);
-                            const timeStr = createdDate.toLocaleTimeString("es-AR", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              timeZone: "America/Argentina/Buenos_Aires",
-                            });
-                            return (
-                              <div
-                                key={p.id}
-                                className={`rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30 flex items-center justify-between gap-3 ${
-                                  isOverdue ? "border-red-200 dark:border-red-900/30" : ""
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
-                                    p.metodo_entrega === "envio"
-                                      ? "bg-blue-100 dark:bg-blue-900/30"
-                                      : "bg-emerald-100 dark:bg-emerald-900/30"
-                                  }`}>
-                                    {p.metodo_entrega === "envio" ? (
-                                      <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                                    ) : (
-                                      <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-mono text-xs font-semibold text-muted-foreground">#{p.numero}</span>
-                                      <span className="font-medium text-sm truncate">{p.nombre_cliente}</span>
-                                      {p.estado === "confirmado" && (
-                                        <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">Confirmado</Badge>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                        {p.metodo_entrega === "envio" ? "Envio" : "Retiro"}
-                                      </Badge>
-                                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />{timeStr}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <span className="font-bold text-sm">{formatCurrency(p.total)}</span>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => handleViewPedido(p)}
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            );
-          })()}
-
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-2">
@@ -764,124 +561,148 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Recent sales with own filters */}
+          {/* Pedidos Online */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Últimas ventas</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Sales filters */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pb-3 border-b">
-                {/* Mode tabs */}
-                <div className="flex border rounded-lg overflow-hidden">
-                  {(["diario", "mensual", "rango"] as FilterMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => setSalesFilterMode(mode)}
-                      className={`px-3 py-1 text-xs font-medium transition-colors ${
-                        salesFilterMode === mode
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background hover:bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {mode === "diario" ? "Diario" : mode === "mensual" ? "Mensual" : "Entre Fechas"}
-                    </button>
-                  ))}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-primary" />
+                  Pedidos Online
+                  {allPedidosWeb.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">{allPedidosWeb.length}</Badge>
+                  )}
+                </CardTitle>
+                <div className="flex items-center gap-3">
+                  {allPedidosWeb.length > 0 && (
+                    <span className="text-sm text-muted-foreground">
+                      Total: <span className="font-bold text-foreground">{formatCurrency(allPedidosWeb.reduce((s, p) => s + p.total, 0))}</span>
+                    </span>
+                  )}
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+                    <Link href="/admin/ventas/hoja-ruta">
+                      <Truck className="w-3.5 h-3.5" />
+                      Hoja de Ruta
+                    </Link>
+                  </Button>
                 </div>
-
-                {/* Date inputs */}
-                {salesFilterMode === "diario" && (
-                  <Input type="date" value={salesFilterDate} onChange={(ev) => setSalesFilterDate(ev.target.value)} className="h-8 w-40 text-xs" />
-                )}
-                {salesFilterMode === "mensual" && (
-                  <Input type="month" value={salesFilterMonth} onChange={(ev) => setSalesFilterMonth(ev.target.value)} className="h-8 w-40 text-xs" />
-                )}
-                {salesFilterMode === "rango" && (
-                  <div className="flex items-center gap-1.5">
-                    <Input type="date" value={salesFilterFrom} onChange={(ev) => setSalesFilterFrom(ev.target.value)} className="h-8 w-36 text-xs" />
-                    <span className="text-xs text-muted-foreground">—</span>
-                    <Input type="date" value={salesFilterTo} onChange={(ev) => setSalesFilterTo(ev.target.value)} className="h-8 w-36 text-xs" />
-                  </div>
-                )}
-
-                {/* Tipo comprobante filter */}
-                <Select value={salesFilterComprobante} onValueChange={(v) => setSalesFilterComprobante(v ?? "all")}>
-                  <SelectTrigger className="h-8 w-44 text-xs">
-                    <SelectValue placeholder="Tipo comprobante" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los tipos</SelectItem>
-                    <SelectItem value="Remito X">Remito X</SelectItem>
-                    <SelectItem value="Factura B">Factura B</SelectItem>
-                    <SelectItem value="Factura C">Factura C</SelectItem>
-                    <SelectItem value="Nota de Crédito B">Nota de Crédito B</SelectItem>
-                    <SelectItem value="Nota de Crédito C">Nota de Crédito C</SelectItem>
-                    <SelectItem value="Nota de Débito B">Nota de Débito B</SelectItem>
-                    <SelectItem value="Nota de Débito C">Nota de Débito C</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {/* Count */}
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {salesLoading ? "Cargando..." : `${recentSales.length} resultado${recentSales.length !== 1 ? "s" : ""}`}
-                </span>
               </div>
+            </CardHeader>
+            <CardContent>
+              {allPedidosWeb.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No hay pedidos pendientes</p>
+              ) : (() => {
+                const today = todayARG();
+                const tomorrow = (() => { const d = new Date(today + "T12:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
 
-              {/* Table */}
-              {salesLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : recentSales.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No hay ventas en este período</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-3 px-4 font-medium">Fecha</th>
-                        <th className="text-left py-3 px-4 font-medium">N°</th>
-                        <th className="text-left py-3 px-4 font-medium">Tipo</th>
-                        <th className="text-left py-3 px-4 font-medium">Cliente</th>
-                        <th className="text-left py-3 px-4 font-medium">Forma de pago</th>
-                        <th className="text-right py-3 px-4 font-medium">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentSales.map((sale) => (
-                        <tr key={sale.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {new Date(sale.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}
-                          </td>
-                          <td className="py-3 px-4 font-mono text-xs text-muted-foreground">#{sale.numero}</td>
-                          <td className="py-3 px-4">
-                            <Badge variant="outline" className="font-normal text-xs">{sale.tipo_comprobante}</Badge>
-                          </td>
-                          <td className="py-3 px-4 font-medium">{sale.clientes?.nombre || "—"}</td>
-                          <td className="py-3 px-4">
-                            <Badge variant="secondary" className="font-normal text-xs">
-                              {sale.forma_pago === "Efectivo" && <Banknote className="w-3 h-3 mr-1" />}
-                              {sale.forma_pago === "Tarjeta" && <CreditCard className="w-3 h-3 mr-1" />}
-                              {sale.forma_pago}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-right font-semibold">{formatCurrency(sale.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                const byDate: Record<string, PedidoWeb[]> = {};
+                for (const p of allPedidosWeb) {
+                  const key = p.fecha_entrega || "_sin_fecha";
+                  if (!byDate[key]) byDate[key] = [];
+                  byDate[key].push(p);
+                }
+                const sortedDates = Object.keys(byDate).sort((a, b) => {
+                  if (a === "_sin_fecha") return 1;
+                  if (b === "_sin_fecha") return -1;
+                  return a.localeCompare(b);
+                });
 
-              {/* Sales total */}
-              {recentSales.length > 0 && !salesLoading && (
-                <div className="flex justify-end pt-2 border-t">
-                  <p className="text-sm">
-                    <span className="text-muted-foreground">Total: </span>
-                    <span className="font-bold">{formatCurrency(recentSales.reduce((a, s) => a + s.total, 0))}</span>
-                  </p>
-                </div>
-              )}
+                const getDateLabel = (key: string) => {
+                  if (key === "_sin_fecha") return "Sin fecha de entrega";
+                  if (key === today) return "Hoy";
+                  if (key === tomorrow) return "Mañana";
+                  if (key < today) return `Vencido — ${new Date(key + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" })}`;
+                  return new Date(key + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" });
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {sortedDates.map((dateKey) => {
+                      const pedidos = byDate[dateKey];
+                      const isOverdue = dateKey !== "_sin_fecha" && dateKey < today;
+                      const isToday = dateKey === today;
+                      const dateTotal = pedidos.reduce((s, p) => s + p.total, 0);
+
+                      return (
+                        <div key={dateKey}>
+                          <div className={`flex items-center justify-between px-3 py-2 rounded-lg mb-2 ${
+                            isOverdue ? "bg-red-50 dark:bg-red-950/20" : isToday ? "bg-primary/5" : "bg-muted/50"
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              {isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className={`text-sm font-semibold capitalize ${isOverdue ? "text-red-700 dark:text-red-400" : ""}`}>
+                                {getDateLabel(dateKey)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">({pedidos.length})</span>
+                            </div>
+                            <span className="text-sm font-semibold">{formatCurrency(dateTotal)}</span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {pedidos.map((p) => {
+                              const createdDate = new Date(p.created_at);
+                              const dateStr = createdDate.toLocaleDateString("es-AR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                timeZone: "America/Argentina/Buenos_Aires",
+                              });
+                              const timeStr = createdDate.toLocaleTimeString("es-AR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                timeZone: "America/Argentina/Buenos_Aires",
+                              });
+
+                              return (
+                                <div
+                                  key={p.id}
+                                  className={`rounded-lg border px-4 py-3 transition-colors hover:bg-muted/30 cursor-pointer ${
+                                    isOverdue ? "border-red-200 dark:border-red-900/30" : ""
+                                  }`}
+                                  onClick={() => handleViewPedido(p)}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+                                        p.metodo_entrega === "envio"
+                                          ? "bg-blue-100 dark:bg-blue-900/30"
+                                          : "bg-emerald-100 dark:bg-emerald-900/30"
+                                      }`}>
+                                        {p.metodo_entrega === "envio" ? (
+                                          <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                        ) : (
+                                          <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium text-sm truncate">{p.nombre_cliente}</span>
+                                          <span className="font-mono text-xs text-muted-foreground">#{p.numero}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                                          <span className="flex items-center gap-1">
+                                            <Clock className="w-3 h-3" />
+                                            {dateStr} {timeStr}
+                                          </span>
+                                          {p.estado === "confirmado" && (
+                                            <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
+                                              Confirmado
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <span className="font-bold text-sm shrink-0">{formatCurrency(p.total)}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </>
