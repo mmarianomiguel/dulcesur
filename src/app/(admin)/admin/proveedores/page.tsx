@@ -192,7 +192,7 @@ export default function ProveedoresPage() {
   const pf = (key: keyof typeof pagoForm, value: string) => setPagoForm({ ...pagoForm, [key]: value });
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <PageHeader
         title="Proveedores"
         description={`${providers.length} proveedores registrados`}
@@ -201,7 +201,7 @@ export default function ProveedoresPage() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatCard title="Total proveedores" value={providers.length} icon={Truck} iconColor="text-primary" iconBg="bg-primary/10" />
         <StatCard title="Deuda total" value={formatCurrency(totalDebt)} icon={Truck} iconColor="text-orange-500" iconBg="bg-orange-500/10" />
         <StatCard title="Sin deuda" value={providers.filter((p) => p.saldo === 0).length} icon={Truck} iconColor="text-emerald-500" iconBg="bg-emerald-500/10" />

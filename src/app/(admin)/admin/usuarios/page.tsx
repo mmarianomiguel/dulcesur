@@ -165,7 +165,7 @@ export default function UsuariosPage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -173,7 +173,7 @@ export default function UsuariosPage() {
             <Users className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Usuarios</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Usuarios</h1>
             <p className="text-sm text-muted-foreground">
               Gestionar usuarios del sistema
             </p>

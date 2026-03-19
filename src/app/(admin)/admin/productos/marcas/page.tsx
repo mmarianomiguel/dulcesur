@@ -344,7 +344,7 @@ export default function MarcasPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <PageHeader
         title="Marcas y Categorías"
         description="Gestionar marcas, categorías y subcategorías de productos"
@@ -365,7 +365,7 @@ export default function MarcasPage() {
 
         <TabsContent value="marcas" className="space-y-4 mt-4">
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatCard title="Total marcas" value={marcas.length} icon={Tag} />
         <StatCard title="Con productos" value={marcas.filter((m) => m.producto_count > 0).length} icon={Package} iconColor="text-emerald-600" iconBg="bg-emerald-100" />
         <StatCard title="Sin productos" value={marcas.filter((m) => m.producto_count === 0).length} icon={Tag} iconColor="text-gray-400" iconBg="bg-gray-100" />

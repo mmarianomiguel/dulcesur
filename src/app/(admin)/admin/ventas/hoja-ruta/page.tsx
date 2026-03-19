@@ -428,7 +428,7 @@ export default function HojaDeRutaPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Nav Tabs */}
       <div className="bg-gray-100 rounded-xl p-1 inline-flex">
         {navTabs.map((tab) => (
@@ -451,7 +451,7 @@ export default function HojaDeRutaPage() {
         <div className="flex items-center gap-3">
           <Truck className="w-7 h-7 text-gray-700" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Entregas y Hoja de Ruta</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Entregas y Hoja de Ruta</h1>
             <p className="text-sm text-gray-500">Gestiona entregas pendientes, cobros y hoja de ruta</p>
           </div>
         </div>
@@ -538,7 +538,7 @@ export default function HojaDeRutaPage() {
           </div>
 
           {/* Historial stats */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
@@ -743,7 +743,7 @@ export default function HojaDeRutaPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
@@ -1013,7 +1013,7 @@ export default function HojaDeRutaPage() {
 
       {/* Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Package className="w-5 h-5" />

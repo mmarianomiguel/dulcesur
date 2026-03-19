@@ -355,11 +355,11 @@ export default function DashboardPage() {
   const periodLabel = filterMode === "diario" ? "del día" : filterMode === "mensual" ? "del mes" : "del período";
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm">Resumen de actividad — {getFilterLabel()}</p>
         </div>
         <Badge variant="outline" className="text-xs w-fit">DulceSur</Badge>
@@ -445,7 +445,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">

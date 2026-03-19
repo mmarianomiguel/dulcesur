@@ -491,7 +491,7 @@ export default function ComprasPage() {
   // ── NEW COMPRA FORM ──
   if (mode === "new") {
     return (
-      <div className="p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4">
           <Button
@@ -505,7 +505,7 @@ export default function ComprasPage() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
               Ingreso de Mercaderia
             </h1>
             <p className="text-muted-foreground text-sm">
@@ -977,7 +977,7 @@ export default function ComprasPage() {
   // ── DETAIL VIEW ──
   if (mode === "detail" && detailCompra) {
     return (
-      <div className="p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-6xl mx-auto">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -991,7 +991,7 @@ export default function ComprasPage() {
           </Button>
           <div className="flex-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
                 Compra {detailCompra.numero}
               </h1>
               <Badge
@@ -1130,10 +1130,10 @@ export default function ComprasPage() {
 
   // ── LIST VIEW ──
   return (
-    <div className="p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Compras</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Compras</h1>
           <p className="text-muted-foreground text-sm">
             Registro de compras a proveedores e ingreso de mercaderia
           </p>
@@ -1144,7 +1144,7 @@ export default function ComprasPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">

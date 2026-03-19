@@ -473,13 +473,13 @@ export default function PedidosProveedorPage() {
   // ── NEW PEDIDO FORM ──
   if (mode === "new") {
     return (
-      <div className="p-6 lg:p-8 space-y-6">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => { resetForm(); setMode("list"); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Nuevo Pedido a Proveedor</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Nuevo Pedido a Proveedor</h1>
             <p className="text-muted-foreground text-sm">Selecciona proveedor y genera la lista de productos faltantes</p>
           </div>
         </div>
@@ -634,14 +634,14 @@ export default function PedidosProveedorPage() {
   // ── DETAIL VIEW ──
   if (mode === "detail" && detailPedido) {
     return (
-      <div className="p-6 lg:p-8 space-y-6">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => { setMode("list"); setDetailPedido(null); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
                 Pedido {detailPedido.numero || ""}
               </h1>
               <Badge variant={estadoBadgeVariant(detailPedido.estado)} className="text-xs">
@@ -735,13 +735,13 @@ export default function PedidosProveedorPage() {
     const selectedTotal = generatedGroups.filter((g) => g.selected).reduce((a, g) => a + g.total, 0);
 
     return (
-      <div className="p-6 lg:p-8 space-y-6">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => { setGeneratedGroups([]); setMode("list"); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Generar Pedidos Automaticos</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Generar Pedidos Automaticos</h1>
             <p className="text-muted-foreground text-sm">Productos con stock por debajo del minimo, agrupados por proveedor</p>
           </div>
         </div>
@@ -834,10 +834,10 @@ export default function PedidosProveedorPage() {
 
   // ── LIST VIEW ──
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pedidos a Proveedores</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Pedidos a Proveedores</h1>
           <p className="text-muted-foreground text-sm">Gestiona tus pedidos de compra</p>
         </div>
         <div className="flex gap-2">
@@ -858,7 +858,7 @@ export default function PedidosProveedorPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">

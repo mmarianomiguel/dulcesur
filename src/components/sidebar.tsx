@@ -295,9 +295,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         className={cn(
           "flex flex-col h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-300 ease-in-out",
           collapsed ? "w-[72px]" : "w-[260px]",
-          // Mobile: fixed overlay sidebar, hidden by default
+          // Mobile: fixed overlay sidebar, completely hidden when closed
           "fixed z-50 lg:relative lg:z-auto",
-          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          !mobileOpen && "max-lg:hidden"
         )}
       >
         {/* Logo */}

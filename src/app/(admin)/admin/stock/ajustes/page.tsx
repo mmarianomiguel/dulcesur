@@ -268,11 +268,11 @@ export default function AjustesStockPage() {
   );
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Ajustes de Stock</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Ajustes de Stock</h1>
           <p className="text-muted-foreground text-sm">Registro de ajustes de inventario</p>
         </div>
         <Button onClick={openNew}>
@@ -333,7 +333,7 @@ export default function AjustesStockPage() {
           <p>No hay ajustes registrados</p>
         </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
+        <div className="border rounded-lg overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50 text-muted-foreground text-xs">

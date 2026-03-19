@@ -519,7 +519,7 @@ export default function EditarPreciosPage() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Editar Precios</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Editar Precios</h1>
             <p className="text-sm text-muted-foreground">
               Edici&oacute;n r&aacute;pida de precios de productos
             </p>

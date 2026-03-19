@@ -217,10 +217,10 @@ export default function ResumenVendedorPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
             Resumen por Vendedor
           </h1>
           <p className="text-muted-foreground">
@@ -236,7 +236,7 @@ export default function ResumenVendedorPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Desde</Label>
               <Input
@@ -283,7 +283,7 @@ export default function ResumenVendedorPage() {
       ) : (
         <>
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -468,7 +468,7 @@ export default function ResumenVendedorPage() {
               </DialogHeader>
               {detailVendedor && (
                 <div className="space-y-4 min-w-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">
                         Total Vendido

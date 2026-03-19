@@ -404,11 +404,11 @@ export default function DescuentosPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Descuentos</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Descuentos</h1>
           <p className="text-sm text-muted-foreground">Gestión de descuentos y promociones</p>
         </div>
         <Button onClick={openCreate}>
@@ -418,7 +418,7 @@ export default function DescuentosPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">Total descuentos</div>
@@ -1044,7 +1044,7 @@ export default function DescuentosPage() {
               {/* Presentación */}
               <div className="space-y-2">
                 <Label>Presentación</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {[
                     { value: "todas", label: "Todas las presentaciones" },
                     { value: "unidad", label: "Solo unidad" },

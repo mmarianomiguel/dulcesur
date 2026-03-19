@@ -986,7 +986,7 @@ export default function ListaPreciosPage() {
         </div>
       </div>
 
-      <div className="p-6 space-y-5">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-5">
         {/* Search + filters */}
         <div className="bg-card border border-border rounded-xl p-4">
           <div className="flex gap-3 items-end">

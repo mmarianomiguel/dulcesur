@@ -253,10 +253,10 @@ export default function ReportesPage() {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Reportes</h1>
           <p className="text-muted-foreground text-sm">Analisis de ventas, compras y stock</p>
         </div>
         <div className="flex items-center gap-2">

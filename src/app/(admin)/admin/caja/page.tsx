@@ -427,7 +427,7 @@ export default function CajaPage() {
   // ─── No turno open: show open button ───
   if (!turnoLoading && !turno) {
     return (
-      <div className="p-6 lg:p-8 space-y-6">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         <PageHeader
           title="Caja Diaria"
           description={new Date().toLocaleDateString("es-AR", {
@@ -604,7 +604,7 @@ export default function CajaPage() {
 
   // ─── Turno open: main view ───
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <PageHeader
         title="Caja Diaria"
         description={new Date().toLocaleDateString("es-AR", {

@@ -149,13 +149,13 @@ export default function ListasPreciosPage() {
   // Detail view
   if (detailLista) {
     return (
-      <div className="p-6 lg:p-8 space-y-6">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <Button variant="ghost" size="sm" className="mb-2" onClick={() => setDetailLista(null)}>
               &larr; Volver
             </Button>
-            <h1 className="text-2xl font-bold">{detailLista.nombre}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">{detailLista.nombre}</h1>
             <p className="text-sm text-muted-foreground">
               Ajuste general: <strong>{detailLista.porcentaje_ajuste > 0 ? "+" : ""}{detailLista.porcentaje_ajuste}%</strong>
               {detailLista.descripcion && ` | ${detailLista.descripcion}`}
@@ -244,10 +244,10 @@ export default function ListasPreciosPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Listas de Precios</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Listas de Precios</h1>
           <p className="text-muted-foreground text-sm">{listas.length} listas configuradas</p>
         </div>
         <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nueva Lista</Button>

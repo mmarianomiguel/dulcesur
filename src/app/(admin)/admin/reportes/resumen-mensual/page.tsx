@@ -154,10 +154,10 @@ export default function ResumenMensualPage() {
   const totalEgresos = useMemo(() => egresosPorPago.reduce((a, e) => a + e.total, 0), [egresosPorPago]);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Resumen Mensual</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Resumen Mensual</h1>
           <p className="text-muted-foreground text-sm">{MESES[Number(mes) - 1]} {anio}</p>
         </div>
         <div className="flex items-center gap-2">

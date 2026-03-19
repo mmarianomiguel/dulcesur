@@ -119,9 +119,9 @@ export default function FooterConfigPage() {
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 max-w-4xl">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Footer y Páginas de Info</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Footer y Páginas de Info</h1>
         <p className="text-muted-foreground text-sm">Configura el pie de página y las páginas de información de la tienda</p>
       </div>
 

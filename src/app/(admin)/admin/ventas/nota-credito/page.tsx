@@ -516,10 +516,10 @@ export default function NotaCreditoPage() {
   );
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Notas de Crédito</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Notas de Crédito</h1>
           <p className="text-muted-foreground text-sm">Crear y consultar notas de crédito</p>
         </div>
         <Badge variant="outline"><FileMinus className="w-3.5 h-3.5 mr-1" />NC</Badge>

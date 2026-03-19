@@ -569,10 +569,10 @@ export default function ClientesPage() {
   const f = (key: keyof typeof form, value: string) => setForm({ ...form, [key]: value });
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Clientes</h1>
           <p className="text-muted-foreground text-sm">{clients.length} clientes registrados</p>
         </div>
         <div className="flex gap-2">
@@ -609,7 +609,7 @@ export default function ClientesPage() {
 
       {activeTab === "listado" && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card>
               <CardContent className="pt-6 flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="w-5 h-5 text-primary" /></div>
@@ -799,7 +799,7 @@ export default function ClientesPage() {
 
       {activeTab === "cobranzas" && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-6 flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="w-5 h-5 text-primary" /></div>

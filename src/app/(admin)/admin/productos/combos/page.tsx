@@ -283,10 +283,10 @@ export default function CombosPage() {
   );
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Productos Combo</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Productos Combo</h1>
           <p className="text-muted-foreground text-sm">{combos.length} combos activos</p>
         </div>
         <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo Combo</Button>

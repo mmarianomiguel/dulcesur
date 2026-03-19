@@ -528,14 +528,14 @@ export default function RemitosPage() {
   const montoTotal = remitos.reduce((a, r) => a + r.total, 0);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Remitos</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Remitos</h1>
         <p className="text-muted-foreground text-sm">{totalRemitos} remitos encontrados</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><FileText className="w-5 h-5 text-primary" /></div>
