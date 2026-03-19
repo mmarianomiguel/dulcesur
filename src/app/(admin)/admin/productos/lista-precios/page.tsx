@@ -63,10 +63,13 @@ interface Product {
   id: string;
   categoria: string;
   subcategoria: string;
+  fechaActualizacion: string;
 }
 
 interface Filters {
   search: string;
+  categoria: string;
+  subcategoria: string;
   marca: string;
   enOferta: string;
   cajaEnOferta: string;
@@ -123,7 +126,7 @@ interface PdfConfig {
 type PdfStyle = "cartel" | "lista" | "combinado" | "oferta" | "poster";
 type ConfigTab = "general" | PdfStyle;
 
-const DEFAULT_FILTERS: Filters = { search: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "" };
+const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "" };
 
 const DEFAULT_CONFIG: PdfConfig = {
   porcentajeTransferencia: 2,
@@ -280,6 +283,10 @@ export default function ListaPreciosPage() {
       const dbMarca = p.marcas?.nombre || "";
       const clasificacion = clasificarProducto(p.nombre);
 
+      // Detect recent price modification (last 7 days)
+      const fechaAct = p.fecha_actualizacion || "";
+      const isRecent = fechaAct ? (Date.now() - new Date(fechaAct).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
+
       return {
         nombre: p.nombre,
         precioUnitario,
@@ -292,10 +299,11 @@ export default function ListaPreciosPage() {
         precioPorCaja: precioCaja > 0,
         unidadesCaja,
         hayStock: p.stock > 0,
-        aumento: false,
+        aumento: isRecent,
         id: p.id,
         categoria: dbCategoria || clasificacion.categoria,
         subcategoria: clasificacion.subcategoria,
+        fechaActualizacion: fechaAct,
       };
     });
 
@@ -312,6 +320,8 @@ export default function ListaPreciosPage() {
 
   const activeFilterCount = useMemo(() => {
     let c = 0;
+    if (filters.categoria) c++;
+    if (filters.subcategoria) c++;
     if (filters.marca) c++;
     if (filters.enOferta) c++;
     if (filters.cajaEnOferta) c++;
@@ -322,10 +332,17 @@ export default function ListaPreciosPage() {
   }, [filters]);
 
   const marcas = useMemo(() => [...new Set(products.map((p) => p.marca).filter(Boolean))].sort(), [products]);
+  const categorias = useMemo(() => [...new Set(products.map((p) => p.categoria).filter(Boolean))].sort(), [products]);
+  const subcategorias = useMemo(() => {
+    const prods = filters.categoria ? products.filter((p) => p.categoria === filters.categoria) : products;
+    return [...new Set(prods.map((p) => p.subcategoria).filter(Boolean))].sort();
+  }, [products, filters.categoria]);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
       if (filters.search && !p.nombre.toLowerCase().includes(filters.search.toLowerCase())) return false;
+      if (filters.categoria && p.categoria !== filters.categoria) return false;
+      if (filters.subcategoria && p.subcategoria !== filters.subcategoria) return false;
       if (filters.marca && p.marca !== filters.marca) return false;
       if (filters.enOferta === "si" && !p.enOferta) return false;
       if (filters.enOferta === "no" && p.enOferta) return false;
@@ -1002,6 +1019,20 @@ export default function ListaPreciosPage() {
             <div className="mt-4 pt-4 border-t border-border">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                 <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Categoria</label>
+                  <select value={filters.categoria} onChange={(e) => { updateFilter("categoria", e.target.value); updateFilter("subcategoria", ""); }} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                    <option value="">Todas</option>
+                    {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Subcategoria</label>
+                  <select value={filters.subcategoria} onChange={(e) => updateFilter("subcategoria", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                    <option value="">Todas</option>
+                    {subcategorias.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Marca</label>
                   <select value={filters.marca} onChange={(e) => updateFilter("marca", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="">Todas</option>
@@ -1063,6 +1094,7 @@ export default function ListaPreciosPage() {
                 <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">P. Oferta</th>
                 <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Uds/Caja</th>
                 <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Stock</th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Fecha mod.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -1099,6 +1131,9 @@ export default function ListaPreciosPage() {
                       ) : (
                         <span className="inline-block w-2 h-2 rounded-full bg-red-400"></span>
                       )}
+                    </td>
+                    <td className="px-3 py-3 text-center text-xs text-muted-foreground">
+                      {p.fechaActualizacion ? new Date(p.fechaActualizacion + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
                     </td>
                   </tr>
                 );

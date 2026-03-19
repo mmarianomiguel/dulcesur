@@ -24,6 +24,8 @@ import {
   Banknote,
   Loader2,
   Calendar,
+  ShoppingCart,
+  Truck,
 } from "lucide-react";
 import {
   BarChart,
@@ -96,6 +98,18 @@ export default function DashboardPage() {
   const [paymentBreakdown, setPaymentBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [monthlyData, setMonthlyData] = useState<{ name: string; ventas: number; egresos: number }[]>([]);
   const [ventasPorCategoria, setVentasPorCategoria] = useState<{ name: string; value: number }[]>([]);
+
+  // Web orders
+  interface PedidoWeb {
+    id: string;
+    numero: string;
+    nombre_cliente: string;
+    metodo_entrega: string;
+    total: number;
+    fecha_entrega: string | null;
+  }
+  const [pedidosHoy, setPedidosHoy] = useState<PedidoWeb[]>([]);
+  const [pedidosProgramados, setPedidosProgramados] = useState<Record<string, PedidoWeb[]>>({});
 
   // ─── Compute date range from filter ───
   const getDateRange = useCallback((): { start: string; end: string } => {
@@ -271,6 +285,30 @@ export default function DashboardPage() {
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
     );
+
+    // Web orders - pending for today
+    const today = todayARG();
+    const { data: pedHoy } = await supabase
+      .from("pedidos_tienda")
+      .select("id, numero, nombre_cliente, metodo_entrega, total, fecha_entrega")
+      .eq("estado", "pendiente")
+      .eq("fecha_entrega", today);
+    setPedidosHoy((pedHoy as PedidoWeb[]) || []);
+
+    // Web orders - scheduled (future)
+    const { data: pedFuturo } = await supabase
+      .from("pedidos_tienda")
+      .select("id, numero, nombre_cliente, metodo_entrega, total, fecha_entrega")
+      .eq("estado", "pendiente")
+      .gt("fecha_entrega", today)
+      .order("fecha_entrega");
+    const grouped: Record<string, PedidoWeb[]> = {};
+    (pedFuturo || []).forEach((p: any) => {
+      const key = p.fecha_entrega || "Sin fecha";
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(p as PedidoWeb);
+    });
+    setPedidosProgramados(grouped);
 
     setLoading(false);
   }, [getDateRange]);
@@ -456,6 +494,98 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Pedidos web pendientes de hoy */}
+          {pedidosHoy.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-orange-500" />
+                  Pedidos web pendientes de hoy
+                  <Badge variant="secondary" className="ml-1">{pedidosHoy.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-2 px-3 font-medium">N°</th>
+                        <th className="text-left py-2 px-3 font-medium">Cliente</th>
+                        <th className="text-left py-2 px-3 font-medium">Entrega</th>
+                        <th className="text-right py-2 px-3 font-medium">Total</th>
+                        <th className="text-left py-2 px-3 font-medium">Fecha entrega</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pedidosHoy.map((p) => (
+                        <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50">
+                          <td className="py-2 px-3 font-mono text-xs">#{p.numero}</td>
+                          <td className="py-2 px-3 font-medium">{p.nombre_cliente}</td>
+                          <td className="py-2 px-3">
+                            <Badge variant="outline" className="text-xs">{p.metodo_entrega === "envio" ? "Envio" : "Retiro"}</Badge>
+                          </td>
+                          <td className="py-2 px-3 text-right font-semibold">{formatCurrency(p.total)}</td>
+                          <td className="py-2 px-3 text-xs text-muted-foreground">
+                            {p.fecha_entrega ? new Date(p.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Pedidos programados (futuros) */}
+          {Object.keys(pedidosProgramados).length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-blue-500" />
+                  Pedidos programados
+                  <Badge variant="secondary" className="ml-1">
+                    {Object.values(pedidosProgramados).reduce((a, b) => a + b.length, 0)}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {Object.entries(pedidosProgramados).map(([fecha, pedidos]) => (
+                  <div key={fecha}>
+                    <p className="text-sm font-medium mb-2 text-muted-foreground">
+                      {new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
+                      <Badge variant="outline" className="ml-2 text-xs">{pedidos.length}</Badge>
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="text-left py-2 px-3 font-medium">N°</th>
+                            <th className="text-left py-2 px-3 font-medium">Cliente</th>
+                            <th className="text-left py-2 px-3 font-medium">Entrega</th>
+                            <th className="text-right py-2 px-3 font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pedidos.map((p) => (
+                            <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50">
+                              <td className="py-2 px-3 font-mono text-xs">#{p.numero}</td>
+                              <td className="py-2 px-3 font-medium">{p.nombre_cliente}</td>
+                              <td className="py-2 px-3">
+                                <Badge variant="outline" className="text-xs">{p.metodo_entrega === "envio" ? "Envio" : "Retiro"}</Badge>
+                              </td>
+                              <td className="py-2 px-3 text-right font-semibold">{formatCurrency(p.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

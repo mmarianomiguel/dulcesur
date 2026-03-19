@@ -236,6 +236,7 @@ export default function EditarPreciosPage() {
         supabase
           .from("productos")
           .select("id, nombre, codigo, stock, precio, costo, activo, categoria_id, subcategoria_id, marca_id")
+          .eq("activo", true)
           .order("nombre"),
         supabase.from("marcas").select("*").order("nombre"),
         supabase.from("categorias").select("*").order("nombre"),
