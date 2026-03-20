@@ -554,7 +554,7 @@ export default function VentasPage() {
               ...i,
               qty: 1,
               price: medioPres.precio,
-              code: medioPres.codigo || i.code,
+              code: medioPres.codigo || prod?.codigo || i.code,
               description: prod ? `${prod.nombre} (${medioPres.nombre || "Medio Cartón"})` : i.description,
               presentacion: medioPres.nombre || "Medio Carton",
               unidades_por_presentacion: Number(medioPres.cantidad) || 0.5,
@@ -567,21 +567,24 @@ export default function VentasPage() {
         if (qty < 1 && i.presentacion !== "Unidad" && i.unidades_por_presentacion > 1) {
           const pres = presentacionesMap[i.producto_id] || [];
           const unitPres = pres.find((p) => Number(p.cantidad) === 1);
-          if (unitPres) {
-            const prod = products.find((p) => p.id === i.producto_id);
+          const prod = products.find((p) => p.id === i.producto_id);
+          // Use unit presentation price/code if available, otherwise fall back to base product
+          const unitPrice = unitPres?.precio ?? prod?.precio ?? i.price;
+          const unitCode = unitPres?.codigo || prod?.codigo || i.code;
+          if (unitPres || prod) {
             const newQty = i.unidades_por_presentacion - 1;
             return {
               ...i,
               qty: newQty,
-              price: unitPres.precio,
-              code: unitPres.codigo || i.code,
+              price: unitPrice,
+              code: unitCode,
               description: prod?.nombre || i.description.replace(/\s*\(.*\)$/, ""),
               presentacion: "Unidad",
               unidades_por_presentacion: 1,
-              subtotal: unitPres.precio * newQty * (1 - i.discount / 100),
+              subtotal: unitPrice * newQty * (1 - i.discount / 100),
             };
           }
-          // No unit presentation available: don't go below 1
+          // No unit presentation or product found: don't go below 1
           return i;
         }
 
@@ -590,17 +593,19 @@ export default function VentasPage() {
             (i.unidades_por_presentacion < 1 || (i.presentacion && i.presentacion.toLowerCase().includes("medio")))) {
           const pres = presentacionesMap[i.producto_id] || [];
           const unitPres = pres.find((p) => Number(p.cantidad) === 1);
-          if (unitPres) {
-            const prod = products.find((p) => p.id === i.producto_id);
+          const prod = products.find((p) => p.id === i.producto_id);
+          const unitPrice = unitPres?.precio ?? prod?.precio ?? i.price;
+          const unitCode = unitPres?.codigo || prod?.codigo || i.code;
+          if (unitPres || prod) {
             return {
               ...i,
               qty: 1,
-              price: unitPres.precio,
-              code: unitPres.codigo || i.code,
+              price: unitPrice,
+              code: unitCode,
               description: prod?.nombre || i.description.replace(/\s*\(.*\)$/, ""),
               presentacion: "Unidad",
               unidades_por_presentacion: 1,
-              subtotal: unitPres.precio * (1 - i.discount / 100),
+              subtotal: unitPrice * (1 - i.discount / 100),
             };
           }
         }
