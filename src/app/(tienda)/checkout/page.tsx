@@ -484,7 +484,7 @@ export default function CheckoutPage() {
             cantidad: item.cantidad,
             precio_unitario: item.precio,
             subtotal: item.precio * item.cantidad,
-            unidad_medida: item.presentacion || "Unidad",
+            unidad_medida: "Un",
             presentacion: item.presentacion || "Unidad",
             unidades_por_presentacion: presUnitsVal,
           };

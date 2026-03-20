@@ -237,7 +237,7 @@ export function ReceiptPrintView({
                   )}
                 </td>
                 <td style={{ padding: "3px 4px", textAlign: "center" }}>
-                  {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : isBox ? `x${item.unidades_por_presentacion} un` : item.unit || "Un"}
+                  {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : isBox ? `x${item.unidades_por_presentacion} un` : (item.unit === "Unidad" ? "Un" : item.unit) || "Un"}
                 </td>
                 <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
                 {config.mostrarDescuento && (
@@ -263,7 +263,7 @@ export function ReceiptPrintView({
 
       {/* ── Footer totals ── */}
       <div style={{ borderTop: "2px solid #000", marginTop: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${config.fontSize}px`, gap: "30px" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${fsResumen - 2}px`, gap: "30px" }}>
           <div>
             <span>Subtotal: </span>
             <span style={{ fontWeight: "bold" }}>{fmtCur(sale.subtotal)}</span>

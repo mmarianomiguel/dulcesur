@@ -522,6 +522,21 @@ export default function ProductosPage() {
           throw new Error(error.message);
         }
         productId = editingProduct.id;
+
+        // Log stock movement if stock changed manually
+        if (editingProduct.stock !== form.stock) {
+          const diff = form.stock - editingProduct.stock;
+          await supabase.from("stock_movimientos").insert({
+            producto_id: editingProduct.id,
+            tipo: "ajuste",
+            cantidad_antes: editingProduct.stock,
+            cantidad_despues: form.stock,
+            cantidad: diff,
+            referencia: `Edición manual de producto`,
+            descripcion: `Stock ${diff > 0 ? "incrementado" : "reducido"} de ${editingProduct.stock} a ${form.stock} (${diff > 0 ? "+" : ""}${diff})`,
+            usuario: "Admin",
+          });
+        }
       } else {
         const { data, error } = await supabase.from("productos").insert(payload).select("id").single();
         if (error || !data) {
