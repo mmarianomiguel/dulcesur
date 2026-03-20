@@ -111,6 +111,7 @@ export interface Producto {
   categoria_id: string | null;
   stock: number;
   stock_minimo: number;
+  stock_maximo: number;
   precio: number;
   costo: number;
   unidad_medida: string;
@@ -252,6 +253,18 @@ export interface PagoProveedor {
   compra_id: string | null;
   observacion: string | null;
   created_at: string;
+}
+
+export interface ProductoProveedor {
+  id: string;
+  producto_id: string;
+  proveedor_id: string;
+  codigo_proveedor: string | null;
+  precio_proveedor: number | null;
+  es_principal: boolean;
+  cantidad_minima_pedido: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Numerador {

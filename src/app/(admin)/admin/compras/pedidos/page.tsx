@@ -198,7 +198,7 @@ export default function PedidosProveedorPage() {
 
     let query = supabase
       .from("productos")
-      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, categoria_id, producto_proveedores!inner(proveedor_id)")
+      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, categoria_id, producto_proveedores!inner(proveedor_id, precio_proveedor, cantidad_minima_pedido)")
       .eq("activo", true)
       .eq("producto_proveedores.proveedor_id", selectedProveedorId);
 
@@ -212,8 +212,9 @@ export default function PedidosProveedorPage() {
       const suggested: SuggestedItem[] = (data as any[])
         .filter((p) => p.stock < p.stock_minimo)
         .map((p) => {
-          const faltante = Math.max(0, (p.stock_maximo || 0) - (p.stock || 0));
-          const precio = p.costo || 0;
+          const pp = (p.producto_proveedores || [])[0];
+          const faltante = Math.max(pp?.cantidad_minima_pedido || 1, (p.stock_maximo || 0) - (p.stock || 0));
+          const precio = pp?.precio_proveedor || p.costo || 0;
           return {
             producto_id: p.id,
             codigo: p.codigo || "",
@@ -357,7 +358,7 @@ export default function PedidosProveedorPage() {
 
     const { data } = await supabase
       .from("productos")
-      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, producto_proveedores(proveedor_id, proveedores(nombre))")
+      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, producto_proveedores(proveedor_id, precio_proveedor, cantidad_minima_pedido, es_principal, proveedores(nombre))")
       .eq("activo", true);
 
     if (data) {
@@ -368,26 +369,27 @@ export default function PedidosProveedorPage() {
         const ppList = p.producto_proveedores || [];
         if (ppList.length === 0) continue;
 
-        for (const pp of ppList) {
-          const provId = pp.proveedor_id;
-          const provName = pp.proveedores?.nombre || "Sin nombre";
-          if (!groupMap[provId]) groupMap[provId] = { proveedor_nombre: provName, items: [] };
-          // Avoid duplicates within same provider
-          if (groupMap[provId].items.some((i: SuggestedItem) => i.producto_id === p.id)) continue;
-          const faltante = Math.max(0, (p.stock_maximo || 0) - (p.stock || 0));
-          const precio = p.costo || 0;
-          groupMap[provId].items.push({
-            producto_id: p.id,
-            codigo: p.codigo || "",
-            nombre: p.nombre,
-            stock: p.stock || 0,
-            stock_minimo: p.stock_minimo || 0,
-            stock_maximo: p.stock_maximo || 0,
-            faltante,
-            precio_unitario: precio,
-            subtotal: faltante * precio,
-          });
-        }
+        // Prefer principal provider, otherwise use first
+        const sorted = [...ppList].sort((a: any, b: any) => (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0));
+        const pp = sorted[0];
+
+        const provId = pp.proveedor_id;
+        const provName = pp.proveedores?.nombre || "Sin nombre";
+        if (!groupMap[provId]) groupMap[provId] = { proveedor_nombre: provName, items: [] };
+        if (groupMap[provId].items.some((i: SuggestedItem) => i.producto_id === p.id)) continue;
+        const faltante = Math.max(pp.cantidad_minima_pedido || 1, (p.stock_maximo || 0) - (p.stock || 0));
+        const precio = pp.precio_proveedor || p.costo || 0;
+        groupMap[provId].items.push({
+          producto_id: p.id,
+          codigo: p.codigo || "",
+          nombre: p.nombre,
+          stock: p.stock || 0,
+          stock_minimo: p.stock_minimo || 0,
+          stock_maximo: p.stock_maximo || 0,
+          faltante,
+          precio_unitario: precio,
+          subtotal: faltante * precio,
+        });
       }
 
       const groups = Object.entries(groupMap).map(([provId, g]) => ({

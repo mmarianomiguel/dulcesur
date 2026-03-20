@@ -99,6 +99,7 @@ const navigation: NavItem[] = [
     children: [
       { name: "Registrar", href: "/admin/compras" },
       { name: "Pedidos", href: "/admin/compras/pedidos", icon: ClipboardList },
+      { name: "Reposicion", href: "/admin/compras/reposicion" },
     ],
   },
   { name: "Caja", href: "/admin/caja", icon: Wallet },
