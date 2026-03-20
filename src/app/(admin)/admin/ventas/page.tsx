@@ -1436,7 +1436,7 @@ export default function VentasPage() {
               inputMode="numeric"
               placeholder="#"
               maxLength={4}
-              className="w-14 h-[46px] rounded-xl border bg-card px-2 text-center font-mono text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-[72px] h-[46px] rounded-xl border bg-card px-2 text-center font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               onChange={(e) => {
                 const code = e.target.value.replace(/\D/g, "").slice(0, 4);
                 e.target.value = code;
