@@ -82,23 +82,6 @@ interface PdfConfig {
   porcentajeTransferencia: number;
   webUrl: string;
   logoTamaño: number;
-  cartel_columnas: number;
-  cartel_filas: number;
-  cartel_tamañoNombre: number;
-  cartel_tamañoPrecio: number;
-  cartel_tamañoTransferencia: number;
-  cartel_mostrarTransferencia: boolean;
-  cartel_mostrarPrecioCaja: boolean;
-  cartel_mostrarLogo: boolean;
-  cartel_mostrarWeb: boolean;
-  cartel_mostrarFecha: boolean;
-  lista_columnas: number;
-  lista_filas: number;
-  lista_tamañoNombre: number;
-  lista_tamañoPrecioGrande: number;
-  lista_tamañoPrecioChico: number;
-  lista_mostrarCaja: boolean;
-  lista_mostrarFecha: boolean;
   combinado_columnas: number;
   combinado_filas: number;
   combinado_tamañoNombre: number;
@@ -107,15 +90,6 @@ interface PdfConfig {
   combinado_mostrarLogo: boolean;
   combinado_mostrarWeb: boolean;
   combinado_mostrarFecha: boolean;
-  oferta_columnas: number;
-  oferta_filas: number;
-  oferta_tamañoNombre: number;
-  oferta_tamañoPrecioOferta: number;
-  oferta_tamañoPrecioOriginal: number;
-  oferta_mostrarPrecioCaja: boolean;
-  oferta_mostrarLogo: boolean;
-  oferta_mostrarWeb: boolean;
-  oferta_mostrarFecha: boolean;
   poster_tamañoNombre: number;
   poster_tamañoPrecio: number;
   poster_mostrarLogo: boolean;
@@ -123,7 +97,7 @@ interface PdfConfig {
   poster_mostrarPrecioUnitario: boolean;
 }
 
-type PdfStyle = "cartel" | "lista" | "combinado" | "oferta" | "poster";
+type PdfStyle = "combinado" | "poster";
 type ConfigTab = "general" | PdfStyle;
 
 const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "" };
@@ -132,14 +106,8 @@ const DEFAULT_CONFIG: PdfConfig = {
   porcentajeTransferencia: 2,
   webUrl: "www.dulcesur.com",
   logoTamaño: 8,
-  cartel_columnas: 3, cartel_filas: 4, cartel_tamañoNombre: 10, cartel_tamañoPrecio: 28, cartel_tamañoTransferencia: 14,
-  cartel_mostrarTransferencia: true, cartel_mostrarPrecioCaja: true, cartel_mostrarLogo: true, cartel_mostrarWeb: true, cartel_mostrarFecha: true,
-  lista_columnas: 3, lista_filas: 4, lista_tamañoNombre: 9, lista_tamañoPrecioGrande: 14, lista_tamañoPrecioChico: 9,
-  lista_mostrarCaja: true, lista_mostrarFecha: true,
   combinado_columnas: 3, combinado_filas: 3, combinado_tamañoNombre: 9, combinado_tamañoPrecio: 22,
   combinado_mostrarPrecioCaja: true, combinado_mostrarLogo: true, combinado_mostrarWeb: true, combinado_mostrarFecha: true,
-  oferta_columnas: 3, oferta_filas: 4, oferta_tamañoNombre: 10, oferta_tamañoPrecioOferta: 26, oferta_tamañoPrecioOriginal: 12,
-  oferta_mostrarPrecioCaja: true, oferta_mostrarLogo: true, oferta_mostrarWeb: true, oferta_mostrarFecha: true,
   poster_tamañoNombre: 36, poster_tamañoPrecio: 72, poster_mostrarLogo: true, poster_mostrarWeb: true, poster_mostrarPrecioUnitario: true,
 };
 
@@ -408,190 +376,6 @@ export default function ListaPreciosPage() {
       const margin = 5;
       const today = new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
 
-      if (style === "cartel") {
-        const cols = config.cartel_columnas;
-        const rows = config.cartel_filas;
-        const perPage = cols * rows;
-        const cellW = (pageW - margin * 2) / cols;
-        const cellH = (pageH - margin * 2) / rows;
-
-        selectedProducts.forEach((product, idx) => {
-          if (idx > 0 && idx % perPage === 0) pdf.addPage();
-          const posInPage = idx % perPage;
-          const col = posInPage % cols;
-          const row = Math.floor(posInPage / cols);
-          const x = margin + col * cellW;
-          const y = margin + row * cellH;
-          const pad = 2;
-
-          pdf.setDrawColor(200);
-          pdf.setLineWidth(0.3);
-          pdf.rect(x, y, cellW, cellH);
-
-          if (config.cartel_mostrarLogo && logoBase64) {
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + pad, config.logoTamaño, config.logoTamaño); } catch {}
-          }
-
-          const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
-          const transferPrice = displayPrice * (1 + config.porcentajeTransferencia / 100);
-          const boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
-          const hasUnits = product.unidadesCaja > 0;
-
-          // Product name
-          const nameMaxW = cellW - pad * 2;
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.cartel_tamañoNombre);
-          const nameLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
-          const nameY = y + (config.cartel_mostrarLogo && logoBase64 ? config.logoTamaño + pad + 4 : pad + 4);
-          for (let li = 0; li < Math.min(nameLines.length, 2); li++) {
-            pdf.text(String(nameLines[li]), x + cellW / 2, nameY + li * (config.cartel_tamañoNombre * 0.45), { align: "center" });
-          }
-
-          if (config.cartel_mostrarPrecioCaja && hasUnits) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7);
-            pdf.setTextColor(120);
-            pdf.text(`Caja x${product.unidadesCaja} unidades`, x + cellW / 2, nameY + Math.min(nameLines.length, 2) * (config.cartel_tamañoNombre * 0.45) + 2, { align: "center" });
-            pdf.setTextColor(0);
-          }
-
-          // Main price
-          const priceY = y + cellH * 0.55;
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.cartel_tamañoPrecio);
-          pdf.text(`${formatPrice(displayPrice)}`, x + cellW / 2, priceY, { align: "center" });
-
-          // Transfer price
-          if (config.cartel_mostrarTransferencia) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7);
-            pdf.setTextColor(120);
-            pdf.text("Transferencia", x + cellW / 2, priceY + 6, { align: "center" });
-            pdf.setTextColor(0);
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(config.cartel_tamañoTransferencia);
-            pdf.text(`${formatPrice(transferPrice)}`, x + cellW / 2, priceY + 12, { align: "center" });
-          }
-
-          // Box price
-          if (config.cartel_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            const bpY = priceY + (config.cartel_mostrarTransferencia ? 19 : 8);
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7);
-            pdf.setTextColor(120);
-            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW / 2, bpY, { align: "center" });
-            pdf.setTextColor(0);
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(11);
-            pdf.text(`${formatPrice(boxPrice)}`, x + cellW / 2, bpY + 4, { align: "center" });
-          }
-
-          // Footer
-          const footerY = y + cellH - pad - 1;
-          pdf.setDrawColor(220);
-          pdf.setLineWidth(0.2);
-          pdf.line(x + pad, footerY - 3, x + cellW - pad, footerY - 3);
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(5);
-          pdf.setTextColor(150);
-          if (config.cartel_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerY);
-          if (config.cartel_mostrarFecha) pdf.text(today, x + cellW - pad - 1, footerY, { align: "right" });
-          pdf.setTextColor(0);
-        });
-      }
-
-      if (style === "lista") {
-        const cols = config.lista_columnas;
-        const rows = config.lista_filas;
-        const perPage = cols * rows;
-        const cellW = (pageW - margin * 2) / cols;
-        const cellH = (pageH - margin * 2) / rows;
-
-        selectedProducts.forEach((product, idx) => {
-          if (idx > 0 && idx % perPage === 0) pdf.addPage();
-          const posInPage = idx % perPage;
-          const col = posInPage % cols;
-          const row = Math.floor(posInPage / cols);
-          const x = margin + col * cellW;
-          const y = margin + row * cellH;
-          const pad = 2.5;
-
-          pdf.setDrawColor(200);
-          pdf.setLineWidth(0.3);
-          pdf.rect(x, y, cellW, cellH);
-
-          const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
-          const transferPrice = displayPrice * (1 + config.porcentajeTransferencia / 100);
-          const boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
-          const transferBox = boxPrice * (1 + config.porcentajeTransferencia / 100);
-          const hasUnits = product.unidadesCaja > 0;
-
-          // Name
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.lista_tamañoNombre);
-          const nameMaxW = cellW - pad * 2;
-          const nameLines: string[] = pdf.splitTextToSize(product.nombre.toUpperCase() + (hasUnits ? ` x${product.unidadesCaja}` : ""), nameMaxW);
-          let curY = y + pad + 3;
-          for (let li = 0; li < Math.min(nameLines.length, 2); li++) {
-            pdf.text(String(nameLines[li]), x + pad, curY + li * (config.lista_tamañoNombre * 0.45));
-          }
-          curY += Math.min(nameLines.length, 2) * (config.lista_tamañoNombre * 0.45) + 1;
-
-          pdf.setDrawColor(220);
-          pdf.setLineWidth(0.2);
-          pdf.line(x + pad, curY, x + cellW - pad, curY);
-          curY += 2;
-
-          // EFEC row
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(6);
-          pdf.setTextColor(140);
-          pdf.text("EFEC", x + pad, curY);
-          pdf.setTextColor(0);
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.lista_tamañoPrecioGrande);
-          pdf.text(`${formatPrice(displayPrice)}`, x + pad, curY + 5);
-
-          if (config.lista_mostrarCaja && hasUnits && boxPrice > 0) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(6);
-            pdf.setTextColor(140);
-            pdf.text(`x${product.unidadesCaja}`, x + cellW - pad, curY, { align: "right" });
-            pdf.setTextColor(0);
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(config.lista_tamañoPrecioChico);
-            pdf.text(`${formatPrice(boxPrice)}`, x + cellW - pad, curY + 5, { align: "right" });
-          }
-
-          curY += 8;
-
-          // TRANSF row
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(6);
-          pdf.setTextColor(140);
-          pdf.text("TRANSFERENCIA", x + pad, curY);
-          pdf.setTextColor(0);
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.lista_tamañoPrecioGrande);
-          pdf.text(`${formatPrice(transferPrice)}`, x + pad, curY + 5);
-
-          if (config.lista_mostrarCaja && hasUnits && boxPrice > 0) {
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(config.lista_tamañoPrecioChico);
-            pdf.text(`${formatPrice(transferBox)}`, x + cellW - pad, curY + 5, { align: "right" });
-          }
-
-          // Footer
-          if (config.lista_mostrarFecha) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(5);
-            pdf.setTextColor(150);
-            pdf.text(`Fecha Modificación: ${today}`, x + cellW / 2, y + cellH - pad, { align: "center" });
-            pdf.setTextColor(0);
-          }
-        });
-      }
-
       if (style === "combinado") {
         const cols = config.combinado_columnas;
         const rows = config.combinado_filas;
@@ -618,30 +402,30 @@ export default function ListaPreciosPage() {
 
           let curY = y + pad;
 
-          // Logo (top-left, object-contain: square constrained)
+          // Logo (top-left)
           if (config.combinado_mostrarLogo && logoBase64) {
             try { pdf.addImage(logoBase64, "PNG", x + pad, curY, logoSize, logoSize); } catch {}
           }
 
-          // Marca (top-left, next to or below logo)
+          // Marca (top-right corner)
           if (product.marca) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(5);
             pdf.setTextColor(130);
-            const marcaX = logoSize > 0 ? x + pad + logoSize + 1.5 : x + pad;
-            const marcaY = logoSize > 0 ? y + pad + 3 : curY + 3;
-            pdf.text(product.marca.toUpperCase(), marcaX, marcaY);
+            pdf.text(product.marca.toUpperCase(), x + cellW - pad, y + pad + 3, { align: "right" });
             pdf.setTextColor(0);
           }
 
           curY += Math.max(logoSize, 2) + 2;
 
-          // Product name - truncate to max 2 lines
+          // Product name - truncate to max 2 lines (lowered 3px)
           const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
           const transferPrice = displayPrice * (1 + config.porcentajeTransferencia / 100);
           const boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
           const transferBox = boxPrice * (1 + config.porcentajeTransferencia / 100);
           const hasUnits = product.unidadesCaja > 0;
+
+          curY += 3; // lower product name 3px
 
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.combinado_tamañoNombre);
@@ -652,7 +436,6 @@ export default function ListaPreciosPage() {
           for (let li = 0; li < maxNameLines; li++) {
             let lineText = String(nameLines[li]);
             if (li === 1 && nameLines.length > 2) {
-              // Truncate with ellipsis
               while (pdf.getTextWidth(lineText + "...") > nameMaxW && lineText.length > 0) {
                 lineText = lineText.slice(0, -1);
               }
@@ -660,76 +443,66 @@ export default function ListaPreciosPage() {
             }
             pdf.text(lineText, x + cellW / 2, curY + li * nameLineH, { align: "center" });
           }
-          curY += maxNameLines * nameLineH;
+          curY += maxNameLines * nameLineH + 1;
 
-          // Caja info - small text below product name, left-aligned
-          if (hasUnits) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(5);
-            pdf.setTextColor(120);
-            pdf.text(`Caja x${product.unidadesCaja} unidades`, x + pad, curY + 1.5);
-            pdf.setTextColor(0);
-            curY += 4;
-          } else {
-            curY += 1;
-          }
-
-          // Big price - centered in remaining upper space
+          // Big price - centered
           const bigPriceH = config.combinado_tamañoPrecio * 0.4;
-          curY += 2;
+          curY += 1;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.combinado_tamañoPrecio);
           pdf.text(formatPrice(displayPrice), x + cellW / 2, curY + bigPriceH, { align: "center" });
-          curY += bigPriceH + config.combinado_tamañoPrecio * 0.15 + 2;
+          curY += bigPriceH + config.combinado_tamañoPrecio * 0.15 + 1;
 
           // Divider line
           pdf.setDrawColor(220);
           pdf.setLineWidth(0.2);
           pdf.line(x + pad, curY, x + cellW - pad, curY);
-          curY += 3;
+          curY += 2;
 
-          // Detail rows - use remaining space above footer
+          // Detail rows - raised closer to divider
           const detailEndY = y + cellH - footerH;
           const detailSpace = detailEndY - curY;
-          // Each row needs: label line (3mm) + price line (4mm) + gap (2mm) = ~9mm
-          const rowH = Math.max(8, Math.min(11, detailSpace / 2));
+          const rowH = Math.max(7, Math.min(10, detailSpace / 2));
 
-          // EFEC row
+          // EFEC row - unit price left, box qty + box price right
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
           pdf.text("Efect.", x + pad, curY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.text("Caja", x + cellW - pad, curY, { align: "right" });
+            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, curY, { align: "right" });
           }
           pdf.setTextColor(0);
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(Math.min(9, rowH - 2));
-          pdf.text(formatPrice(displayPrice), x + pad, curY + 4);
+          pdf.setFontSize(Math.min(9, rowH - 1));
+          pdf.text(formatPrice(displayPrice), x + pad, curY + 3.5);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.setFontSize(Math.min(7.5, rowH - 3));
-            pdf.text(formatPrice(boxPrice), x + cellW - pad, curY + 4, { align: "right" });
+            pdf.setFontSize(Math.min(7.5, rowH - 2));
+            pdf.text(formatPrice(boxPrice), x + cellW - pad, curY + 3.5, { align: "right" });
           }
 
           curY += rowH;
 
-          // TRANSF row
+          // TRANSF row - unit price left, box transfer price right
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
           pdf.text("Transf.", x + pad, curY);
+          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
+            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, curY, { align: "right" });
+          }
           pdf.setTextColor(0);
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(Math.min(9, rowH - 2));
+          pdf.setFontSize(Math.min(9, rowH - 1));
           pdf.setTextColor(100);
-          pdf.text(formatPrice(transferPrice), x + pad, curY + 4);
+          pdf.text(formatPrice(transferPrice), x + pad, curY + 3.5);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.setFontSize(Math.min(7.5, rowH - 3));
-            pdf.text(formatPrice(transferBox), x + cellW - pad, curY + 4, { align: "right" });
+            pdf.setFontSize(Math.min(7.5, rowH - 2));
+            pdf.text(formatPrice(transferBox), x + cellW - pad, curY + 3.5, { align: "right" });
           }
           pdf.setTextColor(0);
 
-          // Footer - fixed at bottom
+          // Footer - fixed at bottom, web URL bottom-left
           const footerY = y + cellH - pad;
           pdf.setDrawColor(220);
           pdf.setLineWidth(0.2);
@@ -739,100 +512,6 @@ export default function ListaPreciosPage() {
           pdf.setTextColor(150);
           if (config.combinado_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerY - 1);
           if (config.combinado_mostrarFecha) pdf.text(today, x + cellW - pad - 1, footerY - 1, { align: "right" });
-          pdf.setTextColor(0);
-        });
-      }
-
-      if (style === "oferta") {
-        const cols = config.oferta_columnas;
-        const rows = config.oferta_filas;
-        const perPage = cols * rows;
-        const cellW = (pageW - margin * 2) / cols;
-        const cellH = (pageH - margin * 2) / rows;
-
-        const ofertaProducts = selectedProducts.filter((p) => p.enOferta);
-        const toRender = ofertaProducts.length > 0 ? ofertaProducts : selectedProducts;
-
-        toRender.forEach((product, idx) => {
-          if (idx > 0 && idx % perPage === 0) pdf.addPage();
-          const posInPage = idx % perPage;
-          const col = posInPage % cols;
-          const row = Math.floor(posInPage / cols);
-          const x = margin + col * cellW;
-          const y = margin + row * cellH;
-          const pad = 2.5;
-
-          pdf.setDrawColor(200);
-          pdf.setLineWidth(0.3);
-          pdf.rect(x, y, cellW, cellH);
-
-          if (config.oferta_mostrarLogo && logoBase64) {
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + pad, config.logoTamaño, config.logoTamaño); } catch {}
-          }
-
-          // OFERTA badge
-          const badgeW = 18;
-          const badgeH = 5;
-          const badgeX = x + cellW - pad - badgeW;
-          const badgeY = y + pad;
-          pdf.setFillColor(220, 38, 38);
-          pdf.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, "F");
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(7);
-          pdf.setTextColor(255, 255, 255);
-          pdf.text("OFERTA", badgeX + badgeW / 2, badgeY + 3.5, { align: "center" });
-          pdf.setTextColor(0);
-
-          const displayPrice = product.precioUnitario;
-          const offerPrice = product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
-          const hasUnits = product.unidadesCaja > 0;
-
-          // Name
-          const nameY = y + pad + 12;
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.oferta_tamañoNombre);
-          const nameLines: string[] = pdf.splitTextToSize(product.nombre, cellW - pad * 2);
-          for (let li = 0; li < Math.min(nameLines.length, 2); li++) {
-            pdf.text(String(nameLines[li]), x + cellW / 2, nameY + li * (config.oferta_tamañoNombre * 0.45), { align: "center" });
-          }
-
-          if (config.oferta_mostrarPrecioCaja && hasUnits) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7);
-            pdf.setTextColor(120);
-            pdf.text(`Caja x${product.unidadesCaja} unidades`, x + cellW / 2, nameY + Math.min(nameLines.length, 2) * (config.oferta_tamañoNombre * 0.45) + 2, { align: "center" });
-            pdf.setTextColor(0);
-          }
-
-          // Original price (crossed)
-          const origY = y + cellH * 0.55;
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(config.oferta_tamañoPrecioOriginal);
-          pdf.setTextColor(150);
-          const origText = `${formatPrice(displayPrice)}`;
-          pdf.text(origText, x + cellW / 2, origY, { align: "center" });
-          const origW = pdf.getTextWidth(origText);
-          pdf.setDrawColor(150);
-          pdf.setLineWidth(0.4);
-          pdf.line(x + cellW / 2 - origW / 2, origY - 1, x + cellW / 2 + origW / 2, origY - 1);
-
-          // Offer price
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.oferta_tamañoPrecioOferta);
-          pdf.setTextColor(220, 38, 38);
-          pdf.text(`${formatPrice(offerPrice)}`, x + cellW / 2, origY + 10, { align: "center" });
-          pdf.setTextColor(0);
-
-          // Footer
-          const footerY = y + cellH - pad - 1;
-          pdf.setDrawColor(220);
-          pdf.setLineWidth(0.2);
-          pdf.line(x + pad, footerY - 3, x + cellW - pad, footerY - 3);
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(5);
-          pdf.setTextColor(150);
-          if (config.oferta_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerY);
-          if (config.oferta_mostrarFecha) pdf.text(today, x + cellW - pad - 1, footerY, { align: "right" });
           pdf.setTextColor(0);
         });
       }
@@ -1201,67 +880,22 @@ export default function ListaPreciosPage() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 grid grid-cols-5 gap-4">
-              {/* Cartel */}
-              <button onClick={() => generatePDF("cartel")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
-                  <div className="text-center space-y-1">
-                    <p className="text-[6px] font-bold leading-tight">Producto Ejemplo</p>
-                    <p className="text-[5px] text-muted-foreground">Caja x12 unidades</p>
-                    <p className="text-xs font-bold">$1.200,00</p>
-                    <p className="text-[5px] text-muted-foreground">Transferencia</p>
-                    <p className="text-[7px] font-bold text-muted-foreground">$1.224,00</p>
-                  </div>
-                  <div className="border-t border-border mt-2 pt-1 flex justify-between">
-                    <span className="text-[4px] text-muted-foreground">www.dulcesur.com</span>
-                    <span className="text-[4px] text-muted-foreground">16/3/2026</span>
-                  </div>
-                </div>
-                <p className="font-semibold text-sm">Cartel de precio</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Precio grande, nombre y transferencia</p>
-              </button>
-
-              {/* Lista */}
-              <button onClick={() => generatePDF("lista")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30 font-mono">
-                  <p className="text-[5px] font-bold">PRODUCTO EJEMPLO x20</p>
-                  <div className="border-t border-border my-1"></div>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-[4px] text-muted-foreground">EFEC</p>
-                      <p className="text-[8px] font-bold">$ 48,49</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[4px] text-muted-foreground">x20</p>
-                      <p className="text-[6px] font-bold">$ 969,75</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center mt-0.5">
-                    <div>
-                      <p className="text-[4px] text-muted-foreground">TRANSFERENCIA</p>
-                      <p className="text-[8px] font-bold">$ 49,46</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[6px] font-bold">$ 989,14</p>
-                    </div>
-                  </div>
-                </div>
-                <p className="font-semibold text-sm">Lista detallada</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Efec, Transferencia, precio x caja</p>
-              </button>
-
-              {/* Combinado */}
+            <div className="p-6 grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+              {/* Carteles de precios */}
               <button onClick={() => generatePDF("combinado")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
                 <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="w-3 h-3 bg-muted-foreground/30 rounded-sm"></div>
+                    <span className="text-[4px] text-muted-foreground">MARCA</span>
+                  </div>
                   <div className="text-center">
                     <p className="text-[6px] font-bold leading-tight">Producto Ejemplo</p>
-                    <p className="text-[5px] text-muted-foreground">Caja x12 unidades</p>
                     <p className="text-[10px] font-bold my-0.5">$1.200,00</p>
                   </div>
                   <div className="border-t border-border mt-1 pt-1">
                     <div className="flex justify-between items-center">
                       <div>
-                        <p className="text-[4px] text-muted-foreground">EFEC</p>
+                        <p className="text-[4px] text-muted-foreground">Efect.</p>
                         <p className="text-[6px] font-bold">$1.200,00</p>
                       </div>
                       <div className="text-right">
@@ -1269,26 +903,23 @@ export default function ListaPreciosPage() {
                         <p className="text-[5px] font-bold text-muted-foreground">$14.400</p>
                       </div>
                     </div>
+                    <div className="flex justify-between items-center mt-0.5">
+                      <div>
+                        <p className="text-[4px] text-muted-foreground">Transf.</p>
+                        <p className="text-[6px] font-bold text-muted-foreground">$1.224,00</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[5px] font-bold text-muted-foreground">$14.688</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border-t border-border mt-1 pt-0.5 flex justify-between">
+                    <span className="text-[4px] text-muted-foreground">www.dulcesur.com</span>
+                    <span className="text-[4px] text-muted-foreground">20/3/2026</span>
                   </div>
                 </div>
-                <p className="font-semibold text-sm">Combinado</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Cartel + detalle Efec/Transf.</p>
-              </button>
-
-              {/* Oferta */}
-              <button onClick={() => generatePDF("oferta")} className="group border-2 border-border rounded-xl p-4 hover:border-red-500 transition-all text-left">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="bg-red-500 text-white text-[5px] font-bold px-1.5 py-0.5 rounded">OFERTA</span>
-                  </div>
-                  <div className="text-center space-y-0.5">
-                    <p className="text-[6px] font-bold leading-tight">Producto Ejemplo</p>
-                    <p className="text-[7px] text-muted-foreground line-through">$1.500,00</p>
-                    <p className="text-[12px] font-bold text-red-500">$1.200,00</p>
-                  </div>
-                </div>
-                <p className="font-semibold text-sm group-hover:text-red-500">Oferta</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Precio tachado + precio oferta</p>
+                <p className="font-semibold text-sm">Carteles de precios</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Precio grande + detalle Efec/Transf. + Caja</p>
               </button>
 
               {/* Poster */}
@@ -1324,15 +955,15 @@ export default function ListaPreciosPage() {
             </div>
 
             <div className="flex border-b border-border px-6 overflow-x-auto">
-              {(["general", "cartel", "lista", "combinado", "oferta", "poster"] as const).map((tab) => (
+              {(["general", "combinado", "poster"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setConfigTab(tab)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize whitespace-nowrap ${
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     configTab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {tab}
+                  {tab === "combinado" ? "Carteles de precios" : tab === "general" ? "General" : "Poster"}
                 </button>
               ))}
             </div>
@@ -1363,95 +994,6 @@ export default function ListaPreciosPage() {
                     <div className="mt-3">
                       <label className="block text-xs text-muted-foreground mb-1">Tamaño del logo ({config.logoTamaño}mm)</label>
                       <input type="range" min={4} max={20} step={1} value={config.logoTamaño} onChange={(e) => updateConfig("logoTamaño", Number(e.target.value))} className="w-full accent-primary" />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {configTab === "cartel" && (
-                <>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Grilla</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Columnas</label>
-                        <input type="number" min={1} max={5} value={config.cartel_columnas} onChange={(e) => updateConfig("cartel_columnas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Filas</label>
-                        <input type="number" min={1} max={12} value={config.cartel_filas} onChange={(e) => updateConfig("cartel_filas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">{config.cartel_columnas * config.cartel_filas} carteles por página</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Tamaños de fuente</h3>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Nombre (pt)</label>
-                        <input type="number" min={6} max={20} value={config.cartel_tamañoNombre} onChange={(e) => updateConfig("cartel_tamañoNombre", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Precio (pt)</label>
-                        <input type="number" min={10} max={48} value={config.cartel_tamañoPrecio} onChange={(e) => updateConfig("cartel_tamañoPrecio", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Transf. (pt)</label>
-                        <input type="number" min={6} max={30} value={config.cartel_tamañoTransferencia} onChange={(e) => updateConfig("cartel_tamañoTransferencia", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Elementos visibles</h3>
-                    <div className="space-y-3">
-                      <ToggleSwitch checked={config.cartel_mostrarTransferencia} onChange={() => updateConfig("cartel_mostrarTransferencia", !config.cartel_mostrarTransferencia)} label="Precio transferencia" />
-                      <ToggleSwitch checked={config.cartel_mostrarPrecioCaja} onChange={() => updateConfig("cartel_mostrarPrecioCaja", !config.cartel_mostrarPrecioCaja)} label="Unidades por caja" />
-                      <ToggleSwitch checked={config.cartel_mostrarLogo} onChange={() => updateConfig("cartel_mostrarLogo", !config.cartel_mostrarLogo)} label="Logo" />
-                      <ToggleSwitch checked={config.cartel_mostrarWeb} onChange={() => updateConfig("cartel_mostrarWeb", !config.cartel_mostrarWeb)} label="Página web" />
-                      <ToggleSwitch checked={config.cartel_mostrarFecha} onChange={() => updateConfig("cartel_mostrarFecha", !config.cartel_mostrarFecha)} label="Fecha actual" />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {configTab === "lista" && (
-                <>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Grilla</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Columnas</label>
-                        <input type="number" min={1} max={5} value={config.lista_columnas} onChange={(e) => updateConfig("lista_columnas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Filas</label>
-                        <input type="number" min={1} max={12} value={config.lista_filas} onChange={(e) => updateConfig("lista_filas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">{config.lista_columnas * config.lista_filas} etiquetas por página</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Tamaños de fuente</h3>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Nombre (pt)</label>
-                        <input type="number" min={6} max={20} value={config.lista_tamañoNombre} onChange={(e) => updateConfig("lista_tamañoNombre", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">P. Grande (pt)</label>
-                        <input type="number" min={6} max={30} value={config.lista_tamañoPrecioGrande} onChange={(e) => updateConfig("lista_tamañoPrecioGrande", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">P. Chico (pt)</label>
-                        <input type="number" min={6} max={20} value={config.lista_tamañoPrecioChico} onChange={(e) => updateConfig("lista_tamañoPrecioChico", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Elementos visibles</h3>
-                    <div className="space-y-3">
-                      <ToggleSwitch checked={config.lista_mostrarCaja} onChange={() => updateConfig("lista_mostrarCaja", !config.lista_mostrarCaja)} label="Precio por caja" />
-                      <ToggleSwitch checked={config.lista_mostrarFecha} onChange={() => updateConfig("lista_mostrarFecha", !config.lista_mostrarFecha)} label="Fecha actual" />
                     </div>
                   </div>
                 </>
@@ -1493,51 +1035,6 @@ export default function ListaPreciosPage() {
                       <ToggleSwitch checked={config.combinado_mostrarLogo} onChange={() => updateConfig("combinado_mostrarLogo", !config.combinado_mostrarLogo)} label="Logo" />
                       <ToggleSwitch checked={config.combinado_mostrarWeb} onChange={() => updateConfig("combinado_mostrarWeb", !config.combinado_mostrarWeb)} label="Página web" />
                       <ToggleSwitch checked={config.combinado_mostrarFecha} onChange={() => updateConfig("combinado_mostrarFecha", !config.combinado_mostrarFecha)} label="Fecha actual" />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {configTab === "oferta" && (
-                <>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Grilla</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Columnas</label>
-                        <input type="number" min={1} max={5} value={config.oferta_columnas} onChange={(e) => updateConfig("oferta_columnas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Filas</label>
-                        <input type="number" min={1} max={12} value={config.oferta_filas} onChange={(e) => updateConfig("oferta_filas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">{config.oferta_columnas * config.oferta_filas} carteles por página</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Tamaños de fuente</h3>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Nombre (pt)</label>
-                        <input type="number" min={6} max={20} value={config.oferta_tamañoNombre} onChange={(e) => updateConfig("oferta_tamañoNombre", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">P. Oferta (pt)</label>
-                        <input type="number" min={10} max={48} value={config.oferta_tamañoPrecioOferta} onChange={(e) => updateConfig("oferta_tamañoPrecioOferta", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">P. Original (pt)</label>
-                        <input type="number" min={6} max={30} value={config.oferta_tamañoPrecioOriginal} onChange={(e) => updateConfig("oferta_tamañoPrecioOriginal", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Elementos visibles</h3>
-                    <div className="space-y-3">
-                      <ToggleSwitch checked={config.oferta_mostrarPrecioCaja} onChange={() => updateConfig("oferta_mostrarPrecioCaja", !config.oferta_mostrarPrecioCaja)} label="Unidades por caja" />
-                      <ToggleSwitch checked={config.oferta_mostrarLogo} onChange={() => updateConfig("oferta_mostrarLogo", !config.oferta_mostrarLogo)} label="Logo" />
-                      <ToggleSwitch checked={config.oferta_mostrarWeb} onChange={() => updateConfig("oferta_mostrarWeb", !config.oferta_mostrarWeb)} label="Página web" />
-                      <ToggleSwitch checked={config.oferta_mostrarFecha} onChange={() => updateConfig("oferta_mostrarFecha", !config.oferta_mostrarFecha)} label="Fecha actual" />
                     </div>
                   </div>
                 </>

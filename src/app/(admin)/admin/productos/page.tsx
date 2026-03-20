@@ -287,7 +287,7 @@ export default function ProductosPage() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     const [{ data }, { data: allPres }, { data: allCI }] = await Promise.all([
-      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, descripcion_detallada, visibilidad, updated_at, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, descripcion_detallada, visibilidad, updated_at, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(0, 9999),
       supabase.from("presentaciones").select("producto_id, sku, nombre, cantidad"),
       supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)"),
     ]);

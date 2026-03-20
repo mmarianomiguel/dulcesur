@@ -255,8 +255,8 @@ export default function VentasPage() {
   // ---------- data fetch ----------
   const fetchData = useCallback(async () => {
     const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }] = await Promise.all([
-      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
-      supabase.from("clientes").select("id, nombre, email, telefono, domicilio, saldo, situacion_iva, tipo_documento, numero_documento, tipo_factura, razon_social, domicilio_fiscal, provincia, localidad, codigo_postal, vendedor_id").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("*").eq("activo", true).order("nombre").range(0, 9999),
+      supabase.from("clientes").select("id, nombre, email, telefono, domicilio, saldo, situacion_iva, tipo_documento, numero_documento, tipo_factura, razon_social, domicilio_fiscal, provincia, localidad, codigo_postal, vendedor_id, codigo_cliente").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
     ]);
@@ -368,7 +368,8 @@ export default function VentasPage() {
       (c) =>
         c.nombre.toLowerCase().includes(term) ||
         (c.email || "").toLowerCase().includes(term) ||
-        (c.telefono || "").includes(clientSearch)
+        (c.telefono || "").includes(clientSearch) ||
+        ((c as any).codigo_cliente || "").includes(clientSearch)
     );
   }, [clients, clientSearch]);
 
@@ -2312,12 +2313,12 @@ export default function VentasPage() {
                 }}
               >
                 <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0">
-                  {initials(c.nombre)}
+                  {(c as any).codigo_cliente || initials(c.nombre)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{c.nombre}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {[c.email, c.telefono].filter(Boolean).join(" - ")}
+                    {[(c as any).codigo_cliente ? `#${(c as any).codigo_cliente}` : null, c.email, c.telefono].filter(Boolean).join(" - ")}
                   </p>
                 </div>
                 <Button size="sm" variant="outline" className="shrink-0 text-xs">

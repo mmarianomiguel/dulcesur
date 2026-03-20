@@ -122,6 +122,7 @@ export interface Producto {
 
 export interface Cliente {
   id: string;
+  codigo_cliente: string | null;
   nombre: string;
   tipo_documento: string | null;
   numero_documento: string | null;

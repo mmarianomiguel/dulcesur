@@ -88,7 +88,7 @@ function getAvailableDates(
   diasEntrega: string[],
   maxDias: number,
   horaCorte: string
-): { dayAbbr: string; dayNum: number; monthAbbr: string; value: string }[] {
+): { dayAbbr: string; dayNum: number; monthAbbr: string; value: string; isToday: boolean }[] {
   const dayMap: Record<string, number> = {
     domingo: 0, lunes: 1, martes: 2, miercoles: 3,
     miércoles: 3, jueves: 4, viernes: 5, sabado: 6, sábado: 6,
@@ -101,16 +101,19 @@ function getAvailableDates(
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const startOffset = nowMinutes < cutoffMinutes ? 0 : 1;
 
-  const dates: { dayAbbr: string; dayNum: number; monthAbbr: string; value: string }[] = [];
+  const todayStr = now.toISOString().split("T")[0];
+  const dates: { dayAbbr: string; dayNum: number; monthAbbr: string; value: string; isToday: boolean }[] = [];
   for (let i = startOffset; i <= maxDias && dates.length < 10; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     if (allowedDays.includes(d.getDay())) {
+      const value = d.toISOString().split("T")[0];
       dates.push({
         dayAbbr: DAY_ABBR[d.getDay()],
         dayNum: d.getDate(),
         monthAbbr: MONTH_ABBR[d.getMonth()],
-        value: d.toISOString().split("T")[0],
+        value,
+        isToday: value === todayStr,
       });
     }
   }
@@ -383,7 +386,7 @@ export default function CheckoutPage() {
     if (metodoEntrega === "envio" && showNewAddress && (!addr.calle || !addr.numero || !addr.localidad)) {
       errs.push("Completá la dirección de envío.");
     }
-    if (!fechaEntrega) errs.push("Seleccioná una fecha de entrega.");
+    if (metodoEntrega === "envio" && !fechaEntrega) errs.push("Seleccioná una fecha de entrega.");
     if (metodoPago === "mixto" && Math.abs((mixtoEfectivo + mixtoTransferencia) - (subtotal + costoEnvio)) > 0.01) {
       errs.push("La suma de efectivo y transferencia debe igualar el total.");
     }
@@ -941,7 +944,8 @@ export default function CheckoutPage() {
             </p>
           </div>
 
-          {/* 4. Fecha de entrega */}
+          {/* 4. Fecha de entrega - solo para envío a domicilio */}
+          {metodoEntrega === "envio" && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
@@ -956,12 +960,17 @@ export default function CheckoutPage() {
                   <button
                     key={d.value}
                     onClick={() => setFechaEntrega(d.value)}
-                    className={`flex-shrink-0 flex flex-col items-center px-4 py-3 rounded-xl border-2 transition min-w-[72px] ${
+                    className={`flex-shrink-0 flex flex-col items-center px-4 py-3 rounded-xl border-2 transition min-w-[72px] relative ${
                       fechaEntrega === d.value
                         ? "border-pink-500 bg-pink-50"
                         : "border-gray-200 hover:border-pink-300"
                     }`}
                   >
+                    {d.isToday && (
+                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-pink-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full leading-none">
+                        hoy
+                      </span>
+                    )}
                     <span className={`text-xs font-medium ${fechaEntrega === d.value ? "text-pink-600" : "text-gray-500"}`}>
                       {d.dayAbbr}
                     </span>
@@ -978,6 +987,7 @@ export default function CheckoutPage() {
               <p className="text-sm text-gray-500">No hay fechas de entrega disponibles.</p>
             )}
           </div>
+          )}
         </div>
 
         {/* ===== RIGHT COLUMN - Resumen del Pedido ===== */}

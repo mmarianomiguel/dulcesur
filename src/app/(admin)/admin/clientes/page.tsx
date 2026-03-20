@@ -62,6 +62,7 @@ function formatCurrency(value: number) {
 }
 
 const emptyForm = {
+  codigo_cliente: "",
   nombre: "",
   tipo_documento: "",
   numero_documento: "",
@@ -158,7 +159,7 @@ export default function ClientesPage() {
     setLoading(true);
     const { data } = await supabase
       .from("clientes")
-      .select("id, nombre, tipo_documento, numero_documento, cuit, situacion_iva, tipo_factura, razon_social, domicilio, domicilio_fiscal, telefono, email, provincia, localidad, codigo_postal, observacion, barrio, vendedor_id, saldo, origen, activo, zona_entrega, dias_entrega")
+      .select("id, codigo_cliente, nombre, tipo_documento, numero_documento, cuit, situacion_iva, tipo_factura, razon_social, domicilio, domicilio_fiscal, telefono, email, provincia, localidad, codigo_postal, observacion, barrio, vendedor_id, saldo, origen, activo, zona_entrega, dias_entrega")
       .eq("activo", true)
       .order("nombre");
     setClients((data || []) as unknown as Cliente[]);
@@ -220,6 +221,7 @@ export default function ClientesPage() {
   const openEdit = async (c: Cliente) => {
     setEditingClient(c);
     setForm({
+      codigo_cliente: (c as any).codigo_cliente || "",
       nombre: c.nombre,
       tipo_documento: c.tipo_documento || "",
       numero_documento: c.numero_documento || "",
@@ -256,6 +258,7 @@ export default function ClientesPage() {
   const handleSave = async () => {
     const selectedZona = zonas.find((z) => z.id === form.zona_entrega);
     const payload = {
+      codigo_cliente: form.codigo_cliente || null,
       nombre: form.nombre,
       tipo_documento: form.tipo_documento || null,
       numero_documento: form.numero_documento || null,
@@ -555,7 +558,7 @@ export default function ClientesPage() {
     const domicilioLower = filterDomicilio.toLowerCase();
     return clients.filter(
       (c) =>
-        (c.nombre.toLowerCase().includes(searchLower) || (c.cuit || "").includes(search)) &&
+        (c.nombre.toLowerCase().includes(searchLower) || (c.cuit || "").includes(search) || ((c as any).codigo_cliente || "").includes(search)) &&
         (!vendedorFilter || (c as any).vendedor_id === vendedorFilter) &&
         (!filterDomicilio || (c.domicilio || "").toLowerCase().includes(domicilioLower)) &&
         (!filterZona || c.zona_entrega === filterZona)
@@ -716,6 +719,7 @@ export default function ClientesPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-3 px-4 font-medium w-16">Cód.</th>
                         <th className="text-left py-3 px-4 font-medium">Cliente</th>
                         <th className="text-left py-3 px-4 font-medium">CUIT</th>
                         <th className="text-left py-3 px-4 font-medium">Situación IVA</th>
@@ -730,6 +734,7 @@ export default function ClientesPage() {
                         const zona = zonas.find((z) => z.id === client.zona_entrega);
                         return (
                           <tr key={client.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{(client as any).codigo_cliente || "—"}</td>
                             <td className="py-3 px-4 font-medium">
                               <div className="flex items-center gap-2">
                                 {client.nombre}
@@ -1323,7 +1328,12 @@ export default function ClientesPage() {
             </TabsList>
             <TabsContent value="persona" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
+                <div className="space-y-2">
+                  <Label>Código de cliente</Label>
+                  <Input value={form.codigo_cliente} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 4); f("codigo_cliente", v); }} placeholder="0046" maxLength={4} className="font-mono tracking-widest" />
+                  <p className="text-[11px] text-muted-foreground">4 dígitos, único por cliente</p>
+                </div>
+                <div className="space-y-2">
                   <Label>Apellido y Nombre</Label>
                   <Input value={form.nombre} onChange={(e) => f("nombre", e.target.value)} />
                 </div>
