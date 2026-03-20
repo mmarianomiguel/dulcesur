@@ -879,7 +879,9 @@ export default function ProductosPage() {
   const [importResult, setImportResult] = useState<{
     total: number;
     imported: number;
+    updated: number;
     skipped: number;
+    updatedDetails: { nombre: string; changes: string[] }[];
     failed: { row: number; nombre: string; error: string }[];
   } | null>(null);
 
@@ -964,12 +966,14 @@ export default function ProductosPage() {
       };
 
       let imported = 0;
+      let updated = 0;
       let skipped = 0;
+      const updatedDetails: { nombre: string; changes: string[] }[] = [];
       const failed: { row: number; nombre: string; error: string }[] = [];
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        const rowNum = i + 2; // +2 because row 1 is header, data starts at 2
+        const rowNum = i + 2;
         setImportProgress(`Procesando ${i + 1} de ${rows.length}...`);
 
         try {
@@ -980,28 +984,21 @@ export default function ProductosPage() {
             continue;
           }
 
-          // Check if product already exists by codigo - SKIP if found
-          if (codigo) {
-            const { data: existing } = await supabase
-              .from("productos")
-              .select("id")
-              .eq("codigo", codigo)
-              .maybeSingle();
-            if (existing) {
-              skipped++;
-              continue;
-            }
-          }
-
           const stock = getNum(row, "stock");
           const costo = getNum(row, "precio de costo", "costo");
-          const ganancia = getNum(row, "ganancia");
-          const precio = ganancia > 0 && costo > 0 ? Math.round(costo * (1 + ganancia / 100)) : costo;
+          const precio = getNum(row, "precio de venta", "precio venta", "pvp");
           const unidadMedida = getVal(row, "unidad medida", "unidad") || "UN";
           const categoriaNombre = getVal(row, "categoria");
           const subcategoriaNombre = getVal(row, "subcategoria");
           const marcaNombre = getVal(row, "marca");
           const proveedorNombre = getVal(row, "proveedor");
+
+          // Box presentation fields
+          const cajaNombre = getVal(row, "presentacion caja");
+          const cajaCantidad = getNum(row, "cantidad caja");
+          const cajaCodigo = getVal(row, "codigo caja");
+          const cajaCosto = getNum(row, "costo caja");
+          const cajaPrecio = getNum(row, "precio caja");
 
           // Resolve IDs
           const categoriaId = await getOrCreateCategoria(categoriaNombre);
@@ -1009,12 +1006,108 @@ export default function ProductosPage() {
           const marcaId = await getOrCreateMarca(marcaNombre);
           const proveedorId = await getOrCreateProveedor(proveedorNombre);
 
+          // Check if product already exists by codigo
+          if (codigo) {
+            const { data: existing } = await supabase
+              .from("productos")
+              .select("id, precio, costo, stock, nombre")
+              .eq("codigo", codigo)
+              .maybeSingle();
+
+            if (existing) {
+              // UPDATE existing product
+              const changes: string[] = [];
+              const updatePayload: Record<string, unknown> = {};
+
+              if (precio > 0 && precio !== existing.precio) {
+                updatePayload.precio = precio;
+                changes.push(`Precio: ${existing.precio} → ${precio}`);
+              }
+              if (costo > 0 && costo !== existing.costo) {
+                updatePayload.costo = costo;
+                changes.push(`Costo: ${existing.costo} → ${costo}`);
+              }
+              if (stock > 0 && stock !== existing.stock) {
+                updatePayload.stock = stock;
+                changes.push(`Stock: ${existing.stock} → ${stock}`);
+              }
+              if (categoriaId) updatePayload.categoria_id = categoriaId;
+              if (subcategoriaId) updatePayload.subcategoria_id = subcategoriaId;
+              if (marcaId) updatePayload.marca_id = marcaId;
+
+              if (Object.keys(updatePayload).length > 0) {
+                updatePayload.fecha_actualizacion = new Date().toISOString();
+                await supabase.from("productos").update(updatePayload).eq("id", existing.id);
+              }
+
+              // Upsert box presentation if provided
+              if (cajaCantidad > 0 && cajaPrecio > 0) {
+                const boxNombre = cajaNombre || `Caja x${cajaCantidad}`;
+                const { data: existingPres } = await supabase
+                  .from("presentaciones")
+                  .select("id, precio, cantidad, costo")
+                  .eq("producto_id", existing.id)
+                  .gt("cantidad", 1)
+                  .maybeSingle();
+
+                if (existingPres) {
+                  const presUpdate: Record<string, unknown> = {};
+                  if (cajaPrecio !== existingPres.precio) {
+                    presUpdate.precio = cajaPrecio;
+                    changes.push(`Precio Caja: ${existingPres.precio} → ${cajaPrecio}`);
+                  }
+                  if (cajaCosto > 0 && cajaCosto !== existingPres.costo) {
+                    presUpdate.costo = cajaCosto;
+                    changes.push(`Costo Caja: ${existingPres.costo} → ${cajaCosto}`);
+                  }
+                  if (cajaCantidad !== existingPres.cantidad) {
+                    presUpdate.cantidad = cajaCantidad;
+                    presUpdate.nombre = boxNombre;
+                    changes.push(`Cantidad Caja: ${existingPres.cantidad} → ${cajaCantidad}`);
+                  }
+                  if (Object.keys(presUpdate).length > 0) {
+                    await supabase.from("presentaciones").update(presUpdate).eq("id", existingPres.id);
+                  }
+                } else {
+                  // Create new box presentation
+                  await supabase.from("presentaciones").insert({
+                    producto_id: existing.id,
+                    nombre: boxNombre,
+                    cantidad: cajaCantidad,
+                    sku: cajaCodigo || null,
+                    costo: cajaCosto || 0,
+                    precio: cajaPrecio,
+                  });
+                  changes.push(`Nueva presentación: ${boxNombre} a ${cajaPrecio}`);
+                }
+              }
+
+              if (changes.length > 0) {
+                updated++;
+                updatedDetails.push({ nombre: existing.nombre, changes });
+              } else {
+                skipped++;
+              }
+
+              // Link proveedor
+              if (proveedorId) {
+                await supabase.from("producto_proveedores").upsert(
+                  { producto_id: existing.id, proveedor_id: proveedorId },
+                  { onConflict: "producto_id,proveedor_id" }
+                );
+              }
+              continue;
+            }
+          }
+
+          // NEW product - insert
+          const finalPrecio = precio > 0 ? precio : (costo > 0 ? costo : 0);
           const payload: Record<string, unknown> = {
             codigo: codigo || `AUTO-${Date.now()}-${i}`,
             nombre: nombre || codigo,
             stock,
             costo,
-            precio,
+            precio: finalPrecio,
             unidad_medida: unidadMedida,
             categoria_id: categoriaId,
             subcategoria_id: subcategoriaId,
@@ -1030,6 +1123,18 @@ export default function ProductosPage() {
             .single();
 
           if (insertErr) throw new Error(insertErr.message);
+
+          // Create box presentation for new product
+          if (inserted && cajaCantidad > 0 && cajaPrecio > 0) {
+            await supabase.from("presentaciones").insert({
+              producto_id: inserted.id,
+              nombre: cajaNombre || `Caja x${cajaCantidad}`,
+              cantidad: cajaCantidad,
+              sku: cajaCodigo || null,
+              costo: cajaCosto || 0,
+              precio: cajaPrecio,
+            });
+          }
 
           // Link proveedor
           if (proveedorId && inserted) {
@@ -1049,7 +1154,7 @@ export default function ProductosPage() {
         }
       }
 
-      setImportResult({ total: rows.length, imported, skipped, failed });
+      setImportResult({ total: rows.length, imported, updated, skipped, updatedDetails, failed });
       await fetchProducts();
       await fetchCategories();
       await fetchSubcategories();
@@ -1057,7 +1162,7 @@ export default function ProductosPage() {
       await fetchProveedores();
     } catch (err) {
       console.error("Import error:", err);
-      setImportResult({ total: 0, imported: 0, skipped: 0, failed: [{ row: 0, nombre: "Error general", error: String(err) }] });
+      setImportResult({ total: 0, imported: 0, updated: 0, skipped: 0, updatedDetails: [], failed: [{ row: 0, nombre: "Error general", error: String(err) }] });
     } finally {
       setImporting(false);
       setImportProgress("");
@@ -2512,14 +2617,18 @@ export default function ProductosPage() {
           {importResult && (
             <div className="space-y-4">
               {/* Summary stats */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-emerald-600">{importResult.imported}</p>
-                  <p className="text-xs text-emerald-600 font-medium">Importados</p>
+                  <p className="text-xs text-emerald-600 font-medium">Nuevos</p>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">{importResult.updated}</p>
+                  <p className="text-xs text-blue-600 font-medium">Actualizados</p>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-amber-600">{importResult.skipped}</p>
-                  <p className="text-xs text-amber-600 font-medium">Omitidos</p>
+                  <p className="text-xs text-amber-600 font-medium">Sin cambios</p>
                 </div>
                 <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-red-600">{importResult.failed.length}</p>
@@ -2529,8 +2638,33 @@ export default function ProductosPage() {
 
               <p className="text-sm text-muted-foreground">
                 Se procesaron <strong>{importResult.total}</strong> filas del archivo.
-                {importResult.skipped > 0 && " Los productos con codigo existente fueron omitidos."}
+                {importResult.skipped > 0 && " Los productos sin cambios fueron omitidos."}
               </p>
+
+              {/* Updated products detail */}
+              {importResult.updatedDetails.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-blue-600">Productos actualizados:</p>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-blue-200">
+                    <table className="w-full text-xs">
+                      <thead className="bg-blue-50 sticky top-0">
+                        <tr>
+                          <th className="text-left py-2 px-3 font-medium text-blue-700">Producto</th>
+                          <th className="text-left py-2 px-3 font-medium text-blue-700">Cambios</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importResult.updatedDetails.map((u, i) => (
+                          <tr key={i} className="border-t border-blue-100">
+                            <td className="py-1.5 px-3 font-medium truncate max-w-[180px]">{u.nombre}</td>
+                            <td className="py-1.5 px-3 text-blue-600">{u.changes.join(" | ")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Failed rows detail */}
               {importResult.failed.length > 0 && (
