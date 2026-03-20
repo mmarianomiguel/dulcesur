@@ -175,8 +175,9 @@ export default function CajaPage() {
       ? new Date(`${turno.fecha_cierre}T${turno.hora_cierre}-03:00`)
       : null;
     return all.filter((v: Venta) => {
-      // Exclude credit notes
+      // Exclude credit notes and annulled sales
       if ((v as any).tipo_comprobante?.toLowerCase().startsWith("nota de crédito")) return false;
+      if (v.estado === "anulada") return false;
       const d = new Date(v.created_at);
       if (d < aperturaDate) return false;
       if (cierreDate && d > cierreDate) return false;
@@ -326,7 +327,7 @@ export default function CajaPage() {
 
     const [{ data: movs }, { data: vts }] = await Promise.all([
       supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at").eq("fecha", fecha).order("hora", { ascending: false }),
-      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, created_at, clientes(nombre)").eq("fecha", fecha).not("tipo_comprobante", "ilike", "Nota de Crédito%").order("created_at", { ascending: false }),
+      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, clientes(nombre)").eq("fecha", fecha).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
     ]);
 
     // Filter by turno time range using Date comparison
@@ -356,6 +357,7 @@ export default function CajaPage() {
     depositos,
     gastos,
     notasCreditoEgresos,
+    anulaciones,
     retiros,
     efectivoEsperado,
     efectivoInicial,
@@ -401,12 +403,16 @@ export default function CajaPage() {
       .filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito")
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
+    const anulaciones = movements
+      .filter((m) => m.tipo === "egreso" && m.referencia_tipo === "anulacion")
+      .reduce((a, m) => a + Math.abs(m.monto), 0);
+
     const retiros = movements
-      .filter((m) => m.tipo === "egreso" && !m.descripcion.toLowerCase().includes("gasto") && m.referencia_tipo !== "nota_credito")
+      .filter((m) => m.tipo === "egreso" && !m.descripcion.toLowerCase().includes("gasto") && m.referencia_tipo !== "nota_credito" && m.referencia_tipo !== "anulacion")
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const efectivoInicial = turno?.efectivo_inicial ?? 0;
-    const efectivoEsperado = efectivoInicial + ventasEfectivo + depositos - gastos - retiros - notasCreditoEgresos;
+    const efectivoEsperado = efectivoInicial + ventasEfectivo + depositos - gastos - retiros - notasCreditoEgresos - anulaciones;
 
     return {
       ventasEfectivo,
@@ -416,6 +422,7 @@ export default function CajaPage() {
       depositos,
       gastos,
       notasCreditoEgresos,
+      anulaciones,
       retiros,
       efectivoEsperado,
       efectivoInicial,
@@ -572,6 +579,25 @@ export default function CajaPage() {
                         </>
                       );
                     })()}
+                    {(() => {
+                      const anulMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "anulacion");
+                      if (anulMovs.length === 0) return null;
+                      const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                      return (
+                        <>
+                          <h4 className="text-sm font-semibold mt-4 mb-2">Anulaciones</h4>
+                          <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/20 space-y-1">
+                            <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
+                            {anulMovs.map((m) => (
+                              <div key={m.id} className="flex justify-between text-xs text-orange-600">
+                                <span className="truncate mr-2">{m.descripcion}</span>
+                                <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                     <h4 className="text-sm font-semibold mt-4 mb-2">Movimientos ({histMovs.length})</h4>
                     {histMovs.length === 0 ? <p className="text-xs text-muted-foreground">Sin movimientos</p> : (
                       <div className="border rounded-lg overflow-hidden">
@@ -692,7 +718,7 @@ export default function CajaPage() {
             />
             <StatCard
               title="Egresos Caja"
-              value={formatCurrency(gastos + retiros + notasCreditoEgresos)}
+              value={formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}
               icon={ArrowDownRight}
               iconColor="text-red-500"
               iconBg="bg-red-500/10"
@@ -1011,6 +1037,27 @@ export default function CajaPage() {
                     );
                   })()}
 
+                  {/* Anulaciones */}
+                  {(() => {
+                    const anulMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "anulacion");
+                    if (anulMovs.length === 0) return null;
+                    const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                    return (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2">Anulaciones</h4>
+                        <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/20 space-y-1">
+                          <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
+                          {anulMovs.map((m) => (
+                            <div key={m.id} className="flex justify-between text-xs text-orange-600">
+                              <span className="truncate mr-2">{m.descripcion}</span>
+                              <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div>
                     <h4 className="text-sm font-semibold mb-2">Movimientos ({histMovs.length})</h4>
                     {histMovs.length === 0 ? (
@@ -1194,6 +1241,12 @@ export default function CajaPage() {
                     <span className="text-muted-foreground">Retiros</span>
                     <span className="text-red-500">-{formatCurrency(retiros)}</span>
                   </div>
+                  {anulaciones > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Anulaciones</span>
+                      <span className="text-red-500">-{formatCurrency(anulaciones)}</span>
+                    </div>
+                  )}
                   {notasCreditoEgresos > 0 && (
                     <>
                       <div className="flex justify-between">
