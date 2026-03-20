@@ -66,7 +66,6 @@ const FORMAS_PAGO = [
   "Transferencia",
   "Tarjeta",
   "Cuenta Corriente",
-  "Cheque",
 ];
 
 function formatCurrency(value: number) {

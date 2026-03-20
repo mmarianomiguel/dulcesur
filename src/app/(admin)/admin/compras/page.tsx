@@ -34,7 +34,6 @@ import {
   Save,
   CalendarDays,
   Hash,
-  CreditCard,
   AlertCircle,
   ImageIcon,
   X,
@@ -49,6 +48,8 @@ interface CompraRow {
   proveedor_id: string | null;
   total: number;
   estado: string;
+  forma_pago: string | null;
+  estado_pago: string | null;
   observacion: string | null;
   proveedores: { nombre: string } | null;
 }
@@ -165,7 +166,7 @@ export default function ComprasPage() {
     setLoading(true);
     let comprasQuery = supabase
       .from("compras")
-      .select("id, numero, fecha, proveedor_id, total, estado, observacion, proveedores(nombre)")
+      .select("id, numero, fecha, proveedor_id, total, estado, forma_pago, estado_pago, observacion, proveedores(nombre)")
       .order("fecha", { ascending: false });
 
     if (purchaseFilterMode === "day") {
@@ -185,7 +186,7 @@ export default function ComprasPage() {
       comprasQuery,
       supabase
         .from("proveedores")
-        .select("id, nombre")
+        .select("id, nombre, saldo")
         .eq("activo", true)
         .order("nombre"),
     ]);
@@ -222,7 +223,6 @@ export default function ComprasPage() {
       .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%`)
       .limit(10);
     let results = (data as ProductSearch[]) || [];
-    // Also search by presentacion codes
     if (results.length === 0) {
       const { data: presMat } = await supabase
         .from("presentaciones")
@@ -310,7 +310,6 @@ export default function ComprasPage() {
     setShowConfirmDialog(false);
 
     try {
-      // Use manual numero if provided, otherwise auto-generate
       let numero = numeroCompra.trim();
       if (!numero) {
         const { data: numData } = await supabase.rpc("next_numero", {
@@ -318,6 +317,9 @@ export default function ComprasPage() {
         });
         numero = numData || "C-0000";
       }
+
+      // Determine estado_pago based on forma de pago
+      const estadoPago = formaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
 
       const { data: compra, error } = await supabase
         .from("compras")
@@ -327,6 +329,8 @@ export default function ComprasPage() {
           proveedor_id: selectedProveedorId || null,
           total: totalCompra,
           estado: "Confirmada",
+          forma_pago: formaPago,
+          estado_pago: estadoPago,
           observacion: observacion || null,
         })
         .select("id")
@@ -364,7 +368,6 @@ export default function ComprasPage() {
 
       // Update stock and costs for each product
       for (const item of items) {
-        // Get current stock before update
         const { data: prodData } = await supabase
           .from("productos")
           .select("stock")
@@ -372,7 +375,6 @@ export default function ComprasPage() {
           .single();
         const stockAntes = prodData?.stock ?? 0;
 
-        // Update stock: add quantity
         const newStock = stockAntes + item.cantidad;
         await supabase
           .from("productos")
@@ -392,11 +394,8 @@ export default function ComprasPage() {
           orden_id: compra.id,
         });
 
-        // If costo was modified and user wants to update prices
-        if (
-          item.costo_unitario !== item.costo_original &&
-          item.costo_original > 0
-        ) {
+        // Update cost and price if modified
+        if (item.costo_unitario !== item.costo_original && item.costo_original > 0) {
           if (actualizarPrecios) {
             const marginRatio = item.precio_original / item.costo_original;
             const newPrecio = Math.round(item.costo_unitario * marginRatio);
@@ -428,8 +427,8 @@ export default function ComprasPage() {
         }
       }
 
-      // Register caja movement only if requested and not cuenta corriente
-      if (totalCompra > 0 && registrarEnCaja && formaPago !== "Cuenta Corriente") {
+      // Register caja movement if paid and requested
+      if (totalCompra > 0 && formaPago !== "Cuenta Corriente" && registrarEnCaja) {
         const prov = providers.find((p) => p.id === selectedProveedorId);
         await supabase.from("caja_movimientos").insert({
           fecha: fecha || todayString(),
@@ -441,11 +440,24 @@ export default function ComprasPage() {
         });
       }
 
-      // If cuenta corriente, update proveedor saldo
+      // If cuenta corriente, update proveedor saldo + create CC entry
       if (formaPago === "Cuenta Corriente" && selectedProveedorId) {
         const prov = providers.find((p) => p.id === selectedProveedorId);
         if (prov) {
-          await supabase.from("proveedores").update({ saldo: (prov.saldo || 0) + totalCompra }).eq("id", selectedProveedorId);
+          const newSaldo = (prov.saldo || 0) + totalCompra;
+          await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", selectedProveedorId);
+
+          // Register in cuenta_corriente_proveedor
+          await supabase.from("cuenta_corriente_proveedor").insert({
+            proveedor_id: selectedProveedorId,
+            fecha: fecha || todayString(),
+            tipo: "compra",
+            descripcion: `Compra ${numero} - ${prov.nombre}`,
+            monto: totalCompra,
+            saldo_resultante: newSaldo,
+            referencia_id: compra.id,
+            referencia_tipo: "compra",
+          });
         }
       }
 
@@ -478,7 +490,7 @@ export default function ComprasPage() {
     setDetailCompra(compra);
     const { data } = await supabase
       .from("compra_items")
-      .select("id, codigo, descripcion, cantidad, precio_unitario, subtotal")
+      .select("id, compra_id, producto_id, codigo, descripcion, cantidad, precio_unitario, subtotal")
       .eq("compra_id", compra.id)
       .order("created_at");
     setDetailItems((data as CompraItemRow[]) || []);
@@ -488,7 +500,7 @@ export default function ComprasPage() {
   /* ── stats ── */
 
   const totalMonth = useMemo(() => purchases.reduce((a, p) => a + p.total, 0), [purchases]);
-  const pending = useMemo(() => purchases.filter((p) => p.estado === "Pendiente").length, [purchases]);
+  const pendientePago = useMemo(() => purchases.filter((p) => p.estado_pago === "Pendiente").length, [purchases]);
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
@@ -609,7 +621,6 @@ export default function ComprasPage() {
                   placeholder="Auto-generado"
                 />
               </div>
-
             </div>
 
             {/* Observaciones row */}
@@ -706,68 +717,34 @@ export default function ComprasPage() {
                   <thead>
                     <tr className="border-b text-muted-foreground">
                       <th className="text-left py-3 px-2 font-medium w-10"></th>
-                      <th className="text-left py-3 px-3 font-medium">
-                        Codigo
-                      </th>
-                      <th className="text-left py-3 px-3 font-medium">
-                        Producto
-                      </th>
-                      <th className="text-center py-3 px-3 font-medium">
-                        Stock actual
-                      </th>
-                      <th className="text-center py-3 px-3 font-medium">
-                        Cantidad
-                      </th>
-                      <th className="text-right py-3 px-3 font-medium">
-                        Costo Unit.
-                      </th>
-                      <th className="text-right py-3 px-3 font-medium">
-                        Subtotal
-                      </th>
-                      <th className="text-center py-3 px-3 font-medium">
-                        Costo mod.
-                      </th>
+                      <th className="text-left py-3 px-3 font-medium">Codigo</th>
+                      <th className="text-left py-3 px-3 font-medium">Producto</th>
+                      <th className="text-center py-3 px-3 font-medium">Stock actual</th>
+                      <th className="text-center py-3 px-3 font-medium">Cantidad</th>
+                      <th className="text-right py-3 px-3 font-medium">Costo Unit.</th>
+                      <th className="text-right py-3 px-3 font-medium">Subtotal</th>
+                      <th className="text-center py-3 px-3 font-medium">Costo mod.</th>
                       <th className="w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item, idx) => {
-                      const costoChanged =
-                        item.costo_unitario !== item.costo_original;
+                      const costoChanged = item.costo_unitario !== item.costo_original;
                       return (
-                        <tr
-                          key={item.producto_id}
-                          className="border-b last:border-0 hover:bg-muted/50 transition-colors"
-                        >
-                          {/* Thumbnail */}
+                        <tr key={item.producto_id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                           <td className="py-2 px-2">
                             <div className="w-8 h-8 rounded bg-muted flex items-center justify-center overflow-hidden">
                               {item.imagen_url ? (
-                                <img
-                                  src={item.imagen_url}
-                                  alt=""
-                                  className="w-full h-full object-cover"
-                                />
+                                <img src={item.imagen_url} alt="" className="w-full h-full object-cover" />
                               ) : (
                                 <ImageIcon className="w-3.5 h-3.5 text-muted-foreground/40" />
                               )}
                             </div>
                           </td>
-                          <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
-                            {item.codigo}
-                          </td>
-                          <td className="py-2 px-3 font-medium">
-                            {item.nombre}
-                          </td>
+                          <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.codigo}</td>
+                          <td className="py-2 px-3 font-medium">{item.nombre}</td>
                           <td className="py-2 px-3 text-center">
-                            <Badge
-                              variant={
-                                item.stock_actual <= 0
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="text-xs font-normal"
-                            >
+                            <Badge variant={item.stock_actual <= 0 ? "destructive" : "secondary"} className="text-xs font-normal">
                               {item.stock_actual}
                             </Badge>
                           </td>
@@ -776,13 +753,7 @@ export default function ComprasPage() {
                               type="number"
                               min={1}
                               value={item.cantidad}
-                              onChange={(e) =>
-                                updateItemField(
-                                  idx,
-                                  "cantidad",
-                                  Math.max(1, Number(e.target.value))
-                                )
-                              }
+                              onChange={(e) => updateItemField(idx, "cantidad", Math.max(1, Number(e.target.value)))}
                               className="w-20 mx-auto text-center h-8"
                             />
                           </td>
@@ -791,37 +762,20 @@ export default function ComprasPage() {
                               type="number"
                               min={0}
                               value={item.costo_unitario}
-                              onChange={(e) =>
-                                updateItemField(
-                                  idx,
-                                  "costo_unitario",
-                                  Math.max(0, Number(e.target.value))
-                                )
-                              }
+                              onChange={(e) => updateItemField(idx, "costo_unitario", Math.max(0, Number(e.target.value)))}
                               className="w-28 ml-auto text-right h-8"
                             />
                           </td>
-                          <td className="py-2 px-3 text-right font-semibold">
-                            {formatCurrency(item.subtotal)}
-                          </td>
+                          <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
                           <td className="py-2 px-3 text-center">
                             {costoChanged ? (
-                              <Badge variant="default" className="text-xs">
-                                Si
-                              </Badge>
+                              <Badge variant="default" className="text-xs">Si</Badge>
                             ) : (
-                              <span className="text-xs text-muted-foreground">
-                                -
-                              </span>
+                              <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
                           <td className="py-2 px-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                              onClick={() => removeItem(idx)}
-                            >
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => removeItem(idx)}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </td>
@@ -835,30 +789,16 @@ export default function ComprasPage() {
                 <div className="border-t bg-muted/30 rounded-b-lg">
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex gap-6 text-xs text-muted-foreground">
-                      <span>
-                        {items.length} producto(s) |{" "}
-                        {totalUnidades} unidad(es)
-                      </span>
-                      {items.filter(
-                        (i) => i.costo_unitario !== i.costo_original
-                      ).length > 0 && (
+                      <span>{items.length} producto(s) | {totalUnidades} unidad(es)</span>
+                      {items.filter((i) => i.costo_unitario !== i.costo_original).length > 0 && (
                         <span className="text-amber-600 dark:text-amber-400">
-                          {
-                            items.filter(
-                              (i) => i.costo_unitario !== i.costo_original
-                            ).length
-                          }{" "}
-                          con costo modificado
+                          {items.filter((i) => i.costo_unitario !== i.costo_original).length} con costo modificado
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">
-                        Total:
-                      </span>
-                      <span className="text-lg font-bold">
-                        {formatCurrency(totalCompra)}
-                      </span>
+                      <span className="text-sm text-muted-foreground">Total:</span>
+                      <span className="text-lg font-bold">{formatCurrency(totalCompra)}</span>
                     </div>
                   </div>
                 </div>
@@ -871,25 +811,12 @@ export default function ComprasPage() {
         {items.length > 0 && (
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
-              Al confirmar se actualizara el stock y se registrara el movimiento
-              de caja.
+              Al confirmar se actualizara el stock y se registrara el movimiento de caja.
             </p>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  resetForm();
-                  setMode("list");
-                }}
-              >
-                Cancelar
-              </Button>
+              <Button variant="outline" onClick={() => { resetForm(); setMode("list"); }}>Cancelar</Button>
               <Button onClick={openConfirmDialog} disabled={saving} size="lg">
-                {saving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
+                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 Confirmar Compra
               </Button>
             </div>
@@ -908,8 +835,7 @@ export default function ComprasPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Proveedor</span>
                   <span className="font-medium">
-                    {providers.find((p) => p.id === selectedProveedorId)
-                      ?.nombre || "Sin proveedor"}
+                    {providers.find((p) => p.id === selectedProveedorId)?.nombre || "Sin proveedor"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -920,17 +846,11 @@ export default function ComprasPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Productos</span>
-                  <span className="font-medium">
-                    {items.length} ({totalUnidades} unidades)
-                  </span>
+                  <span className="font-medium">{items.length} ({totalUnidades} unidades)</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 mt-2">
-                  <span className="text-muted-foreground font-medium">
-                    Total
-                  </span>
-                  <span className="font-bold text-lg">
-                    {formatCurrency(totalCompra)}
-                  </span>
+                  <span className="text-muted-foreground font-medium">Total</span>
+                  <span className="font-bold text-lg">{formatCurrency(totalCompra)}</span>
                 </div>
               </div>
 
@@ -944,15 +864,9 @@ export default function ComprasPage() {
                     className="w-4 h-4 rounded border-border mt-0.5"
                   />
                   <span className="text-sm">
-                    Actualizar precios de venta manteniendo el margen de
-                    ganancia
+                    Actualizar precios de venta manteniendo el margen de ganancia
                     <span className="block text-xs text-muted-foreground mt-0.5">
-                      {
-                        items.filter(
-                          (i) => i.costo_unitario !== i.costo_original
-                        ).length
-                      }{" "}
-                      producto(s) con costo modificado
+                      {items.filter((i) => i.costo_unitario !== i.costo_original).length} producto(s) con costo modificado
                     </span>
                   </span>
                 </label>
@@ -966,7 +880,6 @@ export default function ComprasPage() {
                   <SelectContent>
                     <SelectItem value="Efectivo">Efectivo</SelectItem>
                     <SelectItem value="Transferencia">Transferencia</SelectItem>
-                    <SelectItem value="Cheque">Cheque</SelectItem>
                     <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
                   </SelectContent>
                 </Select>
@@ -980,14 +893,15 @@ export default function ComprasPage() {
                 </label>
               )}
 
+              {formaPago === "Cuenta Corriente" && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Se agregara al saldo del proveedor como deuda pendiente
+                </p>
+              )}
+
               {/* Actions */}
               <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowConfirmDialog(false)}
-                >
-                  Cancelar
-                </Button>
+                <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancelar</Button>
                 <Button onClick={handleSave} disabled={saving}>
                   {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Confirmar compra
@@ -1005,29 +919,20 @@ export default function ComprasPage() {
     return (
       <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-6xl mx-auto">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setMode("list");
-              setDetailCompra(null);
-            }}
-          >
+          <Button variant="ghost" size="icon" onClick={() => { setMode("list"); setDetailCompra(null); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-                Compra {detailCompra.numero}
-              </h1>
-              <Badge
-                variant={
-                  detailCompra.estado === "Confirmada" ? "default" : "secondary"
-                }
-                className="text-xs"
-              >
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Compra {detailCompra.numero}</h1>
+              <Badge variant={detailCompra.estado === "Confirmada" ? "default" : "secondary"} className="text-xs">
                 {detailCompra.estado}
               </Badge>
+              {detailCompra.estado_pago && (
+                <Badge variant={detailCompra.estado_pago === "Pagada" ? "outline" : "destructive"} className="text-xs">
+                  {detailCompra.estado_pago}
+                </Badge>
+              )}
             </div>
             <p className="text-muted-foreground text-sm">
               {detailCompra.proveedores?.nombre || "Sin proveedor"} &middot;{" "}
@@ -1036,59 +941,38 @@ export default function ComprasPage() {
           </div>
           <div className="text-right">
             <p className="text-xs text-muted-foreground">Total</p>
-            <p className="text-2xl font-bold">
-              {formatCurrency(detailCompra.total)}
-            </p>
+            <p className="text-2xl font-bold">{formatCurrency(detailCompra.total)}</p>
           </div>
         </div>
 
         <Card>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
               <div>
-                <span className="text-xs text-muted-foreground block">
-                  Proveedor
-                </span>
-                <span className="font-medium">
-                  {detailCompra.proveedores?.nombre || "---"}
-                </span>
+                <span className="text-xs text-muted-foreground block">Proveedor</span>
+                <span className="font-medium">{detailCompra.proveedores?.nombre || "---"}</span>
               </div>
               <div>
-                <span className="text-xs text-muted-foreground block">
-                  Fecha
-                </span>
-                <span className="font-medium">
-                  {new Date(detailCompra.fecha).toLocaleDateString("es-AR")}
-                </span>
+                <span className="text-xs text-muted-foreground block">Fecha</span>
+                <span className="font-medium">{new Date(detailCompra.fecha).toLocaleDateString("es-AR")}</span>
               </div>
               <div>
-                <span className="text-xs text-muted-foreground block">
-                  Estado
-                </span>
-                <Badge
-                  variant={
-                    detailCompra.estado === "Confirmada"
-                      ? "default"
-                      : "secondary"
-                  }
-                  className="text-xs mt-0.5"
-                >
-                  {detailCompra.estado}
+                <span className="text-xs text-muted-foreground block">Forma de pago</span>
+                <span className="font-medium">{detailCompra.forma_pago || "---"}</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">Estado pago</span>
+                <Badge variant={detailCompra.estado_pago === "Pagada" ? "outline" : "destructive"} className="text-xs mt-0.5">
+                  {detailCompra.estado_pago || "---"}
                 </Badge>
               </div>
               <div>
-                <span className="text-xs text-muted-foreground block">
-                  Total
-                </span>
-                <span className="font-bold">
-                  {formatCurrency(detailCompra.total)}
-                </span>
+                <span className="text-xs text-muted-foreground block">Total</span>
+                <span className="font-bold">{formatCurrency(detailCompra.total)}</span>
               </div>
             </div>
             {detailCompra.observacion && (
-              <p className="text-sm text-muted-foreground mt-3 border-t pt-3">
-                {detailCompra.observacion}
-              </p>
+              <p className="text-sm text-muted-foreground mt-3 border-t pt-3">{detailCompra.observacion}</p>
             )}
           </CardContent>
         </Card>
@@ -1100,52 +984,27 @@ export default function ComprasPage() {
                 <thead>
                   <tr className="border-b text-muted-foreground">
                     <th className="text-left py-3 px-4 font-medium">Codigo</th>
-                    <th className="text-left py-3 px-4 font-medium">
-                      Descripcion
-                    </th>
-                    <th className="text-center py-3 px-4 font-medium">
-                      Cantidad
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium">
-                      Costo Unit.
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium">
-                      Subtotal
-                    </th>
+                    <th className="text-left py-3 px-4 font-medium">Descripcion</th>
+                    <th className="text-center py-3 px-4 font-medium">Cantidad</th>
+                    <th className="text-right py-3 px-4 font-medium">Costo Unit.</th>
+                    <th className="text-right py-3 px-4 font-medium">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
                   {detailItems.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b last:border-0 hover:bg-muted/50 transition-colors"
-                    >
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
-                        {item.codigo}
-                      </td>
-                      <td className="py-3 px-4 font-medium">
-                        {item.descripcion}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {item.cantidad}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        {formatCurrency(item.precio_unitario)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-semibold">
-                        {formatCurrency(item.subtotal)}
-                      </td>
+                    <tr key={item.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{item.codigo}</td>
+                      <td className="py-3 px-4 font-medium">{item.descripcion}</td>
+                      <td className="py-3 px-4 text-center">{item.cantidad}</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(item.precio_unitario)}</td>
+                      <td className="py-3 px-4 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <div className="flex justify-end border-t pt-3 mt-1 px-4">
-                <span className="text-sm text-muted-foreground mr-4">
-                  Total:
-                </span>
-                <span className="text-sm font-bold">
-                  {formatCurrency(detailCompra.total)}
-                </span>
+                <span className="text-sm text-muted-foreground mr-4">Total:</span>
+                <span className="text-sm font-bold">{formatCurrency(detailCompra.total)}</span>
               </div>
             </div>
           </CardContent>
@@ -1199,8 +1058,8 @@ export default function ComprasPage() {
               <Receipt className="w-5 h-5 text-orange-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Pendientes</p>
-              <p className="text-xl font-bold">{pending}</p>
+              <p className="text-xs text-muted-foreground">Pendientes de pago</p>
+              <p className="text-xl font-bold">{pendientePago}</p>
             </div>
           </CardContent>
         </Card>
@@ -1218,12 +1077,12 @@ export default function ComprasPage() {
             </div>
             <div className="flex items-end gap-2">
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Período</Label>
+                <Label className="text-xs text-muted-foreground">Periodo</Label>
                 <Select value={purchaseFilterMode} onValueChange={(v) => setPurchaseFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
                   <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="day">Día</SelectItem>
+                    <SelectItem value="day">Dia</SelectItem>
                     <SelectItem value="month">Mensual</SelectItem>
                     <SelectItem value="range">Entre fechas</SelectItem>
                   </SelectContent>
@@ -1280,13 +1139,10 @@ export default function ComprasPage() {
                   <tr className="border-b text-muted-foreground">
                     <th className="text-left py-3 px-4 font-medium">N</th>
                     <th className="text-left py-3 px-4 font-medium">Fecha</th>
-                    <th className="text-left py-3 px-4 font-medium">
-                      Proveedor
-                    </th>
+                    <th className="text-left py-3 px-4 font-medium">Proveedor</th>
+                    <th className="text-left py-3 px-4 font-medium">Forma pago</th>
                     <th className="text-right py-3 px-4 font-medium">Total</th>
-                    <th className="text-center py-3 px-4 font-medium">
-                      Estado
-                    </th>
+                    <th className="text-center py-3 px-4 font-medium">Pago</th>
                     <th className="text-right py-3 px-4 font-medium w-16"></th>
                   </tr>
                 </thead>
@@ -1297,38 +1153,21 @@ export default function ComprasPage() {
                       className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
                       onClick={() => openDetail(p)}
                     >
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
-                        {p.numero}
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {new Date(p.fecha).toLocaleDateString("es-AR")}
-                      </td>
-                      <td className="py-3 px-4 font-medium">
-                        {p.proveedores?.nombre || "---"}
-                      </td>
-                      <td className="py-3 px-4 text-right font-semibold">
-                        {formatCurrency(p.total)}
-                      </td>
+                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.numero}</td>
+                      <td className="py-3 px-4 text-muted-foreground">{new Date(p.fecha).toLocaleDateString("es-AR")}</td>
+                      <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "---"}</td>
+                      <td className="py-3 px-4 text-muted-foreground text-xs">{p.forma_pago || "---"}</td>
+                      <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.total)}</td>
                       <td className="py-3 px-4 text-center">
                         <Badge
-                          variant={
-                            p.estado === "Confirmada" ? "default" : "secondary"
-                          }
+                          variant={p.estado_pago === "Pagada" ? "outline" : p.estado_pago === "Pendiente" ? "destructive" : "secondary"}
                           className="text-xs font-normal"
                         >
-                          {p.estado}
+                          {p.estado_pago || "---"}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDetail(p);
-                          }}
-                        >
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openDetail(p); }}>
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
                       </td>

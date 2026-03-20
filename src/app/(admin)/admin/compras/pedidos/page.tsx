@@ -40,6 +40,8 @@ import {
   Package,
   ArrowLeft,
   X,
+  Edit,
+  Check,
 } from "lucide-react";
 
 /* ───────── types ───────── */
@@ -47,6 +49,7 @@ import {
 interface Proveedor {
   id: string;
   nombre: string;
+  saldo?: number;
 }
 
 interface Categoria {
@@ -64,7 +67,6 @@ interface PedidoRow {
   proveedores: { nombre: string } | null;
 }
 
-/** Generate a short display number from UUID */
 function pedidoDisplayNum(id: string): string {
   return "PED-" + id.slice(0, 6).toUpperCase();
 }
@@ -77,6 +79,7 @@ interface PedidoItemRow {
   descripcion: string;
   cantidad: number;
   faltante: number;
+  cantidad_recibida: number;
   precio_unitario: number;
   subtotal: number;
 }
@@ -111,6 +114,8 @@ function estadoBadgeVariant(estado: string): "default" | "secondary" | "destruct
       return "default";
     case "Recibido":
       return "outline";
+    case "Recibido Parcial":
+      return "destructive";
     default:
       return "secondary";
   }
@@ -134,7 +139,7 @@ export default function PedidosProveedorPage() {
   const [pedFilterTo, setPedFilterTo] = useState(new Date().toISOString().split("T")[0]);
 
   // New / edit pedido state
-  const [mode, setMode] = useState<"list" | "new" | "detail" | "generate">("list");
+  const [mode, setMode] = useState<"list" | "new" | "detail" | "generate" | "edit">("list");
   const [selectedProveedorId, setSelectedProveedorId] = useState("");
   const [selectedCategoriaId, setSelectedCategoriaId] = useState("all");
 
@@ -155,6 +160,7 @@ export default function PedidosProveedorPage() {
   // Detail / edit existing
   const [detailPedido, setDetailPedido] = useState<PedidoRow | null>(null);
   const [detailItems, setDetailItems] = useState<PedidoItemRow[]>([]);
+  const [editingDetail, setEditingDetail] = useState(false);
 
   // Auto-generate state
   const [generating, setGenerating] = useState(false);
@@ -165,6 +171,15 @@ export default function PedidosProveedorPage() {
     total: number;
     selected: boolean;
   }[]>([]);
+
+  // Receive dialog state
+  const [showReceiveDialog, setShowReceiveDialog] = useState(false);
+  const [receiveSaving, setReceiveSaving] = useState(false);
+  const [receiveError, setReceiveError] = useState("");
+  const [receiveFormaPago, setReceiveFormaPago] = useState("Transferencia");
+  const [receiveRegistrarCaja, setReceiveRegistrarCaja] = useState(true);
+  const [receiveActualizarPrecios, setReceiveActualizarPrecios] = useState(true);
+  const [receiveItems, setReceiveItems] = useState<{ id: string; cantidad_pedida: number; cantidad_recibida_prev: number; cantidad_recibir: number; descripcion: string; codigo: string; precio_unitario: number }[]>([]);
 
   /* ── fetch list ── */
 
@@ -190,7 +205,7 @@ export default function PedidosProveedorPage() {
 
     const [{ data: ped }, { data: prov }, { data: cats }] = await Promise.all([
       pedQuery,
-      supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
+      supabase.from("proveedores").select("id, nombre, saldo").eq("activo", true).order("nombre"),
       supabase.from("categorias").select("id, nombre").order("nombre"),
     ]);
     setPedidos((ped as PedidoRow[]) || []);
@@ -203,7 +218,7 @@ export default function PedidosProveedorPage() {
     fetchData();
   }, [fetchData]);
 
-  // Click outside handler for searchable dropdowns
+  // Click outside handler
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (provRef.current && !provRef.current.contains(e.target as Node)) setProvOpen(false);
@@ -261,7 +276,6 @@ export default function PedidosProveedorPage() {
           };
         });
 
-      // Merge with existing items (don't duplicate)
       const existingIds = new Set(items.map((i) => i.producto_id));
       const merged = [...items, ...suggested.filter((s) => !existingIds.has(s.producto_id))];
       setItems(merged);
@@ -286,7 +300,7 @@ export default function PedidosProveedorPage() {
 
   const totalEstimado = items.reduce((a, i) => a + i.subtotal, 0);
 
-  /* ── save pedido ── */
+  /* ── save pedido (new or edit) ── */
 
   const savePedido = async (estado: "Borrador" | "Enviado") => {
     if (!selectedProveedorId || items.length === 0) return;
@@ -307,13 +321,10 @@ export default function PedidosProveedorPage() {
         .single();
 
       if (error || !pedido) {
-        console.error("Error saving pedido:", error);
-        setSaveError(error?.message || "Error al guardar el pedido. Verifica que la tabla pedidos_proveedor exista en la base de datos.");
+        setSaveError(error?.message || "Error al guardar el pedido.");
         setSaving(false);
         return;
       }
-
-      const displayNum = pedidoDisplayNum(pedido.id);
 
       const rows = items.map((item) => ({
         pedido_id: pedido.id,
@@ -322,27 +333,67 @@ export default function PedidosProveedorPage() {
         descripcion: item.nombre,
         cantidad: item.faltante,
         faltante: item.faltante,
+        cantidad_recibida: 0,
         precio_unitario: item.precio_unitario,
         subtotal: item.subtotal,
       }));
 
-      const { error: itemsError } = await supabase.from("pedido_proveedor_items").insert(rows);
-      if (itemsError) {
-        console.error("Error saving pedido items:", itemsError);
-      }
+      await supabase.from("pedido_proveedor_items").insert(rows);
 
       resetForm();
       setMode("list");
       await fetchData();
       setSuccessMsg(
         estado === "Borrador"
-          ? `Borrador ${displayNum} guardado correctamente`
-          : `Pedido ${displayNum} confirmado correctamente`
+          ? `Borrador ${pedidoDisplayNum(pedido.id)} guardado`
+          : `Pedido ${pedidoDisplayNum(pedido.id)} confirmado`
       );
       setTimeout(() => setSuccessMsg(""), 4000);
     } catch (err: any) {
-      console.error("Error saving pedido:", err);
-      setSaveError(err?.message || "Error inesperado al guardar el pedido.");
+      setSaveError(err?.message || "Error inesperado.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ── update existing borrador ── */
+
+  const saveEditedBorrador = async () => {
+    if (!detailPedido || detailItems.length === 0) return;
+    setSaving(true);
+    setSaveError("");
+
+    try {
+      // Update header
+      const total = detailItems.reduce((a, i) => a + i.subtotal, 0);
+      await supabase
+        .from("pedidos_proveedor")
+        .update({ costo_total_estimado: total, observacion: observacion || null })
+        .eq("id", detailPedido.id);
+
+      // Delete old items and re-insert
+      await supabase.from("pedido_proveedor_items").delete().eq("pedido_id", detailPedido.id);
+
+      const rows = detailItems.map((item) => ({
+        pedido_id: detailPedido.id,
+        producto_id: item.producto_id,
+        codigo: item.codigo,
+        descripcion: item.descripcion,
+        cantidad: item.cantidad,
+        faltante: item.faltante,
+        cantidad_recibida: item.cantidad_recibida || 0,
+        precio_unitario: item.precio_unitario,
+        subtotal: item.subtotal,
+      }));
+      await supabase.from("pedido_proveedor_items").insert(rows);
+
+      setDetailPedido({ ...detailPedido, costo_total_estimado: total });
+      setEditingDetail(false);
+      setSuccessMsg("Borrador actualizado");
+      setTimeout(() => setSuccessMsg(""), 3000);
+      fetchData();
+    } catch (err: any) {
+      setSaveError(err?.message || "Error al actualizar.");
     } finally {
       setSaving(false);
     }
@@ -359,22 +410,21 @@ export default function PedidosProveedorPage() {
 
   const openDetail = async (pedido: PedidoRow) => {
     setDetailPedido(pedido);
+    setEditingDetail(false);
+    setObservacion(pedido.observacion || "");
     const { data } = await supabase
       .from("pedido_proveedor_items")
       .select("*")
       .eq("pedido_id", pedido.id)
       .order("created_at");
-    setDetailItems((data as PedidoItemRow[]) || []);
+    // Handle cantidad_recibida potentially not existing yet
+    const items = ((data || []) as any[]).map((item) => ({
+      ...item,
+      cantidad_recibida: item.cantidad_recibida ?? 0,
+    }));
+    setDetailItems(items as PedidoItemRow[]);
     setMode("detail");
   };
-
-  // Receive dialog state
-  const [showReceiveDialog, setShowReceiveDialog] = useState(false);
-  const [receiveSaving, setReceiveSaving] = useState(false);
-  const [receiveError, setReceiveError] = useState("");
-  const [receiveFormaPago, setReceiveFormaPago] = useState("Transferencia");
-  const [receiveRegistrarCaja, setReceiveRegistrarCaja] = useState(true);
-  const [receiveActualizarPrecios, setReceiveActualizarPrecios] = useState(true);
 
   /* ── change status ── */
 
@@ -388,20 +438,55 @@ export default function PedidosProveedorPage() {
     fetchData();
   };
 
-  /* ── receive pedido → create compra + update stock ── */
+  /* ── open receive dialog ── */
+
+  const openReceiveDialog = () => {
+    if (!detailPedido) return;
+    setReceiveError("");
+    // Build receive items: only items that still have pending quantities
+    const rItems = detailItems
+      .filter((item) => {
+        const pendiente = item.cantidad - (item.cantidad_recibida || 0);
+        return pendiente > 0;
+      })
+      .map((item) => ({
+        id: item.id,
+        cantidad_pedida: item.cantidad,
+        cantidad_recibida_prev: item.cantidad_recibida || 0,
+        cantidad_recibir: item.cantidad - (item.cantidad_recibida || 0), // Default: receive all pending
+        descripcion: item.descripcion,
+        codigo: item.codigo,
+        precio_unitario: item.precio_unitario,
+      }));
+    setReceiveItems(rItems);
+    setShowReceiveDialog(true);
+  };
+
+  /* ── receive pedido → create compra + update stock (partial support) ── */
 
   const handleRecibirPedido = async () => {
-    if (!detailPedido || detailItems.length === 0) return;
+    if (!detailPedido || receiveItems.length === 0) return;
     setReceiveSaving(true);
     setReceiveError("");
 
     try {
+      // Filter items that are actually being received (qty > 0)
+      const itemsToReceive = receiveItems.filter((i) => i.cantidad_recibir > 0);
+      if (itemsToReceive.length === 0) {
+        setReceiveError("Debes ingresar al menos 1 producto a recibir");
+        setReceiveSaving(false);
+        return;
+      }
+
       // 1. Get next compra number
       const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "compra" });
       const numero = numData || "C-0000";
       const fecha = new Date().toISOString().split("T")[0];
 
-      const total = detailItems.reduce((a, i) => a + i.subtotal, 0);
+      const total = itemsToReceive.reduce((a, i) => a + i.cantidad_recibir * i.precio_unitario, 0);
+
+      // Determine estado_pago
+      const estadoPago = receiveFormaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
 
       // 2. Create compra
       const { data: compra, error: compraError } = await supabase
@@ -412,6 +497,8 @@ export default function PedidosProveedorPage() {
           proveedor_id: detailPedido.proveedor_id,
           total,
           estado: "Confirmada",
+          forma_pago: receiveFormaPago,
+          estado_pago: estadoPago,
           observacion: `Recepcion de pedido ${pedidoDisplayNum(detailPedido.id)}`,
         })
         .select("id")
@@ -424,49 +511,50 @@ export default function PedidosProveedorPage() {
       }
 
       // 3. Create compra items
-      const compraItems = detailItems.map((item) => ({
+      const compraItems = itemsToReceive.map((item) => ({
         compra_id: compra.id,
-        producto_id: item.producto_id,
+        producto_id: detailItems.find((di) => di.id === item.id)?.producto_id,
         codigo: item.codigo,
         descripcion: item.descripcion,
-        cantidad: item.cantidad,
+        cantidad: item.cantidad_recibir,
         precio_unitario: item.precio_unitario,
-        subtotal: item.subtotal,
+        subtotal: item.cantidad_recibir * item.precio_unitario,
       }));
       await supabase.from("compra_items").insert(compraItems);
 
-      // 4. Update stock for each product
-      for (const item of detailItems) {
-        if (!item.producto_id) continue;
+      // 4. Update stock for each received product
+      for (const item of itemsToReceive) {
+        const detailItem = detailItems.find((di) => di.id === item.id);
+        if (!detailItem?.producto_id) continue;
 
         const { data: prodData } = await supabase
           .from("productos")
           .select("stock, costo, precio")
-          .eq("id", item.producto_id)
+          .eq("id", detailItem.producto_id)
           .single();
 
         const stockAntes = prodData?.stock ?? 0;
-        const newStock = stockAntes + item.cantidad;
+        const newStock = stockAntes + item.cantidad_recibir;
 
         await supabase
           .from("productos")
           .update({ stock: newStock })
-          .eq("id", item.producto_id);
+          .eq("id", detailItem.producto_id);
 
         // Log stock movement
         await supabase.from("stock_movimientos").insert({
-          producto_id: item.producto_id,
+          producto_id: detailItem.producto_id,
           tipo: "compra",
           cantidad_antes: stockAntes,
           cantidad_despues: newStock,
-          cantidad: item.cantidad,
+          cantidad: item.cantidad_recibir,
           referencia: `Compra #${numero} (Pedido ${pedidoDisplayNum(detailPedido.id)})`,
           descripcion: `Recepcion - ${item.descripcion}`,
           usuario: "Admin Sistema",
           orden_id: compra.id,
         });
 
-        // Update cost and optionally price
+        // Update cost and price
         if (receiveActualizarPrecios && item.precio_unitario > 0) {
           const costoAnterior = prodData?.costo ?? 0;
           if (costoAnterior > 0 && item.precio_unitario !== costoAnterior) {
@@ -475,22 +563,27 @@ export default function PedidosProveedorPage() {
             const newPrecio = Math.round(item.precio_unitario * marginRatio);
             await supabase
               .from("productos")
-              .update({
-                costo: item.precio_unitario,
-                precio: newPrecio,
-                fecha_actualizacion: fecha,
-              })
-              .eq("id", item.producto_id);
+              .update({ costo: item.precio_unitario, precio: newPrecio, fecha_actualizacion: fecha })
+              .eq("id", detailItem.producto_id);
           } else {
             await supabase
               .from("productos")
               .update({ costo: item.precio_unitario, fecha_actualizacion: fecha })
-              .eq("id", item.producto_id);
+              .eq("id", detailItem.producto_id);
           }
         }
       }
 
-      // 5. Register caja movement
+      // 5. Update cantidad_recibida on pedido items
+      for (const item of itemsToReceive) {
+        const newRecibida = item.cantidad_recibida_prev + item.cantidad_recibir;
+        await supabase
+          .from("pedido_proveedor_items")
+          .update({ cantidad_recibida: newRecibida })
+          .eq("id", item.id);
+      }
+
+      // 6. Register caja movement
       if (total > 0 && receiveRegistrarCaja && receiveFormaPago !== "Cuenta Corriente") {
         const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
         await supabase.from("caja_movimientos").insert({
@@ -503,29 +596,58 @@ export default function PedidosProveedorPage() {
         });
       }
 
-      // 6. If cuenta corriente, update proveedor saldo
+      // 7. If CC, update proveedor saldo + CC entry
       if (receiveFormaPago === "Cuenta Corriente" && detailPedido.proveedor_id) {
         const { data: provData } = await supabase
           .from("proveedores")
-          .select("saldo")
+          .select("saldo, nombre")
           .eq("id", detailPedido.proveedor_id)
           .single();
         const saldoActual = provData?.saldo ?? 0;
-        await supabase
-          .from("proveedores")
-          .update({ saldo: saldoActual + total })
-          .eq("id", detailPedido.proveedor_id);
+        const newSaldo = saldoActual + total;
+        await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", detailPedido.proveedor_id);
+
+        await supabase.from("cuenta_corriente_proveedor").insert({
+          proveedor_id: detailPedido.proveedor_id,
+          fecha,
+          tipo: "compra",
+          descripcion: `Compra ${numero} - ${provData?.nombre || "Proveedor"} (Recepcion pedido)`,
+          monto: total,
+          saldo_resultante: newSaldo,
+          referencia_id: compra.id,
+          referencia_tipo: "compra",
+        });
       }
 
-      // 7. Mark pedido as Recibido
+      // 8. Determine pedido status
+      // Re-fetch items to check if all received
+      const { data: updatedItems } = await supabase
+        .from("pedido_proveedor_items")
+        .select("cantidad, cantidad_recibida")
+        .eq("pedido_id", detailPedido.id);
+
+      const allReceived = (updatedItems || []).every(
+        (i: any) => (i.cantidad_recibida ?? 0) >= i.cantidad
+      );
+
+      const newEstado = allReceived ? "Recibido" : "Recibido Parcial";
       await supabase
         .from("pedidos_proveedor")
-        .update({ estado: "Recibido" })
+        .update({ estado: newEstado })
         .eq("id", detailPedido.id);
 
-      setDetailPedido({ ...detailPedido, estado: "Recibido" });
+      setDetailPedido({ ...detailPedido, estado: newEstado });
       setShowReceiveDialog(false);
       setReceiveSaving(false);
+
+      // Refresh detail items
+      const { data: refreshedItems } = await supabase
+        .from("pedido_proveedor_items")
+        .select("*")
+        .eq("pedido_id", detailPedido.id)
+        .order("created_at");
+      setDetailItems(((refreshedItems || []) as any[]).map((i) => ({ ...i, cantidad_recibida: i.cantidad_recibida ?? 0 })));
+
       fetchData();
     } catch (err: any) {
       setReceiveError(err?.message || "Error inesperado");
@@ -552,12 +674,10 @@ export default function PedidosProveedorPage() {
         const minimo = p.stock_minimo ?? 0;
         const maximo = p.stock_maximo ?? 0;
 
-        // Include products with stock below minimum OR negative stock
         if (stock >= minimo && stock >= 0) continue;
         const ppList = p.producto_proveedores || [];
         if (ppList.length === 0) continue;
 
-        // Prefer principal provider, otherwise use first
         const sorted = [...ppList].sort((a: any, b: any) => (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0));
         const pp = sorted[0];
 
@@ -636,6 +756,7 @@ export default function PedidosProveedorPage() {
         descripcion: item.nombre,
         cantidad: item.faltante,
         faltante: item.faltante,
+        cantidad_recibida: 0,
         precio_unitario: item.precio_unitario,
         subtotal: item.subtotal,
       }));
@@ -648,10 +769,28 @@ export default function PedidosProveedorPage() {
     fetchData();
   };
 
+  /* ── detail item editing (for borradores) ── */
+
+  const updateDetailItemField = (index: number, field: "cantidad" | "precio_unitario", value: number) => {
+    setDetailItems((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      if (field === "cantidad") {
+        updated[index].faltante = value;
+      }
+      updated[index].subtotal = updated[index].cantidad * updated[index].precio_unitario;
+      return updated;
+    });
+  };
+
+  const removeDetailItem = (index: number) => {
+    setDetailItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
   /* ── stats ── */
 
   const totalPedidos = pedidos.length;
-  const pendientes = pedidos.filter((p) => p.estado === "Borrador" || p.estado === "Enviado").length;
+  const pendientes = pedidos.filter((p) => p.estado === "Borrador" || p.estado === "Enviado" || p.estado === "Recibido Parcial").length;
   const costoTotal = pedidos.reduce((a, p) => a + (p.costo_total_estimado || 0), 0);
 
   const filtered = pedidos.filter((p) => {
@@ -738,22 +877,12 @@ export default function PedidosProveedorPage() {
                           {c.nombre}
                         </button>
                       ))}
-                      {categorias.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).length === 0 && (
-                        <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
-                      )}
                     </div>
                   )}
                 </div>
               </div>
-              <Button
-                onClick={handleSugerirFaltantes}
-                disabled={!selectedProveedorId || suggesting}
-              >
-                {suggesting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4 mr-2" />
-                )}
+              <Button onClick={handleSugerirFaltantes} disabled={!selectedProveedorId || suggesting}>
+                {suggesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                 Sugerir faltantes
               </Button>
             </div>
@@ -774,11 +903,11 @@ export default function PedidosProveedorPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground">
-                      <th className="text-left py-3 px-4 font-medium">Código</th>
+                      <th className="text-left py-3 px-4 font-medium">Codigo</th>
                       <th className="text-left py-3 px-4 font-medium">Producto</th>
                       <th className="text-center py-3 px-4 font-medium">Stock</th>
-                      <th className="text-center py-3 px-4 font-medium">Mín</th>
-                      <th className="text-center py-3 px-4 font-medium">Máx</th>
+                      <th className="text-center py-3 px-4 font-medium">Min</th>
+                      <th className="text-center py-3 px-4 font-medium">Max</th>
                       <th className="text-center py-3 px-4 font-medium">Cantidad</th>
                       <th className="text-right py-3 px-4 font-medium">Precio Unit.</th>
                       <th className="text-right py-3 px-4 font-medium">Subtotal</th>
@@ -794,22 +923,14 @@ export default function PedidosProveedorPage() {
                         <td className="py-2 px-4 text-center text-muted-foreground">{item.stock_minimo}</td>
                         <td className="py-2 px-4 text-center text-muted-foreground">{item.stock_maximo}</td>
                         <td className="py-2 px-4 text-center">
-                          <Input
-                            type="number"
-                            min={1}
-                            value={item.faltante}
+                          <Input type="number" min={1} value={item.faltante}
                             onChange={(e) => updateItemField(idx, "faltante", Math.max(1, Number(e.target.value)))}
-                            className="w-20 mx-auto text-center h-8"
-                          />
+                            className="w-20 mx-auto text-center h-8" />
                         </td>
                         <td className="py-2 px-4 text-right">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={item.precio_unitario}
+                          <Input type="number" min={0} value={item.precio_unitario}
                             onChange={(e) => updateItemField(idx, "precio_unitario", Math.max(0, Number(e.target.value)))}
-                            className="w-28 ml-auto text-right h-8"
-                          />
+                            className="w-28 ml-auto text-right h-8" />
                         </td>
                         <td className="py-2 px-4 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
                         <td className="py-2 px-2">
@@ -836,19 +957,13 @@ export default function PedidosProveedorPage() {
             <CardContent className="pt-6 space-y-4">
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Observaciones</Label>
-                <Input
-                  value={observacion}
-                  onChange={(e) => setObservacion(e.target.value)}
-                  placeholder="Notas adicionales para el pedido..."
-                />
+                <Input value={observacion} onChange={(e) => setObservacion(e.target.value)} placeholder="Notas adicionales para el pedido..." />
               </div>
               {saveError && (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700">{saveError}</div>
               )}
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => { resetForm(); setSaveError(""); setMode("list"); }}>
-                  Cancelar
-                </Button>
+                <Button variant="outline" onClick={() => { resetForm(); setSaveError(""); setMode("list"); }}>Cancelar</Button>
                 <Button variant="secondary" onClick={() => savePedido("Borrador")} disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                   Guardar Borrador
@@ -867,10 +982,15 @@ export default function PedidosProveedorPage() {
 
   // ── DETAIL VIEW ──
   if (mode === "detail" && detailPedido) {
+    const isParcial = detailPedido.estado === "Recibido Parcial";
+    const canReceive = detailPedido.estado === "Enviado" || isParcial;
+    const canEdit = detailPedido.estado === "Borrador";
+    const detailTotal = detailItems.reduce((a, i) => a + i.subtotal, 0);
+
     return (
       <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => { setMode("list"); setDetailPedido(null); }}>
+          <Button variant="ghost" size="icon" onClick={() => { setMode("list"); setDetailPedido(null); setEditingDetail(false); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">
@@ -889,6 +1009,13 @@ export default function PedidosProveedorPage() {
           </div>
         </div>
 
+        {/* Success message */}
+        {successMsg && (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+            {successMsg}
+          </div>
+        )}
+
         {/* Status actions */}
         <Card>
           <CardContent className="pt-6">
@@ -896,7 +1023,7 @@ export default function PedidosProveedorPage() {
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Proveedor:</span>{" "}
-                  <span className="font-medium ml-1">{detailPedido.proveedores?.nombre || "—"}</span>
+                  <span className="font-medium ml-1">{detailPedido.proveedores?.nombre || "\u2014"}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Fecha:</span>{" "}
@@ -904,24 +1031,44 @@ export default function PedidosProveedorPage() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Total estimado:</span>{" "}
-                  <span className="font-medium ml-1">{formatCurrency(detailPedido.costo_total_estimado || 0)}</span>
+                  <span className="font-medium ml-1">{formatCurrency(detailTotal)}</span>
                 </div>
               </div>
               <div className="flex gap-2">
-                {detailPedido.estado === "Borrador" && (
+                {canEdit && !editingDetail && (
+                  <Button size="sm" variant="outline" onClick={() => setEditingDetail(true)}>
+                    <Edit className="w-4 h-4 mr-2" />Editar
+                  </Button>
+                )}
+                {canEdit && editingDetail && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => setEditingDetail(false)}>Cancelar</Button>
+                    <Button size="sm" onClick={saveEditedBorrador} disabled={saving}>
+                      {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                      Guardar
+                    </Button>
+                  </>
+                )}
+                {detailPedido.estado === "Borrador" && !editingDetail && (
                   <Button size="sm" onClick={() => changeEstado("Enviado")}>
                     <Send className="w-4 h-4 mr-2" />Marcar Enviado
                   </Button>
                 )}
-                {detailPedido.estado === "Enviado" && (
-                  <Button size="sm" onClick={() => setShowReceiveDialog(true)}>
+                {canReceive && (
+                  <Button size="sm" onClick={openReceiveDialog}>
                     <Package className="w-4 h-4 mr-2" />Recibir Mercaderia
                   </Button>
                 )}
               </div>
             </div>
-            {detailPedido.observacion && (
+            {detailPedido.observacion && !editingDetail && (
               <p className="text-sm text-muted-foreground mt-3 border-t pt-3">{detailPedido.observacion}</p>
+            )}
+            {editingDetail && (
+              <div className="mt-3 border-t pt-3 space-y-2">
+                <Label className="text-xs text-muted-foreground">Observaciones</Label>
+                <Input value={observacion} onChange={(e) => setObservacion(e.target.value)} placeholder="Notas..." />
+              </div>
             )}
           </CardContent>
         </Card>
@@ -933,28 +1080,75 @@ export default function PedidosProveedorPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Código</th>
-                    <th className="text-left py-3 px-4 font-medium">Descripción</th>
-                    <th className="text-center py-3 px-4 font-medium">Cantidad</th>
+                    <th className="text-left py-3 px-4 font-medium">Codigo</th>
+                    <th className="text-left py-3 px-4 font-medium">Descripcion</th>
+                    <th className="text-center py-3 px-4 font-medium">Pedido</th>
+                    {(isParcial || detailPedido.estado === "Recibido") && (
+                      <th className="text-center py-3 px-4 font-medium">Recibido</th>
+                    )}
+                    {(isParcial || detailPedido.estado === "Recibido") && (
+                      <th className="text-center py-3 px-4 font-medium">Pendiente</th>
+                    )}
                     <th className="text-right py-3 px-4 font-medium">Precio Unit.</th>
                     <th className="text-right py-3 px-4 font-medium">Subtotal</th>
+                    {editingDetail && <th className="w-10"></th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {detailItems.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{item.codigo}</td>
-                      <td className="py-3 px-4 font-medium">{item.descripcion}</td>
-                      <td className="py-3 px-4 text-center">{item.cantidad}</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(item.precio_unitario)}</td>
-                      <td className="py-3 px-4 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                    </tr>
-                  ))}
+                  {detailItems.map((item, idx) => {
+                    const pendiente = item.cantidad - (item.cantidad_recibida || 0);
+                    return (
+                      <tr key={item.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{item.codigo}</td>
+                        <td className="py-3 px-4 font-medium">{item.descripcion}</td>
+                        <td className="py-3 px-4 text-center">
+                          {editingDetail ? (
+                            <Input type="number" min={1} value={item.cantidad}
+                              onChange={(e) => updateDetailItemField(idx, "cantidad", Math.max(1, Number(e.target.value)))}
+                              className="w-20 mx-auto text-center h-8" />
+                          ) : (
+                            item.cantidad
+                          )}
+                        </td>
+                        {(isParcial || detailPedido.estado === "Recibido") && (
+                          <td className="py-3 px-4 text-center">
+                            <span className="text-emerald-600 font-medium">{item.cantidad_recibida || 0}</span>
+                          </td>
+                        )}
+                        {(isParcial || detailPedido.estado === "Recibido") && (
+                          <td className="py-3 px-4 text-center">
+                            {pendiente > 0 ? (
+                              <span className="text-orange-500 font-medium">{pendiente}</span>
+                            ) : (
+                              <Check className="w-4 h-4 text-emerald-500 mx-auto" />
+                            )}
+                          </td>
+                        )}
+                        <td className="py-3 px-4 text-right">
+                          {editingDetail ? (
+                            <Input type="number" min={0} value={item.precio_unitario}
+                              onChange={(e) => updateDetailItemField(idx, "precio_unitario", Math.max(0, Number(e.target.value)))}
+                              className="w-28 ml-auto text-right h-8" />
+                          ) : (
+                            formatCurrency(item.precio_unitario)
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                        {editingDetail && (
+                          <td className="py-3 px-2">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => removeDetailItem(idx)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               <div className="flex justify-end border-t pt-3 mt-1 px-4">
                 <span className="text-sm text-muted-foreground mr-4">Total:</span>
-                <span className="text-sm font-bold">{formatCurrency(detailPedido.costo_total_estimado || 0)}</span>
+                <span className="text-sm font-bold">{formatCurrency(detailTotal)}</span>
               </div>
             </div>
           </CardContent>
@@ -962,32 +1156,70 @@ export default function PedidosProveedorPage() {
 
         {/* Receive Pedido Dialog */}
         <Dialog open={showReceiveDialog} onOpenChange={setShowReceiveDialog}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Recibir Mercaderia</DialogTitle>
+              <DialogTitle>Recibir Mercaderia {isParcial && "(Recepcion adicional)"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Se creara una <strong>compra</strong> con los items del pedido, se actualizara el <strong>stock</strong> y los <strong>costos</strong> de cada producto.
+                Ingresa la cantidad recibida de cada producto. Los items no recibidos quedaran pendientes.
               </p>
 
-              {/* Summary */}
-              <div className="rounded-lg border p-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Proveedor</span>
-                  <span className="font-medium">{detailPedido.proveedores?.nombre || "Sin proveedor"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Pedido</span>
-                  <span className="font-medium">{pedidoDisplayNum(detailPedido.id)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Productos</span>
-                  <span className="font-medium">{detailItems.length} items ({detailItems.reduce((a, i) => a + i.cantidad, 0)} unidades)</span>
-                </div>
-                <div className="flex justify-between border-t pt-2 mt-2">
-                  <span className="text-muted-foreground font-medium">Total</span>
-                  <span className="font-bold text-lg">{formatCurrency(detailPedido.costo_total_estimado || 0)}</span>
+              {/* Items to receive */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="text-left py-2 px-3 font-medium">Producto</th>
+                      <th className="text-center py-2 px-3 font-medium">Pedido</th>
+                      <th className="text-center py-2 px-3 font-medium">Ya recibido</th>
+                      <th className="text-center py-2 px-3 font-medium">Pendiente</th>
+                      <th className="text-center py-2 px-3 font-medium">Recibir ahora</th>
+                      <th className="text-right py-2 px-3 font-medium">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiveItems.map((item, idx) => {
+                      const pendiente = item.cantidad_pedida - item.cantidad_recibida_prev;
+                      return (
+                        <tr key={item.id} className="border-b last:border-0">
+                          <td className="py-2 px-3">
+                            <span className="font-mono text-xs text-muted-foreground mr-2">{item.codigo}</span>
+                            <span className="text-sm">{item.descripcion}</span>
+                          </td>
+                          <td className="py-2 px-3 text-center text-muted-foreground">{item.cantidad_pedida}</td>
+                          <td className="py-2 px-3 text-center text-muted-foreground">{item.cantidad_recibida_prev}</td>
+                          <td className="py-2 px-3 text-center text-orange-500 font-medium">{pendiente}</td>
+                          <td className="py-2 px-3 text-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={pendiente}
+                              value={item.cantidad_recibir}
+                              onChange={(e) => {
+                                const val = Math.min(Math.max(0, Number(e.target.value)), pendiente);
+                                setReceiveItems((prev) => {
+                                  const updated = [...prev];
+                                  updated[idx] = { ...updated[idx], cantidad_recibir: val };
+                                  return updated;
+                                });
+                              }}
+                              className="w-20 mx-auto text-center h-8"
+                            />
+                          </td>
+                          <td className="py-2 px-3 text-right font-medium">
+                            {formatCurrency(item.cantidad_recibir * item.precio_unitario)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div className="flex justify-end border-t pt-3 mt-1 px-3">
+                  <span className="text-sm text-muted-foreground mr-4">Total a recibir:</span>
+                  <span className="text-sm font-bold">
+                    {formatCurrency(receiveItems.reduce((a, i) => a + i.cantidad_recibir * i.precio_unitario, 0))}
+                  </span>
                 </div>
               </div>
 
@@ -1000,7 +1232,6 @@ export default function PedidosProveedorPage() {
                     <SelectContent>
                       <SelectItem value="Efectivo">Efectivo</SelectItem>
                       <SelectItem value="Transferencia">Transferencia</SelectItem>
-                      <SelectItem value="Cheque">Cheque</SelectItem>
                       <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1017,6 +1248,12 @@ export default function PedidosProveedorPage() {
                     <span className="text-sm">Registrar movimiento en caja diaria</span>
                   </label>
                 )}
+
+                {receiveFormaPago === "Cuenta Corriente" && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    Se agregara al saldo del proveedor como deuda pendiente
+                  </p>
+                )}
               </div>
 
               {receiveError && (
@@ -1026,9 +1263,7 @@ export default function PedidosProveedorPage() {
               )}
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => { setShowReceiveDialog(false); setReceiveError(""); }}>
-                  Cancelar
-                </Button>
+                <Button variant="outline" onClick={() => { setShowReceiveDialog(false); setReceiveError(""); }}>Cancelar</Button>
                 <Button onClick={handleRecibirPedido} disabled={receiveSaving}>
                   {receiveSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Package className="w-4 h-4 mr-2" />}
                   Confirmar Recepcion
@@ -1075,12 +1310,10 @@ export default function PedidosProveedorPage() {
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                {generatedGroups.length} proveedor(es) con productos faltantes - Total estimado: <span className="font-bold text-foreground">{formatCurrency(selectedTotal)}</span>
+                {generatedGroups.length} proveedor(es) - Total estimado: <span className="font-bold text-foreground">{formatCurrency(selectedTotal)}</span>
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { setGeneratedGroups([]); setMode("list"); }}>
-                  Cancelar
-                </Button>
+                <Button variant="outline" onClick={() => { setGeneratedGroups([]); setMode("list"); }}>Cancelar</Button>
                 <Button onClick={confirmGeneratedPedidos} disabled={saving || selectedCount === 0}>
                   {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                   Crear {selectedCount} Pedido(s) como Borrador
@@ -1093,12 +1326,7 @@ export default function PedidosProveedorPage() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={group.selected}
-                        onChange={() => toggleGroupSelected(gIdx)}
-                        className="w-4 h-4 rounded border-border"
-                      />
+                      <input type="checkbox" checked={group.selected} onChange={() => toggleGroupSelected(gIdx)} className="w-4 h-4 rounded border-border" />
                       <div>
                         <p className="font-semibold">{group.proveedor_nombre}</p>
                         <p className="text-xs text-muted-foreground">{group.items.length} producto(s) - Total: {formatCurrency(group.total)}</p>
@@ -1217,6 +1445,7 @@ export default function PedidosProveedorPage() {
             <TabsTrigger value="all">Todos</TabsTrigger>
             <TabsTrigger value="Borrador">Borrador</TabsTrigger>
             <TabsTrigger value="Enviado">Enviado</TabsTrigger>
+            <TabsTrigger value="Recibido Parcial">Parcial</TabsTrigger>
             <TabsTrigger value="Recibido">Recibido</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -1225,7 +1454,7 @@ export default function PedidosProveedorPage() {
             <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="day">Día</SelectItem>
+              <SelectItem value="day">Dia</SelectItem>
               <SelectItem value="month">Mensual</SelectItem>
               <SelectItem value="range">Entre fechas</SelectItem>
             </SelectContent>
@@ -1278,7 +1507,7 @@ export default function PedidosProveedorPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">N°</th>
+                    <th className="text-left py-3 px-4 font-medium">N</th>
                     <th className="text-left py-3 px-4 font-medium">Fecha</th>
                     <th className="text-left py-3 px-4 font-medium">Proveedor</th>
                     <th className="text-right py-3 px-4 font-medium">Total estimado</th>
@@ -1295,7 +1524,7 @@ export default function PedidosProveedorPage() {
                     >
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{pedidoDisplayNum(p.id)}</td>
                       <td className="py-3 px-4 text-muted-foreground">{new Date(p.fecha).toLocaleDateString("es-AR")}</td>
-                      <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "—"}</td>
+                      <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "\u2014"}</td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.costo_total_estimado || 0)}</td>
                       <td className="py-3 px-4 text-center">
                         <Badge variant={estadoBadgeVariant(p.estado)} className="text-xs font-normal">

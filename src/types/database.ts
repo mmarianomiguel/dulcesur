@@ -214,6 +214,8 @@ export interface Compra {
   subtotal: number;
   total: number;
   estado: string;
+  forma_pago: string | null;
+  estado_pago: string;
   observacion: string | null;
   created_at: string;
 }
@@ -265,6 +267,19 @@ export interface ProductoProveedor {
   cantidad_minima_pedido: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface CuentaCorrienteProveedor {
+  id: string;
+  proveedor_id: string;
+  fecha: string;
+  tipo: "compra" | "pago" | "ajuste";
+  descripcion: string;
+  monto: number;
+  saldo_resultante: number;
+  referencia_id: string | null;
+  referencia_tipo: string | null;
+  created_at: string;
 }
 
 export interface Numerador {
