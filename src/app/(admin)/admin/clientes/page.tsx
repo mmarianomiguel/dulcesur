@@ -1330,7 +1330,7 @@ export default function ClientesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Código de cliente</Label>
-                  <Input value={form.codigo_cliente} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 4); f("codigo_cliente", v); }} placeholder="0046" maxLength={4} className="font-mono tracking-widest" />
+                  <Input value={form.codigo_cliente} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 4); f("codigo_cliente", v); }} placeholder="Ej: 0046" maxLength={4} className="font-mono tracking-widest" />
                   <p className="text-[11px] text-muted-foreground">4 dígitos, único por cliente</p>
                 </div>
                 <div className="space-y-2">

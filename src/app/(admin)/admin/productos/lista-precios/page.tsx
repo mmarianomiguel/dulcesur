@@ -396,15 +396,79 @@ export default function ListaPreciosPage() {
           pdf.setLineWidth(0.3);
           pdf.rect(x, y, cellW, cellH);
 
-          // Fixed layout zones from top to bottom
-          const footerH = 8; // reserved for footer line + web/date
-          const logoSize = config.combinado_mostrarLogo && logoBase64 ? Math.min(config.logoTamaño, cellH * 0.12) : 0;
+          // Layout: all zones positioned absolutely within cell
+          const logoSize = config.combinado_mostrarLogo && logoBase64 ? Math.min(config.logoTamaño, cellH * 0.10) : 0;
 
-          let curY = y + pad;
+          const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
+          const transferPrice = displayPrice * (1 + config.porcentajeTransferencia / 100);
+          const boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
+          const transferBox = boxPrice * (1 + config.porcentajeTransferencia / 100);
+          const hasUnits = product.unidadesCaja > 0;
 
+          // ── Bottom zone (anchored to bottom) ──
+          // Footer: web + date (5mm from bottom)
+          const footerY = y + cellH - pad - 1;
+          pdf.setDrawColor(220);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + pad, footerY - 3, x + cellW - pad, footerY - 3);
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(4.5);
+          pdf.setTextColor(150);
+          if (config.combinado_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerY);
+          if (config.combinado_mostrarFecha) pdf.text(today, x + cellW - pad - 1, footerY, { align: "right" });
+          pdf.setTextColor(0);
+
+          // Detail rows: Efect + Transf (anchored above footer)
+          const rowH = 8;
+          const transfY = footerY - 5; // transf label Y
+          const efectY = transfY - rowH; // efect label Y
+          const dividerY = efectY - 2; // divider above efect
+
+          // Divider line
+          pdf.setDrawColor(220);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + pad, dividerY, x + cellW - pad, dividerY);
+
+          // EFEC row
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5);
+          pdf.setTextColor(140);
+          pdf.text("Efect.", x + pad, efectY);
+          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
+            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, efectY, { align: "right" });
+          }
+          pdf.setTextColor(0);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(8);
+          pdf.text(formatPrice(displayPrice), x + pad, efectY + 3.5);
+          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
+            pdf.setFontSize(7);
+            pdf.text(formatPrice(boxPrice), x + cellW - pad, efectY + 3.5, { align: "right" });
+          }
+
+          // TRANSF row
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5);
+          pdf.setTextColor(140);
+          pdf.text("Transf.", x + pad, transfY);
+          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
+            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, transfY, { align: "right" });
+          }
+          pdf.setTextColor(0);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(8);
+          pdf.setTextColor(100);
+          pdf.text(formatPrice(transferPrice), x + pad, transfY + 3.5);
+          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
+            pdf.setFontSize(7);
+            pdf.text(formatPrice(transferBox), x + cellW - pad, transfY + 3.5, { align: "right" });
+          }
+          pdf.setTextColor(0);
+
+          // ── Top zone (flows down) ──
           // Logo (top-left)
           if (config.combinado_mostrarLogo && logoBase64) {
-            try { pdf.addImage(logoBase64, "PNG", x + pad, curY, logoSize, logoSize); } catch {}
+            try { pdf.addImage(logoBase64, "PNG", x + pad, y + pad, logoSize, logoSize); } catch {}
           }
 
           // Marca (top-right corner)
@@ -416,23 +480,15 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(0);
           }
 
-          curY += Math.max(logoSize, 2) + 2;
-
-          // Product name - truncate to max 2 lines (lowered 3px)
-          const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
-          const transferPrice = displayPrice * (1 + config.porcentajeTransferencia / 100);
-          const boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
-          const transferBox = boxPrice * (1 + config.porcentajeTransferencia / 100);
-          const hasUnits = product.unidadesCaja > 0;
-
-          curY += 3; // lower product name 3px
-
+          // Product name - centered in the space between top area and big price
+          const topAreaEnd = y + pad + Math.max(logoSize, 4) + 3;
+          const nameMaxW = cellW - pad * 2;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.combinado_tamañoNombre);
-          const nameMaxW = cellW - pad * 2;
           const nameLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
           const nameLineH = config.combinado_tamañoNombre * 0.45;
           const maxNameLines = Math.min(nameLines.length, 2);
+          const nameY = topAreaEnd + 1;
           for (let li = 0; li < maxNameLines; li++) {
             let lineText = String(nameLines[li]);
             if (li === 1 && nameLines.length > 2) {
@@ -441,78 +497,15 @@ export default function ListaPreciosPage() {
               }
               lineText = lineText + "...";
             }
-            pdf.text(lineText, x + cellW / 2, curY + li * nameLineH, { align: "center" });
+            pdf.text(lineText, x + cellW / 2, nameY + li * nameLineH, { align: "center" });
           }
-          curY += maxNameLines * nameLineH + 1;
 
-          // Big price - centered
-          const bigPriceH = config.combinado_tamañoPrecio * 0.4;
-          curY += 1;
+          // Big price - centered between name and divider
+          const nameEnd = nameY + maxNameLines * nameLineH + 1;
+          const priceZoneCenter = nameEnd + (dividerY - nameEnd) / 2;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.combinado_tamañoPrecio);
-          pdf.text(formatPrice(displayPrice), x + cellW / 2, curY + bigPriceH, { align: "center" });
-          curY += bigPriceH + config.combinado_tamañoPrecio * 0.15 + 1;
-
-          // Divider line
-          pdf.setDrawColor(220);
-          pdf.setLineWidth(0.2);
-          pdf.line(x + pad, curY, x + cellW - pad, curY);
-          curY += 2;
-
-          // Detail rows - raised closer to divider
-          const detailEndY = y + cellH - footerH;
-          const detailSpace = detailEndY - curY;
-          const rowH = Math.max(7, Math.min(10, detailSpace / 2));
-
-          // EFEC row - unit price left, box qty + box price right
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(5.5);
-          pdf.setTextColor(140);
-          pdf.text("Efect.", x + pad, curY);
-          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, curY, { align: "right" });
-          }
-          pdf.setTextColor(0);
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(Math.min(9, rowH - 1));
-          pdf.text(formatPrice(displayPrice), x + pad, curY + 3.5);
-          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.setFontSize(Math.min(7.5, rowH - 2));
-            pdf.text(formatPrice(boxPrice), x + cellW - pad, curY + 3.5, { align: "right" });
-          }
-
-          curY += rowH;
-
-          // TRANSF row - unit price left, box transfer price right
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(5.5);
-          pdf.setTextColor(140);
-          pdf.text("Transf.", x + pad, curY);
-          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, curY, { align: "right" });
-          }
-          pdf.setTextColor(0);
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(Math.min(9, rowH - 1));
-          pdf.setTextColor(100);
-          pdf.text(formatPrice(transferPrice), x + pad, curY + 3.5);
-          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.setFontSize(Math.min(7.5, rowH - 2));
-            pdf.text(formatPrice(transferBox), x + cellW - pad, curY + 3.5, { align: "right" });
-          }
-          pdf.setTextColor(0);
-
-          // Footer - fixed at bottom, web URL bottom-left
-          const footerY = y + cellH - pad;
-          pdf.setDrawColor(220);
-          pdf.setLineWidth(0.2);
-          pdf.line(x + pad, footerY - 4, x + cellW - pad, footerY - 4);
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(5);
-          pdf.setTextColor(150);
-          if (config.combinado_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerY - 1);
-          if (config.combinado_mostrarFecha) pdf.text(today, x + cellW - pad - 1, footerY - 1, { align: "right" });
-          pdf.setTextColor(0);
+          pdf.text(formatPrice(displayPrice), x + cellW / 2, priceZoneCenter + config.combinado_tamañoPrecio * 0.15, { align: "center" });
         });
       }
 

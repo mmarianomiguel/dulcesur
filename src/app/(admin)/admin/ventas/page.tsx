@@ -1430,34 +1430,55 @@ export default function VentasPage() {
         {/* LEFT COLUMN */}
         <div className="flex-1 flex flex-col gap-2 lg:gap-3 min-w-0 overflow-hidden">
           {/* Client selector */}
-          <button
-            ref={clientSectionRef}
-            onClick={() => {
-              setClientSearch("");
-              setClientHighlight(0);
-              setClientDialogOpen(true);
-            }}
-            className="flex items-center gap-2 lg:gap-3 w-full rounded-xl border bg-card px-3 lg:px-4 py-2 lg:py-3 text-left hover:bg-accent transition-colors"
-          >
-            <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
-              <User className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <span className={selectedClient ? "text-sm font-medium" : "text-sm text-muted-foreground"}>
-              {selectedClient ? `${selectedClient.nombre}` : "Consumidor Final"}
-            </span>
-            {selectedClient && (
-              <span
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setClientId("");
-                }}
-                className="ml-auto p-1 rounded hover:bg-muted cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="#"
+              maxLength={4}
+              className="w-14 h-[46px] rounded-xl border bg-card px-2 text-center font-mono text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-primary"
+              onChange={(e) => {
+                const code = e.target.value.replace(/\D/g, "").slice(0, 4);
+                e.target.value = code;
+                if (code.length >= 1) {
+                  const match = clients.find((c) => (c as any).codigo_cliente === code);
+                  if (match) {
+                    setClientId(match.id);
+                    e.target.value = "";
+                    e.target.blur();
+                  }
+                }
+              }}
+            />
+            <button
+              ref={clientSectionRef}
+              onClick={() => {
+                setClientSearch("");
+                setClientHighlight(0);
+                setClientDialogOpen(true);
+              }}
+              className="flex items-center gap-2 lg:gap-3 flex-1 rounded-xl border bg-card px-3 lg:px-4 py-2 lg:py-3 text-left hover:bg-accent transition-colors"
+            >
+              <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
+                <User className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <span className={selectedClient ? "text-sm font-medium" : "text-sm text-muted-foreground"}>
+                {selectedClient ? `${selectedClient.nombre}` : "Consumidor Final"}
               </span>
-            )}
-          </button>
+              {selectedClient && (
+                <span
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setClientId("");
+                  }}
+                  className="ml-auto p-1 rounded hover:bg-muted cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5 text-muted-foreground" />
+                </span>
+              )}
+            </button>
+          </div>
 
           {/* Dispatch method toggle */}
           <button
@@ -1662,23 +1683,6 @@ export default function VentasPage() {
 
         {/* RIGHT COLUMN */}
         <div ref={paymentSectionRef} tabIndex={-1} className="flex flex-col gap-2 lg:w-[280px] xl:w-[320px] shrink-0 overflow-y-auto">
-          {/* Price list selector */}
-          {listasPrecio.length > 0 && (
-            <Select value={listaPrecioId} onValueChange={(v) => setListaPrecioId(v ?? "")}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Lista de precios" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Precio base</SelectItem>
-                {listasPrecio.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.nombre} {l.porcentaje_ajuste !== 0 ? `(${l.porcentaje_ajuste > 0 ? "+" : ""}${l.porcentaje_ajuste}%)` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
           {/* Vendedor selector */}
           {sellers.length > 0 && (
             <div className="space-y-1">
