@@ -147,7 +147,7 @@ export default function CheckoutPage() {
   // Date
   const [fechaEntrega, setFechaEntrega] = useState("");
   const [availableDates, setAvailableDates] = useState<
-    { dayAbbr: string; dayNum: number; monthAbbr: string; value: string }[]
+    { dayAbbr: string; dayNum: number; monthAbbr: string; value: string; isToday: boolean }[]
   >([]);
 
   // Payment
