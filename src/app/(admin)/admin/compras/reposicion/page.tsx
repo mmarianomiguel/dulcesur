@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -30,6 +32,8 @@ import {
   CheckCircle2,
   ArrowUpDown,
   Save,
+  Filter,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -44,7 +48,12 @@ interface ReposicionItem {
   codigo: string;
   nombre: string;
   imagen_url: string | null;
+  categoria_id: string | null;
   categoria: string;
+  subcategoria_id: string | null;
+  subcategoria: string;
+  marca_id: string | null;
+  marca: string;
   stock: number;
   stock_minimo: number;
   stock_maximo: number;
@@ -62,6 +71,17 @@ interface Categoria {
   nombre: string;
 }
 
+interface Subcategoria {
+  id: string;
+  nombre: string;
+  categoria_id: string;
+}
+
+interface Marca {
+  id: string;
+  nombre: string;
+}
+
 interface Proveedor {
   id: string;
   nombre: string;
@@ -72,33 +92,68 @@ interface Proveedor {
 export default function ReposicionPage() {
   const [items, setItems] = useState<ReposicionItem[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [subcategorias, setSubcategorias] = useState<Subcategoria[]>([]);
+  const [marcas, setMarcas] = useState<Marca[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCategoria, setFilterCategoria] = useState("all");
+  const [filterSubcategoria, setFilterSubcategoria] = useState("all");
+  const [filterMarca, setFilterMarca] = useState("all");
   const [filterProveedor, setFilterProveedor] = useState("all");
   const [filterNivel, setFilterNivel] = useState<"all" | "critico" | "bajo">("all");
   const [sortBy, setSortBy] = useState<"nivel" | "nombre" | "faltante">("nivel");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Searchable dropdown states
+  const [catSearch, setCatSearch] = useState("");
+  const [catOpen, setCatOpen] = useState(false);
+  const [subcatSearch, setSubcatSearch] = useState("");
+  const [subcatOpen, setSubcatOpen] = useState(false);
+  const [marcaSearch, setMarcaSearch] = useState("");
+  const [marcaOpen, setMarcaOpen] = useState(false);
+  const [provSearch, setProvSearch] = useState("");
+  const [provOpen, setProvOpen] = useState(false);
+  const catRef = useRef<HTMLDivElement>(null);
+  const subcatRef = useRef<HTMLDivElement>(null);
+  const marcaRef = useRef<HTMLDivElement>(null);
+  const provRef = useRef<HTMLDivElement>(null);
 
   // Generate pedido dialog
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generateResult, setGenerateResult] = useState<{ ok: boolean; message: string } | null>(null);
 
+  // Click outside handler for dropdowns
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false);
+      if (subcatRef.current && !subcatRef.current.contains(e.target as Node)) setSubcatOpen(false);
+      if (marcaRef.current && !marcaRef.current.contains(e.target as Node)) setMarcaOpen(false);
+      if (provRef.current && !provRef.current.contains(e.target as Node)) setProvOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
 
-    const [{ data: productos }, { data: cats }, { data: provs }] = await Promise.all([
+    const [{ data: productos }, { data: cats }, { data: subcats }, { data: mrs }, { data: provs }] = await Promise.all([
       supabase
         .from("productos")
-        .select("id, codigo, nombre, imagen_url, stock, stock_minimo, stock_maximo, costo, categoria_id, categorias(nombre), producto_proveedores(proveedor_id, precio_proveedor, cantidad_minima_pedido, es_principal, proveedores(nombre))")
+        .select("id, codigo, nombre, imagen_url, stock, stock_minimo, stock_maximo, costo, categoria_id, subcategoria_id, marca_id, categorias(nombre), subcategorias(nombre), marcas(nombre), producto_proveedores(proveedor_id, precio_proveedor, cantidad_minima_pedido, es_principal, proveedores(nombre))")
         .eq("activo", true)
         .order("nombre"),
       supabase.from("categorias").select("id, nombre").order("nombre"),
+      supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
+      supabase.from("marcas").select("id, nombre").order("nombre"),
       supabase.from("proveedores").select("id, nombre").eq("activo", true).order("nombre"),
     ]);
 
     setCategorias((cats as Categoria[]) || []);
+    setSubcategorias((subcats as Subcategoria[]) || []);
+    setMarcas((mrs as Marca[]) || []);
     setProveedores((provs as Proveedor[]) || []);
 
     if (productos) {
@@ -111,28 +166,23 @@ export default function ReposicionPage() {
         const ppList = p.producto_proveedores || [];
         const pp = ppList.find((x: any) => x.es_principal) || ppList[0] || null;
 
-        // Determine level: critico if stock <= 0 or stock < minimo (when minimo > 0), bajo if close
+        // Determine level
         let nivel: "critico" | "bajo" | "ok";
         if (stock <= 0) {
           nivel = "critico";
         } else if (minimo > 0 && stock <= minimo) {
           nivel = "bajo";
-        } else if (stock < 0) {
-          nivel = "critico";
         } else {
           nivel = "ok";
         }
 
-        // Calculate how many to order:
-        // If stock_maximo is set, order up to max. Otherwise use a sensible default.
+        // Calculate how many to order
         let faltante: number;
         if (maximo > 0) {
           faltante = Math.max(1, maximo - stock);
         } else if (stock < 0) {
-          // Negative stock: at minimum bring to 0
           faltante = Math.abs(stock);
         } else if (minimo > 0 && stock <= minimo) {
-          // Below minimum but no max set: order at least minimo * 2
           faltante = Math.max(1, minimo * 2 - stock);
         } else {
           faltante = 0;
@@ -143,7 +193,12 @@ export default function ReposicionPage() {
           codigo: p.codigo || "",
           nombre: p.nombre,
           imagen_url: p.imagen_url || null,
+          categoria_id: p.categoria_id || null,
           categoria: p.categorias?.nombre || "Sin categoria",
+          subcategoria_id: p.subcategoria_id || null,
+          subcategoria: (p.subcategorias as any)?.nombre || "",
+          marca_id: p.marca_id || null,
+          marca: p.marcas?.nombre || "",
           stock,
           stock_minimo: minimo,
           stock_maximo: maximo,
@@ -167,6 +222,13 @@ export default function ReposicionPage() {
     fetchData();
   }, [fetchData]);
 
+  /* ── filtered subcategorias by selected category ── */
+
+  const filteredSubcategorias = useMemo(
+    () => subcategorias.filter((s) => filterCategoria === "all" || s.categoria_id === filterCategoria),
+    [subcategorias, filterCategoria]
+  );
+
   /* ── filtered & sorted ── */
 
   const filtered = useMemo(() => {
@@ -182,7 +244,15 @@ export default function ReposicionPage() {
     }
 
     if (filterCategoria !== "all") {
-      result = result.filter((i) => i.categoria === filterCategoria);
+      result = result.filter((i) => i.categoria_id === filterCategoria);
+    }
+
+    if (filterSubcategoria !== "all") {
+      result = result.filter((i) => i.subcategoria_id === filterSubcategoria);
+    }
+
+    if (filterMarca !== "all") {
+      result = result.filter((i) => i.marca_id === filterMarca);
     }
 
     if (filterProveedor !== "all") {
@@ -208,7 +278,7 @@ export default function ReposicionPage() {
     });
 
     return result;
-  }, [items, search, filterCategoria, filterProveedor, filterNivel, sortBy]);
+  }, [items, search, filterCategoria, filterSubcategoria, filterMarca, filterProveedor, filterNivel, sortBy]);
 
   /* ── stats ── */
 
@@ -292,6 +362,9 @@ export default function ReposicionPage() {
     }
   };
 
+  // Count active filters
+  const activeFilterCount = [filterCategoria, filterSubcategoria, filterMarca, filterProveedor].filter((f) => f !== "all").length;
+
   /* ═══════════════════ RENDER ═══════════════════ */
 
   return (
@@ -344,63 +417,202 @@ export default function ReposicionPage() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre o codigo..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+      <Card className="overflow-visible">
+        <CardContent className="pt-6 space-y-4 overflow-visible">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Buscar</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por codigo o descripcion..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <Select value={filterNivel} onValueChange={(v) => setFilterNivel((v || "all") as any)}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="Nivel" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="critico">Criticos</SelectItem>
-                <SelectItem value="bajo">Stock bajo</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterCategoria} onValueChange={(v) => setFilterCategoria(v || "all")}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las categorias</SelectItem>
-                {categorias.map((c) => (
-                  <SelectItem key={c.id} value={c.nombre}>{c.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterProveedor} onValueChange={(v) => setFilterProveedor(v || "all")}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Proveedor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los proveedores</SelectItem>
-                <SelectItem value="sin_proveedor">Sin proveedor</SelectItem>
-                {proveedores.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9"
-              title="Cambiar orden"
-              onClick={() => setSortBy((prev) => prev === "nivel" ? "faltante" : prev === "faltante" ? "nombre" : "nivel")}
-            >
-              <ArrowUpDown className="w-4 h-4" />
-            </Button>
+            <div className="flex-shrink-0 self-end flex gap-2">
+              <Select value={filterNivel} onValueChange={(v) => setFilterNivel((v || "all") as any)}>
+                <SelectTrigger className="w-36">
+                  <SelectValue placeholder="Urgencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="critico">Criticos</SelectItem>
+                  <SelectItem value="bajo">Stock bajo</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="w-4 h-4" />
+                Filtros
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-[10px] h-5 px-1.5">{activeFilterCount}</Badge>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                title="Cambiar orden"
+                onClick={() => setSortBy((prev) => prev === "nivel" ? "faltante" : prev === "faltante" ? "nombre" : "nivel")}
+              >
+                <ArrowUpDown className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
+
+          {showFilters && (
+            <>
+              <Separator />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Categoria searchable */}
+                <div ref={catRef}>
+                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Categoria</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar categoria..."
+                      value={filterCategoria !== "all" ? (categorias.find((c) => c.id === filterCategoria)?.nombre ?? catSearch) : catSearch}
+                      onChange={(e) => { setCatSearch(e.target.value); setFilterCategoria("all"); setFilterSubcategoria("all"); setCatOpen(true); }}
+                      onFocus={() => setCatOpen(true)}
+                      className="pl-9"
+                    />
+                    {filterCategoria !== "all" && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setFilterCategoria("all"); setCatSearch(""); setFilterSubcategoria("all"); }}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {catOpen && filterCategoria === "all" && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setFilterCategoria("all"); setCatSearch(""); setCatOpen(false); }}>Todas</button>
+                        {categorias.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).map((c) => (
+                          <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setFilterCategoria(c.id); setCatSearch(""); setCatOpen(false); setFilterSubcategoria("all"); }}>
+                            {c.nombre}
+                          </button>
+                        ))}
+                        {categorias.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Subcategoria searchable */}
+                <div ref={subcatRef}>
+                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Subcategoria</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar subcategoria..."
+                      value={filterSubcategoria !== "all" ? (filteredSubcategorias.find((s) => s.id === filterSubcategoria)?.nombre ?? subcatSearch) : subcatSearch}
+                      onChange={(e) => { setSubcatSearch(e.target.value); setFilterSubcategoria("all"); setSubcatOpen(true); }}
+                      onFocus={() => setSubcatOpen(true)}
+                      className="pl-9"
+                    />
+                    {filterSubcategoria !== "all" && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setFilterSubcategoria("all"); setSubcatSearch(""); }}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {subcatOpen && filterSubcategoria === "all" && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setFilterSubcategoria("all"); setSubcatSearch(""); setSubcatOpen(false); }}>Todas</button>
+                        {filteredSubcategorias.filter((s) => s.nombre.toLowerCase().includes(subcatSearch.toLowerCase())).map((s) => (
+                          <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setFilterSubcategoria(s.id); setSubcatSearch(""); setSubcatOpen(false); }}>
+                            {s.nombre}
+                          </button>
+                        ))}
+                        {filteredSubcategorias.filter((s) => s.nombre.toLowerCase().includes(subcatSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Marca searchable */}
+                <div ref={marcaRef}>
+                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Marca</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar marca..."
+                      value={filterMarca !== "all" ? (marcas.find((m) => m.id === filterMarca)?.nombre ?? marcaSearch) : marcaSearch}
+                      onChange={(e) => { setMarcaSearch(e.target.value); setFilterMarca("all"); setMarcaOpen(true); }}
+                      onFocus={() => setMarcaOpen(true)}
+                      className="pl-9"
+                    />
+                    {filterMarca !== "all" && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setFilterMarca("all"); setMarcaSearch(""); }}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {marcaOpen && filterMarca === "all" && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setFilterMarca("all"); setMarcaSearch(""); setMarcaOpen(false); }}>Todas</button>
+                        {marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())).map((m) => (
+                          <button key={m.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setFilterMarca(m.id); setMarcaSearch(""); setMarcaOpen(false); }}>
+                            {m.nombre}
+                          </button>
+                        ))}
+                        {marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Proveedor searchable */}
+                <div ref={provRef}>
+                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Proveedor</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar proveedor..."
+                      value={filterProveedor !== "all" ? (filterProveedor === "sin_proveedor" ? "Sin proveedor" : (proveedores.find((p) => p.id === filterProveedor)?.nombre ?? provSearch)) : provSearch}
+                      onChange={(e) => { setProvSearch(e.target.value); setFilterProveedor("all"); setProvOpen(true); }}
+                      onFocus={() => setProvOpen(true)}
+                      className="pl-9"
+                    />
+                    {filterProveedor !== "all" && (
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setFilterProveedor("all"); setProvSearch(""); }}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    {provOpen && filterProveedor === "all" && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setFilterProveedor("all"); setProvSearch(""); setProvOpen(false); }}>Todos</button>
+                        <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors italic text-muted-foreground" onClick={() => { setFilterProveedor("sin_proveedor"); setProvSearch(""); setProvOpen(false); }}>Sin proveedor</button>
+                        {proveedores.filter((p) => p.nombre.toLowerCase().includes(provSearch.toLowerCase())).map((p) => (
+                          <button key={p.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setFilterProveedor(p.id); setProvSearch(""); setProvOpen(false); }}>
+                            {p.nombre}
+                          </button>
+                        ))}
+                        {proveedores.filter((p) => p.nombre.toLowerCase().includes(provSearch.toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <p className="text-xs text-muted-foreground">
             Ordenado por: {sortBy === "nivel" ? "Urgencia" : sortBy === "faltante" ? "Cantidad faltante" : "Nombre"}
+            {" "}&middot;{" "}{filtered.length} producto(s)
           </p>
         </CardContent>
       </Card>
@@ -425,6 +637,7 @@ export default function ReposicionPage() {
                     <th className="text-left py-3 px-4 font-medium">Codigo</th>
                     <th className="text-left py-3 px-4 font-medium">Producto</th>
                     <th className="text-left py-3 px-4 font-medium">Categoria</th>
+                    <th className="text-left py-3 px-4 font-medium hidden lg:table-cell">Marca</th>
                     <th className="text-center py-3 px-4 font-medium">Stock</th>
                     <th className="text-center py-3 px-4 font-medium">Min</th>
                     <th className="text-center py-3 px-4 font-medium">Max</th>
@@ -454,6 +667,7 @@ export default function ReposicionPage() {
                         <td className="py-2.5 px-4">
                           <Badge variant="secondary" className="text-[10px] font-normal">{item.categoria}</Badge>
                         </td>
+                        <td className="py-2.5 px-4 hidden lg:table-cell text-muted-foreground">{item.marca || "\u2014"}</td>
                         <td className="py-2.5 px-4 text-center">
                           <span className={item.nivel === "critico" ? "text-red-500 font-bold" : "text-amber-600 font-semibold"}>
                             {item.stock}

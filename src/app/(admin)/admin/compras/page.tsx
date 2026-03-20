@@ -37,6 +37,7 @@ import {
   CreditCard,
   AlertCircle,
   ImageIcon,
+  X,
 } from "lucide-react";
 
 /* ───────── types ───────── */
@@ -117,6 +118,9 @@ export default function ComprasPage() {
   // New compra state
   const [mode, setMode] = useState<"list" | "new" | "detail">("list");
   const [selectedProveedorId, setSelectedProveedorId] = useState("");
+  const [compraProvSearch, setCompraProvSearch] = useState("");
+  const [compraProvOpen, setCompraProvOpen] = useState(false);
+  const compraProvRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<CompraItem[]>([]);
   const [observacion, setObservacion] = useState("");
   const [fecha, setFecha] = useState(todayString());
@@ -193,6 +197,15 @@ export default function ComprasPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Click outside handler for searchable dropdowns
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (compraProvRef.current && !compraProvRef.current.contains(e.target as Node)) setCompraProvOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   /* ── product search ── */
 
@@ -531,30 +544,43 @@ export default function ComprasPage() {
         )}
 
         {/* Compra details card */}
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="overflow-visible">
+          <CardContent className="pt-6 overflow-visible">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Proveedor */}
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide flex items-center gap-1.5">
                   <Package className="w-3.5 h-3.5" />
                   Proveedor
                 </Label>
-                <Select
-                  value={selectedProveedorId}
-                  onValueChange={(v) => setSelectedProveedorId(v ?? "")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar proveedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providers.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div ref={compraProvRef} className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar proveedor..."
+                    value={selectedProveedorId ? (providers.find((p) => p.id === selectedProveedorId)?.nombre ?? compraProvSearch) : compraProvSearch}
+                    onChange={(e) => { setCompraProvSearch(e.target.value); setSelectedProveedorId(""); setCompraProvOpen(true); }}
+                    onFocus={() => setCompraProvOpen(true)}
+                    className="pl-9"
+                  />
+                  {selectedProveedorId && (
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSelectedProveedorId(""); setCompraProvSearch(""); }}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  {compraProvOpen && !selectedProveedorId && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                      {providers.filter((p) => p.nombre.toLowerCase().includes(compraProvSearch.toLowerCase())).map((p) => (
+                        <button key={p.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                          onClick={() => { setSelectedProveedorId(p.id); setCompraProvSearch(""); setCompraProvOpen(false); }}>
+                          {p.nombre}
+                        </button>
+                      ))}
+                      {providers.filter((p) => p.nombre.toLowerCase().includes(compraProvSearch.toLowerCase())).length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Fecha */}

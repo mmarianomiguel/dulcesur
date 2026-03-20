@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BarChart3, TrendingUp, TrendingDown, DollarSign, Package, ShoppingCart,
-  Loader2, Download, Calendar, Filter, ChevronDown, ChevronRight, Search,
+  Loader2, Download, Calendar, Filter, ChevronDown, ChevronRight, Search, X,
 } from "lucide-react";
 
 function fc(v: number) {
@@ -61,6 +61,16 @@ export default function ReportesPage() {
   const [stockFilterCat, setStockFilterCat] = useState("");
   const [stockFilterSubcat, setStockFilterSubcat] = useState("");
   const [stockFilterMarca, setStockFilterMarca] = useState("");
+  // Searchable dropdown states for stock filters
+  const [stockCatSearch, setStockCatSearch] = useState("");
+  const [stockCatOpen, setStockCatOpen] = useState(false);
+  const [stockSubcatSearch, setStockSubcatSearch] = useState("");
+  const [stockSubcatOpen, setStockSubcatOpen] = useState(false);
+  const [stockMarcaSearch, setStockMarcaSearch] = useState("");
+  const [stockMarcaOpen, setStockMarcaOpen] = useState(false);
+  const stockCatRef = useRef<HTMLDivElement>(null);
+  const stockSubcatRef = useRef<HTMLDivElement>(null);
+  const stockMarcaRef = useRef<HTMLDivElement>(null);
 
   // Compute effective date range based on ventaDateMode
   const effectiveDates = useMemo(() => {
@@ -130,12 +140,13 @@ export default function ReportesPage() {
     });
   }, []);
 
-  // Close cliente dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(e.target as Node)) {
-        setShowClienteDropdown(false);
-      }
+      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(e.target as Node)) setShowClienteDropdown(false);
+      if (stockCatRef.current && !stockCatRef.current.contains(e.target as Node)) setStockCatOpen(false);
+      if (stockSubcatRef.current && !stockSubcatRef.current.contains(e.target as Node)) setStockSubcatOpen(false);
+      if (stockMarcaRef.current && !stockMarcaRef.current.contains(e.target as Node)) setStockMarcaOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -534,36 +545,102 @@ export default function ReportesPage() {
         </TabsContent>
 
         <TabsContent value="stock" className="mt-4 space-y-4">
-          <div className="flex items-end gap-3 flex-wrap">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Categoria</Label>
-              <Select value={stockFilterCat} onValueChange={(v) => setStockFilterCat(v ?? "")}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="Todas" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
-                  {categorias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
+          <div className="flex items-end gap-3 flex-wrap overflow-visible">
+            <div ref={stockCatRef} className="relative">
+              <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Categoria</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar categoria..."
+                  value={stockFilterCat ? (categorias.find((c) => c.id === stockFilterCat)?.nombre ?? stockCatSearch) : stockCatSearch}
+                  onChange={(e) => { setStockCatSearch(e.target.value); setStockFilterCat(""); setStockFilterSubcat(""); setStockCatOpen(true); }}
+                  onFocus={() => setStockCatOpen(true)}
+                  className="pl-9 w-44"
+                />
+                {stockFilterCat && (
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setStockFilterCat(""); setStockCatSearch(""); setStockFilterSubcat(""); }}>
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                {stockCatOpen && !stockFilterCat && (
+                  <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                    <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setStockFilterCat(""); setStockCatSearch(""); setStockCatOpen(false); }}>Todas</button>
+                    {categorias.filter((c) => c.nombre.toLowerCase().includes(stockCatSearch.toLowerCase())).map((c) => (
+                      <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                        onClick={() => { setStockFilterCat(c.id); setStockCatSearch(""); setStockCatOpen(false); setStockFilterSubcat(""); }}>
+                        {c.nombre}
+                      </button>
+                    ))}
+                    {categorias.filter((c) => c.nombre.toLowerCase().includes(stockCatSearch.toLowerCase())).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Subcategoria</Label>
-              <Select value={stockFilterSubcat} onValueChange={(v) => setStockFilterSubcat(v ?? "")}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="Todas" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
-                  {subcategorias.map((s) => <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div ref={stockSubcatRef} className="relative">
+              <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Subcategoria</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar subcategoria..."
+                  value={stockFilterSubcat ? (subcategorias.find((s) => s.id === stockFilterSubcat)?.nombre ?? stockSubcatSearch) : stockSubcatSearch}
+                  onChange={(e) => { setStockSubcatSearch(e.target.value); setStockFilterSubcat(""); setStockSubcatOpen(true); }}
+                  onFocus={() => setStockSubcatOpen(true)}
+                  className="pl-9 w-44"
+                />
+                {stockFilterSubcat && (
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setStockFilterSubcat(""); setStockSubcatSearch(""); }}>
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                {stockSubcatOpen && !stockFilterSubcat && (
+                  <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                    <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setStockFilterSubcat(""); setStockSubcatSearch(""); setStockSubcatOpen(false); }}>Todas</button>
+                    {subcategorias.filter((s) => s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).map((s) => (
+                      <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                        onClick={() => { setStockFilterSubcat(s.id); setStockSubcatSearch(""); setStockSubcatOpen(false); }}>
+                        {s.nombre}
+                      </button>
+                    ))}
+                    {subcategorias.filter((s) => s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Marca</Label>
-              <Select value={stockFilterMarca} onValueChange={(v) => setStockFilterMarca(v ?? "")}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="Todas" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
-                  {marcas.map((m) => <SelectItem key={m.id} value={m.id}>{m.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div ref={stockMarcaRef} className="relative">
+              <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Marca</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar marca..."
+                  value={stockFilterMarca ? (marcas.find((m) => m.id === stockFilterMarca)?.nombre ?? stockMarcaSearch) : stockMarcaSearch}
+                  onChange={(e) => { setStockMarcaSearch(e.target.value); setStockFilterMarca(""); setStockMarcaOpen(true); }}
+                  onFocus={() => setStockMarcaOpen(true)}
+                  className="pl-9 w-44"
+                />
+                {stockFilterMarca && (
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setStockFilterMarca(""); setStockMarcaSearch(""); }}>
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                {stockMarcaOpen && !stockFilterMarca && (
+                  <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                    <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setStockFilterMarca(""); setStockMarcaSearch(""); setStockMarcaOpen(false); }}>Todas</button>
+                    {marcas.filter((m) => m.nombre.toLowerCase().includes(stockMarcaSearch.toLowerCase())).map((m) => (
+                      <button key={m.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                        onClick={() => { setStockFilterMarca(m.id); setStockMarcaSearch(""); setStockMarcaOpen(false); }}>
+                        {m.nombre}
+                      </button>
+                    ))}
+                    {marcas.filter((m) => m.nombre.toLowerCase().includes(stockMarcaSearch.toLowerCase())).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <Button variant="outline" size="sm" onClick={() => exportCSV("stock", "Codigo,Nombre,Stock,Costo,Precio,Valor Costo,Valor Venta", filteredProductos.map((p) => `${p.codigo},${p.nombre},${p.stock},${p.costo},${p.precio},${p.stock * p.costo},${p.stock * p.precio}`).join("\n"))}>
               <Download className="w-4 h-4 mr-1.5" />CSV

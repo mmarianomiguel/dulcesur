@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ import {
   Send,
   Package,
   ArrowLeft,
+  X,
 } from "lucide-react";
 
 /* ───────── types ───────── */
@@ -136,6 +137,14 @@ export default function PedidosProveedorPage() {
   const [mode, setMode] = useState<"list" | "new" | "detail" | "generate">("list");
   const [selectedProveedorId, setSelectedProveedorId] = useState("");
   const [selectedCategoriaId, setSelectedCategoriaId] = useState("all");
+
+  // Searchable dropdown states
+  const [provSearch, setProvSearch] = useState("");
+  const [provOpen, setProvOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState("");
+  const [catOpen, setCatOpen] = useState(false);
+  const provRef = useRef<HTMLDivElement>(null);
+  const catRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<SuggestedItem[]>([]);
   const [observacion, setObservacion] = useState("");
   const [saving, setSaving] = useState(false);
@@ -193,6 +202,16 @@ export default function PedidosProveedorPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Click outside handler for searchable dropdowns
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (provRef.current && !provRef.current.contains(e.target as Node)) setProvOpen(false);
+      if (catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   /* ── suggest faltantes ── */
 
@@ -660,31 +679,71 @@ export default function PedidosProveedorPage() {
         </div>
 
         {/* Provider & category selection */}
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="overflow-visible">
+          <CardContent className="pt-6 overflow-visible">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Proveedor</Label>
-                <Select value={selectedProveedorId} onValueChange={(v) => setSelectedProveedorId(v || "")}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar proveedor" /></SelectTrigger>
-                  <SelectContent>
-                    {proveedores.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div ref={provRef}>
+                <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Proveedor</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar proveedor..."
+                    value={selectedProveedorId ? (proveedores.find((p) => p.id === selectedProveedorId)?.nombre ?? provSearch) : provSearch}
+                    onChange={(e) => { setProvSearch(e.target.value); setSelectedProveedorId(""); setProvOpen(true); }}
+                    onFocus={() => setProvOpen(true)}
+                    className="pl-9"
+                  />
+                  {selectedProveedorId && (
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSelectedProveedorId(""); setProvSearch(""); }}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  {provOpen && !selectedProveedorId && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                      {proveedores.filter((p) => p.nombre.toLowerCase().includes(provSearch.toLowerCase())).map((p) => (
+                        <button key={p.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                          onClick={() => { setSelectedProveedorId(p.id); setProvSearch(""); setProvOpen(false); }}>
+                          {p.nombre}
+                        </button>
+                      ))}
+                      {proveedores.filter((p) => p.nombre.toLowerCase().includes(provSearch.toLowerCase())).length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Categoría (opcional)</Label>
-                <Select value={selectedCategoriaId} onValueChange={(v) => setSelectedCategoriaId(v || "all")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {categorias.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div ref={catRef}>
+                <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Categoria (opcional)</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar categoria..."
+                    value={selectedCategoriaId !== "all" ? (categorias.find((c) => c.id === selectedCategoriaId)?.nombre ?? catSearch) : catSearch}
+                    onChange={(e) => { setCatSearch(e.target.value); setSelectedCategoriaId("all"); setCatOpen(true); }}
+                    onFocus={() => setCatOpen(true)}
+                    className="pl-9"
+                  />
+                  {selectedCategoriaId !== "all" && (
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSelectedCategoriaId("all"); setCatSearch(""); }}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  {catOpen && selectedCategoriaId === "all" && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                      <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setSelectedCategoriaId("all"); setCatSearch(""); setCatOpen(false); }}>Todas</button>
+                      {categorias.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).map((c) => (
+                        <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                          onClick={() => { setSelectedCategoriaId(c.id); setCatSearch(""); setCatOpen(false); }}>
+                          {c.nombre}
+                        </button>
+                      ))}
+                      {categorias.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <Button
                 onClick={handleSugerirFaltantes}
