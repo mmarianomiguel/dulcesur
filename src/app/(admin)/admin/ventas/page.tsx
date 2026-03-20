@@ -691,6 +691,22 @@ export default function VentasPage() {
   const scannerAddRef = useRef<(product: Producto, presentacion?: Presentacion) => void>(addItem);
   useEffect(() => { scannerAddRef.current = addItem; });
 
+  // Ref to apply leftover barcode digits as qty (when scanner buffer clears without Enter)
+  const applyQtyFromScanRef = useRef((digits: string) => {
+    const qty = parseInt(digits, 10);
+    if (qty > 0 && selectedItemIdx >= 0 && selectedItemIdx < items.length) {
+      updateQty(items[selectedItemIdx].id, qty);
+    }
+  });
+  useEffect(() => {
+    applyQtyFromScanRef.current = (digits: string) => {
+      const qty = parseInt(digits, 10);
+      if (qty > 0 && selectedItemIdx >= 0 && selectedItemIdx < items.length) {
+        updateQty(items[selectedItemIdx].id, qty);
+      }
+    };
+  });
+
   useEffect(() => {
     if (!scannerEnabled) return;
     let lastKeyTime = 0;
@@ -754,8 +770,14 @@ export default function VentasPage() {
         }
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
         barcodeTimer.current = setTimeout(() => {
+          // Buffer timed out without Enter → not a barcode scan
+          // If it's 1-3 digits, treat as quantity input for selected item
+          const buf = barcodeBuffer.current;
           barcodeBuffer.current = "";
-        }, 100);
+          if (buf.length > 0 && buf.length <= 3 && /^\d+$/.test(buf)) {
+            applyQtyFromScanRef.current(buf);
+          }
+        }, 250);
       }
     };
     window.addEventListener("keydown", handler);
@@ -797,17 +819,8 @@ export default function VentasPage() {
           return;
         }
         // Type numbers to set quantity of selected item
-        // Skip if keys arrive too fast (<60ms) — that's the barcode scanner, not manual typing
-        if (selectedItemIdx >= 0 && e.key >= "0" && e.key <= "9") {
-          const now = Date.now();
-          const gap = now - qtyLastKeyTime.current;
-          qtyLastKeyTime.current = now;
-          if (gap < 60 && qtyBuffer.current.length > 0) {
-            // Fast input = scanner → clear qty buffer, let barcode handler take over
-            qtyBuffer.current = "";
-            if (qtyBufferTimer.current) clearTimeout(qtyBufferTimer.current);
-            return;
-          }
+        // Skip if scanner is on — digits go to barcode buffer first, then fall back to qty
+        if (selectedItemIdx >= 0 && e.key >= "0" && e.key <= "9" && !scannerEnabled) {
           e.preventDefault();
           qtyBuffer.current += e.key;
           if (qtyBufferTimer.current) clearTimeout(qtyBufferTimer.current);
