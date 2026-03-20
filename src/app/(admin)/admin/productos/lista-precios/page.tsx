@@ -423,9 +423,9 @@ export default function ListaPreciosPage() {
           pdf.setLineWidth(0.2);
           pdf.line(x + pad, footerLineY, x + cellW - pad, footerLineY);
 
-          // TRANSF row — label at 16mm from bottom, price at 12mm
-          const transfLabelY = bottom - 16;
-          const transfPriceY = bottom - 12;
+          // TRANSF row — label at 14mm from bottom, price at 10mm
+          const transfLabelY = bottom - 14;
+          const transfPriceY = bottom - 10;
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
@@ -444,9 +444,9 @@ export default function ListaPreciosPage() {
           }
           pdf.setTextColor(0);
 
-          // EFEC row — label at 26mm from bottom, price at 22mm
-          const efectLabelY = bottom - 26;
-          const efectPriceY = bottom - 22;
+          // EFEC row — label at 22mm from bottom, price at 18mm
+          const efectLabelY = bottom - 22;
+          const efectPriceY = bottom - 18;
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
@@ -463,8 +463,8 @@ export default function ListaPreciosPage() {
             pdf.text(formatPrice(boxPrice), x + cellW - pad, efectPriceY, { align: "right" });
           }
 
-          // Divider line — 29mm from bottom (above Efect)
-          const dividerY = bottom - 29;
+          // Divider line — 25mm from bottom (above Efect)
+          const dividerY = bottom - 25;
           pdf.setDrawColor(220);
           pdf.setLineWidth(0.2);
           pdf.line(x + pad, dividerY, x + cellW - pad, dividerY);
