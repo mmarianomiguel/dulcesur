@@ -525,13 +525,43 @@ export default function VentasPage() {
   };
 
   const updateQty = (id: string, qty: number, checkSwitch = false) => {
-    // Allow qty 0 to trigger box→unit downgrade
     setItems((prev) => {
-      // Check if this is a box downgrade scenario
       const target = prev.find((i) => i.id === id);
-      if (qty < 0.5 && !(target && target.presentacion !== "Unidad" && target.unidades_por_presentacion > 1 && qty < 1)) return prev;
+
+      // Never allow negative
+      if (qty < 0) return prev;
+
+      // Guard: block near-zero unless it's a valid downgrade transition
+      if (qty < 0.5) {
+        const isBoxDowngrade = target && target.presentacion !== "Unidad" && target.unidades_por_presentacion > 1;
+        const hasMedioPres = target && target.presentacion === "Unidad" && target.producto_id &&
+          (presentacionesMap[target.producto_id] || []).some((p) =>
+            Number(p.cantidad) <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio"))
+          );
+        if (!isBoxDowngrade && !hasMedioPres) return prev;
+      }
+
       return prev.map((i) => {
         if (i.id !== id) return i;
+
+        // Downgrade: unit qty goes below 1 → check for medio cartón
+        if (qty < 1 && i.presentacion === "Unidad" && i.producto_id) {
+          const pres = presentacionesMap[i.producto_id] || [];
+          const medioPres = pres.find((p) => Number(p.cantidad) <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio")));
+          if (medioPres) {
+            const prod = products.find((p) => p.id === i.producto_id);
+            return {
+              ...i,
+              qty: 1,
+              price: medioPres.precio,
+              code: medioPres.codigo || i.code,
+              description: prod ? `${prod.nombre} (${medioPres.nombre || "Medio Cartón"})` : i.description,
+              presentacion: medioPres.nombre || "Medio Carton",
+              unidades_por_presentacion: Number(medioPres.cantidad) || 0.5,
+              subtotal: medioPres.precio * (1 - i.discount / 100),
+            };
+          }
+        }
 
         // Downgrade: box qty goes below 1 → convert to units
         if (qty < 1 && i.presentacion !== "Unidad" && i.unidades_por_presentacion > 1) {
@@ -555,21 +585,22 @@ export default function VentasPage() {
           return i;
         }
 
-        // Check auto-switch: units → medio cartón (for Mt products going from 1 to 0.5)
-        if (i.presentacion === "Unidad" && qty === 0.5 && i.unit === "Mt") {
+        // Upgrade: medio cartón qty reaches 2 → convert back to unit
+        if (qty === 2 && i.presentacion !== "Unidad" &&
+            (i.unidades_por_presentacion < 1 || (i.presentacion && i.presentacion.toLowerCase().includes("medio")))) {
           const pres = presentacionesMap[i.producto_id] || [];
-          const medioPres = pres.find((p) => Number(p.cantidad) <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio")));
-          if (medioPres) {
+          const unitPres = pres.find((p) => Number(p.cantidad) === 1);
+          if (unitPres) {
             const prod = products.find((p) => p.id === i.producto_id);
             return {
               ...i,
               qty: 1,
-              price: medioPres.precio,
-              code: medioPres.codigo || i.code,
-              description: prod ? `${prod.nombre} (Medio Cartón)` : i.description,
-              presentacion: medioPres.nombre || "Medio Carton",
-              unidades_por_presentacion: Number(medioPres.cantidad) || 0.5,
-              subtotal: medioPres.precio * (1 - i.discount / 100),
+              price: unitPres.precio,
+              code: unitPres.codigo || i.code,
+              description: prod?.nombre || i.description.replace(/\s*\(.*\)$/, ""),
+              presentacion: "Unidad",
+              unidades_por_presentacion: 1,
+              subtotal: unitPres.precio * (1 - i.discount / 100),
             };
           }
         }
