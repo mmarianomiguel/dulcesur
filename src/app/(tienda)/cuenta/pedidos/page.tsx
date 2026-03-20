@@ -495,7 +495,14 @@ export default function PedidosPage() {
                             </button>
                           )}
                           <div>
-                            {displayName}
+                            <span className="flex items-center gap-1.5">
+                              {displayName}
+                              {isCombo && (
+                                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-pink-100 text-pink-700">
+                                  COMBO
+                                </span>
+                              )}
+                            </span>
                             {isCombo && !hasComboDetail && (item.unidades_por_presentacion || 1) > 1 && (
                               <span className="block text-[10px] text-gray-400 mt-0.5">
                                 Combo de {item.unidades_por_presentacion} unidades
@@ -749,7 +756,14 @@ export default function PedidosPage() {
                             </button>
                           )}
                           <div>
-                            {displayName}
+                            <span className="flex items-center gap-1.5">
+                              {displayName}
+                              {isCombo && (
+                                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-pink-100 text-pink-700">
+                                  COMBO
+                                </span>
+                              )}
+                            </span>
                             {isCombo && !hasComboDetail && (item.unidades_por_presentacion || 1) > 1 && (
                               <span className="block text-[10px] text-gray-400 mt-0.5">
                                 Combo de {item.unidades_por_presentacion} unidades

@@ -1536,6 +1536,11 @@ export default function VentasPage() {
                                 -{item.discount}%
                               </span>
                             )}
+                            {item.es_combo && (
+                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-pink-100 text-pink-700">
+                                COMBO
+                              </span>
+                            )}
                             {!item.es_combo && item.unidades_por_presentacion > 1 && (
                               <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-indigo-100 text-indigo-700">
                                 Caja

@@ -302,7 +302,12 @@ export default function ProductoDetallePage() {
 
   function handleAddToCart() {
     if (!producto) return;
-    const presLabel = currentPresLabel;
+    let presLabel = currentPresLabel;
+    // For combo products, override presentacion to "Combo x{N}"
+    if (producto.es_combo) {
+      const totalUnits = comboComponentes.reduce((acc, c) => acc + c.cantidad, 0);
+      presLabel = totalUnits > 0 ? `Combo x${totalUnits}` : "Combo";
+    }
     const disc = getProductDiscount(producto, presLabel);
     const price = disc > 0 ? Math.round(currentPrice * (1 - disc / 100)) : currentPrice;
     addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined);

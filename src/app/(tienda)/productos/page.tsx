@@ -60,6 +60,7 @@ interface Producto {
   created_at: string;
   categorias: { nombre: string } | null;
   marcas: { nombre: string } | null;
+  es_combo?: boolean;
 }
 
 /* ───── Skeleton loader ───── */
@@ -450,7 +451,11 @@ function ProductosContent() {
   function addToCart(producto: Producto, qty?: number) {
     const amount = qty ?? getQty(producto.id);
     const basePrice = getActivePrice(producto);
-    const presLabel = getActivePresLabel(producto);
+    let presLabel = getActivePresLabel(producto);
+    // For combo products, override presentacion
+    if (producto.es_combo) {
+      presLabel = "Combo";
+    }
     const disc = getProductDiscount(producto, presLabel);
     const price = disc > 0 ? Math.round(basePrice * (1 - disc / 100)) : basePrice;
     const cartKey = presLabel ? `${producto.id}_${presLabel}` : producto.id;
@@ -462,7 +467,7 @@ function ProductosContent() {
     } else {
       carrito.push({
         id: cartKey,
-        nombre: presLabel ? `${producto.nombre} - ${presLabel}` : producto.nombre,
+        nombre: presLabel && presLabel !== "Unidad" ? `${producto.nombre} - ${presLabel}` : producto.nombre,
         precio: price,
         precio_original: disc > 0 ? basePrice : undefined,
         descuento: disc > 0 ? disc : undefined,
@@ -1116,8 +1121,13 @@ function ProductosContent() {
                     {/* Content */}
                     <div className="flex flex-col flex-1 p-3.5 pt-2.5">
                       <Link href={`/productos/${producto.id}`} className="flex-1">
-                        {(producto.categorias?.nombre || producto.marcas?.nombre) && (
+                        {(producto.categorias?.nombre || producto.marcas?.nombre || producto.es_combo) && (
                           <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                            {producto.es_combo && (
+                              <span className="text-[10px] bg-pink-100 text-pink-700 font-semibold px-1.5 py-0.5 rounded">
+                                COMBO
+                              </span>
+                            )}
                             {producto.categorias?.nombre && (
                               <span className="text-[10px] text-gray-400 font-medium truncate">
                                 {producto.categorias.nombre}
@@ -1271,8 +1281,13 @@ function ProductosContent() {
                     </Link>
                     <div className="flex-1 py-3.5 pr-4 pl-1 flex items-center justify-between gap-4 min-w-0">
                       <div className="min-w-0 flex-1">
-                        {(producto.categorias?.nombre || producto.marcas?.nombre) && (
+                        {(producto.categorias?.nombre || producto.marcas?.nombre || producto.es_combo) && (
                           <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                            {producto.es_combo && (
+                              <span className="text-[10px] bg-pink-100 text-pink-700 font-semibold px-1.5 py-0.5 rounded">
+                                COMBO
+                              </span>
+                            )}
                             {producto.categorias?.nombre && (
                               <span className="text-[10px] text-gray-400 font-medium truncate">
                                 {producto.categorias.nombre}
