@@ -210,10 +210,20 @@ export default function PedidosProveedorPage() {
 
     if (data) {
       const suggested: SuggestedItem[] = (data as any[])
-        .filter((p) => p.stock < p.stock_minimo)
+        .filter((p) => (p.stock ?? 0) < (p.stock_minimo ?? 0) || (p.stock ?? 0) < 0)
         .map((p) => {
           const pp = (p.producto_proveedores || [])[0];
-          const faltante = Math.max(pp?.cantidad_minima_pedido || 1, (p.stock_maximo || 0) - (p.stock || 0));
+          const stock = p.stock ?? 0;
+          const maximo = p.stock_maximo ?? 0;
+          const minimo = p.stock_minimo ?? 0;
+          let faltante: number;
+          if (maximo > 0) {
+            faltante = Math.max(pp?.cantidad_minima_pedido || 1, maximo - stock);
+          } else if (stock < 0) {
+            faltante = Math.abs(stock);
+          } else {
+            faltante = Math.max(pp?.cantidad_minima_pedido || 1, minimo > 0 ? minimo * 2 - stock : 1);
+          }
           const precio = pp?.precio_proveedor || p.costo || 0;
           return {
             producto_id: p.id,
@@ -338,6 +348,14 @@ export default function PedidosProveedorPage() {
     setMode("detail");
   };
 
+  // Receive dialog state
+  const [showReceiveDialog, setShowReceiveDialog] = useState(false);
+  const [receiveSaving, setReceiveSaving] = useState(false);
+  const [receiveError, setReceiveError] = useState("");
+  const [receiveFormaPago, setReceiveFormaPago] = useState("Transferencia");
+  const [receiveRegistrarCaja, setReceiveRegistrarCaja] = useState(true);
+  const [receiveActualizarPrecios, setReceiveActualizarPrecios] = useState(true);
+
   /* ── change status ── */
 
   const changeEstado = async (newEstado: string) => {
@@ -348,6 +366,151 @@ export default function PedidosProveedorPage() {
       .eq("id", detailPedido.id);
     setDetailPedido({ ...detailPedido, estado: newEstado });
     fetchData();
+  };
+
+  /* ── receive pedido → create compra + update stock ── */
+
+  const handleRecibirPedido = async () => {
+    if (!detailPedido || detailItems.length === 0) return;
+    setReceiveSaving(true);
+    setReceiveError("");
+
+    try {
+      // 1. Get next compra number
+      const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "compra" });
+      const numero = numData || "C-0000";
+      const fecha = new Date().toISOString().split("T")[0];
+
+      const total = detailItems.reduce((a, i) => a + i.subtotal, 0);
+
+      // 2. Create compra
+      const { data: compra, error: compraError } = await supabase
+        .from("compras")
+        .insert({
+          numero,
+          fecha,
+          proveedor_id: detailPedido.proveedor_id,
+          total,
+          estado: "Confirmada",
+          observacion: `Recepcion de pedido ${detailPedido.numero || ""}`,
+        })
+        .select("id")
+        .single();
+
+      if (compraError || !compra) {
+        setReceiveError(compraError?.message || "Error al crear la compra");
+        setReceiveSaving(false);
+        return;
+      }
+
+      // 3. Create compra items
+      const compraItems = detailItems.map((item) => ({
+        compra_id: compra.id,
+        producto_id: item.producto_id,
+        codigo: item.codigo,
+        descripcion: item.descripcion,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio_unitario,
+        subtotal: item.subtotal,
+      }));
+      await supabase.from("compra_items").insert(compraItems);
+
+      // 4. Update stock for each product
+      for (const item of detailItems) {
+        if (!item.producto_id) continue;
+
+        const { data: prodData } = await supabase
+          .from("productos")
+          .select("stock, costo, precio")
+          .eq("id", item.producto_id)
+          .single();
+
+        const stockAntes = prodData?.stock ?? 0;
+        const newStock = stockAntes + item.cantidad;
+
+        await supabase
+          .from("productos")
+          .update({ stock: newStock })
+          .eq("id", item.producto_id);
+
+        // Log stock movement
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id,
+          tipo: "compra",
+          cantidad_antes: stockAntes,
+          cantidad_despues: newStock,
+          cantidad: item.cantidad,
+          referencia: `Compra #${numero} (Pedido ${detailPedido.numero || ""})`,
+          descripcion: `Recepcion - ${item.descripcion}`,
+          usuario: "Admin Sistema",
+          orden_id: compra.id,
+        });
+
+        // Update cost and optionally price
+        if (receiveActualizarPrecios && item.precio_unitario > 0) {
+          const costoAnterior = prodData?.costo ?? 0;
+          if (costoAnterior > 0 && item.precio_unitario !== costoAnterior) {
+            const precioAnterior = prodData?.precio ?? 0;
+            const marginRatio = precioAnterior > 0 ? precioAnterior / costoAnterior : 1;
+            const newPrecio = Math.round(item.precio_unitario * marginRatio);
+            await supabase
+              .from("productos")
+              .update({
+                costo: item.precio_unitario,
+                precio: newPrecio,
+                fecha_actualizacion: fecha,
+              })
+              .eq("id", item.producto_id);
+          } else {
+            await supabase
+              .from("productos")
+              .update({ costo: item.precio_unitario, fecha_actualizacion: fecha })
+              .eq("id", item.producto_id);
+          }
+        }
+      }
+
+      // 5. Register caja movement
+      if (total > 0 && receiveRegistrarCaja && receiveFormaPago !== "Cuenta Corriente") {
+        const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
+        await supabase.from("caja_movimientos").insert({
+          fecha,
+          hora: new Date().toTimeString().split(" ")[0],
+          tipo: "egreso",
+          descripcion: `Compra ${numero} - ${provNombre} (Pedido ${detailPedido.numero || ""})`,
+          metodo_pago: receiveFormaPago,
+          monto: -total,
+        });
+      }
+
+      // 6. If cuenta corriente, update proveedor saldo
+      if (receiveFormaPago === "Cuenta Corriente" && detailPedido.proveedor_id) {
+        const { data: provData } = await supabase
+          .from("proveedores")
+          .select("saldo")
+          .eq("id", detailPedido.proveedor_id)
+          .single();
+        const saldoActual = provData?.saldo ?? 0;
+        await supabase
+          .from("proveedores")
+          .update({ saldo: saldoActual + total })
+          .eq("id", detailPedido.proveedor_id);
+      }
+
+      // 7. Mark pedido as Recibido
+      await supabase
+        .from("pedidos_proveedor")
+        .update({ estado: "Recibido" })
+        .eq("id", detailPedido.id);
+
+      setDetailPedido({ ...detailPedido, estado: "Recibido" });
+      setShowReceiveDialog(false);
+      setReceiveSaving(false);
+      fetchData();
+    } catch (err: any) {
+      setReceiveError(err?.message || "Error inesperado");
+      setReceiveSaving(false);
+    }
   };
 
   /* ── auto-generate pedidos ── */
@@ -365,7 +528,12 @@ export default function PedidosProveedorPage() {
       const groupMap: Record<string, { proveedor_nombre: string; items: SuggestedItem[] }> = {};
 
       for (const p of data as any[]) {
-        if ((p.stock ?? 0) >= (p.stock_minimo ?? 0)) continue;
+        const stock = p.stock ?? 0;
+        const minimo = p.stock_minimo ?? 0;
+        const maximo = p.stock_maximo ?? 0;
+
+        // Include products with stock below minimum OR negative stock
+        if (stock >= minimo && stock >= 0) continue;
         const ppList = p.producto_proveedores || [];
         if (ppList.length === 0) continue;
 
@@ -377,15 +545,23 @@ export default function PedidosProveedorPage() {
         const provName = pp.proveedores?.nombre || "Sin nombre";
         if (!groupMap[provId]) groupMap[provId] = { proveedor_nombre: provName, items: [] };
         if (groupMap[provId].items.some((i: SuggestedItem) => i.producto_id === p.id)) continue;
-        const faltante = Math.max(pp.cantidad_minima_pedido || 1, (p.stock_maximo || 0) - (p.stock || 0));
+
+        let faltante: number;
+        if (maximo > 0) {
+          faltante = Math.max(pp.cantidad_minima_pedido || 1, maximo - stock);
+        } else if (stock < 0) {
+          faltante = Math.abs(stock);
+        } else {
+          faltante = Math.max(pp.cantidad_minima_pedido || 1, minimo > 0 ? minimo * 2 - stock : 1);
+        }
         const precio = pp.precio_proveedor || p.costo || 0;
         groupMap[provId].items.push({
           producto_id: p.id,
           codigo: p.codigo || "",
           nombre: p.nombre,
-          stock: p.stock || 0,
-          stock_minimo: p.stock_minimo || 0,
-          stock_maximo: p.stock_maximo || 0,
+          stock,
+          stock_minimo: minimo,
+          stock_maximo: maximo,
           faltante,
           precio_unitario: precio,
           subtotal: faltante * precio,
@@ -682,8 +858,8 @@ export default function PedidosProveedorPage() {
                   </Button>
                 )}
                 {detailPedido.estado === "Enviado" && (
-                  <Button size="sm" onClick={() => changeEstado("Recibido")}>
-                    <Package className="w-4 h-4 mr-2" />Marcar Recibido
+                  <Button size="sm" onClick={() => setShowReceiveDialog(true)}>
+                    <Package className="w-4 h-4 mr-2" />Recibir Mercaderia
                   </Button>
                 )}
               </div>
@@ -727,6 +903,84 @@ export default function PedidosProveedorPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Receive Pedido Dialog */}
+        <Dialog open={showReceiveDialog} onOpenChange={setShowReceiveDialog}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Recibir Mercaderia</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Se creara una <strong>compra</strong> con los items del pedido, se actualizara el <strong>stock</strong> y los <strong>costos</strong> de cada producto.
+              </p>
+
+              {/* Summary */}
+              <div className="rounded-lg border p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Proveedor</span>
+                  <span className="font-medium">{detailPedido.proveedores?.nombre || "Sin proveedor"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pedido</span>
+                  <span className="font-medium">{detailPedido.numero || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Productos</span>
+                  <span className="font-medium">{detailItems.length} items ({detailItems.reduce((a, i) => a + i.cantidad, 0)} unidades)</span>
+                </div>
+                <div className="flex justify-between border-t pt-2 mt-2">
+                  <span className="text-muted-foreground font-medium">Total</span>
+                  <span className="font-bold text-lg">{formatCurrency(detailPedido.costo_total_estimado || 0)}</span>
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Forma de pago</Label>
+                  <Select value={receiveFormaPago} onValueChange={(v) => setReceiveFormaPago(v ?? "")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Efectivo">Efectivo</SelectItem>
+                      <SelectItem value="Transferencia">Transferencia</SelectItem>
+                      <SelectItem value="Cheque">Cheque</SelectItem>
+                      <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={receiveActualizarPrecios} onChange={(e) => setReceiveActualizarPrecios(e.target.checked)} className="rounded" />
+                  <span className="text-sm">Actualizar costos y precios de venta (mantener margen)</span>
+                </label>
+
+                {(receiveFormaPago === "Efectivo" || receiveFormaPago === "Transferencia") && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={receiveRegistrarCaja} onChange={(e) => setReceiveRegistrarCaja(e.target.checked)} className="rounded" />
+                    <span className="text-sm">Registrar movimiento en caja diaria</span>
+                  </label>
+                )}
+              </div>
+
+              {receiveError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+                  {receiveError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => { setShowReceiveDialog(false); setReceiveError(""); }}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleRecibirPedido} disabled={receiveSaving}>
+                  {receiveSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Package className="w-4 h-4 mr-2" />}
+                  Confirmar Recepcion
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

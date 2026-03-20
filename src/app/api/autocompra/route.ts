@@ -68,7 +68,8 @@ export async function POST(req: Request) {
     const minimo = p.stock_minimo ?? 0;
     const maximo = p.stock_maximo ?? 0;
 
-    if (stock >= minimo) continue;
+    // Include products below minimum OR with negative stock
+    if (stock >= minimo && stock >= 0) continue;
 
     const ppList = p.producto_proveedores || [];
     if (ppList.length === 0) continue;
@@ -87,7 +88,14 @@ export async function POST(req: Request) {
     // Skip duplicates
     if (groups[provId].items.some((i) => i.producto_id === p.id)) continue;
 
-    const faltante = Math.max(pp.cantidad_minima_pedido || 1, maximo - stock);
+    let faltante: number;
+    if (maximo > 0) {
+      faltante = Math.max(pp.cantidad_minima_pedido || 1, maximo - stock);
+    } else if (stock < 0) {
+      faltante = Math.abs(stock);
+    } else {
+      faltante = Math.max(pp.cantidad_minima_pedido || 1, minimo > 0 ? minimo * 2 - stock : 1);
+    }
     const precio = pp.precio_proveedor || p.costo || 0;
 
     groups[provId].items.push({

@@ -111,10 +111,32 @@ export default function ReposicionPage() {
         const ppList = p.producto_proveedores || [];
         const pp = ppList.find((x: any) => x.es_principal) || ppList[0] || null;
 
-        const nivel: "critico" | "bajo" | "ok" =
-          stock <= 0 ? "critico" : stock <= minimo ? "bajo" : "ok";
+        // Determine level: critico if stock <= 0 or stock < minimo (when minimo > 0), bajo if close
+        let nivel: "critico" | "bajo" | "ok";
+        if (stock <= 0) {
+          nivel = "critico";
+        } else if (minimo > 0 && stock <= minimo) {
+          nivel = "bajo";
+        } else if (stock < 0) {
+          nivel = "critico";
+        } else {
+          nivel = "ok";
+        }
 
-        const faltante = maximo > 0 ? Math.max(0, maximo - stock) : 0;
+        // Calculate how many to order:
+        // If stock_maximo is set, order up to max. Otherwise use a sensible default.
+        let faltante: number;
+        if (maximo > 0) {
+          faltante = Math.max(1, maximo - stock);
+        } else if (stock < 0) {
+          // Negative stock: at minimum bring to 0
+          faltante = Math.abs(stock);
+        } else if (minimo > 0 && stock <= minimo) {
+          // Below minimum but no max set: order at least minimo * 2
+          faltante = Math.max(1, minimo * 2 - stock);
+        } else {
+          faltante = 0;
+        }
 
         return {
           producto_id: p.id,
