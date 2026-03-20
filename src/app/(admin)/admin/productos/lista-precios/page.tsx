@@ -423,8 +423,8 @@ export default function ListaPreciosPage() {
           pdf.setLineWidth(0.2);
           pdf.line(x + pad, footerLineY, x + cellW - pad, footerLineY);
 
-          // TRANSF row — label at 14mm from bottom, price at 10mm
-          const transfLabelY = bottom - 14;
+          // TRANSF row
+          const transfLabelY = bottom - 13;
           const transfPriceY = bottom - 10;
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
@@ -435,18 +435,18 @@ export default function ListaPreciosPage() {
           }
           pdf.setTextColor(0);
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(8);
+          pdf.setFontSize(7);
           pdf.setTextColor(100);
           pdf.text(formatPrice(transferPrice), x + pad, transfPriceY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.setFontSize(7);
+            pdf.setFontSize(6.5);
             pdf.text(formatPrice(transferBox), x + cellW - pad, transfPriceY, { align: "right" });
           }
           pdf.setTextColor(0);
 
-          // EFEC row — label at 22mm from bottom, price at 18mm
-          const efectLabelY = bottom - 22;
-          const efectPriceY = bottom - 18;
+          // EFEC row
+          const efectLabelY = bottom - 19;
+          const efectPriceY = bottom - 16;
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
@@ -456,15 +456,15 @@ export default function ListaPreciosPage() {
           }
           pdf.setTextColor(0);
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(8);
+          pdf.setFontSize(7);
           pdf.text(formatPrice(displayPrice), x + pad, efectPriceY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.setFontSize(7);
+            pdf.setFontSize(6.5);
             pdf.text(formatPrice(boxPrice), x + cellW - pad, efectPriceY, { align: "right" });
           }
 
-          // Divider line — 25mm from bottom (above Efect)
-          const dividerY = bottom - 25;
+          // Divider line — 21mm from bottom (just above Efect)
+          const dividerY = bottom - 21;
           pdf.setDrawColor(220);
           pdf.setLineWidth(0.2);
           pdf.line(x + pad, dividerY, x + cellW - pad, dividerY);
