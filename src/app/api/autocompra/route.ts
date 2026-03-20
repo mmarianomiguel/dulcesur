@@ -140,15 +140,11 @@ export async function POST(req: Request) {
   const fecha = new Date().toISOString().split("T")[0];
 
   for (const [provId, group] of Object.entries(groups)) {
-    const { data: numData } = await supabaseAdmin.rpc("next_numero", { p_tipo: "pedido" });
-    const numero = numData || "PED-0000";
-
     const total = group.items.reduce((a, i) => a + i.subtotal, 0);
 
     const { data: pedido, error: pedError } = await supabaseAdmin
       .from("pedidos_proveedor")
       .insert({
-        numero,
         proveedor_id: provId,
         fecha,
         estado: "Borrador",
@@ -172,7 +168,7 @@ export async function POST(req: Request) {
     }));
 
     await supabaseAdmin.from("pedido_proveedor_items").insert(rows);
-    pedidosCreados.push(numero);
+    pedidosCreados.push("PED-" + pedido.id.slice(0, 6).toUpperCase());
   }
 
   return NextResponse.json({

@@ -247,9 +247,6 @@ export default function ReposicionPage() {
       let pedidosCreados = 0;
 
       for (const [provId, group] of Object.entries(groups)) {
-        const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
-        const numero = numData || "PED-0000";
-
         const totalEstimado = group.items.reduce((a, i) => {
           const precio = i.precio_proveedor || i.costo;
           return a + i.faltante * precio;
@@ -258,7 +255,6 @@ export default function ReposicionPage() {
         const { data: pedido, error } = await supabase
           .from("pedidos_proveedor")
           .insert({
-            numero,
             proveedor_id: provId,
             fecha: new Date().toISOString().split("T")[0],
             estado: "Borrador",

@@ -55,13 +55,17 @@ interface Categoria {
 
 interface PedidoRow {
   id: string;
-  numero?: string;
   proveedor_id: string | null;
   fecha: string;
   estado: string;
   costo_total_estimado: number;
   observacion: string | null;
   proveedores: { nombre: string } | null;
+}
+
+/** Generate a short display number from UUID */
+function pedidoDisplayNum(id: string): string {
+  return "PED-" + id.slice(0, 6).toUpperCase();
 }
 
 interface PedidoItemRow {
@@ -271,14 +275,9 @@ export default function PedidosProveedorPage() {
     setSaveError("");
 
     try {
-      const { data: numData, error: numError } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
-      if (numError) console.warn("next_numero error:", numError);
-      const numero = numData || "PED-0000";
-
       const { data: pedido, error } = await supabase
         .from("pedidos_proveedor")
         .insert({
-          numero,
           proveedor_id: selectedProveedorId,
           fecha: new Date().toISOString().split("T")[0],
           estado,
@@ -294,6 +293,8 @@ export default function PedidosProveedorPage() {
         setSaving(false);
         return;
       }
+
+      const displayNum = pedidoDisplayNum(pedido.id);
 
       const rows = items.map((item) => ({
         pedido_id: pedido.id,
@@ -316,8 +317,8 @@ export default function PedidosProveedorPage() {
       await fetchData();
       setSuccessMsg(
         estado === "Borrador"
-          ? `Borrador ${numero} guardado correctamente`
-          : `Pedido ${numero} confirmado correctamente`
+          ? `Borrador ${displayNum} guardado correctamente`
+          : `Pedido ${displayNum} confirmado correctamente`
       );
       setTimeout(() => setSuccessMsg(""), 4000);
     } catch (err: any) {
@@ -392,7 +393,7 @@ export default function PedidosProveedorPage() {
           proveedor_id: detailPedido.proveedor_id,
           total,
           estado: "Confirmada",
-          observacion: `Recepcion de pedido ${detailPedido.numero || ""}`,
+          observacion: `Recepcion de pedido ${pedidoDisplayNum(detailPedido.id)}`,
         })
         .select("id")
         .single();
@@ -440,7 +441,7 @@ export default function PedidosProveedorPage() {
           cantidad_antes: stockAntes,
           cantidad_despues: newStock,
           cantidad: item.cantidad,
-          referencia: `Compra #${numero} (Pedido ${detailPedido.numero || ""})`,
+          referencia: `Compra #${numero} (Pedido ${pedidoDisplayNum(detailPedido.id)})`,
           descripcion: `Recepcion - ${item.descripcion}`,
           usuario: "Admin Sistema",
           orden_id: compra.id,
@@ -477,7 +478,7 @@ export default function PedidosProveedorPage() {
           fecha,
           hora: new Date().toTimeString().split(" ")[0],
           tipo: "egreso",
-          descripcion: `Compra ${numero} - ${provNombre} (Pedido ${detailPedido.numero || ""})`,
+          descripcion: `Compra ${numero} - ${provNombre} (Pedido ${pedidoDisplayNum(detailPedido.id)})`,
           metodo_pago: receiveFormaPago,
           monto: -total,
         });
@@ -595,13 +596,9 @@ export default function PedidosProveedorPage() {
     setSaving(true);
 
     for (const group of selected) {
-      const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
-      const numero = numData || "PED-0000";
-
       const { data: pedido, error } = await supabase
         .from("pedidos_proveedor")
         .insert({
-          numero,
           proveedor_id: group.proveedor_id,
           fecha: new Date().toISOString().split("T")[0],
           estado: "Borrador",
@@ -640,7 +637,7 @@ export default function PedidosProveedorPage() {
 
   const filtered = pedidos.filter((p) => {
     const matchSearch =
-      (p.numero || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      pedidoDisplayNum(p.id).toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.proveedores?.nombre || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchEstado = filterEstado === "all" || p.estado === filterEstado;
     return matchSearch && matchEstado;
@@ -820,7 +817,7 @@ export default function PedidosProveedorPage() {
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-                Pedido {detailPedido.numero || ""}
+                Pedido {pedidoDisplayNum(detailPedido.id)}
               </h1>
               <Badge variant={estadoBadgeVariant(detailPedido.estado)} className="text-xs">
                 {detailPedido.estado}
@@ -923,7 +920,7 @@ export default function PedidosProveedorPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Pedido</span>
-                  <span className="font-medium">{detailPedido.numero || "—"}</span>
+                  <span className="font-medium">{pedidoDisplayNum(detailPedido.id)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Productos</span>
@@ -1237,7 +1234,7 @@ export default function PedidosProveedorPage() {
                       className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
                       onClick={() => openDetail(p)}
                     >
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.numero || "—"}</td>
+                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{pedidoDisplayNum(p.id)}</td>
                       <td className="py-3 px-4 text-muted-foreground">{new Date(p.fecha).toLocaleDateString("es-AR")}</td>
                       <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "—"}</td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.costo_total_estimado || 0)}</td>
