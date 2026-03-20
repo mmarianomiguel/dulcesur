@@ -159,7 +159,7 @@ export default function ClientesPage() {
     setLoading(true);
     const { data } = await supabase
       .from("clientes")
-      .select("id, codigo_cliente, nombre, tipo_documento, numero_documento, cuit, situacion_iva, tipo_factura, razon_social, domicilio, domicilio_fiscal, telefono, email, provincia, localidad, codigo_postal, observacion, barrio, vendedor_id, saldo, origen, activo, zona_entrega, dias_entrega")
+      .select("*")
       .eq("activo", true)
       .order("nombre");
     setClients((data || []) as unknown as Cliente[]);

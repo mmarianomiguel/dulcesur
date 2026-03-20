@@ -26,7 +26,8 @@ import {
 interface CartItem {
   id: string;
   nombre: string;
-  imagen: string;
+  imagen?: string;
+  imagen_url?: string;
   presentacion: string;
   precio: number;
   precio_original?: number;
@@ -1021,14 +1022,14 @@ export default function CheckoutPage() {
               {items.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-3">
                   <div className="flex-shrink-0">
-                    {item.imagen ? (
+                    {(item.imagen || item.imagen_url) ? (
                       <img
-                        src={item.imagen}
+                        src={(item.imagen || item.imagen_url)!}
                         alt={item.nombre}
-                        className="w-12 h-12 rounded-full object-cover"
+                        className="w-12 h-12 rounded-lg object-contain bg-gray-50"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
                         <ShoppingBag className="h-5 w-5 text-gray-400" />
                       </div>
                     )}

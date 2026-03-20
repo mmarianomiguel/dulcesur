@@ -233,10 +233,19 @@ export default function VentasPage() {
   // selected cart item for arrow key navigation
   const [selectedItemIdx, setSelectedItemIdx] = useState(-1);
   const cartListRef = useRef<HTMLDivElement>(null);
+  const qtyBuffer = useRef("");
+  const qtyBufferTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // barcode scanner
   const barcodeBuffer = useRef("");
   const barcodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [scanNotFound, setScanNotFound] = useState<string | null>(null);
+  const scanNotFoundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanNotFoundRef = useRef((code: string) => {
+    setScanNotFound(code);
+    if (scanNotFoundTimer.current) clearTimeout(scanNotFoundTimer.current);
+    scanNotFoundTimer.current = setTimeout(() => setScanNotFound(null), 3000);
+  });
   const [scannerEnabled, setScannerEnabled] = useState(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("pos_scanner_enabled");
@@ -256,7 +265,7 @@ export default function VentasPage() {
   const fetchData = useCallback(async () => {
     const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }] = await Promise.all([
       supabase.from("productos").select("*").eq("activo", true).order("nombre").range(0, 9999),
-      supabase.from("clientes").select("id, nombre, email, telefono, domicilio, saldo, situacion_iva, tipo_documento, numero_documento, tipo_factura, razon_social, domicilio_fiscal, provincia, localidad, codigo_postal, vendedor_id, codigo_cliente").eq("activo", true).order("nombre"),
+      supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
     ]);
@@ -685,22 +694,22 @@ export default function VentasPage() {
     if (!scannerEnabled) return;
     let lastKeyTime = 0;
 
-    const findAndAdd = (code: string) => {
+    const findAndAdd = (code: string): "found" | "not_found" => {
       // Search by code in products
       const product = products.find((p) => p.codigo === code);
       if (product) {
         scannerAddRef.current(product);
-        return true;
+        return "found";
       }
       // Try presentaciones by codigo
       for (const [prodId, presList] of Object.entries(presentacionesMap)) {
         const match = presList.find((pr) => pr.codigo === code);
         if (match) {
           const prod = products.find((p) => p.id === prodId);
-          if (prod) { scannerAddRef.current(prod, match); return true; }
+          if (prod) { scannerAddRef.current(prod, match); return "found"; }
         }
       }
-      return false;
+      return "not_found";
     };
 
     const handler = (e: KeyboardEvent) => {
@@ -708,15 +717,26 @@ export default function VentasPage() {
       const tag = (e.target as HTMLElement).tagName;
       const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 
+      // Skip scanner when search dialog is open (the dialog handles its own Enter)
+      const dialogOpen = document.querySelector("[data-search-dialog]");
+      if (dialogOpen) {
+        barcodeBuffer.current = "";
+        return;
+      }
+
       if (e.key === "Enter" && barcodeBuffer.current.length >= 3) {
         const code = barcodeBuffer.current;
         barcodeBuffer.current = "";
-        const found = findAndAdd(code);
-        if (found && inInput) {
+        const result = findAndAdd(code);
+        if (result === "found" && inInput) {
           e.preventDefault();
           // Clear whatever the scanner typed into the input
           const el = e.target as HTMLInputElement;
           if (el.value) el.value = "";
+        }
+        if (result === "not_found") {
+          // Show non-invasive toast for unknown barcode
+          scanNotFoundRef.current(code);
         }
         return;
       }
@@ -773,6 +793,27 @@ export default function VentasPage() {
         if (e.key === "Delete" && selectedItemIdx >= 0) {
           e.preventDefault();
           removeItem(items[selectedItemIdx].id);
+          return;
+        }
+        // Type numbers to set quantity of selected item
+        if (selectedItemIdx >= 0 && e.key >= "0" && e.key <= "9") {
+          e.preventDefault();
+          qtyBuffer.current += e.key;
+          if (qtyBufferTimer.current) clearTimeout(qtyBufferTimer.current);
+          qtyBufferTimer.current = setTimeout(() => {
+            const qty = parseInt(qtyBuffer.current, 10);
+            if (qty > 0 && selectedItemIdx >= 0 && selectedItemIdx < items.length) {
+              updateQty(items[selectedItemIdx].id, qty);
+            }
+            qtyBuffer.current = "";
+          }, 600);
+          return;
+        }
+        // Backspace to clear quantity buffer or delete item
+        if (e.key === "Backspace" && selectedItemIdx >= 0) {
+          if (qtyBuffer.current.length > 0) {
+            qtyBuffer.current = qtyBuffer.current.slice(0, -1);
+          }
           return;
         }
       }
@@ -2145,7 +2186,7 @@ export default function VentasPage() {
 
       {/* Product search dialog */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" data-search-dialog>
           <DialogHeader>
             <DialogTitle>Buscar producto</DialogTitle>
           </DialogHeader>
@@ -3206,6 +3247,16 @@ export default function VentasPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Barcode not found toast */}
+      {scanNotFound && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center gap-2 bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            Código no encontrado: <span className="font-mono">{scanNotFound}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

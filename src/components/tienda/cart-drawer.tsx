@@ -12,7 +12,8 @@ interface CartItem {
   presentacion: string;
   precio: number;
   cantidad: number;
-  imagen: string;
+  imagen?: string;
+  imagen_url?: string;
   precio_original?: number;
   descuento?: number;
 }
@@ -241,9 +242,9 @@ function CartDrawer() {
                 >
                   {/* Image */}
                   <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
-                    {item.imagen ? (
+                    {(item.imagen || item.imagen_url) ? (
                       <Image
-                        src={item.imagen}
+                        src={(item.imagen || item.imagen_url)!}
                         alt={item.nombre}
                         fill
                         className="object-contain p-1"

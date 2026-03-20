@@ -6,9 +6,10 @@ import Link from "next/link";
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft } from "lucide-react";
 
 interface CartItem {
-  producto_id: string;
+  id: string;
   nombre: string;
-  imagen_url: string;
+  imagen_url?: string;
+  imagen?: string;
   presentacion: string;
   precio: number;
   cantidad: number;
@@ -44,14 +45,14 @@ export default function CarritoPage() {
   const updateQty = (id: string, delta: number) => {
     const updated = items
       .map((i) =>
-        i.producto_id === id ? { ...i, cantidad: i.cantidad + delta } : i
+        i.id === id ? { ...i, cantidad: i.cantidad + delta } : i
       )
       .filter((i) => i.cantidad > 0);
     persist(updated);
   };
 
   const remove = (id: string) => {
-    persist(items.filter((i) => i.producto_id !== id));
+    persist(items.filter((i) => i.id !== id));
   };
 
   const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
@@ -84,16 +85,16 @@ export default function CarritoPage() {
       <div className="space-y-4">
         {items.map((item) => (
           <div
-            key={item.producto_id}
+            key={item.id}
             className="flex items-center gap-4 bg-white rounded-xl border p-4"
           >
-            <div className="relative h-16 w-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
-              {item.imagen_url ? (
+            <div className="relative h-16 w-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
+              {(item.imagen_url || item.imagen) ? (
                 <Image
-                  src={item.imagen_url}
+                  src={(item.imagen_url || item.imagen)!}
                   alt={item.nombre}
                   fill
-                  className="object-cover"
+                  className="object-contain p-1"
                 />
               ) : (
                 <div className="h-full w-full flex items-center justify-center text-gray-400">
@@ -109,7 +110,7 @@ export default function CarritoPage() {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => updateQty(item.producto_id, -1)}
+                onClick={() => updateQty(item.id, -1)}
                 className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-gray-50 transition"
               >
                 <Minus className="h-4 w-4" />
@@ -118,7 +119,7 @@ export default function CarritoPage() {
                 {item.cantidad}
               </span>
               <button
-                onClick={() => updateQty(item.producto_id, 1)}
+                onClick={() => updateQty(item.id, 1)}
                 className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-gray-50 transition"
               >
                 <Plus className="h-4 w-4" />
@@ -135,7 +136,7 @@ export default function CarritoPage() {
             </div>
 
             <button
-              onClick={() => remove(item.producto_id)}
+              onClick={() => remove(item.id)}
               className="text-gray-400 hover:text-red-500 transition p-1"
             >
               <Trash2 className="h-5 w-5" />
