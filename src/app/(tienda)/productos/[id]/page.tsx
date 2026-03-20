@@ -379,14 +379,14 @@ export default function ProductoDetallePage() {
       <div className="grid gap-10 md:grid-cols-2">
         {/* Left - Image */}
         <div className="md:sticky md:top-24 md:self-start md:max-h-[calc(100vh-8rem)]">
-          <div className="relative aspect-square overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
+          <div className="relative aspect-square overflow-hidden rounded-2xl border border-gray-100 bg-white">
             {producto.imagen_url ? (
               <Image
                 src={producto.imagen_url}
                 alt={producto.nombre}
                 fill
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-contain p-8"
+                className="object-contain p-4"
               />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-gradient-to-br from-gray-50 to-gray-100">
