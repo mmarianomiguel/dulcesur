@@ -551,6 +551,8 @@ export default function VentasPage() {
               subtotal: unitPres.precio * newQty * (1 - i.discount / 100),
             };
           }
+          // No unit presentation available: don't go below 1
+          return i;
         }
 
         // Check auto-switch: units → medio cartón (for Mt products going from 1 to 0.5)
