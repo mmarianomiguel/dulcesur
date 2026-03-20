@@ -235,6 +235,7 @@ export default function VentasPage() {
   const cartListRef = useRef<HTMLDivElement>(null);
   const qtyBuffer = useRef("");
   const qtyBufferTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qtyLastKeyTime = useRef(0);
 
   // barcode scanner
   const barcodeBuffer = useRef("");
@@ -244,7 +245,7 @@ export default function VentasPage() {
   const scanNotFoundRef = useRef((code: string) => {
     setScanNotFound(code);
     if (scanNotFoundTimer.current) clearTimeout(scanNotFoundTimer.current);
-    scanNotFoundTimer.current = setTimeout(() => setScanNotFound(null), 3000);
+    scanNotFoundTimer.current = setTimeout(() => setScanNotFound(null), 2000);
   });
   const [scannerEnabled, setScannerEnabled] = useState(() => {
     if (typeof window !== "undefined") {
@@ -796,7 +797,17 @@ export default function VentasPage() {
           return;
         }
         // Type numbers to set quantity of selected item
+        // Skip if keys arrive too fast (<60ms) — that's the barcode scanner, not manual typing
         if (selectedItemIdx >= 0 && e.key >= "0" && e.key <= "9") {
+          const now = Date.now();
+          const gap = now - qtyLastKeyTime.current;
+          qtyLastKeyTime.current = now;
+          if (gap < 60 && qtyBuffer.current.length > 0) {
+            // Fast input = scanner → clear qty buffer, let barcode handler take over
+            qtyBuffer.current = "";
+            if (qtyBufferTimer.current) clearTimeout(qtyBufferTimer.current);
+            return;
+          }
           e.preventDefault();
           qtyBuffer.current += e.key;
           if (qtyBufferTimer.current) clearTimeout(qtyBufferTimer.current);
@@ -806,7 +817,7 @@ export default function VentasPage() {
               updateQty(items[selectedItemIdx].id, qty);
             }
             qtyBuffer.current = "";
-          }, 600);
+          }, 250);
           return;
         }
         // Backspace to clear quantity buffer or delete item
