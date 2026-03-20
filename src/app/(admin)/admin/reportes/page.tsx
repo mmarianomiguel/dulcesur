@@ -79,9 +79,10 @@ export default function ReportesPage() {
     const { desde: dEff, hasta: hEff } = effectiveDates;
 
     const [{ data: vts }, { data: cmps }, { data: prods }] = await Promise.all([
-      supabase.from("ventas").select("id, fecha, total, forma_pago, tipo_comprobante, created_at, cliente_id, origen, clientes(nombre)")
+      supabase.from("ventas").select("id, fecha, total, forma_pago, tipo_comprobante, created_at, cliente_id, origen, estado, clientes(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
         .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+        .neq("estado", "anulada")
         .order("fecha", { ascending: false }),
       supabase.from("compras").select("id, fecha, total, forma_pago")
         .gte("fecha", dEff).lte("fecha", hEff)

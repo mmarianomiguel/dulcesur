@@ -49,7 +49,8 @@ export default function ResumenMensualPage() {
     const { data: ventas } = await supabase.from("ventas").select("id, total, forma_pago, cliente_id, tipo_comprobante, clientes(nombre)")
       .gte("fecha", start).lt("fecha", end)
       .not("tipo_comprobante", "ilike", "Nota de Crédito%")
-      .not("tipo_comprobante", "ilike", "Nota de Débito%");
+      .not("tipo_comprobante", "ilike", "Nota de Débito%")
+      .neq("estado", "anulada");
     const vList = ventas || [];
     setTotalVentas(vList.reduce((a: number, v: any) => a + v.total, 0));
     setCantVentas(vList.length);
@@ -57,7 +58,8 @@ export default function ResumenMensualPage() {
     // Notas de credito
     const { data: ncs } = await supabase.from("ventas").select("total")
       .gte("fecha", start).lt("fecha", end)
-      .ilike("tipo_comprobante", "Nota de Crédito%");
+      .ilike("tipo_comprobante", "Nota de Crédito%")
+      .neq("estado", "anulada");
     setTotalNC((ncs || []).reduce((a: number, n: any) => a + n.total, 0));
 
     // Compras

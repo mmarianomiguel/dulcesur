@@ -224,6 +224,7 @@ export default function VentasPage() {
   const [presentacionesMap, setPresentacionesMap] = useState<Record<string, Presentacion[]>>({});
 
   // section refs for keyboard navigation
+  const codigoClienteRef = useRef<HTMLInputElement>(null);
   const clientSectionRef = useRef<HTMLButtonElement>(null);
   const cartSectionRef = useRef<HTMLDivElement>(null);
   const paymentSectionRef = useRef<HTMLDivElement>(null);
@@ -379,7 +380,8 @@ export default function VentasPage() {
         c.nombre.toLowerCase().includes(term) ||
         (c.email || "").toLowerCase().includes(term) ||
         (c.telefono || "").includes(clientSearch) ||
-        ((c as any).codigo_cliente || "").includes(clientSearch)
+        ((c as any).codigo_cliente || "").includes(clientSearch) ||
+        (/^\d+$/.test(clientSearch) && (c as any).codigo_cliente && parseInt((c as any).codigo_cliente, 10) === parseInt(clientSearch, 10))
     );
   }, [clients, clientSearch]);
 
@@ -958,6 +960,7 @@ export default function VentasPage() {
   const resetSale = () => {
     setItems([]);
     setClientId("");
+    if (codigoClienteRef.current) codigoClienteRef.current.value = "";
     setFormaPago("Efectivo");
     setDescuento(0);
     setRecargo(0);
@@ -1483,6 +1486,7 @@ export default function VentasPage() {
         setClientId(filteredClients[clientHighlight].id);
         setClientDialogOpen(false);
         setClientSearch("");
+        if (codigoClienteRef.current) codigoClienteRef.current.value = (filteredClients[clientHighlight] as any).codigo_cliente || "";
       }
     }
   };
@@ -1497,6 +1501,7 @@ export default function VentasPage() {
           {/* Client selector */}
           <div className="flex items-center gap-2">
             <input
+              ref={codigoClienteRef}
               type="text"
               inputMode="numeric"
               placeholder="#"
@@ -1506,10 +1511,14 @@ export default function VentasPage() {
                 const code = e.target.value.replace(/\D/g, "").slice(0, 4);
                 e.target.value = code;
                 if (code.length >= 1) {
-                  const match = clients.find((c) => (c as any).codigo_cliente === code);
+                  const numericCode = parseInt(code, 10);
+                  const match = clients.find((c) => {
+                    const cc = (c as any).codigo_cliente;
+                    return cc && parseInt(cc, 10) === numericCode;
+                  });
                   if (match) {
                     setClientId(match.id);
-                    e.target.value = "";
+                    e.target.value = (match as any).codigo_cliente || code;
                     e.target.blur();
                   }
                 }
@@ -1536,6 +1545,7 @@ export default function VentasPage() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setClientId("");
+                    if (codigoClienteRef.current) codigoClienteRef.current.value = "";
                   }}
                   className="ml-auto p-1 rounded hover:bg-muted cursor-pointer"
                 >
@@ -2379,6 +2389,7 @@ export default function VentasPage() {
                   setClientId(c.id);
                   setClientDialogOpen(false);
                   setClientSearch("");
+                  if (codigoClienteRef.current) codigoClienteRef.current.value = (c as any).codigo_cliente || "";
                 }}
               >
                 <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0">

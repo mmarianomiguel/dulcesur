@@ -2468,12 +2468,15 @@ export default function ProductosPage() {
             ) : (
               historyItems.map((item) => {
                 const tipoLower = item.tipo.toLowerCase();
+                const isAnulacion = tipoLower.includes("anulacion") || tipoLower.includes("anulación");
                 const isDevolucion = tipoLower.includes("devolucion") || tipoLower.includes("devolución");
                 const isVenta = tipoLower.includes("venta");
                 const diff = item.cantidad_despues - item.cantidad_antes;
                 const isPositive = diff >= 0;
 
-                const badgeConfig = isDevolucion
+                const badgeConfig = isAnulacion
+                  ? { label: "Anulación", className: "bg-orange-100 text-orange-700 border-orange-200", icon: <RefreshCw className="w-3 h-3" /> }
+                  : isDevolucion
                   ? { label: "Devolucion", className: "bg-blue-100 text-blue-700 border-blue-200", icon: <RefreshCw className="w-3 h-3" /> }
                   : isVenta
                   ? { label: "Venta", className: "bg-red-100 text-red-700 border-red-200", icon: <ShoppingBag className="w-3 h-3" /> }

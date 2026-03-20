@@ -32,6 +32,8 @@ import {
   Truck,
   CheckCircle,
   Filter,
+  Ban,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -124,6 +126,11 @@ export default function ListadoVentasPage() {
   const [detailComboIds, setDetailComboIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Anulacion
+  const [anularVenta, setAnularVenta] = useState<VentaRow | null>(null);
+  const [anularMotivo, setAnularMotivo] = useState("");
+  const [anulando, setAnulando] = useState(false);
+
   // Print
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([]);
   const [receiptConfig, setReceiptConfig] = useState(defaultReceiptConfig);
@@ -212,6 +219,138 @@ export default function ListadoVentasPage() {
     setActionLoading(null);
   };
 
+  const handleAnular = async () => {
+    if (!anularVenta) return;
+    setAnulando(true);
+    const v = anularVenta;
+    try {
+      // 1. Get venta_items to reverse stock
+      const { data: vitems } = await supabase.from("venta_items").select("*").eq("venta_id", v.id);
+      const items = (vitems as VentaItemRow[]) || [];
+
+      // 2. Reverse stock for each item
+      for (const item of items) {
+        if (!item.producto_id) continue;
+        const { data: prod } = await supabase.from("productos").select("id, stock, es_combo").eq("id", item.producto_id).single();
+        if (!prod) continue;
+
+        if ((prod as any).es_combo) {
+          // Combo: reverse each component
+          const { data: comboItems } = await supabase
+            .from("combo_items")
+            .select("producto_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .eq("combo_id", item.producto_id);
+          for (const ci of comboItems || []) {
+            const { data: compProd } = await supabase.from("productos").select("id, stock").eq("id", (ci as any).producto_id).single();
+            if (!compProd) continue;
+            const unitsToRestore = item.cantidad * (ci as any).cantidad;
+            const newStock = compProd.stock + unitsToRestore;
+            await supabase.from("productos").update({ stock: newStock }).eq("id", (ci as any).producto_id);
+            await supabase.from("stock_movimientos").insert({
+              producto_id: (ci as any).producto_id,
+              tipo: "anulacion",
+              cantidad_antes: compProd.stock,
+              cantidad_despues: newStock,
+              cantidad: unitsToRestore,
+              referencia: `Anulación Venta #${v.numero}`,
+              descripcion: `Anulación venta - ${(ci as any).productos?.nombre || item.descripcion}${anularMotivo ? ` (${anularMotivo})` : ""}`,
+              usuario: "Admin Sistema",
+              orden_id: v.id,
+            });
+          }
+        } else {
+          // Regular product
+          const upp = item.unidades_por_presentacion || 1;
+          const unitsToRestore = item.cantidad * upp;
+          const newStock = prod.stock + unitsToRestore;
+          await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+          await supabase.from("stock_movimientos").insert({
+            producto_id: item.producto_id,
+            tipo: "anulacion",
+            cantidad_antes: prod.stock,
+            cantidad_despues: newStock,
+            cantidad: unitsToRestore,
+            referencia: `Anulación Venta #${v.numero}`,
+            descripcion: `Anulación venta - ${item.descripcion}${anularMotivo ? ` (${anularMotivo})` : ""}`,
+            usuario: "Admin Sistema",
+            orden_id: v.id,
+          });
+        }
+      }
+
+      // 3. Reverse caja_movimientos (delete ingreso entries for this sale)
+      const { data: cajaRows } = await supabase
+        .from("caja_movimientos")
+        .select("*")
+        .eq("referencia_id", v.id)
+        .eq("referencia_tipo", "venta");
+      for (const cm of cajaRows || []) {
+        const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+        const hora = new Date().toTimeString().split(" ")[0];
+        await supabase.from("caja_movimientos").insert({
+          fecha: hoy,
+          hora,
+          tipo: "egreso",
+          descripcion: `Anulación Venta #${v.numero}${anularMotivo ? ` (${anularMotivo})` : ""}`,
+          metodo_pago: (cm as any).metodo_pago,
+          monto: (cm as any).monto,
+          referencia_id: v.id,
+          referencia_tipo: "anulacion",
+          cuenta_bancaria: (cm as any).cuenta_bancaria || null,
+        });
+      }
+
+      // 4. Reverse cuenta_corriente entries and update client saldo
+      if (v.cliente_id) {
+        const { data: ccRows } = await supabase
+          .from("cuenta_corriente")
+          .select("*")
+          .eq("venta_id", v.id);
+        if (ccRows && ccRows.length > 0) {
+          // Get current client saldo
+          const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
+          let saldoActual = clienteData?.saldo || 0;
+
+          for (const cc of ccRows) {
+            const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+            // Reverse: what was debe becomes haber and vice versa
+            const nuevoSaldo = saldoActual - (cc as any).debe + (cc as any).haber;
+            await supabase.from("cuenta_corriente").insert({
+              cliente_id: v.cliente_id,
+              fecha: hoy,
+              comprobante: `Anulación Venta #${v.numero}`,
+              descripcion: `Anulación de venta${anularMotivo ? ` (${anularMotivo})` : ""}`,
+              debe: (cc as any).haber,
+              haber: (cc as any).debe,
+              saldo: nuevoSaldo,
+              forma_pago: "Anulación",
+              venta_id: v.id,
+            });
+            saldoActual = nuevoSaldo;
+          }
+          // Update client balance
+          await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", v.cliente_id);
+        }
+      }
+
+      // 5. Mark venta as anulada
+      await supabase.from("ventas").update({
+        estado: "anulada",
+        observacion: v.observacion
+          ? `${v.observacion} | ANULADA${anularMotivo ? `: ${anularMotivo}` : ""}`
+          : `ANULADA${anularMotivo ? `: ${anularMotivo}` : ""}`,
+      }).eq("id", v.id);
+
+      setAnularVenta(null);
+      setAnularMotivo("");
+      await fetchVentas();
+    } catch (err: any) {
+      alert(`Error al anular: ${err?.message || String(err)}`);
+    } finally {
+      setAnulando(false);
+    }
+  };
+
   const getVendedorNombre = (id: string | null) => {
     if (!id) return "—";
     return vendedores.find((v) => v.id === id)?.nombre || "—";
@@ -298,11 +437,12 @@ export default function ListadoVentasPage() {
   };
 
   // ─── Derived ───
-  const totalSum = ventas.reduce((a, v) => {
+  const ventasActivas = ventas.filter((v) => v.estado !== "anulada");
+  const totalSum = ventasActivas.reduce((a, v) => {
     const isNC = v.tipo_comprobante.includes("Nota de Crédito");
     return a + (isNC ? -v.total : v.total);
   }, 0);
-  const pendientesEntrega = ventas.filter((v) => !v.entregado).length;
+  const pendientesEntrega = ventasActivas.filter((v) => !v.entregado).length;
   const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   return (
@@ -310,7 +450,10 @@ export default function ListadoVentasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Listado de Ventas y Remitos</h1>
-          <p className="text-muted-foreground text-sm">{ventas.length} comprobantes encontrados</p>
+          <p className="text-muted-foreground text-sm">
+            {ventas.length} comprobantes encontrados
+            {ventas.length !== ventasActivas.length && ` (${ventas.length - ventasActivas.length} anulados)`}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={exportCSV}>
@@ -327,7 +470,7 @@ export default function ListadoVentasPage() {
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-primary" /></div>
-            <div><p className="text-xs text-muted-foreground">Comprobantes</p><p className="text-xl font-bold">{ventas.length}</p></div>
+            <div><p className="text-xs text-muted-foreground">Comprobantes</p><p className="text-xl font-bold">{ventasActivas.length}</p></div>
           </CardContent>
         </Card>
         <Card>
@@ -345,7 +488,7 @@ export default function ListadoVentasPage() {
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><FileText className="w-5 h-5 text-violet-500" /></div>
-            <div><p className="text-xs text-muted-foreground">Promedio por ticket</p><p className="text-xl font-bold">{ventas.length > 0 ? formatCurrency(totalSum / ventas.length) : "$0"}</p></div>
+            <div><p className="text-xs text-muted-foreground">Promedio por ticket</p><p className="text-xl font-bold">{ventasActivas.length > 0 ? formatCurrency(totalSum / ventasActivas.length) : "$0"}</p></div>
           </CardContent>
         </Card>
       </div>
@@ -475,16 +618,21 @@ export default function ListadoVentasPage() {
                 </thead>
                 <tbody>
                   {ventas.map((v) => (
-                    <tr key={v.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    <tr key={v.id} className={`border-b last:border-0 transition-colors ${v.estado === "anulada" ? "opacity-50 bg-red-50/50" : "hover:bg-muted/50"}`}>
                       <td className="py-3 px-4">
                         <Badge variant="outline" className={`text-xs font-normal ${v.origen === "tienda" ? "border-pink-300 text-pink-700 bg-pink-50" : "border-blue-300 text-blue-700 bg-blue-50"}`}>
                           {v.origen === "tienda" ? "Tienda" : "POS"}
                         </Badge>
                       </td>
                       <td className="py-3 px-4">
-                        <Badge variant={v.tipo_comprobante.includes("Nota de Crédito") ? "destructive" : "secondary"} className="text-xs font-normal">
-                          {v.tipo_comprobante}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant={v.tipo_comprobante.includes("Nota de Crédito") ? "destructive" : "secondary"} className="text-xs font-normal">
+                            {v.tipo_comprobante}
+                          </Badge>
+                          {v.estado === "anulada" && (
+                            <Badge variant="destructive" className="text-[10px] font-bold">ANULADA</Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{v.numero}</td>
                       <td className="py-3 px-4 text-muted-foreground">
@@ -508,7 +656,7 @@ export default function ListadoVentasPage() {
                           </Badge>
                         )}
                       </td>
-                      <td className={`py-3 px-4 text-right font-semibold ${v.tipo_comprobante.includes("Nota de Crédito") ? "text-red-500" : ""}`}>
+                      <td className={`py-3 px-4 text-right font-semibold ${v.estado === "anulada" ? "line-through text-muted-foreground" : v.tipo_comprobante.includes("Nota de Crédito") ? "text-red-500" : ""}`}>
                         {v.tipo_comprobante.includes("Nota de Crédito") ? `-${formatCurrency(v.total)}` : formatCurrency(v.total)}
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -519,7 +667,7 @@ export default function ListadoVentasPage() {
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => preparePrint(v)} title="Imprimir">
                             <Printer className="w-3.5 h-3.5" />
                           </Button>
-                          {!v.entregado && !v.tipo_comprobante.includes("Nota de Crédito") && (
+                          {!v.entregado && !v.tipo_comprobante.includes("Nota de Crédito") && v.estado !== "anulada" && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -529,6 +677,17 @@ export default function ListadoVentasPage() {
                             >
                               {actionLoading === v.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3 mr-1" />}
                               Entregar
+                            </Button>
+                          )}
+                          {v.estado !== "anulada" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => { setAnularVenta(v); setAnularMotivo(""); }}
+                              title="Anular comprobante"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
                             </Button>
                           )}
                         </div>
@@ -556,6 +715,12 @@ export default function ListadoVentasPage() {
           </DialogHeader>
           {detailVenta && (
             <div className="w-full overflow-hidden space-y-4">
+              {detailVenta.estado === "anulada" && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+                  <Ban className="w-4 h-4 text-red-600" />
+                  <span className="text-sm font-semibold text-red-700">COMPROBANTE ANULADO</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Tipo:</span> <span className="font-medium ml-1">{detailVenta.tipo_comprobante}</span></div>
                 <div><span className="text-muted-foreground">Fecha:</span> <span className="font-medium ml-1">{new Date(detailVenta.fecha + "T12:00:00").toLocaleDateString("es-AR")}</span></div>
@@ -612,6 +777,55 @@ export default function ListadoVentasPage() {
               </div>
               <div className="flex justify-end text-lg font-bold">
                 Total: {formatCurrency(detailVenta.total)}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Anular Dialog */}
+      <Dialog open={!!anularVenta} onOpenChange={(open) => { if (!open) setAnularVenta(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              Anular comprobante
+            </DialogTitle>
+          </DialogHeader>
+          {anularVenta && (
+            <div className="space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm space-y-2">
+                <p className="font-medium text-red-800">Esta acción revertirá:</p>
+                <ul className="list-disc list-inside text-red-700 space-y-1">
+                  <li>El stock de los productos será restaurado</li>
+                  <li>Se generará un egreso en caja para compensar</li>
+                  {anularVenta.forma_pago === "Cuenta Corriente" || anularVenta.forma_pago === "Mixto" ? (
+                    <li>Se revertirá el movimiento en cuenta corriente del cliente</li>
+                  ) : null}
+                </ul>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-muted-foreground">Comprobante:</span> <span className="font-medium">{anularVenta.numero}</span></div>
+                <div><span className="text-muted-foreground">Total:</span> <span className="font-bold">{formatCurrency(anularVenta.total)}</span></div>
+                <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{anularVenta.clientes?.nombre || "—"}</span></div>
+                <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium">{anularVenta.forma_pago}</span></div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Motivo de anulación (opcional)</Label>
+                <Input
+                  placeholder="Ej: Error en el monto, devolución del cliente..."
+                  value={anularMotivo}
+                  onChange={(e) => setAnularMotivo(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setAnularVenta(null)} disabled={anulando}>
+                  Cancelar
+                </Button>
+                <Button variant="destructive" onClick={handleAnular} disabled={anulando}>
+                  {anulando ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Ban className="w-4 h-4 mr-2" />}
+                  Confirmar anulación
+                </Button>
               </div>
             </div>
           )}

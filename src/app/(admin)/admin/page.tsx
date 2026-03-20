@@ -310,7 +310,7 @@ export default function DashboardPage() {
     if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
 
     // Period sales
-    const { data: periodSales } = await supabase.from("ventas").select("total, forma_pago").gte("fecha", start).lt("fecha", end);
+    const { data: periodSales } = await supabase.from("ventas").select("total, forma_pago, estado").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
     const salesTotal = (periodSales || []).reduce((a, v) => a + v.total, 0);
     setVentasPeriodo(salesTotal);
     setTicketsPeriodo((periodSales || []).length);
@@ -322,7 +322,7 @@ export default function DashboardPage() {
     const { data: periodExpenses } = await supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso");
     setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
 
-    const { data: ventaIds } = await supabase.from("ventas").select("id").gte("fecha", start).lt("fecha", end);
+    const { data: ventaIds } = await supabase.from("ventas").select("id").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
     let gananciaTotal = 0;
     if (ventaIds && ventaIds.length > 0) {
       const ids = ventaIds.map((v) => v.id);
@@ -350,7 +350,7 @@ export default function DashboardPage() {
       const year = d.getFullYear(); const month = d.getMonth() + 1;
       const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
       const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-      const { data: mv } = await supabase.from("ventas").select("total").gte("fecha", mStart).lt("fecha", mEnd);
+      const { data: mv } = await supabase.from("ventas").select("total").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada");
       const { data: me } = await supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd);
       months.push({ name: d.toLocaleDateString("es-AR", { month: "short" }), ventas: (mv || []).reduce((a, v) => a + v.total, 0), egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0) });
     }
