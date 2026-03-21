@@ -495,38 +495,36 @@ export default function CheckoutPage() {
         });
         await supabase.from("venta_items").insert(ventaItemRows);
 
-        // Update stock + log movements
-        for (const item of items) {
+        // Update stock atomically (prevents race conditions with concurrent sales)
+        const stockItems = items.map((item) => {
           const prodId = item.id.split("_")[0];
           const match = item.id.match(/Caja \(x(\d+)\)/);
           const isMedioCarton = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
           const presUnits = isMedioCarton ? 0.5 : match ? Number(match[1]) : 1;
-          const unitsToDeduct = item.cantidad * presUnits;
+          return {
+            producto_id: prodId,
+            cantidad: item.cantidad * presUnits,
+            descripcion: `Venta Web - ${item.nombre} (${item.presentacion || "Unidad"})`,
+          };
+        });
 
-          const { data: prod } = await supabase
-            .from("productos")
-            .select("stock")
-            .eq("id", prodId)
-            .single();
+        const { data: stockResult } = await supabase.rpc("decrementar_stock_venta", {
+          p_items: stockItems,
+          p_referencia: `Pedido Web #${numero}`,
+          p_usuario: "Tienda Online",
+          p_orden_id: venta.id,
+        });
 
-          if (prod) {
-            const newStock = prod.stock - unitsToDeduct;
-            await supabase
-              .from("productos")
-              .update({ stock: newStock })
-              .eq("id", prodId);
-            await supabase.from("stock_movimientos").insert({
-              producto_id: prodId,
-              tipo: "venta",
-              cantidad_antes: prod.stock,
-              cantidad_despues: newStock,
-              cantidad: unitsToDeduct,
-              referencia: `Pedido Web #${numero}`,
-              descripcion: `Venta Web - ${item.nombre} (${item.presentacion || "Unidad"})`,
-              usuario: "Tienda Online",
-              orden_id: venta.id,
-            });
-          }
+        if (stockResult && !stockResult.ok) {
+          // Stock insufficient - rollback venta
+          await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+          await supabase.from("ventas").delete().eq("id", venta.id);
+          const faltantes = (stockResult.faltantes || [])
+            .map((f: any) => `${f.descripcion}: disponible ${f.stock_disponible}`)
+            .join(", ");
+          setErrors([`Algunos productos no tienen stock suficiente: ${faltantes}. Por favor revisá tu carrito.`]);
+          setSubmitting(false);
+          return;
         }
       }
 

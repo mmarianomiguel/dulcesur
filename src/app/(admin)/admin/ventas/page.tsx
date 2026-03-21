@@ -1273,52 +1273,43 @@ export default function VentasPage() {
         }));
         await supabase.from("venta_items").insert(ventaItems);
 
-        // Update stock + log movements
+        // Update stock atomically (prevents race conditions with concurrent sales)
+        const stockItems: { producto_id: string; cantidad: number; descripcion: string }[] = [];
         for (const item of items) {
           if (item.es_combo && item.comboItems && item.comboItems.length > 0) {
-            // Deduct each component individually
             for (const ci of item.comboItems) {
-              const compProd = products.find((p) => p.id === ci.producto_id);
-              if (!compProd) continue;
-              const unitsToDeduct = item.qty * ci.cantidad;
-              const newStock = compProd.stock - unitsToDeduct;
-              await supabase.from("productos").update({ stock: newStock }).eq("id", ci.producto_id);
-              await supabase.from("stock_movimientos").insert({
+              stockItems.push({
                 producto_id: ci.producto_id,
-                tipo: "venta",
-                cantidad_antes: compProd.stock,
-                cantidad_despues: newStock,
-                cantidad: unitsToDeduct,
-                referencia: `Venta #${numero}`,
+                cantidad: item.qty * ci.cantidad,
                 descripcion: `Venta combo ${item.description} - ${ci.nombre}`,
-                usuario: "Admin Sistema",
-                orden_id: venta.id,
               });
-              // Update local products cache so subsequent items see updated stock
-              compProd.stock = newStock;
             }
-            continue;
-          }
-          const prod = products.find((p) => p.id === item.producto_id);
-          if (prod) {
-            const unitsToDeduct = item.qty * (item.unidades_por_presentacion || 1);
-            const newStock = prod.stock - unitsToDeduct;
-            await supabase
-              .from("productos")
-              .update({ stock: newStock })
-              .eq("id", item.producto_id);
-            await supabase.from("stock_movimientos").insert({
+          } else {
+            stockItems.push({
               producto_id: item.producto_id,
-              tipo: "venta",
-              cantidad_antes: prod.stock,
-              cantidad_despues: newStock,
-              cantidad: unitsToDeduct,
-              referencia: `Venta #${numero}`,
+              cantidad: item.qty * (item.unidades_por_presentacion || 1),
               descripcion: `Venta - ${item.description}`,
-              usuario: "Admin Sistema",
-              orden_id: venta.id,
             });
           }
+        }
+
+        const { data: stockResult } = await supabase.rpc("decrementar_stock_venta", {
+          p_items: stockItems,
+          p_referencia: `Venta #${numero}`,
+          p_usuario: "Admin Sistema",
+          p_orden_id: venta.id,
+        });
+
+        if (stockResult && !stockResult.ok) {
+          // Stock insufficient - delete the venta we just created and alert
+          await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+          await supabase.from("ventas").delete().eq("id", venta.id);
+          const faltantes = (stockResult.faltantes || [])
+            .map((f: any) => `${f.descripcion}: pedido ${f.cantidad_pedida}, disponible ${f.stock_disponible}`)
+            .join("\n");
+          alert(`Stock insuficiente:\n${faltantes}`);
+          setSaving(false);
+          return;
         }
 
         const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
