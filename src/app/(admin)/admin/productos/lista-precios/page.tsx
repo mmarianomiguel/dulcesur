@@ -954,7 +954,7 @@ export default function ListaPreciosPage() {
       {/* Config Modal */}
       {showConfig && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden border border-border">
+          <div className={`bg-card rounded-2xl shadow-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-border ${configTab === "combinado" ? "max-w-4xl" : "max-w-lg"}`}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-semibold">Configuración del PDF</h2>
               <button onClick={() => setShowConfig(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
@@ -1008,85 +1008,148 @@ export default function ListaPreciosPage() {
               )}
 
               {configTab === "combinado" && (
-                <>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Grilla</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Columnas</label>
-                        <input type="number" min={1} max={5} value={config.combinado_columnas} onChange={(e) => updateConfig("combinado_columnas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                <div className="flex gap-6">
+                  {/* Live Preview */}
+                  <div className="flex-shrink-0 w-56">
+                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Vista previa</h3>
+                    <div className="border border-border rounded-lg bg-white relative" style={{ width: "220px", height: "300px" }}>
+                      {/* Logo */}
+                      {config.combinado_mostrarLogo && logoBase64 && (
+                        <img src={logoBase64} alt="Logo" className="absolute object-contain" style={{ top: "8px", left: "8px", width: `${config.logoTamaño * 2.5}px`, height: `${config.logoTamaño * 2.5}px` }} />
+                      )}
+                      {config.combinado_mostrarLogo && !logoBase64 && (
+                        <div className="absolute bg-gray-200 rounded" style={{ top: "8px", left: "8px", width: `${config.logoTamaño * 2.5}px`, height: `${config.logoTamaño * 2.5}px` }} />
+                      )}
+                      {/* Marca */}
+                      <span className="absolute text-[8px] text-gray-400 uppercase" style={{ top: "12px", right: "8px" }}>MARCA</span>
+                      {/* Nombre */}
+                      <p className="absolute left-0 right-0 text-center font-bold text-black" style={{ top: `${Math.max(config.logoTamaño * 2.5, 16) + 8 + config.combinado_nombreOffset * 3}px`, fontSize: `${config.combinado_tamañoNombre}px`, padding: "0 8px" }}>
+                        Producto Ejemplo
+                      </p>
+                      {/* Precio grande */}
+                      <p className="absolute left-0 right-0 text-center font-bold text-black" style={{ top: "42%", fontSize: `${Math.min(config.combinado_tamañoPrecio, 36)}px`, transform: "translateY(-50%)" }}>
+                        $1.290
+                      </p>
+                      {/* Divider line */}
+                      <div className="absolute left-2 right-2 bg-gray-200" style={{ bottom: `${config.combinado_divisorY * 2.8}%`, height: "1px" }} />
+                      {/* Efect row */}
+                      <div className="absolute left-2 right-2" style={{ bottom: `${config.combinado_efectLabelY * 2.8}%` }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[7px] text-gray-400">Efect.</span>
+                          <span className="text-[7px] text-gray-400">Caja x16</span>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Filas</label>
-                        <input type="number" min={1} max={12} value={config.combinado_filas} onChange={(e) => updateConfig("combinado_filas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      <div className="absolute left-2 right-2" style={{ bottom: `${config.combinado_efectPrecioY * 2.8}%` }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] font-bold text-black">$1.290</span>
+                          <span className="text-[8px] font-bold text-gray-500">$20.640</span>
+                        </div>
                       </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">{config.combinado_columnas * config.combinado_filas} carteles por página</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Tamaños de fuente</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Nombre (pt)</label>
-                        <input type="number" min={6} max={20} value={config.combinado_tamañoNombre} onChange={(e) => updateConfig("combinado_tamañoNombre", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      {/* Transf row */}
+                      <div className="absolute left-2 right-2" style={{ bottom: `${config.combinado_transfLabelY * 2.8}%` }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[7px] text-gray-400">Transf.</span>
+                          <span className="text-[7px] text-gray-400">Caja x16</span>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Precio (pt)</label>
-                        <input type="number" min={10} max={48} value={config.combinado_tamañoPrecio} onChange={(e) => updateConfig("combinado_tamañoPrecio", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      <div className="absolute left-2 right-2" style={{ bottom: `${config.combinado_transfPrecioY * 2.8}%` }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] font-bold text-gray-500">$1.316</span>
+                          <span className="text-[8px] font-bold text-gray-500">$21.053</span>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Posiciones (mm desde borde)</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Nombre offset (desde logo)</label>
-                        <input type="number" min={-5} max={10} step={0.5} value={config.combinado_nombreOffset} onChange={(e) => updateConfig("combinado_nombreOffset", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      {/* Footer line */}
+                      <div className="absolute left-2 right-2 bg-gray-200" style={{ bottom: `${config.combinado_footerLineY * 2.8}%`, height: "1px" }} />
+                      {/* Footer text */}
+                      <div className="absolute left-2 right-2" style={{ bottom: `${config.combinado_footerTextY * 2.2}%` }}>
+                        <div className="flex justify-between items-center">
+                          {config.combinado_mostrarWeb && <span className="text-gray-400" style={{ fontSize: `${config.combinado_footerFontSize}px` }}>{config.webUrl}</span>}
+                          {config.combinado_mostrarFecha && <span className="text-gray-400" style={{ fontSize: `${config.combinado_footerFontSize}px` }}>20/3/2026</span>}
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Línea divisoria</label>
-                        <input type="number" min={5} max={35} step={0.5} value={config.combinado_divisorY} onChange={(e) => updateConfig("combinado_divisorY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Efect. etiqueta</label>
-                        <input type="number" min={3} max={30} step={0.5} value={config.combinado_efectLabelY} onChange={(e) => updateConfig("combinado_efectLabelY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Efect. precio</label>
-                        <input type="number" min={3} max={30} step={0.5} value={config.combinado_efectPrecioY} onChange={(e) => updateConfig("combinado_efectPrecioY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Transf. etiqueta</label>
-                        <input type="number" min={3} max={25} step={0.5} value={config.combinado_transfLabelY} onChange={(e) => updateConfig("combinado_transfLabelY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Transf. precio</label>
-                        <input type="number" min={3} max={25} step={0.5} value={config.combinado_transfPrecioY} onChange={(e) => updateConfig("combinado_transfPrecioY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Línea footer</label>
-                        <input type="number" min={1} max={15} step={0.5} value={config.combinado_footerLineY} onChange={(e) => updateConfig("combinado_footerLineY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-muted-foreground mb-1">Footer texto</label>
-                        <input type="number" min={0.5} max={10} step={0.5} value={config.combinado_footerTextY} onChange={(e) => updateConfig("combinado_footerTextY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <label className="block text-xs text-muted-foreground mb-1">Footer tamaño fuente (pt)</label>
-                      <input type="number" min={3} max={10} step={0.5} value={config.combinado_footerFontSize} onChange={(e) => updateConfig("combinado_footerFontSize", Number(e.target.value))} className="w-32 border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Elementos visibles</h3>
-                    <div className="space-y-3">
-                      <ToggleSwitch checked={config.combinado_mostrarPrecioCaja} onChange={() => updateConfig("combinado_mostrarPrecioCaja", !config.combinado_mostrarPrecioCaja)} label="Precio por caja" />
-                      <ToggleSwitch checked={config.combinado_mostrarLogo} onChange={() => updateConfig("combinado_mostrarLogo", !config.combinado_mostrarLogo)} label="Logo" />
-                      <ToggleSwitch checked={config.combinado_mostrarWeb} onChange={() => updateConfig("combinado_mostrarWeb", !config.combinado_mostrarWeb)} label="Página web" />
-                      <ToggleSwitch checked={config.combinado_mostrarFecha} onChange={() => updateConfig("combinado_mostrarFecha", !config.combinado_mostrarFecha)} label="Fecha actual" />
+                  {/* Controls */}
+                  <div className="flex-1 space-y-6">
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Grilla</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Columnas</label>
+                          <input type="number" min={1} max={5} value={config.combinado_columnas} onChange={(e) => updateConfig("combinado_columnas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Filas</label>
+                          <input type="number" min={1} max={12} value={config.combinado_filas} onChange={(e) => updateConfig("combinado_filas", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">{config.combinado_columnas * config.combinado_filas} carteles por página</p>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Tamaños de fuente</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Nombre (pt)</label>
+                          <input type="number" min={6} max={20} value={config.combinado_tamañoNombre} onChange={(e) => updateConfig("combinado_tamañoNombre", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Precio (pt)</label>
+                          <input type="number" min={10} max={48} value={config.combinado_tamañoPrecio} onChange={(e) => updateConfig("combinado_tamañoPrecio", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Posiciones (mm desde borde)</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Nombre offset</label>
+                          <input type="number" min={-5} max={10} step={0.5} value={config.combinado_nombreOffset} onChange={(e) => updateConfig("combinado_nombreOffset", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Línea divisoria</label>
+                          <input type="number" min={5} max={35} step={0.5} value={config.combinado_divisorY} onChange={(e) => updateConfig("combinado_divisorY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Efect. etiqueta</label>
+                          <input type="number" min={3} max={30} step={0.5} value={config.combinado_efectLabelY} onChange={(e) => updateConfig("combinado_efectLabelY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Efect. precio</label>
+                          <input type="number" min={3} max={30} step={0.5} value={config.combinado_efectPrecioY} onChange={(e) => updateConfig("combinado_efectPrecioY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Transf. etiqueta</label>
+                          <input type="number" min={3} max={25} step={0.5} value={config.combinado_transfLabelY} onChange={(e) => updateConfig("combinado_transfLabelY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Transf. precio</label>
+                          <input type="number" min={3} max={25} step={0.5} value={config.combinado_transfPrecioY} onChange={(e) => updateConfig("combinado_transfPrecioY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Línea footer</label>
+                          <input type="number" min={1} max={15} step={0.5} value={config.combinado_footerLineY} onChange={(e) => updateConfig("combinado_footerLineY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Footer texto</label>
+                          <input type="number" min={0.5} max={10} step={0.5} value={config.combinado_footerTextY} onChange={(e) => updateConfig("combinado_footerTextY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <label className="block text-xs text-muted-foreground mb-1">Footer tamaño fuente (pt)</label>
+                        <input type="number" min={3} max={10} step={0.5} value={config.combinado_footerFontSize} onChange={(e) => updateConfig("combinado_footerFontSize", Number(e.target.value))} className="w-32 border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Elementos visibles</h3>
+                      <div className="space-y-3">
+                        <ToggleSwitch checked={config.combinado_mostrarPrecioCaja} onChange={() => updateConfig("combinado_mostrarPrecioCaja", !config.combinado_mostrarPrecioCaja)} label="Precio por caja" />
+                        <ToggleSwitch checked={config.combinado_mostrarLogo} onChange={() => updateConfig("combinado_mostrarLogo", !config.combinado_mostrarLogo)} label="Logo" />
+                        <ToggleSwitch checked={config.combinado_mostrarWeb} onChange={() => updateConfig("combinado_mostrarWeb", !config.combinado_mostrarWeb)} label="Página web" />
+                        <ToggleSwitch checked={config.combinado_mostrarFecha} onChange={() => updateConfig("combinado_mostrarFecha", !config.combinado_mostrarFecha)} label="Fecha actual" />
+                      </div>
                     </div>
                   </div>
-                </>
+                </div>
               )}
 
               {configTab === "poster" && (
