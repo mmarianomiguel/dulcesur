@@ -40,6 +40,9 @@ import {
   Navigation,
   ChevronDown,
   ChevronUp,
+  Map,
+  List,
+  Route,
 } from "lucide-react";
 
 interface ClienteInfo {
@@ -116,6 +119,10 @@ export default function HojaDeRutaPage() {
   const [historialDateTo, setHistorialDateTo] = useState(getArgentinaToday());
   const [historialSearch, setHistorialSearch] = useState("");
 
+
+  // Route view
+  const [viewMode, setViewMode] = useState<"list" | "ruta">("list");
+  const [currentStop, setCurrentStop] = useState(0);
 
   // Track how much was actually paid per order (from caja_movimientos)
   const [pagadoPorVenta, setPagadoPorVenta] = useState<Record<string, number>>({});
@@ -812,7 +819,194 @@ export default function HojaDeRutaPage() {
         </Card>
       </div>
 
+      {/* View toggle + Route button */}
+      {sortedVentas.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="bg-gray-100 rounded-lg p-1 inline-flex">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`rounded-md px-4 py-2 text-sm transition-all flex items-center gap-1.5 ${
+                viewMode === "list" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <List className="w-4 h-4" />
+              Lista
+            </button>
+            <button
+              onClick={() => { setViewMode("ruta"); setCurrentStop(0); }}
+              className={`rounded-md px-4 py-2 text-sm transition-all flex items-center gap-1.5 ${
+                viewMode === "ruta" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Route className="w-4 h-4" />
+              Mapa de Ruta
+            </button>
+          </div>
+          <a
+            href={(() => {
+              const addresses = sortedVentas
+                .map((v) => [v.clientes?.domicilio, v.clientes?.localidad].filter(Boolean).join(", "))
+                .filter(Boolean);
+              if (addresses.length === 0) return "#";
+              if (addresses.length === 1) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addresses[0])}`;
+              const origin = encodeURIComponent(addresses[0]);
+              const destination = encodeURIComponent(addresses[addresses.length - 1]);
+              const waypoints = addresses.slice(1, -1).map(encodeURIComponent).join("|");
+              return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}`;
+            })()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors ml-auto"
+          >
+            <Navigation className="w-4 h-4" />
+            Ruta Completa en Maps
+          </a>
+        </div>
+      )}
+
+      {/* Route View */}
+      {viewMode === "ruta" && sortedVentas.length > 0 && (
+        <div className="space-y-4">
+          {/* Current stop card */}
+          {(() => {
+            const venta = sortedVentas[currentStop];
+            if (!venta) return null;
+            const pagado = pagadoPorVenta[venta.id] || 0;
+            const debe = Math.max(0, venta.total - pagado);
+            const direccion = [venta.clientes?.domicilio, venta.clientes?.localidad].filter(Boolean).join(", ");
+            const mapsUrl = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}` : null;
+            const tel = venta.clientes?.telefono?.replace(/\D/g, "") || "";
+            const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
+
+            return (
+              <Card className="border-2 border-blue-300 bg-blue-50/30">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-blue-700 text-sm font-semibold">
+                    <Navigation className="w-4 h-4" />
+                    Siguiente Parada — {currentStop + 1} de {sortedVentas.length}
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xl font-bold text-gray-900">{venta.clientes?.nombre ?? "Sin cliente"}</p>
+                      {direccion && (
+                        <p className="flex items-start gap-1.5 text-sm text-gray-600 mt-1">
+                          <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                          {direccion}
+                        </p>
+                      )}
+                      {venta.clientes?.telefono && (
+                        <p className="flex items-center gap-1.5 text-sm text-gray-600 mt-1">
+                          <Phone className="w-4 h-4 shrink-0" />
+                          {venta.clientes.telefono}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-2xl font-bold text-gray-900">{formatCurrency(venta.total)}</p>
+                      <Badge variant="secondary" className={debe > 0 ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"}>
+                        {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {mapsUrl && (
+                      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+                        <Navigation className="w-4 h-4" />
+                        Navegar
+                      </a>
+                    )}
+                    {whatsappUrl && (
+                      <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors">
+                        <MessageCircle className="w-4 h-4" />
+                        WhatsApp
+                      </a>
+                    )}
+                    {venta.clientes?.telefono && (
+                      <a href={`tel:${venta.clientes.telefono}`} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">
+                        <Phone className="w-4 h-4" />
+                        Llamar
+                      </a>
+                    )}
+                    {debe > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-10 text-sm text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                        onClick={() => openPayDialog(venta)}
+                      >
+                        <DollarSign className="w-4 h-4 mr-1" />
+                        Cobrar
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      className="h-10 text-sm bg-green-600 hover:bg-green-700 text-white"
+                      onClick={async () => {
+                        await handleMarkDelivered(venta.id);
+                        // Move to next stop (stays at same index since array shifts)
+                        setCurrentStop((prev) => Math.min(prev, sortedVentas.length - 2));
+                      }}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Entregado
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* All stops list */}
+          <Card>
+            <CardContent className="p-4">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Paradas ({sortedVentas.length})
+              </h3>
+              <div className="space-y-1">
+                {sortedVentas.map((venta, idx) => {
+                  const pagado = pagadoPorVenta[venta.id] || 0;
+                  const debe = Math.max(0, venta.total - pagado);
+                  const direccion = [venta.clientes?.domicilio, venta.clientes?.localidad].filter(Boolean).join(", ");
+                  const isActive = idx === currentStop;
+
+                  return (
+                    <button
+                      key={venta.id}
+                      onClick={() => setCurrentStop(idx)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                        isActive ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 ${
+                        isActive ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
+                      }`}>
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className={`font-medium truncate ${isActive ? "text-blue-900" : "text-gray-900"}`}>
+                          {venta.clientes?.nombre ?? "Sin cliente"}
+                        </p>
+                        {direccion && (
+                          <p className="text-xs text-gray-500 truncate">{direccion}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-gray-900">{formatCurrency(venta.total)}</p>
+                        <span className={`text-xs ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
+                          {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Orders Table */}
+      {viewMode === "list" && (
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
@@ -974,6 +1168,7 @@ export default function HojaDeRutaPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       </>)}
 
