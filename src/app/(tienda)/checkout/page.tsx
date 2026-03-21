@@ -33,6 +33,7 @@ interface CartItem {
   precio_original?: number;
   descuento?: number;
   cantidad: number;
+  unidades_por_presentacion?: number;
 }
 
 interface Address {
@@ -376,6 +377,7 @@ export default function CheckoutPage() {
     const errs: string[] = [];
     if (!nombre) errs.push("El nombre es obligatorio.");
     if (!email) errs.push("El email es obligatorio.");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push("Ingresá un email válido.");
     if (metodoEntrega === "retiro" && config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) {
       errs.push(`El monto mínimo para retiro en local es ${formatCurrency(config.monto_minimo_pedido)}.`);
     }
@@ -412,9 +414,11 @@ export default function CheckoutPage() {
       const prodId = item.id.split("_")[0];
       const prod = stockMap[prodId];
       if (!prod) continue;
-      const match = item.id.match(/Caja \(x(\d+)\)/);
-      const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-      const presUnits = isMedio ? 0.5 : match ? Number(match[1]) : 1;
+      const presUnits = item.unidades_por_presentacion || (() => {
+        const match = item.id.match(/Caja \(x(\d+)\)/);
+        const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+        return isMedio ? 0.5 : match ? Number(match[1]) : 1;
+      })();
       const unitsNeeded = item.cantidad * presUnits;
       if (unitsNeeded > prod.stock) {
         const disponible = Math.floor(prod.stock / presUnits);
@@ -537,9 +541,11 @@ export default function CheckoutPage() {
         // Update stock atomically (prevents race conditions with concurrent sales)
         const stockItems = items.map((item) => {
           const prodId = item.id.split("_")[0];
-          const match = item.id.match(/Caja \(x(\d+)\)/);
-          const isMedioCarton = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-          const presUnits = isMedioCarton ? 0.5 : match ? Number(match[1]) : 1;
+          const presUnits = item.unidades_por_presentacion || (() => {
+            const match = item.id.match(/Caja \(x(\d+)\)/);
+            const isMedioCarton = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+            return isMedioCarton ? 0.5 : match ? Number(match[1]) : 1;
+          })();
           return {
             producto_id: prodId,
             cantidad: item.cantidad * presUnits,
@@ -557,9 +563,11 @@ export default function CheckoutPage() {
         if (stockError) throw stockError;
 
         if (stockResult && !stockResult.ok) {
-          // Stock insufficient - rollback venta
+          // Stock insufficient - rollback venta AND pedido
           await supabase.from("venta_items").delete().eq("venta_id", venta.id);
           await supabase.from("ventas").delete().eq("id", venta.id);
+          await supabase.from("pedido_tienda_items").delete().eq("pedido_id", pedido.id);
+          await supabase.from("pedidos_tienda").delete().eq("id", pedido.id);
           const faltantes = (stockResult.faltantes || [])
             .map((f: any) => `${f.descripcion}: disponible ${f.stock_disponible}`)
             .join(", ");

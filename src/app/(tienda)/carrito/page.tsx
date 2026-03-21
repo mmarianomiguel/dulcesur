@@ -16,6 +16,7 @@ interface CartItem {
   precio_original?: number;
   descuento?: number;
   cantidad: number;
+  unidades_por_presentacion?: number;
 }
 
 const formatCurrency = (value: number) =>
@@ -39,6 +40,15 @@ export default function CarritoPage() {
       } catch {}
     }
     setLoaded(true);
+
+    // Sync cart across tabs
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "carrito" && e.newValue) {
+        try { setItems(JSON.parse(e.newValue)); } catch {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   // Check real stock for all cart items
@@ -60,9 +70,11 @@ export default function CarritoPage() {
     const prodId = item.id.split("_")[0];
     const stock = stockMap[prodId];
     if (stock === undefined) return null; // still loading
-    const match = item.id.match(/Caja \(x(\d+)\)/);
-    const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-    const presUnits = isMedio ? 0.5 : match ? Number(match[1]) : 1;
+    const presUnits = item.unidades_por_presentacion || (() => {
+      const match = item.id.match(/Caja \(x(\d+)\)/);
+      const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+      return isMedio ? 0.5 : match ? Number(match[1]) : 1;
+    })();
     return Math.floor(stock / presUnits);
   };
 

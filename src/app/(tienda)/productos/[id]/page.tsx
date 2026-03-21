@@ -277,7 +277,7 @@ export default function ProductoDetallePage() {
     maxQty <= 5 ? "text-orange-500" :
     "text-green-600";
 
-  function addToCart(prod: Producto, price: number, presLabel: string, qty: number, precioOriginal?: number, descuento?: number) {
+  function addToCart(prod: Producto, price: number, presLabel: string, qty: number, precioOriginal?: number, descuento?: number, unidadesPres?: number) {
     const stored = localStorage.getItem("carrito");
     let carrito: any[];
     try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
@@ -295,6 +295,7 @@ export default function ProductoDetallePage() {
         imagen_url: prod.imagen_url,
         cantidad: qty,
         presentacion: presLabel,
+        unidades_por_presentacion: unidadesPres || 1,
       });
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
@@ -312,7 +313,7 @@ export default function ProductoDetallePage() {
     }
     const disc = getProductDiscount(producto, presLabel);
     const price = disc > 0 ? Math.round(currentPrice * (1 - disc / 100)) : currentPrice;
-    addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined);
+    addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined, presQty);
     setCantidad(1);
   }
 

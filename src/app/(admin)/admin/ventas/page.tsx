@@ -401,7 +401,7 @@ export default function VentasPage() {
 
   const mixtoSum = mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente;
   const mixtoTotalWithSurcharge = mixtoSum + (mixtoTransferencia * (porcentajeTransferencia / 100));
-  const mixtoRemaining = formaPago === "Mixto" ? baseTotal - mixtoSum : 0;
+  const mixtoRemaining = formaPago === "Mixto" ? total - mixtoTotalWithSurcharge : 0;
   const mixtoValid = formaPago !== "Mixto" || Math.abs(mixtoRemaining) < 0.01;
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
@@ -1304,22 +1304,33 @@ export default function VentasPage() {
         if (stockRpcError) { setErrorModal({ open: true, message: `Error al actualizar stock: ${stockRpcError.message}` }); setSaving(false); return; }
 
         if (stockResult && !stockResult.ok) {
-          // Stock insufficient but POS allows selling anyway - manually decrement stock
+          // Stock insufficient but POS allows selling anyway - manually decrement stock atomically
           for (const item of stockItems) {
-            // Decrement stock directly, allowing negative values
             const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
             if (prod) {
-              await supabase.from("productos").update({ stock: prod.stock - item.cantidad }).eq("id", item.producto_id);
+              const stockAntes = prod.stock;
+              const stockDespues = stockAntes - item.cantidad;
+              await supabase.rpc("decrementar_stock_forzado", {
+                p_producto_id: item.producto_id,
+                p_cantidad: item.cantidad,
+              }).then(async (res) => {
+                // If RPC doesn't exist, fallback to direct update
+                if (res.error) {
+                  await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+                }
+              });
+              await supabase.from("stock_movimientos").insert({
+                producto_id: item.producto_id,
+                tipo: "Venta",
+                cantidad: -item.cantidad,
+                cantidad_antes: stockAntes,
+                cantidad_despues: stockDespues,
+                referencia: `Venta #${numero}`,
+                descripcion: item.descripcion,
+                usuario: "Admin Sistema",
+                orden_id: venta.id,
+              });
             }
-            // Record stock movement
-            await supabase.from("stock_movimientos").insert({
-              producto_id: item.producto_id,
-              tipo: "Venta",
-              cantidad: -item.cantidad,
-              referencia: `Venta #${numero}`,
-              usuario: "Admin Sistema",
-              orden_id: venta.id,
-            });
           }
         }
 

@@ -256,6 +256,7 @@ export default function ClientesPage() {
   };
 
   const handleSave = async () => {
+    if (!form.nombre.trim()) { alert("El nombre del cliente es obligatorio."); return; }
     const selectedZona = zonas.find((z) => z.id === form.zona_entrega);
     const payload = {
       codigo_cliente: form.codigo_cliente || null,
