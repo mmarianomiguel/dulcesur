@@ -445,7 +445,7 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
-          pdf.text("Efect.", x + pad, efectLabelY);
+          pdf.text("Efectivo", x + pad, efectLabelY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
             pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, efectLabelY, { align: "right" });
           }
@@ -464,7 +464,7 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
-          pdf.text("Transf.", x + pad, transfLabelY);
+          pdf.text(`Transf. (${config.porcentajeTransferencia}%)`, x + pad, transfLabelY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
             pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, transfLabelY, { align: "right" });
           }
@@ -1050,7 +1050,7 @@ export default function ListaPreciosPage() {
                       {/* Efect row */}
                       <div className="absolute left-2 right-2" style={{ bottom: `${config.combinado_efectLabelY * 2.8}%` }}>
                         <div className="flex justify-between items-center">
-                          <span className="text-[7px] text-gray-400">Efect.</span>
+                          <span className="text-[7px] text-gray-400">Efectivo</span>
                           <span className="text-[7px] text-gray-400">Caja x16</span>
                         </div>
                       </div>
@@ -1063,7 +1063,7 @@ export default function ListaPreciosPage() {
                       {/* Transf row */}
                       <div className="absolute left-2 right-2" style={{ bottom: `${config.combinado_transfLabelY * 2.8}%` }}>
                         <div className="flex justify-between items-center">
-                          <span className="text-[7px] text-gray-400">Transf.</span>
+                          <span className="text-[7px] text-gray-400">{`Transf. (${config.porcentajeTransferencia}%)`}</span>
                           <span className="text-[7px] text-gray-400">Caja x16</span>
                         </div>
                       </div>
