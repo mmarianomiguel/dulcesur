@@ -125,6 +125,8 @@ interface PedidoItem {
   precio_unitario: number;
   subtotal: number;
   unidades_por_presentacion: number;
+  codigo?: string;
+  descuento?: number;
 }
 
 interface Pedido {
@@ -145,6 +147,18 @@ interface Pedido {
   observacion: string | null;
   cliente_auth_id: string | null;
   items: PedidoItem[];
+  // Unified detail fields (populated from historial)
+  _source?: "historial" | "pedidos";
+  _ventaId?: string;
+  _clienteId?: string | null;
+  _entregado?: boolean;
+  _tipo_comprobante?: string;
+  _descuento_porcentaje?: number;
+  _recargo_porcentaje?: number;
+  _vendedor?: string;
+  _cuit?: string;
+  _domicilio?: string;
+  _comboIds?: Set<string>;
 }
 
 interface ProductoSearch {
@@ -199,11 +213,6 @@ export default function ListadoVentasPage() {
   });
   const [showFilters, setShowFilters] = useState(false);
 
-  // Detail
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailVenta, setDetailVenta] = useState<VentaRow | null>(null);
-  const [detailItems, setDetailItems] = useState<VentaItemRow[]>([]);
-  const [detailComboIds, setDetailComboIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Anulacion
@@ -303,23 +312,71 @@ export default function ListadoVentasPage() {
   }, []);
 
   const openDetail = async (v: VentaRow) => {
-    setDetailVenta(v);
     const { data } = await supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at");
-    const items = (data as VentaItemRow[]) || [];
-    setDetailItems(items);
+    const vitems = (data as VentaItemRow[]) || [];
 
     // Check for combos
-    const productIds = items.map((i) => i.producto_id).filter(Boolean) as string[];
+    const productIds = vitems.map((i) => i.producto_id).filter(Boolean) as string[];
+    let comboIds = new Set<string>();
     if (productIds.length > 0) {
       const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", productIds);
-      const cIds = new Set<string>();
-      for (const p of prods || []) { if ((p as any).es_combo) cIds.add(p.id); }
-      setDetailComboIds(cIds);
-    } else {
-      setDetailComboIds(new Set());
+      for (const p of prods || []) { if ((p as any).es_combo) comboIds.add(p.id); }
     }
 
-    setDetailOpen(true);
+    // Convert VentaRow → Pedido format for unified dialog
+    const estado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "pendiente";
+    const pedidoItems: PedidoItem[] = vitems.map((item) => ({
+      producto_id: item.producto_id || "",
+      nombre: item.descripcion
+        .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+        .replace(/\s*\(Unidad\)$/, "")
+        .replace(/(\([^)]+\))\s*\1/gi, "$1")
+        .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
+        .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1"),
+      presentacion: item.presentacion || "Unidad",
+      cantidad: item.cantidad,
+      precio_unitario: item.precio_unitario,
+      subtotal: item.subtotal,
+      unidades_por_presentacion: item.unidades_por_presentacion || 1,
+      codigo: item.codigo,
+      descuento: item.descuento,
+    }));
+
+    const pseudoPedido: Pedido = {
+      id: 0,
+      numero: v.numero,
+      created_at: v.created_at || v.fecha,
+      estado,
+      nombre_cliente: v.clientes?.nombre || "Consumidor Final",
+      email: "",
+      telefono: v.clientes?.telefono || "",
+      metodo_entrega: v.metodo_entrega || "",
+      direccion_texto: v.clientes?.domicilio || null,
+      fecha_entrega: null,
+      metodo_pago: v.forma_pago,
+      subtotal: v.subtotal,
+      costo_envio: 0,
+      total: v.total,
+      observacion: v.observacion,
+      cliente_auth_id: null,
+      items: pedidoItems,
+      _source: "historial",
+      _ventaId: v.id,
+      _clienteId: v.cliente_id,
+      _entregado: v.entregado,
+      _tipo_comprobante: v.tipo_comprobante,
+      _descuento_porcentaje: v.descuento_porcentaje,
+      _recargo_porcentaje: v.recargo_porcentaje,
+      _vendedor: getVendedorNombre(v.vendedor_id),
+      _cuit: v.clientes?.cuit || "",
+      _domicilio: v.clientes?.domicilio || "",
+      _comboIds: comboIds,
+    };
+
+    setPoSelectedPedido(pseudoPedido);
+    setPoEditItems(pedidoItems.map((i) => ({ ...i })));
+    setPoHasChanges(false);
+    setPoDetailOpen(true);
   };
 
   const marcarEntregado = async (v: VentaRow) => {
@@ -650,7 +707,7 @@ export default function ListadoVentasPage() {
 
   // Open PO detail
   const poOpenDetail = (pedido: Pedido) => {
-    setPoSelectedPedido(pedido);
+    setPoSelectedPedido({ ...pedido, _source: "pedidos" });
     setPoEditItems(pedido.items.map((i) => ({ ...i })));
     setPoHasChanges(false);
     setPoDetailOpen(true);
@@ -753,55 +810,55 @@ export default function ListadoVentasPage() {
         });
       }
 
-      // Delete existing items
-      const { error: delErr } = await supabase.from("pedido_tienda_items").delete().eq("pedido_id", poSelectedPedido.id);
-      if (delErr) throw new Error(`Error eliminando items: ${delErr.message}`);
-
-      // Insert updated items
-      const newItems = poEditItems.map((item) => ({
-        pedido_id: poSelectedPedido.id,
-        producto_id: item.producto_id,
-        nombre: item.nombre,
-        presentacion: item.presentacion,
-        cantidad: item.cantidad,
-        precio_unitario: item.precio_unitario,
-        subtotal: item.precio_unitario * item.cantidad,
-      }));
-
-      const { error: insErr } = await supabase.from("pedido_tienda_items").insert(newItems);
-      if (insErr) throw new Error(`Error insertando items: ${insErr.message}`);
-
-      // Update pedido total
       const nuevoSubtotal = poEditItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0);
       const nuevoTotal = nuevoSubtotal + (poSelectedPedido.costo_envio || 0);
+      const isHistorial = poSelectedPedido._source === "historial";
+      const refLabel = isHistorial ? `Edición Venta #${poSelectedPedido.numero}` : `Edición Pedido Web #${poSelectedPedido.numero}`;
 
-      const { error: pedErr } = await supabase.from("pedidos_tienda").update({
-        subtotal: nuevoSubtotal,
-        total: nuevoTotal,
-      }).eq("id", poSelectedPedido.id);
-      if (pedErr) throw new Error(`Error actualizando pedido: ${pedErr.message}`);
+      // Update pedido_tienda_items (only for PO source)
+      if (!isHistorial) {
+        const { error: delErr } = await supabase.from("pedido_tienda_items").delete().eq("pedido_id", poSelectedPedido.id);
+        if (delErr) throw new Error(`Error eliminando items: ${delErr.message}`);
+        const { error: insErr } = await supabase.from("pedido_tienda_items").insert(
+          poEditItems.map((item) => ({
+            pedido_id: poSelectedPedido.id,
+            producto_id: item.producto_id,
+            nombre: item.nombre,
+            presentacion: item.presentacion,
+            cantidad: item.cantidad,
+            precio_unitario: item.precio_unitario,
+            subtotal: item.precio_unitario * item.cantidad,
+          }))
+        );
+        if (insErr) throw new Error(`Error insertando items: ${insErr.message}`);
 
-      // Sync linked venta + venta_items + caja + CC
-      const { data: venta } = await supabase
-        .from("ventas")
-        .select("id, total, cliente_id, forma_pago")
-        .eq("numero", poSelectedPedido.numero)
-        .maybeSingle();
+        const { error: pedErr } = await supabase.from("pedidos_tienda").update({
+          subtotal: nuevoSubtotal,
+          total: nuevoTotal,
+        }).eq("id", poSelectedPedido.id);
+        if (pedErr) throw new Error(`Error actualizando pedido: ${pedErr.message}`);
+      }
 
-      if (venta) {
-        const totalAnterior = venta.total || 0;
-        const diferencia = nuevoTotal - totalAnterior; // positive = more expensive, negative = cheaper
+      // Update venta + venta_items
+      const ventaId = isHistorial
+        ? poSelectedPedido._ventaId
+        : (await supabase.from("ventas").select("id, total, cliente_id, forma_pago").eq("numero", poSelectedPedido.numero).maybeSingle()).data?.id;
+
+      if (ventaId) {
+        const { data: ventaData } = await supabase.from("ventas").select("total, cliente_id, forma_pago").eq("id", ventaId).single();
+        const totalAnterior = ventaData?.total || 0;
+        const diferencia = nuevoTotal - totalAnterior;
 
         const { error: ventaErr } = await supabase.from("ventas").update({
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
-        }).eq("id", venta.id);
+        }).eq("id", ventaId);
         if (ventaErr) errores.push(`Error sync venta: ${ventaErr.message}`);
 
-        await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+        await supabase.from("venta_items").delete().eq("venta_id", ventaId);
         const { error: viErr } = await supabase.from("venta_items").insert(
           poEditItems.map((item) => ({
-            venta_id: venta.id,
+            venta_id: ventaId,
             producto_id: item.producto_id,
             descripcion: `${item.nombre} (${item.presentacion})`,
             cantidad: item.cantidad,
@@ -814,92 +871,55 @@ export default function ListadoVentasPage() {
         );
         if (viErr) errores.push(`Error sync venta_items: ${viErr.message}`);
 
-        // Adjust caja_movimientos if total changed
+        // Adjust caja + CC if total changed
         if (Math.abs(diferencia) > 0.01) {
           const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
           const hora = new Date().toTimeString().split(" ")[0];
 
-          // Get existing caja entries for this venta to know the payment method
           const { data: cajaRows } = await supabase
             .from("caja_movimientos")
             .select("metodo_pago, cuenta_bancaria")
-            .eq("referencia_id", venta.id)
+            .eq("referencia_id", ventaId)
             .eq("referencia_tipo", "venta")
             .limit(1);
-          const metodoPago = cajaRows?.[0]?.metodo_pago || venta.forma_pago || "Efectivo";
+          const metodoPago = cajaRows?.[0]?.metodo_pago || ventaData?.forma_pago || "Efectivo";
           const cuentaBancaria = cajaRows?.[0]?.cuenta_bancaria || null;
 
-          if (diferencia > 0) {
-            // Total increased: register additional income
-            const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
-              fecha: hoy, hora,
-              tipo: "ingreso",
-              descripcion: `Ajuste por edición Pedido Web #${poSelectedPedido.numero} (+${formatCurrency(diferencia)})`,
-              metodo_pago: metodoPago,
-              monto: diferencia,
-              referencia_id: venta.id,
-              referencia_tipo: "venta",
-              cuenta_bancaria: cuentaBancaria,
-            });
-            if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
-          } else {
-            // Total decreased: register refund (egreso)
-            const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
-              fecha: hoy, hora,
-              tipo: "egreso",
-              descripcion: `Ajuste por edición Pedido Web #${poSelectedPedido.numero} (${formatCurrency(diferencia)})`,
-              metodo_pago: metodoPago,
-              monto: Math.abs(diferencia),
-              referencia_id: venta.id,
-              referencia_tipo: "ajuste_edicion",
-              cuenta_bancaria: cuentaBancaria,
-            });
-            if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
-          }
+          const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
+            fecha: hoy, hora,
+            tipo: diferencia > 0 ? "ingreso" : "egreso",
+            descripcion: `Ajuste por edición #${poSelectedPedido.numero} (${diferencia > 0 ? "+" : ""}${formatCurrency(diferencia)})`,
+            metodo_pago: metodoPago,
+            monto: Math.abs(diferencia),
+            referencia_id: ventaId,
+            referencia_tipo: diferencia > 0 ? "venta" : "ajuste_edicion",
+            cuenta_bancaria: cuentaBancaria,
+          });
+          if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
 
-          // Adjust cuenta_corriente if client has CC entries for this venta
-          if (venta.cliente_id) {
+          const clienteId = ventaData?.cliente_id;
+          if (clienteId) {
             const { data: ccRows } = await supabase
               .from("cuenta_corriente")
-              .select("id, debe, haber")
-              .eq("venta_id", venta.id);
-
+              .select("id")
+              .eq("venta_id", ventaId)
+              .limit(1);
             if (ccRows && ccRows.length > 0) {
-              // There are CC entries — adjust the client's balance
-              const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
+              const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
               const saldoActual = clienteData?.saldo || 0;
-
-              if (diferencia > 0) {
-                // More expensive: client owes more
-                const nuevoSaldo = saldoActual + diferencia;
-                await supabase.from("cuenta_corriente").insert({
-                  cliente_id: venta.cliente_id,
-                  fecha: hoy,
-                  comprobante: `Edición Pedido Web #${poSelectedPedido.numero}`,
-                  descripcion: `Ajuste por edición de pedido (aumento)`,
-                  debe: diferencia,
-                  haber: 0,
-                  saldo: nuevoSaldo,
-                  forma_pago: "Ajuste",
-                  venta_id: venta.id,
-                });
-                await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
-              } else {
-                // Cheaper: client owes less
-                const nuevoSaldo = saldoActual + diferencia; // diferencia is negative
-                await supabase.from("cuenta_corriente").insert({
-                  cliente_id: venta.cliente_id,
-                  fecha: hoy,
-                  comprobante: `Edición Pedido Web #${poSelectedPedido.numero}`,
-                  descripcion: `Ajuste por edición de pedido (reducción)`,
-                  debe: 0,
-                  haber: Math.abs(diferencia),
-                  saldo: nuevoSaldo,
-                  forma_pago: "Ajuste",
-                  venta_id: venta.id,
-                });
-                await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
-              }
+              const nuevoSaldo = saldoActual + diferencia;
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: clienteId,
+                fecha: hoy,
+                comprobante: refLabel,
+                descripcion: `Ajuste por edición (${diferencia > 0 ? "aumento" : "reducción"})`,
+                debe: diferencia > 0 ? diferencia : 0,
+                haber: diferencia < 0 ? Math.abs(diferencia) : 0,
+                saldo: nuevoSaldo,
+                forma_pago: "Ajuste",
+                venta_id: ventaId,
+              });
+              await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clienteId);
             }
           }
         }
@@ -922,17 +942,27 @@ export default function ListadoVentasPage() {
   // Update estado -- sync to linked venta, return stock + caja + CC on cancel
   const poHandleEstadoChange = async (pedido: Pedido, nuevoEstado: string) => {
     const estadoAnterior = pedido.estado;
+    const isHistorial = pedido._source === "historial";
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     const hora = new Date().toTimeString().split(" ")[0];
 
-    await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
+    // Only update pedidos_tienda for actual pedidos (not historial ventas)
+    if (pedido._source !== "historial" && pedido.id > 0) {
+      await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
+    }
 
     // Find linked venta
-    const { data: ventaLinked } = await supabase
-      .from("ventas")
-      .select("id, cliente_id")
-      .eq("numero", pedido.numero)
-      .maybeSingle();
+    let ventaLinked: { id: string; cliente_id: string | null } | null = null;
+    if (pedido._source === "historial" && pedido._ventaId) {
+      ventaLinked = { id: pedido._ventaId, cliente_id: pedido._clienteId || null };
+    } else {
+      const { data } = await supabase
+        .from("ventas")
+        .select("id, cliente_id")
+        .eq("numero", pedido.numero)
+        .maybeSingle();
+      ventaLinked = data as typeof ventaLinked;
+    }
 
     // Sync estado to linked venta (ventas uses "anulada" instead of "cancelado")
     const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;
@@ -940,10 +970,18 @@ export default function ListadoVentasPage() {
     if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
     if (nuevoEstado === "cancelado") {
       ventaUpdate.entregado = false;
-      ventaUpdate.observacion = `ANULADA (Cancelación desde Pedidos Online)`;
+      ventaUpdate.observacion = isHistorial
+        ? `ANULADA (Cancelación desde Historial)`
+        : `ANULADA (Cancelación desde Pedidos Online)`;
     }
     if (ventaLinked) {
       await supabase.from("ventas").update(ventaUpdate).eq("id", ventaLinked.id);
+    }
+
+    // Also sync to pedidos_tienda if this is a historial venta (might be a linked web order)
+    if (isHistorial) {
+      const ptEstado = nuevoEstado === "cancelado" ? "cancelado" : nuevoEstado;
+      await supabase.from("pedidos_tienda").update({ estado: ptEstado }).eq("numero", pedido.numero);
     }
 
     // Return stock when cancelling (only if wasn't already cancelled)
@@ -1592,160 +1630,6 @@ export default function ListadoVentasPage() {
       )}
 
       {/* ══════════════════════════════════════════════════════════ */}
-      {/* HISTORIAL DETAIL DIALOG */}
-      {/* ══════════════════════════════════════════════════════════ */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-          {detailVenta && (() => {
-            const dvEstado = detailVenta.estado === "anulada" ? "cancelado" : detailVenta.entregado ? "entregado" : detailVenta.estado || "pendiente";
-            const dvBadge = estadoBadge[dvEstado] || estadoBadge.pendiente;
-            return (
-            <>
-              {/* Header */}
-              <div className="px-6 py-4 border-b bg-muted/30">
-                <DialogHeader className="p-0 space-y-0">
-                  <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                    <Receipt className="w-5 h-5 text-primary" />
-                    {detailVenta.tipo_comprobante} #{detailVenta.numero}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="flex items-center gap-3 mt-1">
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(detailVenta.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })}
-                    {detailVenta.created_at && `, ${new Date(detailVenta.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}`}
-                  </p>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${dvBadge.bg} ${dvBadge.text}`}>
-                    {dvBadge.label}
-                  </span>
-                  {detailVenta.estado === "anulada" && (
-                    <Badge variant="destructive" className="text-[10px] font-bold">ANULADA</Badge>
-                  )}
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                {/* Client + Delivery info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <User className="w-4 h-4" /> Cliente
-                    </h3>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                      <p className="font-medium">{detailVenta.clientes?.nombre || "Consumidor Final"}</p>
-                      {detailVenta.clientes?.telefono && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{detailVenta.clientes.telefono}</p>}
-                      {detailVenta.clientes?.domicilio && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3" />{detailVenta.clientes.domicilio}</p>}
-                      {detailVenta.clientes?.cuit && <p className="text-xs text-muted-foreground">CUIT: {detailVenta.clientes.cuit}</p>}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <Truck className="w-4 h-4" /> Entrega y Pago
-                    </h3>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                      <p className="flex items-center gap-1.5">
-                        {detailVenta.entregado ? (
-                          <><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Entregado</>
-                        ) : (
-                          <><Clock className="w-3.5 h-3.5 text-amber-500" /> Pendiente de entrega</>
-                        )}
-                      </p>
-                      {detailVenta.metodo_entrega && (
-                        <p className="text-xs text-muted-foreground">
-                          {detailVenta.metodo_entrega === "envio" ? "Envio a domicilio" : detailVenta.metodo_entrega === "retiro" ? "Retiro en local" : detailVenta.metodo_entrega}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">Pago: {detailVenta.forma_pago}</p>
-                      {detailVenta.vendedor_id && <p className="text-xs text-muted-foreground">Vendedor: {getVendedorNombre(detailVenta.vendedor_id)}</p>}
-                    </div>
-                  </div>
-                </div>
-
-                {detailVenta.observacion && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                    <p className="font-medium text-amber-800 text-xs mb-1">Observación:</p>
-                    <p className="text-amber-700">{detailVenta.observacion}</p>
-                  </div>
-                )}
-
-                {/* Items table */}
-                <div>
-                  <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground mb-3">
-                    <Package className="w-4 h-4" /> Productos ({detailItems.length})
-                  </h3>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Producto</th>
-                          <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-16">Cant.</th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailItems.map((item) => {
-                          const cleanDesc = item.descripcion
-                            .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
-                            .replace(/\s*\(Unidad\)$/, "")
-                            .replace(/(\([^)]+\))\s*\1/gi, "$1")
-                            .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
-                            .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
-                          const isCombo = detailComboIds.has(item.producto_id || "");
-                          const upp = item.unidades_por_presentacion ?? 1;
-                          const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
-                          return (
-                          <tr key={item.id} className="border-b last:border-0">
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-1.5">
-                                {isCombo && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white tracking-wider shrink-0">COMBO</span>
-                                )}
-                                <span className="font-medium">{cleanDesc}</span>
-                              </div>
-                              {item.codigo && <p className="text-[10px] text-muted-foreground font-mono">{item.codigo}</p>}
-                            </td>
-                            <td className="px-3 py-2 text-center">{displayQty}</td>
-                            <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
-                            <td className="px-3 py-2 text-right text-xs">{item.descuento > 0 ? `-${item.descuento}%` : ""}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                          </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Totals */}
-                  <div className="mt-3 space-y-1 text-sm text-right">
-                    {detailVenta.descuento_porcentaje > 0 && (
-                      <p className="text-muted-foreground">Descuento ({detailVenta.descuento_porcentaje}%): <span className="font-medium text-red-500">-{formatCurrency(detailVenta.subtotal * detailVenta.descuento_porcentaje / 100)}</span></p>
-                    )}
-                    {detailVenta.recargo_porcentaje > 0 && (
-                      <p className="text-muted-foreground">Recargo ({detailVenta.recargo_porcentaje}%): <span className="font-medium text-foreground">+{formatCurrency(detailVenta.subtotal * detailVenta.recargo_porcentaje / 100)}</span></p>
-                    )}
-                    <p className="text-base font-bold">Total: {formatCurrency(detailVenta.total)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-end gap-2 px-6 py-3 border-t bg-muted/30">
-                <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); preparePrint(detailVenta); }}>
-                  <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
-                </Button>
-                <Button variant="outline" onClick={() => setDetailOpen(false)}>
-                  Cerrar
-                </Button>
-              </div>
-            </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
-
-      {/* ══════════════════════════════════════════════════════════ */}
       {/* ANULAR DIALOG */}
       {/* ══════════════════════════════════════════════════════════ */}
       <Dialog open={!!anularVenta} onOpenChange={(open) => { if (!open) setAnularVenta(null); }}>
@@ -1797,7 +1681,7 @@ export default function ListadoVentasPage() {
       </Dialog>
 
       {/* ══════════════════════════════════════════════════════════ */}
-      {/* PEDIDOS ONLINE DETAIL / EDIT DIALOG */}
+      {/* UNIFIED DETAIL / EDIT DIALOG */}
       {/* ══════════════════════════════════════════════════════════ */}
       <Dialog open={poDetailOpen} onOpenChange={(open) => {
         if (!open && poHasChanges) {
@@ -1806,24 +1690,47 @@ export default function ListadoVentasPage() {
         setPoDetailOpen(open);
       }}>
         <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-          {poSelectedPedido && (
+          {poSelectedPedido && (() => {
+            const isHistorial = poSelectedPedido._source === "historial";
+            const isCancelled = poSelectedPedido.estado === "cancelado";
+            const estBadge = estadoBadge[poSelectedPedido.estado] || estadoBadge.pendiente;
+            const itemsSubtotal = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
+            const descPct = poSelectedPedido._descuento_porcentaje || 0;
+            const recPct = poSelectedPedido._recargo_porcentaje || 0;
+            const envio = poSelectedPedido.costo_envio || 0;
+            const computedTotal = isHistorial
+              ? itemsSubtotal * (1 - descPct / 100) * (1 + recPct / 100)
+              : itemsSubtotal + envio;
+
+            return (
             <>
               {/* Header */}
               <div className="px-6 py-4 border-b bg-muted/30">
                 <DialogHeader className="p-0 space-y-0">
                   <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                    <ShoppingCart className="w-5 h-5 text-primary" />
-                    Pedido #{poSelectedPedido.numero}
+                    {isHistorial ? <Receipt className="w-5 h-5 text-primary" /> : <ShoppingCart className="w-5 h-5 text-primary" />}
+                    {isHistorial ? `${poSelectedPedido._tipo_comprobante} #${poSelectedPedido.numero}` : `Pedido #${poSelectedPedido.numero}`}
                   </DialogTitle>
                 </DialogHeader>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Creado el {new Date(poSelectedPedido.created_at).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                </p>
+                <div className="flex items-center gap-3 mt-1">
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(poSelectedPedido.created_at).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })}
+                    {poSelectedPedido.created_at.includes("T") && `, ${new Date(poSelectedPedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}`}
+                  </p>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${estBadge.bg} ${estBadge.text}`}>
+                    {estBadge.label}
+                  </span>
+                  {!isHistorial && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-50 text-pink-700 border border-pink-200">
+                      <Globe className="w-3 h-3 mr-1" />Pedido Web
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                {/* Client info */}
+                {/* Client + Delivery info */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
@@ -1833,21 +1740,35 @@ export default function ListadoVentasPage() {
                       <p className="font-medium">{poSelectedPedido.nombre_cliente}</p>
                       {poSelectedPedido.email && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="w-3 h-3" />{poSelectedPedido.email}</p>}
                       {poSelectedPedido.telefono && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{poSelectedPedido.telefono}</p>}
+                      {poSelectedPedido._domicilio && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3" />{poSelectedPedido._domicilio}</p>}
+                      {poSelectedPedido._cuit && <p className="text-xs text-muted-foreground">CUIT: {poSelectedPedido._cuit}</p>}
                     </div>
                   </div>
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <Truck className="w-4 h-4" /> Entrega
+                      <Truck className="w-4 h-4" /> Entrega y Pago
                     </h3>
                     <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                      <p className="flex items-center gap-1.5">
-                        {poSelectedPedido.metodo_entrega === "envio" ? (
-                          <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
-                        ) : (
-                          <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
-                        )}
-                      </p>
-                      {poSelectedPedido.direccion_texto && (
+                      {poSelectedPedido.metodo_entrega ? (
+                        <p className="flex items-center gap-1.5">
+                          {poSelectedPedido.metodo_entrega === "envio" ? (
+                            <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
+                          ) : poSelectedPedido.metodo_entrega === "retiro" ? (
+                            <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
+                          ) : (
+                            <>{poSelectedPedido.metodo_entrega}</>
+                          )}
+                        </p>
+                      ) : isHistorial ? (
+                        <p className="flex items-center gap-1.5">
+                          {poSelectedPedido._entregado ? (
+                            <><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Entregado</>
+                          ) : (
+                            <><Clock className="w-3.5 h-3.5 text-amber-500" /> Pendiente de entrega</>
+                          )}
+                        </p>
+                      ) : null}
+                      {!isHistorial && poSelectedPedido.direccion_texto && (
                         <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3 mt-0.5 shrink-0" />{poSelectedPedido.direccion_texto}</p>
                       )}
                       {poSelectedPedido.fecha_entrega && (
@@ -1857,40 +1778,45 @@ export default function ListadoVentasPage() {
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">Pago: {poSelectedPedido.metodo_pago}</p>
+                      {poSelectedPedido._vendedor && poSelectedPedido._vendedor !== "—" && (
+                        <p className="text-xs text-muted-foreground">Vendedor: {poSelectedPedido._vendedor}</p>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {poSelectedPedido.observacion && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                    <p className="font-medium text-amber-800 text-xs mb-1">Observacion del cliente:</p>
+                    <p className="font-medium text-amber-800 text-xs mb-1">Observacion:</p>
                     <p className="text-amber-700">{poSelectedPedido.observacion}</p>
                   </div>
                 )}
 
-                {/* Estado */}
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-medium">Estado:</Label>
-                  <Select
-                    value={poSelectedPedido.estado}
-                    onValueChange={(v) => {
-                      if (!v) return;
-                      poHandleEstadoChange(poSelectedPedido, v);
-                      setPoSelectedPedido({ ...poSelectedPedido, estado: v });
-                    }}
-                  >
-                    <SelectTrigger className="w-44 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pendiente">Pendiente</SelectItem>
-                      <SelectItem value="armado">Armado</SelectItem>
-                      <SelectItem value="confirmado">Confirmado</SelectItem>
-                      <SelectItem value="entregado">Entregado</SelectItem>
-                      <SelectItem value="cancelado">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Estado selector */}
+                {!isCancelled && (
+                  <div className="flex items-center gap-3">
+                    <Label className="text-sm font-medium">Estado:</Label>
+                    <Select
+                      value={poSelectedPedido.estado}
+                      onValueChange={(v) => {
+                        if (!v) return;
+                        poHandleEstadoChange(poSelectedPedido, v);
+                        setPoSelectedPedido({ ...poSelectedPedido, estado: v });
+                      }}
+                    >
+                      <SelectTrigger className="w-44 h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendiente">Pendiente</SelectItem>
+                        <SelectItem value="armado">Armado</SelectItem>
+                        <SelectItem value="confirmado">Confirmado</SelectItem>
+                        <SelectItem value="entregado">Entregado</SelectItem>
+                        <SelectItem value="cancelado">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Items table */}
                 <div>
@@ -1898,9 +1824,11 @@ export default function ListadoVentasPage() {
                     <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
                       <Package className="w-4 h-4" /> Productos ({poEditItems.length})
                     </h3>
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setPoAddProductOpen(true)}>
-                      <Plus className="w-3 h-3" /> Agregar producto
-                    </Button>
+                    {!isCancelled && (
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setPoAddProductOpen(true)}>
+                        <Plus className="w-3 h-3" /> Agregar producto
+                      </Button>
+                    )}
                   </div>
 
                   <div className="border rounded-lg overflow-hidden">
@@ -1911,49 +1839,78 @@ export default function ListadoVentasPage() {
                           <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-24">Presentacion</th>
                           <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-20">Cant.</th>
                           <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
+                          {poEditItems.some((i) => (i.descuento || 0) > 0) && (
+                            <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>
+                          )}
                           <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
-                          <th className="w-10"></th>
+                          {!isCancelled && <th className="w-10"></th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {poEditItems.map((item, idx) => (
+                        {poEditItems.map((item, idx) => {
+                          const isCombo = poSelectedPedido._comboIds?.has(item.producto_id);
+                          return (
                           <tr key={idx} className="border-b last:border-0">
-                            <td className="px-3 py-2 font-medium">{item.nombre}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-1.5">
+                                {isCombo && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white tracking-wider shrink-0">COMBO</span>
+                                )}
+                                <span className="font-medium">{item.nombre}</span>
+                              </div>
+                              {item.codigo && <p className="text-[10px] text-muted-foreground font-mono">{item.codigo}</p>}
+                            </td>
                             <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
                             <td className="px-3 py-2 text-center">
-                              <Input
-                                type="number"
-                                min={1}
-                                value={item.cantidad}
-                                onChange={(e) => poUpdateItemQty(idx, Number(e.target.value))}
-                                className="h-7 w-16 text-center mx-auto"
-                              />
+                              {isCancelled ? (
+                                <span>{item.cantidad}</span>
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={item.cantidad}
+                                  onChange={(e) => poUpdateItemQty(idx, Number(e.target.value))}
+                                  className="h-7 w-16 text-center mx-auto"
+                                />
+                              )}
                             </td>
                             <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad)}</td>
-                            <td className="px-2 py-2">
-                              <button
-                                onClick={() => poRemoveItem(idx)}
-                                className="text-muted-foreground hover:text-destructive disabled:opacity-30"
-                                disabled={poEditItems.length <= 1}
-                                title="Quitar producto"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
+                            {poEditItems.some((i) => (i.descuento || 0) > 0) && (
+                              <td className="px-3 py-2 text-right text-xs">{(item.descuento || 0) > 0 ? `-${item.descuento}%` : ""}</td>
+                            )}
+                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad * (1 - (item.descuento || 0) / 100))}</td>
+                            {!isCancelled && (
+                              <td className="px-2 py-2">
+                                <button
+                                  onClick={() => poRemoveItem(idx)}
+                                  className="text-muted-foreground hover:text-destructive disabled:opacity-30"
+                                  disabled={poEditItems.length <= 1}
+                                  title="Quitar producto"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
                   {/* Totals */}
                   <div className="mt-3 space-y-1 text-sm text-right">
-                    <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0))}</span></p>
-                    {(poSelectedPedido.costo_envio || 0) > 0 && (
-                      <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(poSelectedPedido.costo_envio)}</span></p>
+                    <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
+                    {descPct > 0 && (
+                      <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
                     )}
-                    <p className="text-base font-bold">Total: {formatCurrency(poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0) + (poSelectedPedido.costo_envio || 0))}</p>
+                    {recPct > 0 && (
+                      <p className="text-muted-foreground">Recargo ({recPct}%): <span className="font-medium text-foreground">+{formatCurrency(itemsSubtotal * recPct / 100)}</span></p>
+                    )}
+                    {envio > 0 && (
+                      <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
+                    )}
+                    <p className="text-base font-bold">Total: {formatCurrency(computedTotal)}</p>
                   </div>
                 </div>
               </div>
@@ -1968,6 +1925,14 @@ export default function ListadoVentasPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
+                  {isHistorial && (
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
+                      if (v) { setPoDetailOpen(false); preparePrint(v); }
+                    }}>
+                      <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => {
                     if (poHasChanges && !confirm("Tenés cambios sin guardar. ¿Cerrar de todas formas?")) return;
                     setPoDetailOpen(false);
@@ -1983,7 +1948,8 @@ export default function ListadoVentasPage() {
                 </div>
               </div>
             </>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
