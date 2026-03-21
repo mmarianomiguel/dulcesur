@@ -49,6 +49,8 @@ interface VentaRecord {
   forma_pago: string;
   total: number;
   origen: string;
+  estado?: string;
+  entregado?: boolean;
   items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; presentacion?: string; unidades_por_presentacion?: number; descuento?: number; producto_id?: string; es_combo?: boolean; combo_items?: ComboComponent[] }[];
   notas_credito: NotaCredito[];
   pagos: PagoDetalle[];
@@ -129,7 +131,7 @@ export default function PedidosPage() {
       if (clienteId) {
         const { data: ventas } = await supabase
           .from("ventas")
-          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, origen, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
+          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
           .eq("cliente_id", clienteId)
           .not("tipo_comprobante", "ilike", "Nota de Crédito%")
           .not("tipo_comprobante", "ilike", "Nota de Débito%")
@@ -222,6 +224,8 @@ export default function PedidosPage() {
           forma_pago: v.forma_pago,
           total: v.total,
           origen: v.origen || "admin",
+          estado: v.estado || undefined,
+          entregado: v.entregado || false,
           items: (v as any).venta_items || [],
           notas_credito: ncMap[v.id] || [],
           pagos: pagosMap[v.id] || [],
@@ -277,16 +281,32 @@ export default function PedidosPage() {
         }));
       }
 
+      // Helper: derive pedido estado from linked venta (source of truth)
+      const deriveEstado = (pedidoEstado: string, venta?: VentaRecord): string => {
+        if (!venta?.estado) return pedidoEstado;
+        // Map venta estado to pedido-friendly estado
+        if (venta.estado === "anulada") return "cancelado";
+        if (venta.entregado || venta.estado === "entregado") return "entregado";
+        // For other venta states, prefer pedidos_tienda estado if it's more specific
+        // (e.g. "armado", "confirmado" are pedido-specific states not in ventas)
+        if (["armado", "confirmado"].includes(pedidoEstado)) return pedidoEstado;
+        return venta.estado;
+      };
+
       // Map pedidos with their ventas
-      const pedidosList: Pedido[] = (data || []).map((p: any) => ({
-        ...p,
-        items: ((p as any).pedido_tienda_items || []).map((item: any) => ({
-          ...item,
-          es_combo: !!(item.producto_id && comboMap[item.producto_id]),
-          combo_items: item.producto_id ? comboMap[item.producto_id] || undefined : undefined,
-        })),
-        venta: ventaRecords[p.numero] || undefined,
-      }));
+      const pedidosList: Pedido[] = (data || []).map((p: any) => {
+        const venta = ventaRecords[p.numero] || undefined;
+        return {
+          ...p,
+          estado: deriveEstado(p.estado, venta),
+          items: ((p as any).pedido_tienda_items || []).map((item: any) => ({
+            ...item,
+            es_combo: !!(item.producto_id && comboMap[item.producto_id]),
+            combo_items: item.producto_id ? comboMap[item.producto_id] || undefined : undefined,
+          })),
+          venta,
+        };
+      });
 
       setPedidos(pedidosList);
 
@@ -305,7 +325,7 @@ export default function PedidosPage() {
         id: parseInt(v.id.replace(/\D/g, "").slice(0, 8)) || 0,
         numero: v.numero,
         created_at: v.created_at || v.fecha,
-        estado: "entregado",
+        estado: v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "entregado",
         total: v.total,
         items: [],
         venta: v,
