@@ -30,6 +30,7 @@ export default function ResumenMensualPage() {
   const [cantVentas, setCantVentas] = useState(0);
   const [totalCompras, setTotalCompras] = useState(0);
   const [ganancia, setGanancia] = useState(0);
+  const [itemsSinCosto, setItemsSinCosto] = useState(0);
   const [topClientes, setTopClientes] = useState<{ nombre: string; total: number; qty: number }[]>([]);
   const [topProductos, setTopProductos] = useState<{ nombre: string; cantidad: number; total: number }[]>([]);
   const [ventasPorPago, setVentasPorPago] = useState<{ metodo: string; total: number; qty: number }[]>([]);
@@ -73,14 +74,18 @@ export default function ResumenMensualPage() {
       const { data: items } = await supabase.from("venta_items")
         .select("cantidad, precio_unitario, unidades_por_presentacion, productos(costo)")
         .in("venta_id", ids);
+      let sinCosto = 0;
       const g = (items || []).reduce((a: number, item: any) => {
         const costoU = item.productos?.costo || 0;
+        if (!costoU) sinCosto++;
         const u = Number(item.unidades_por_presentacion) || 1;
         return a + (item.precio_unitario - costoU * u) * item.cantidad;
       }, 0);
       setGanancia(g);
+      setItemsSinCosto(sinCosto);
     } else {
       setGanancia(0);
+      setItemsSinCosto(0);
     }
 
     // Top 10 clientes
@@ -195,8 +200,12 @@ export default function ResumenMensualPage() {
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Ganancia</p>
-              <p className={`text-lg font-bold mt-1 ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fc(ganancia)}</p>
-              <p className="text-[11px] text-muted-foreground">{totalVentas > 0 ? `${((ganancia / totalVentas) * 100).toFixed(1)}%` : "—"}</p>
+              <p className={`text-lg font-bold mt-1 ${itemsSinCosto > 0 ? "text-amber-500" : ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fc(ganancia)}</p>
+              {itemsSinCosto > 0 ? (
+                <p className="text-[11px] text-amber-500 font-medium">{itemsSinCosto} items sin costo cargado</p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">{totalVentas > 0 ? `${((ganancia / totalVentas) * 100).toFixed(1)}%` : "—"}</p>
+              )}
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Notas Credito</p>

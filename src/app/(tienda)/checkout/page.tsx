@@ -343,6 +343,7 @@ export default function CheckoutPage() {
 
   const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
   const totalSavings = items.reduce((s, i) => i.precio_original ? s + (i.precio_original - i.precio) * i.cantidad : s, 0);
+  // TODO: shipping cost is hardcoded - add a costo_envio column to tienda_config and use it here
   const costoEnvioBase = 500;
   const envioGratis =
     metodoEntrega === "retiro" ||
@@ -388,7 +389,7 @@ export default function CheckoutPage() {
       errs.push("Completá la dirección de envío.");
     }
     if (metodoEntrega === "envio" && !fechaEntrega) errs.push("Seleccioná una fecha de entrega.");
-    if (metodoPago === "mixto" && Math.abs((mixtoEfectivo + mixtoTransferencia) - (subtotal + costoEnvio)) > 0.01) {
+    if (metodoPago === "mixto" && Math.abs(Math.round(mixtoEfectivo + mixtoTransferencia) - Math.round(subtotal + costoEnvio)) > 1) {
       errs.push("La suma de efectivo y transferencia debe igualar el total.");
     }
 
@@ -431,8 +432,13 @@ export default function CheckoutPage() {
     }
 
     try {
-      const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
-      const numero = numData || ("PED-" + Date.now());
+      const { data: numData, error: numError } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
+      if (!numData || numError) {
+        setErrors(["No se pudo generar el número de pedido. Intentá de nuevo."]);
+        setSubmitting(false);
+        return;
+      }
+      const numero = numData;
 
       const { data: pedido, error } = await supabase
         .from("pedidos_tienda")
