@@ -468,21 +468,15 @@ export default function CheckoutPage() {
 
       if (error) throw error;
 
-      const itemRows = items.map((item) => {
-        const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-        const boxMatch = item.id.match(/Caja \(x(\d+)\)/);
-        const presUnitsVal = item.unidades_por_presentacion || (isMedio ? 0.5 : boxMatch ? Number(boxMatch[1]) : 1);
-        return {
-          pedido_id: pedido.id,
-          producto_id: item.id.split("_")[0],
-          nombre: item.nombre,
-          presentacion: item.presentacion || "Unidad",
-          cantidad: item.cantidad,
-          precio_unitario: item.precio,
-          subtotal: item.precio * item.cantidad,
-          unidades_por_presentacion: presUnitsVal,
-        };
-      });
+      const itemRows = items.map((item) => ({
+        pedido_id: pedido.id,
+        producto_id: item.id.split("_")[0],
+        nombre: item.nombre,
+        presentacion: item.presentacion || "Unidad",
+        cantidad: item.cantidad,
+        precio_unitario: item.precio,
+        subtotal: item.precio * item.cantidad,
+      }));
 
       const { error: itemsError } = await supabase
         .from("pedido_tienda_items")

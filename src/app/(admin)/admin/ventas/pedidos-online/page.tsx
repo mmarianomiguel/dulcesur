@@ -114,6 +114,15 @@ export default function PedidosOnlinePage() {
   const [productResults, setProductResults] = useState<ProductoSearch[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
 
+  // Compute unidades_por_presentacion from presentation name
+  const getUPP = (presentacion: string): number => {
+    const lower = (presentacion || "").toLowerCase();
+    if (lower.includes("medio")) return 0.5;
+    const boxMatch = presentacion.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
+    if (boxMatch) return Number(boxMatch[1]);
+    return 1;
+  };
+
   const fetchPedidos = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
@@ -127,13 +136,40 @@ export default function PedidosOnlinePage() {
     const ids = data.map((p: any) => p.id);
     const { data: allItems } = await supabase
       .from("pedido_tienda_items")
-      .select("*, unidades_por_presentacion")
+      .select("*")
       .in("pedido_id", ids);
+
+    // Also fetch venta_items to get unidades_por_presentacion
+    const numeros = data.map((p: any) => p.numero);
+    const { data: ventas } = await supabase
+      .from("ventas")
+      .select("id, numero")
+      .in("numero", numeros);
+    const ventaIdMap: Record<string, string> = {};
+    for (const v of ventas || []) ventaIdMap[v.numero] = v.id;
+    const ventaIds = Object.values(ventaIdMap);
+
+    let uppByProducto: Record<string, number> = {};
+    if (ventaIds.length > 0) {
+      const { data: vitems } = await supabase
+        .from("venta_items")
+        .select("producto_id, presentacion, unidades_por_presentacion")
+        .in("venta_id", ventaIds);
+      for (const vi of vitems || []) {
+        if (vi.producto_id && vi.unidades_por_presentacion) {
+          const key = `${vi.producto_id}_${vi.presentacion || ""}`;
+          uppByProducto[key] = vi.unidades_por_presentacion;
+        }
+      }
+    }
 
     const itemsByPedido: Record<number, PedidoItem[]> = {};
     (allItems || []).forEach((item: any) => {
       if (!itemsByPedido[item.pedido_id]) itemsByPedido[item.pedido_id] = [];
-      itemsByPedido[item.pedido_id].push({ ...item, unidades_por_presentacion: item.unidades_por_presentacion || 1 });
+      // Try to get UPP from venta_items, fallback to computing from presentation name
+      const key = `${item.producto_id}_${item.presentacion || ""}`;
+      const upp = uppByProducto[key] || getUPP(item.presentacion || "");
+      itemsByPedido[item.pedido_id].push({ ...item, unidades_por_presentacion: upp });
     });
 
     setPedidos(data.map((p: any) => ({ ...p, items: itemsByPedido[p.id] || [] })));
@@ -262,7 +298,7 @@ export default function PedidosOnlinePage() {
       const { error: delErr } = await supabase.from("pedido_tienda_items").delete().eq("pedido_id", selectedPedido.id);
       if (delErr) throw new Error(`Error eliminando items: ${delErr.message}`);
 
-      // Insert updated items (with unidades_por_presentacion)
+      // Insert updated items
       const newItems = editItems.map((item) => ({
         pedido_id: selectedPedido.id,
         producto_id: item.producto_id,
@@ -271,7 +307,6 @@ export default function PedidosOnlinePage() {
         cantidad: item.cantidad,
         precio_unitario: item.precio_unitario,
         subtotal: item.precio_unitario * item.cantidad,
-        unidades_por_presentacion: item.unidades_por_presentacion || 1,
       }));
 
       const { error: insErr } = await supabase.from("pedido_tienda_items").insert(newItems);
