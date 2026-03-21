@@ -390,7 +390,7 @@ export default function DashboardPage() {
   const handleMarkDelivered = async (venta: PedidoVenta) => {
     if (!confirm(`Marcar pedido #${venta.numero} como entregado?`)) return;
     setActionLoading(venta.id);
-    await supabase.from("ventas").update({ entregado: true }).eq("id", venta.id);
+    await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id);
     await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
     setPedidosOnline((prev) => prev.filter((p) => p.id !== venta.id));
     setActionLoading(null);
@@ -399,6 +399,7 @@ export default function DashboardPage() {
   const handleMarkArmado = async (venta: PedidoVenta) => {
     setActionLoading(venta.id);
     await supabase.from("pedidos_tienda").update({ estado: "armado" }).eq("numero", venta.numero);
+    await supabase.from("ventas").update({ estado: "armado" }).eq("id", venta.id);
     setPedidoEstadoMap((prev) => ({ ...prev, [venta.numero]: "armado" }));
     setActionLoading(null);
   };

@@ -372,10 +372,14 @@ export default function PedidosOnlinePage() {
 
     await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
 
-    // Sync estado to linked venta
-    const ventaUpdate: Record<string, unknown> = { estado: nuevoEstado };
+    // Sync estado to linked venta (ventas uses "anulada" instead of "cancelado")
+    const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;
+    const ventaUpdate: Record<string, unknown> = { estado: ventaEstado };
     if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
-    if (nuevoEstado === "cancelado") ventaUpdate.entregado = false;
+    if (nuevoEstado === "cancelado") {
+      ventaUpdate.entregado = false;
+      ventaUpdate.observacion = `ANULADA (Cancelación desde Pedidos Online)`;
+    }
     await supabase.from("ventas").update(ventaUpdate).eq("numero", pedido.numero);
 
     // Return stock when cancelling (only if wasn't already cancelled)

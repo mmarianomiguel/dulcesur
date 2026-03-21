@@ -840,10 +840,14 @@ export default function ListadoVentasPage() {
       .eq("numero", pedido.numero)
       .maybeSingle();
 
-    // Sync estado to linked venta
-    const ventaUpdate: Record<string, unknown> = { estado: nuevoEstado };
+    // Sync estado to linked venta (ventas uses "anulada" instead of "cancelado")
+    const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;
+    const ventaUpdate: Record<string, unknown> = { estado: ventaEstado };
     if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
-    if (nuevoEstado === "cancelado") ventaUpdate.entregado = false;
+    if (nuevoEstado === "cancelado") {
+      ventaUpdate.entregado = false;
+      ventaUpdate.observacion = `ANULADA (Cancelación desde Pedidos Online)`;
+    }
     if (ventaLinked) {
       await supabase.from("ventas").update(ventaUpdate).eq("id", ventaLinked.id);
     }
@@ -1182,7 +1186,7 @@ export default function ListadoVentasPage() {
                         <th className="text-left py-3 px-4 font-medium">Fecha / Hora</th>
                         <th className="text-left py-3 px-4 font-medium">Cliente</th>
                         <th className="text-left py-3 px-4 font-medium">Forma pago</th>
-                        <th className="text-center py-3 px-4 font-medium">Entrega</th>
+                        <th className="text-center py-3 px-4 font-medium">Estado</th>
                         <th className="text-right py-3 px-4 font-medium">Total</th>
                         <th className="text-right py-3 px-4 font-medium">Acciones</th>
                       </tr>
@@ -1221,11 +1225,15 @@ export default function ListadoVentasPage() {
                           <td className="py-3 px-4 text-center">
                             {v.tipo_comprobante.includes("Nota de Crédito") ? (
                               <Badge variant="outline" className="text-xs">N/A</Badge>
-                            ) : (
-                              <Badge variant={v.entregado ? "default" : "secondary"} className="text-xs">
-                                {v.entregado ? "Entregado" : "Pendiente"}
-                              </Badge>
-                            )}
+                            ) : (() => {
+                              const vEstado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "pendiente";
+                              const est = estadoBadge[vEstado] || estadoBadge.pendiente;
+                              return (
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
+                                  {est.label}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className={`py-3 px-4 text-right font-semibold ${v.estado === "anulada" ? "line-through text-muted-foreground" : v.tipo_comprobante.includes("Nota de Crédito") ? "text-red-500" : ""}`}>
                             {v.tipo_comprobante.includes("Nota de Crédito") ? `-${formatCurrency(v.total)}` : formatCurrency(v.total)}
