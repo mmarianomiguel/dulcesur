@@ -223,16 +223,22 @@ export default function ListadoVentasPage() {
     if (!anularVenta) return;
     setAnulando(true);
     const v = anularVenta;
+    const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    const hora = new Date().toTimeString().split(" ")[0];
+    const motivoTexto = anularMotivo ? ` (${anularMotivo})` : "";
+    const errores: string[] = [];
+
     try {
       // 1. Get venta_items to reverse stock
-      const { data: vitems } = await supabase.from("venta_items").select("*").eq("venta_id", v.id);
+      const { data: vitems, error: vitemsErr } = await supabase.from("venta_items").select("*").eq("venta_id", v.id);
+      if (vitemsErr) throw new Error(`Error obteniendo items: ${vitemsErr.message}`);
       const items = (vitems as VentaItemRow[]) || [];
 
       // 2. Reverse stock for each item
       for (const item of items) {
         if (!item.producto_id) continue;
-        const { data: prod } = await supabase.from("productos").select("id, stock, es_combo").eq("id", item.producto_id).single();
-        if (!prod) continue;
+        const { data: prod, error: prodErr } = await supabase.from("productos").select("id, stock, es_combo").eq("id", item.producto_id).single();
+        if (prodErr || !prod) { errores.push(`Producto ${item.descripcion} no encontrado`); continue; }
 
         if ((prod as any).es_combo) {
           // Combo: reverse each component
@@ -242,10 +248,11 @@ export default function ListadoVentasPage() {
             .eq("combo_id", item.producto_id);
           for (const ci of comboItems || []) {
             const { data: compProd } = await supabase.from("productos").select("id, stock").eq("id", (ci as any).producto_id).single();
-            if (!compProd) continue;
+            if (!compProd) { errores.push(`Componente combo no encontrado`); continue; }
             const unitsToRestore = item.cantidad * (ci as any).cantidad;
             const newStock = compProd.stock + unitsToRestore;
-            await supabase.from("productos").update({ stock: newStock }).eq("id", (ci as any).producto_id);
+            const { error: updErr } = await supabase.from("productos").update({ stock: newStock }).eq("id", (ci as any).producto_id);
+            if (updErr) { errores.push(`Error stock combo: ${updErr.message}`); continue; }
             await supabase.from("stock_movimientos").insert({
               producto_id: (ci as any).producto_id,
               tipo: "anulacion",
@@ -253,7 +260,7 @@ export default function ListadoVentasPage() {
               cantidad_despues: newStock,
               cantidad: unitsToRestore,
               referencia: `Anulación Venta #${v.numero}`,
-              descripcion: `Anulación venta - ${(ci as any).productos?.nombre || item.descripcion}${anularMotivo ? ` (${anularMotivo})` : ""}`,
+              descripcion: `Anulación venta - ${(ci as any).productos?.nombre || item.descripcion}${motivoTexto}`,
               usuario: "Admin Sistema",
               orden_id: v.id,
             });
@@ -263,7 +270,8 @@ export default function ListadoVentasPage() {
           const upp = item.unidades_por_presentacion || 1;
           const unitsToRestore = item.cantidad * upp;
           const newStock = prod.stock + unitsToRestore;
-          await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+          const { error: updErr } = await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+          if (updErr) { errores.push(`Error stock ${item.descripcion}: ${updErr.message}`); continue; }
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id,
             tipo: "anulacion",
@@ -271,33 +279,31 @@ export default function ListadoVentasPage() {
             cantidad_despues: newStock,
             cantidad: unitsToRestore,
             referencia: `Anulación Venta #${v.numero}`,
-            descripcion: `Anulación venta - ${item.descripcion}${anularMotivo ? ` (${anularMotivo})` : ""}`,
+            descripcion: `Anulación venta - ${item.descripcion}${motivoTexto}`,
             usuario: "Admin Sistema",
             orden_id: v.id,
           });
         }
       }
 
-      // 3. Reverse caja_movimientos (delete ingreso entries for this sale)
+      // 3. Reverse caja_movimientos
       const { data: cajaRows } = await supabase
         .from("caja_movimientos")
         .select("*")
         .eq("referencia_id", v.id)
         .eq("referencia_tipo", "venta");
       for (const cm of cajaRows || []) {
-        const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-        const hora = new Date().toTimeString().split(" ")[0];
-        await supabase.from("caja_movimientos").insert({
-          fecha: hoy,
-          hora,
+        const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
+          fecha: hoy, hora,
           tipo: "egreso",
-          descripcion: `Anulación Venta #${v.numero}${anularMotivo ? ` (${anularMotivo})` : ""}`,
+          descripcion: `Anulación Venta #${v.numero}${motivoTexto}`,
           metodo_pago: (cm as any).metodo_pago,
           monto: (cm as any).monto,
           referencia_id: v.id,
           referencia_tipo: "anulacion",
           cuenta_bancaria: (cm as any).cuenta_bancaria || null,
         });
+        if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
       }
 
       // 4. Reverse cuenta_corriente entries and update client saldo
@@ -307,19 +313,16 @@ export default function ListadoVentasPage() {
           .select("*")
           .eq("venta_id", v.id);
         if (ccRows && ccRows.length > 0) {
-          // Get current client saldo
           const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
           let saldoActual = clienteData?.saldo || 0;
 
           for (const cc of ccRows) {
-            const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-            // Reverse: what was debe becomes haber and vice versa
             const nuevoSaldo = saldoActual - (cc as any).debe + (cc as any).haber;
             await supabase.from("cuenta_corriente").insert({
               cliente_id: v.cliente_id,
               fecha: hoy,
               comprobante: `Anulación Venta #${v.numero}`,
-              descripcion: `Anulación de venta${anularMotivo ? ` (${anularMotivo})` : ""}`,
+              descripcion: `Anulación de venta${motivoTexto}`,
               debe: (cc as any).haber,
               haber: (cc as any).debe,
               saldo: nuevoSaldo,
@@ -328,18 +331,22 @@ export default function ListadoVentasPage() {
             });
             saldoActual = nuevoSaldo;
           }
-          // Update client balance
           await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", v.cliente_id);
         }
       }
 
       // 5. Mark venta as anulada
-      await supabase.from("ventas").update({
+      const { error: anularErr } = await supabase.from("ventas").update({
         estado: "anulada",
         observacion: v.observacion
-          ? `${v.observacion} | ANULADA${anularMotivo ? `: ${anularMotivo}` : ""}`
-          : `ANULADA${anularMotivo ? `: ${anularMotivo}` : ""}`,
+          ? `${v.observacion} | ANULADA${motivoTexto}`
+          : `ANULADA${motivoTexto}`,
       }).eq("id", v.id);
+      if (anularErr) throw new Error(`Error marcando como anulada: ${anularErr.message}`);
+
+      if (errores.length > 0) {
+        alert(`Venta anulada con advertencias:\n${errores.join("\n")}`);
+      }
 
       setAnularVenta(null);
       setAnularMotivo("");
