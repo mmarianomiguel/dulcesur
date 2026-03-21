@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import type { Cliente, ZonaEntrega } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -310,8 +311,8 @@ export default function ClientesPage() {
   const openMovimientos = async (client: Cliente) => {
     setMovClient(client);
     setMovOpen(true);
-    const hoy = new Date().toISOString().split("T")[0];
-    const hace30 = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+    const hoy = todayARG();
+    const hace30 = new Date(Date.now() - 30 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     setMovDesde(hace30);
     setMovHasta(hoy);
     await fetchMovimientos(client.id, hace30, hoy);
@@ -512,11 +513,15 @@ export default function ClientesPage() {
       observacion: cobroObs || null,
     });
 
-    const currentSaldo = cobroClient.saldo - cobroMonto;
+    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
+    const saldoActual = freshCli?.saldo ?? cobroClient.saldo;
+    const currentSaldo = saldoActual - cobroMonto;
+    const hoy = todayARG();
+
     await supabase.from("cuenta_corriente").insert({
       cliente_id: cobroClient.id,
-      fecha: new Date().toISOString().split("T")[0],
-      comprobante: `RE ${new Date().toISOString().split("T")[0]}`,
+      fecha: hoy,
+      comprobante: `RE ${hoy}`,
       descripcion: `Cobro - ${cobroFormaPago}`,
       debe: 0,
       haber: cobroMonto,
@@ -526,11 +531,11 @@ export default function ClientesPage() {
 
     await supabase
       .from("clientes")
-      .update({ saldo: cobroClient.saldo - cobroMonto })
+      .update({ saldo: currentSaldo })
       .eq("id", cobroClient.id);
 
     await supabase.from("caja_movimientos").insert({
-      fecha: new Date().toISOString().split("T")[0],
+      fecha: hoy,
       hora: new Date().toTimeString().split(" ")[0],
       tipo: "ingreso",
       descripcion: `Cobro a ${cobroClient.nombre}`,

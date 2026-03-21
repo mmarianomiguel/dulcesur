@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,11 +133,11 @@ export default function PedidosProveedorPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState("all");
   const [pedFilterMode, setPedFilterMode] = useState<"day" | "month" | "range" | "all">("month");
-  const [pedFilterDay, setPedFilterDay] = useState(new Date().toISOString().split("T")[0]);
+  const [pedFilterDay, setPedFilterDay] = useState(todayARG());
   const [pedFilterMonth, setPedFilterMonth] = useState(String(new Date().getMonth() + 1));
   const [pedFilterYear, setPedFilterYear] = useState(String(new Date().getFullYear()));
-  const [pedFilterFrom, setPedFilterFrom] = useState(new Date().toISOString().split("T")[0]);
-  const [pedFilterTo, setPedFilterTo] = useState(new Date().toISOString().split("T")[0]);
+  const [pedFilterFrom, setPedFilterFrom] = useState(todayARG());
+  const [pedFilterTo, setPedFilterTo] = useState(todayARG());
 
   // New / edit pedido state
   const [mode, setMode] = useState<"list" | "new" | "detail" | "generate" | "edit">("list");
@@ -316,7 +317,7 @@ export default function PedidosProveedorPage() {
         .from("pedidos_proveedor")
         .insert({
           proveedor_id: selectedProveedorId,
-          fecha: new Date().toISOString().split("T")[0],
+          fecha: todayARG(),
           estado,
           costo_total_estimado: totalEstimado,
           observacion: observacion || null,
@@ -501,7 +502,7 @@ export default function PedidosProveedorPage() {
 
       const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "compra" });
       const numero = numData || "C-0000";
-      const fecha = new Date().toISOString().split("T")[0];
+      const fecha = todayARG();
 
       const total = itemsToReceive.reduce((a, i) => a + i.cantidad_recibir * i.precio_unitario, 0);
       const estadoPago = receiveFormaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
@@ -746,7 +747,7 @@ export default function PedidosProveedorPage() {
         .from("pedidos_proveedor")
         .insert({
           proveedor_id: group.proveedor_id,
-          fecha: new Date().toISOString().split("T")[0],
+          fecha: todayARG(),
           estado: "Borrador",
           costo_total_estimado: group.total,
           observacion: "Generado automaticamente por stock minimo",

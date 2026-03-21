@@ -189,6 +189,11 @@ export interface Venta {
   estado: string;
   observacion: string | null;
   metodo_entrega: string | null;
+  entregado?: boolean;
+  facturado?: boolean;
+  origen?: string;
+  remito_origen_id?: string | null;
+  lista_precio_id?: string | null;
   created_at: string;
 }
 
@@ -203,6 +208,8 @@ export interface VentaItem {
   precio_unitario: number;
   descuento: number;
   subtotal: number;
+  presentacion?: string;
+  unidades_por_presentacion?: number;
   created_at: string;
 }
 

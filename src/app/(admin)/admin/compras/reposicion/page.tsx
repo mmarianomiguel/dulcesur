@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -326,7 +327,7 @@ export default function ReposicionPage() {
           .from("pedidos_proveedor")
           .insert({
             proveedor_id: provId,
-            fecha: new Date().toISOString().split("T")[0],
+            fecha: todayARG(),
             estado: "Borrador",
             costo_total_estimado: totalEstimado,
             observacion: "Generado desde Dashboard de Reposicion",

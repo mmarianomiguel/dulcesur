@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,9 +30,9 @@ export default function ReportesPage() {
   const [tab, setTab] = useState("ventas");
   const [desde, setDesde] = useState(() => {
     const d = new Date(); d.setDate(1);
-    return d.toISOString().split("T")[0];
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
   });
-  const [hasta, setHasta] = useState(() => new Date().toISOString().split("T")[0]);
+  const [hasta, setHasta] = useState(() => todayARG());
   const [loading, setLoading] = useState(false);
 
   // Ventas report
@@ -74,12 +75,12 @@ export default function ReportesPage() {
 
   // Compute effective date range based on ventaDateMode
   const effectiveDates = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayARG();
     if (ventaDateMode === "dia") {
       return { desde: today, hasta: today };
     } else if (ventaDateMode === "mensual") {
       const d = new Date(); d.setDate(1);
-      return { desde: d.toISOString().split("T")[0], hasta: today };
+      return { desde: d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), hasta: today };
     }
     return { desde, hasta };
   }, [ventaDateMode, desde, hasta]);

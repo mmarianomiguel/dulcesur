@@ -375,7 +375,8 @@ export default function HojaDeRutaPage() {
 
     // If there's a pending balance, add to client's cuenta corriente
     if (saldoPendiente > 0 && payVenta.cliente_id) {
-      const clientSaldo = payVenta.clientes?.saldo || 0;
+      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", payVenta.cliente_id).single();
+      const clientSaldo = freshCli?.saldo ?? payVenta.clientes?.saldo ?? 0;
       const newSaldo = clientSaldo + saldoPendiente;
       await supabase.from("cuenta_corriente").insert({
         cliente_id: payVenta.cliente_id,

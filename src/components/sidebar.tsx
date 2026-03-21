@@ -150,6 +150,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const [modulosConfig, setModulosConfig] = useState<Record<string, boolean> | null>(null);
   const [permisosMap, setPermisosMap] = useState<Record<string, boolean> | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const permsFetched = useRef(false);
 
   // Close mobile sidebar on route change
@@ -173,11 +174,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
         const { data: usuario } = await supabase
           .from("usuarios")
-          .select("rol_id, es_admin")
+          .select("rol_id, es_admin, nombre")
           .eq("auth_id", user.id)
           .single();
 
         if (!usuario) return;
+        if (usuario.nombre) setUserName(usuario.nombre);
 
         // Admins see everything
         if (usuario.es_admin) {
@@ -439,11 +441,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <div className="flex items-center gap-3 px-3 py-2">
               <Avatar className="w-8 h-8">
                 <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-xs">
-                  MM
+                  {userName ? userName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) : "AD"}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">Mariano Miguel</p>
+                <p className="text-sm font-medium truncate">{userName || "Admin"}</p>
                 <p className="text-xs text-sidebar-foreground/50 truncate flex items-center gap-1">
                   <Building2 className="w-3 h-3" /> DulceSur
                 </p>

@@ -403,7 +403,7 @@ export default function CheckoutPage() {
     setErrors([]);
     setSubmitting(true);
 
-    // Validate real-time stock before processing
+    // ── Server-side price validation: re-fetch real prices from DB ──
     const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
     const { data: stockData } = await supabase.from("productos").select("id, stock, nombre, es_combo").in("id", productIds);
     const stockMap: Record<string, { stock: number; nombre: string }> = {};
@@ -457,6 +457,58 @@ export default function CheckoutPage() {
       return;
     }
 
+    // ── Server-side price validation: override cart prices with DB prices ──
+    const { data: dbProducts } = await supabase
+      .from("productos")
+      .select("id, precio, es_combo")
+      .in("id", productIds);
+    const { data: dbPresentaciones } = await supabase
+      .from("presentaciones")
+      .select("producto_id, nombre, cantidad, precio_venta")
+      .in("producto_id", productIds);
+    // Fetch active discounts
+    const hoyCheck = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    const { data: dbDescuentos } = await supabase
+      .from("descuentos")
+      .select("producto_id, porcentaje, presentacion")
+      .eq("activo", true)
+      .lte("fecha_inicio", hoyCheck);
+
+    const activeDescs = (dbDescuentos || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= hoyCheck);
+    const prodPriceMap: Record<string, number> = {};
+    for (const p of dbProducts || []) prodPriceMap[p.id] = p.precio;
+    const presPriceMap: Record<string, number> = {};
+    for (const pr of dbPresentaciones || []) {
+      presPriceMap[`${pr.producto_id}_${pr.nombre}`] = pr.precio_venta;
+      // Also map by "Caja (xN)" format
+      if (pr.cantidad > 1) presPriceMap[`${pr.producto_id}_Caja (x${pr.cantidad})`] = pr.precio_venta;
+    }
+
+    for (const item of items) {
+      const prodId = item.id.split("_")[0];
+      const pres = item.presentacion || "Unidad";
+      // Get correct base price from DB
+      let correctPrice = presPriceMap[`${prodId}_${pres}`] ?? prodPriceMap[prodId] ?? item.precio;
+      // Apply active discount if exists
+      const disc = activeDescs.find((d: any) =>
+        d.producto_id === prodId && (!d.presentacion || d.presentacion === pres || d.presentacion === "todas")
+      );
+      if (disc) {
+        correctPrice = Math.round(correctPrice * (1 - disc.porcentaje / 100));
+      }
+      item.precio = correctPrice;
+    }
+    // Recalculate totals from validated prices
+    const vSubtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+    const vEnvioGratis = metodoEntrega === "retiro" || (config && config.umbral_envio_gratis > 0 && vSubtotal >= config.umbral_envio_gratis);
+    const vCostoEnvio = vEnvioGratis ? 0 : metodoEntrega === "envio" ? costoEnvioBase : 0;
+    const vRecargoTransf = config && config.recargo_transferencia > 0
+      ? metodoPago === "transferencia" ? Math.round(vSubtotal * (config.recargo_transferencia / 100))
+        : metodoPago === "mixto" && mixtoTransferencia > 0 ? Math.round(mixtoTransferencia * (config.recargo_transferencia / 100))
+          : 0
+      : 0;
+    const vTotal = vSubtotal + vCostoEnvio + vRecargoTransf;
+
     try {
       const { data: numData, error: numError } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
       if (!numData || numError) {
@@ -480,9 +532,9 @@ export default function CheckoutPage() {
           direccion_texto: getAddressText() || null,
           fecha_entrega: fechaEntrega,
           metodo_pago: metodoPago,
-          subtotal,
-          costo_envio: costoEnvio,
-          total,
+          subtotal: vSubtotal,
+          costo_envio: vCostoEnvio,
+          total: vTotal,
           observacion: observacion || null,
         })
         .select("id")
@@ -526,10 +578,10 @@ export default function CheckoutPage() {
         cliente_id: ventaClienteId,
         forma_pago: metodoPago === "efectivo" ? "Efectivo" : metodoPago === "transferencia" ? "Transferencia" : "Mixto",
         moneda: "Peso",
-        subtotal,
+        subtotal: vSubtotal,
         descuento_porcentaje: 0,
-        recargo_porcentaje: recargoTransf > 0 ? (config?.recargo_transferencia || 0) : 0,
-        total,
+        recargo_porcentaje: vRecargoTransf > 0 ? (config?.recargo_transferencia || 0) : 0,
+        total: vTotal,
         estado: "pendiente",
         observacion: observacion || null,
         entregado: false,

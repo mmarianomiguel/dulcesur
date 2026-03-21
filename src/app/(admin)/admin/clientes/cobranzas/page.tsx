@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,12 +156,16 @@ export default function CobranzasPage() {
       observacion: cobroObs || null,
     });
 
-    // Insert cuenta corriente movement (haber)
-    const currentSaldo = cobroClient.saldo - cobroMonto;
+    // Re-read saldo from DB to avoid stale state
+    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
+    const saldoActual = freshCli?.saldo ?? cobroClient.saldo;
+    const currentSaldo = saldoActual - cobroMonto;
+    const hoy = todayARG();
+
     await supabase.from("cuenta_corriente").insert({
       cliente_id: cobroClient.id,
-      fecha: new Date().toISOString().split("T")[0],
-      comprobante: `RE ${new Date().toISOString().split("T")[0]}`,
+      fecha: hoy,
+      comprobante: `RE ${hoy}`,
       descripcion: `Cobro - ${cobroFormaPago}`,
       debe: 0,
       haber: cobroMonto,
@@ -168,15 +173,14 @@ export default function CobranzasPage() {
       forma_pago: cobroFormaPago,
     });
 
-    // Update client balance (can go negative = saldo a favor)
     await supabase
       .from("clientes")
-      .update({ saldo: cobroClient.saldo - cobroMonto })
+      .update({ saldo: currentSaldo })
       .eq("id", cobroClient.id);
 
     // Register caja movement
     await supabase.from("caja_movimientos").insert({
-      fecha: new Date().toISOString().split("T")[0],
+      fecha: hoy,
       hora: new Date().toTimeString().split(" ")[0],
       tipo: "ingreso",
       descripcion: `Cobro a ${cobroClient.nombre}`,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import type { Proveedor } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -99,7 +100,7 @@ function formatCurrency(value: number) {
 }
 
 function todayString() {
-  return new Date().toISOString().split("T")[0];
+  return todayARG();
 }
 
 /* ───────── component ───────── */
