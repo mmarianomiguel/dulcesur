@@ -21,6 +21,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Search,
   FileText,
   Download,
@@ -48,6 +55,8 @@ import {
   Trash2,
   Save,
   Globe,
+  MoreHorizontal,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -1151,37 +1160,45 @@ export default function ListadoVentasPage() {
                             {v.tipo_comprobante.includes("Nota de Crédito") ? `-${formatCurrency(v.total)}` : formatCurrency(v.total)}
                           </td>
                           <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(v)} title="Ver detalle">
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => preparePrint(v)} title="Imprimir">
-                                <Printer className="w-3.5 h-3.5" />
-                              </Button>
-                              {!v.entregado && !v.tipo_comprobante.includes("Nota de Crédito") && v.estado !== "anulada" && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 text-xs"
-                                  disabled={actionLoading === v.id}
-                                  onClick={() => marcarEntregado(v)}
-                                >
-                                  {actionLoading === v.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3 mr-1" />}
-                                  Entregar
-                                </Button>
-                              )}
-                              {v.estado !== "anulada" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => { setAnularVenta(v); setAnularMotivo(""); }}
-                                  title="Anular comprobante"
-                                >
-                                  <Ban className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                  <MoreHorizontal className="w-4 h-4" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => openDetail(v)}>
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  Ver detalle
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => preparePrint(v)}>
+                                  <Printer className="w-4 h-4 mr-2" />
+                                  Imprimir
+                                </DropdownMenuItem>
+                                {!v.entregado && !v.tipo_comprobante.includes("Nota de Crédito") && v.estado !== "anulada" && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => marcarEntregado(v)}
+                                      disabled={actionLoading === v.id}
+                                    >
+                                      <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                                      <span className="text-green-600">Marcar entregado</span>
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                {v.estado !== "anulada" && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => { setAnularVenta(v); setAnularMotivo(""); }}
+                                      className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                    >
+                                      <Ban className="w-4 h-4 mr-2" />
+                                      Anular
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </td>
                         </tr>
                       ))}
@@ -1304,7 +1321,7 @@ export default function ListadoVentasPage() {
                         <th className="text-center px-4 py-3 font-medium">Items</th>
                         <th className="text-right px-4 py-3 font-medium">Total</th>
                         <th className="text-center px-4 py-3 font-medium">Estado</th>
-                        <th className="text-center px-4 py-3 font-medium">Acciones</th>
+                        <th className="text-right px-4 py-3 font-medium">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1343,11 +1360,43 @@ export default function ListadoVentasPage() {
                                 {est.label}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => poOpenDetail(pedido)}>
-                                <Eye className="w-3.5 h-3.5" />
-                                Ver / Editar
-                              </Button>
+                            <td className="px-4 py-3 text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuItem onClick={() => poOpenDetail(pedido)}>
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    Ver detalle
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => poOpenDetail(pedido)}>
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Editar pedido
+                                  </DropdownMenuItem>
+                                  {pedido.estado !== "entregado" && pedido.estado !== "cancelado" && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem onClick={() => poHandleEstadoChange(pedido, "entregado")}>
+                                        <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                                        <span className="text-green-600">Marcar entregado</span>
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                  {pedido.estado !== "cancelado" && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => poHandleEstadoChange(pedido, "cancelado")}
+                                        className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                      >
+                                        <Ban className="w-4 h-4 mr-2" />
+                                        Cancelar pedido
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </td>
                           </tr>
                         );
