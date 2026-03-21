@@ -66,16 +66,25 @@ export default function CarritoPage() {
       });
   }, [loaded, items]);
 
-  const getStockDisponible = (item: CartItem) => {
-    const prodId = item.id.split("_")[0];
-    const stock = stockMap[prodId];
-    if (stock === undefined) return null; // still loading
-    const presUnits = item.unidades_por_presentacion || (() => {
+  const getPresUnits = (item: CartItem) => {
+    return item.unidades_por_presentacion || (() => {
       const match = item.id.match(/Caja \(x(\d+)\)/);
       const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
       return isMedio ? 0.5 : match ? Number(match[1]) : 1;
     })();
-    return Math.floor(stock / presUnits);
+  };
+
+  const getStockDisponible = (item: CartItem) => {
+    const prodId = item.id.split("_")[0];
+    const stock = stockMap[prodId];
+    if (stock === undefined) return null;
+    const presUnits = getPresUnits(item);
+    // Subtract units consumed by OTHER cart items of the same product
+    const usedByOthers = items
+      .filter((i) => i.id !== item.id && i.id.split("_")[0] === prodId)
+      .reduce((sum, i) => sum + i.cantidad * getPresUnits(i), 0);
+    const remaining = stock - usedByOthers;
+    return Math.max(0, Math.floor(remaining / presUnits));
   };
 
   const hayStockInsuficiente = items.some((item) => {

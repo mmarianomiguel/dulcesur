@@ -79,6 +79,7 @@ interface ProductoSearch {
   codigo: string;
   nombre: string;
   precio: number;
+  unidad_medida?: string;
 }
 
 const formatCurrency = (value: number) =>
@@ -182,7 +183,7 @@ export default function PedidosOnlinePage() {
     setSearchingProducts(true);
     const { data } = await supabase
       .from("productos")
-      .select("id, codigo, nombre, precio")
+      .select("id, codigo, nombre, precio, unidad_medida")
       .eq("activo", true)
       .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
       .limit(10);
@@ -200,7 +201,7 @@ export default function PedidosOnlinePage() {
       setEditItems((prev) => [...prev, {
         producto_id: product.id,
         nombre: product.nombre,
-        presentacion: "Unidad",
+        presentacion: product.unidad_medida || "Unidad",
         cantidad: 1,
         precio_unitario: product.precio,
         subtotal: product.precio,
@@ -218,6 +219,40 @@ export default function PedidosOnlinePage() {
     setSaving(true);
 
     try {
+      const originalItems = selectedPedido.items;
+
+      // Calculate stock differences per product
+      const stockDiffs: Record<string, number> = {};
+      for (const orig of originalItems) {
+        stockDiffs[orig.producto_id] = (stockDiffs[orig.producto_id] || 0) + orig.cantidad;
+      }
+      for (const item of editItems) {
+        stockDiffs[item.producto_id] = (stockDiffs[item.producto_id] || 0) - item.cantidad;
+      }
+      // stockDiffs > 0 means items were removed → return stock
+      // stockDiffs < 0 means items were added → decrement stock
+
+      // Apply stock adjustments
+      for (const [productoId, diff] of Object.entries(stockDiffs)) {
+        if (Math.abs(diff) < 0.001) continue;
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", productoId).single();
+        if (prod) {
+          const stockAntes = prod.stock;
+          const stockDespues = stockAntes + diff;
+          await supabase.from("productos").update({ stock: stockDespues }).eq("id", productoId);
+          await supabase.from("stock_movimientos").insert({
+            producto_id: productoId,
+            tipo: diff > 0 ? "Ajuste" : "Venta",
+            cantidad: diff,
+            cantidad_antes: stockAntes,
+            cantidad_despues: stockDespues,
+            referencia: `Edición Pedido Web #${selectedPedido.numero}`,
+            descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
+            usuario: "Admin Sistema",
+          });
+        }
+      }
+
       // Delete existing items
       await supabase.from("pedido_tienda_items").delete().eq("pedido_id", selectedPedido.id);
 
@@ -243,7 +278,7 @@ export default function PedidosOnlinePage() {
         total: nuevoTotal,
       }).eq("id", selectedPedido.id);
 
-      // Sync linked venta + venta_items (used by listado, hoja de ruta, comprobantes, historial)
+      // Sync linked venta + venta_items
       const { data: venta } = await supabase
         .from("ventas")
         .select("id")
@@ -251,13 +286,11 @@ export default function PedidosOnlinePage() {
         .maybeSingle();
 
       if (venta) {
-        // Update venta totals
         await supabase.from("ventas").update({
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
         }).eq("id", venta.id);
 
-        // Replace venta_items
         await supabase.from("venta_items").delete().eq("venta_id", venta.id);
         await supabase.from("venta_items").insert(
           editItems.map((item) => ({

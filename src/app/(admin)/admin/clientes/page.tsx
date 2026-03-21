@@ -451,11 +451,11 @@ export default function ClientesPage() {
       descripcion: `Pago de deuda (${payMovMetodo}) — desde Clientes`,
       debe: 0,
       haber: montoReal,
-      saldo: Math.max(0, newSaldo),
+      saldo: newSaldo,
       forma_pago: payMovMetodo,
       venta_id: payMovVenta.id,
     });
-    await supabase.from("clientes").update({ saldo: Math.max(0, newSaldo) }).eq("id", movClient?.id);
+    await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", movClient?.id);
 
     setPayMovSaving(false);
     setPayMovOpen(false);

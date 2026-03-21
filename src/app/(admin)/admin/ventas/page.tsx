@@ -1423,40 +1423,41 @@ export default function VentasPage() {
         }
 
         // Collect pending balance if toggled
-        if (cobrarSaldo && clientId && selectedClient && selectedClient.saldo > 0) {
-          const saldoPendiente = selectedClient.saldo;
-          // Create caja_movimiento for saldo collection
-          await supabase.from("caja_movimientos").insert({
-            fecha: hoy,
-            hora,
-            tipo: "ingreso",
-            descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
-            metodo_pago: formaPago === "Mixto" ? "Efectivo" : formaPago,
-            monto: saldoPendiente,
-            referencia_id: venta.id,
-            referencia_tipo: "venta",
-          });
-          // Update cuenta_corriente
-          await supabase.from("cuenta_corriente").insert({
-            cliente_id: clientId,
-            fecha: hoy,
-            comprobante: `Cobro saldo - Venta #${numero}`,
-            descripcion: `Cobro saldo pendiente (${formaPago === "Mixto" ? "Efectivo" : formaPago}) — desde Punto de Venta`,
-            debe: 0,
-            haber: saldoPendiente,
-            saldo: 0,
-            forma_pago: formaPago === "Mixto" ? "Efectivo" : formaPago,
-            venta_id: venta.id,
-          });
-          // Update client saldo (subtract the pending amount)
-          const currentSaldo = selectedClient.saldo;
-          await supabase.from("clientes").update({ saldo: currentSaldo - saldoPendiente }).eq("id", clientId);
-          // Update local state so saldoNuevo calculation is correct
-          selectedClient.saldo = currentSaldo - saldoPendiente;
+        // Re-read saldo from DB to avoid stale state after Mixto CC update
+        if (cobrarSaldo && clientId && selectedClient) {
+          const { data: freshClient } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+          const saldoActualDB = freshClient?.saldo ?? selectedClient.saldo;
+          if (saldoActualDB > 0) {
+            const saldoPendiente = saldoActualDB;
+            await supabase.from("caja_movimientos").insert({
+              fecha: hoy,
+              hora,
+              tipo: "ingreso",
+              descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
+              metodo_pago: formaPago === "Mixto" ? "Efectivo" : formaPago,
+              monto: saldoPendiente,
+              referencia_id: venta.id,
+              referencia_tipo: "venta",
+            });
+            await supabase.from("cuenta_corriente").insert({
+              cliente_id: clientId,
+              fecha: hoy,
+              comprobante: `Cobro saldo - Venta #${numero}`,
+              descripcion: `Cobro saldo pendiente (${formaPago === "Mixto" ? "Efectivo" : formaPago}) — desde Punto de Venta`,
+              debe: 0,
+              haber: saldoPendiente,
+              saldo: 0,
+              forma_pago: formaPago === "Mixto" ? "Efectivo" : formaPago,
+              venta_id: venta.id,
+            });
+            const newSaldoAfterCobro = saldoActualDB - saldoPendiente;
+            await supabase.from("clientes").update({ saldo: newSaldoAfterCobro }).eq("id", clientId);
+            selectedClient.saldo = newSaldoAfterCobro;
+          }
         }
 
-        // Capture sale data before reset
-        const saldoAnterior = cobrarSaldo && selectedClient ? 0 : (selectedClient?.saldo || 0);
+        // Capture sale data before reset (selectedClient.saldo is already updated by cobrarSaldo above)
+        const saldoAnterior = selectedClient?.saldo || 0;
         const saldoNuevo = formaPago === "Cuenta Corriente"
           ? saldoAnterior + total
           : formaPago === "Mixto" && mixtoCuentaCorriente > 0

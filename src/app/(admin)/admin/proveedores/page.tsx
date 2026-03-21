@@ -252,7 +252,7 @@ export default function ProveedoresPage() {
       if (pagoError) throw new Error(pagoError.message);
 
       // 2. Update proveedor saldo
-      const newSaldo = Math.max(0, pagoDialog.data.saldo - monto);
+      const newSaldo = pagoDialog.data.saldo - monto;
       await proveedorService.update(provId, { saldo: newSaldo } as Partial<Proveedor>);
 
       // 3. Mark selected compras as paid
