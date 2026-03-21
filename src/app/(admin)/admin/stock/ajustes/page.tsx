@@ -82,11 +82,31 @@ export default function AjustesStockPage() {
   const [ajustes, setAjustes] = useState<Ajuste[]>([]);
   const [loading, setLoading] = useState(true);
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [currentUserName, setCurrentUserName] = useState("Admin");
+
+  // Fetch current user name from auth + usuarios table
+  const userFetched = useRef(false);
+  useEffect(() => {
+    if (userFetched.current) return;
+    userFetched.current = true;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: usuario } = await supabase
+          .from("usuarios")
+          .select("nombre")
+          .eq("auth_id", user.id)
+          .single();
+        if (usuario?.nombre) setCurrentUserName(usuario.nombre);
+      } catch {}
+    })();
+  }, []);
 
   // Form state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [fecha, setFecha] = useState(todayARG());
-  const [usuario, setUsuario] = useState("Admin");
+  const [usuario, setUsuario] = useState(currentUserName);
   const [motivoGlobal, setMotivoGlobal] = useState(MOTIVOS_GLOBALES[0]);
   const [observacion, setObservacion] = useState("");
   const [rows, setRows] = useState<AjusteRow[]>([]);
@@ -155,7 +175,7 @@ export default function AjustesStockPage() {
 
   const openNew = () => {
     setFecha(todayARG());
-    setUsuario("Admin");
+    setUsuario(currentUserName);
     setMotivoGlobal(MOTIVOS_GLOBALES[0]);
     setObservacion("");
     setRows([]);
@@ -212,9 +232,15 @@ export default function AjustesStockPage() {
     if (rows.length === 0) return;
     setSaving(true);
 
-    const { data: ajuste } = await supabase.from("ajustes_stock").insert({
+    const { data: ajuste, error: ajusteError } = await supabase.from("ajustes_stock").insert({
       fecha, motivo: motivoGlobal, observacion: observacion || null, usuario,
     }).select("id").single();
+
+    if (ajusteError) {
+      alert(`Error al crear ajuste: ${ajusteError.message}`);
+      setSaving(false);
+      return;
+    }
 
     if (ajuste) {
       for (const row of rows) {

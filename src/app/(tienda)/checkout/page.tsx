@@ -493,7 +493,7 @@ export default function CheckoutPage() {
         if (authRec?.cliente_id) ventaClienteId = authRec.cliente_id;
       }
 
-      const { data: venta } = await supabase.from("ventas").insert({
+      const { data: venta, error: ventaError } = await supabase.from("ventas").insert({
         numero,
         tipo_comprobante: "Pedido Web",
         fecha: hoy,
@@ -510,6 +510,8 @@ export default function CheckoutPage() {
         origen: "tienda",
         metodo_entrega: metodoEntrega === "retiro" ? "retiro" : "envio",
       }).select("id").single();
+
+      if (ventaError) throw ventaError;
 
       // Insert venta items
       if (venta) {
@@ -529,7 +531,8 @@ export default function CheckoutPage() {
             unidades_por_presentacion: presUnitsVal,
           };
         });
-        await supabase.from("venta_items").insert(ventaItemRows);
+        const { error: ventaItemsError } = await supabase.from("venta_items").insert(ventaItemRows);
+        if (ventaItemsError) throw ventaItemsError;
 
         // Update stock atomically (prevents race conditions with concurrent sales)
         const stockItems = items.map((item) => {
@@ -544,12 +547,14 @@ export default function CheckoutPage() {
           };
         });
 
-        const { data: stockResult } = await supabase.rpc("decrementar_stock_venta", {
+        const { data: stockResult, error: stockError } = await supabase.rpc("decrementar_stock_venta", {
           p_items: stockItems,
           p_referencia: `Pedido Web #${numero}`,
           p_usuario: "Tienda Online",
           p_orden_id: venta.id,
         });
+
+        if (stockError) throw stockError;
 
         if (stockResult && !stockResult.ok) {
           // Stock insufficient - rollback venta

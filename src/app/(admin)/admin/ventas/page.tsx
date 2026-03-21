@@ -1271,7 +1271,8 @@ export default function VentasPage() {
           presentacion: i.presentacion || "Unidad",
           unidades_por_presentacion: i.unidades_por_presentacion || 1,
         }));
-        await supabase.from("venta_items").insert(ventaItems);
+        const { error: itemsError } = await supabase.from("venta_items").insert(ventaItems);
+        if (itemsError) { setErrorModal({ open: true, message: `Error al guardar items: ${itemsError.message}` }); setSaving(false); return; }
 
         // Update stock atomically (prevents race conditions with concurrent sales)
         const stockItems: { producto_id: string; cantidad: number; descripcion: string }[] = [];
@@ -1293,12 +1294,14 @@ export default function VentasPage() {
           }
         }
 
-        const { data: stockResult } = await supabase.rpc("decrementar_stock_venta", {
+        const { data: stockResult, error: stockRpcError } = await supabase.rpc("decrementar_stock_venta", {
           p_items: stockItems,
           p_referencia: `Venta #${numero}`,
           p_usuario: "Admin Sistema",
           p_orden_id: venta.id,
         });
+
+        if (stockRpcError) { setErrorModal({ open: true, message: `Error al actualizar stock: ${stockRpcError.message}` }); setSaving(false); return; }
 
         if (stockResult && !stockResult.ok) {
           // Stock insufficient - delete the venta we just created and alert
