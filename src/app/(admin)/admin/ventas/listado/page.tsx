@@ -781,14 +781,17 @@ export default function ListadoVentasPage() {
       }).eq("id", poSelectedPedido.id);
       if (pedErr) throw new Error(`Error actualizando pedido: ${pedErr.message}`);
 
-      // Sync linked venta + venta_items
+      // Sync linked venta + venta_items + caja + CC
       const { data: venta } = await supabase
         .from("ventas")
-        .select("id")
+        .select("id, total, cliente_id, forma_pago")
         .eq("numero", poSelectedPedido.numero)
         .maybeSingle();
 
       if (venta) {
+        const totalAnterior = venta.total || 0;
+        const diferencia = nuevoTotal - totalAnterior; // positive = more expensive, negative = cheaper
+
         const { error: ventaErr } = await supabase.from("ventas").update({
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
@@ -810,6 +813,96 @@ export default function ListadoVentasPage() {
           }))
         );
         if (viErr) errores.push(`Error sync venta_items: ${viErr.message}`);
+
+        // Adjust caja_movimientos if total changed
+        if (Math.abs(diferencia) > 0.01) {
+          const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+          const hora = new Date().toTimeString().split(" ")[0];
+
+          // Get existing caja entries for this venta to know the payment method
+          const { data: cajaRows } = await supabase
+            .from("caja_movimientos")
+            .select("metodo_pago, cuenta_bancaria")
+            .eq("referencia_id", venta.id)
+            .eq("referencia_tipo", "venta")
+            .limit(1);
+          const metodoPago = cajaRows?.[0]?.metodo_pago || venta.forma_pago || "Efectivo";
+          const cuentaBancaria = cajaRows?.[0]?.cuenta_bancaria || null;
+
+          if (diferencia > 0) {
+            // Total increased: register additional income
+            const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
+              fecha: hoy, hora,
+              tipo: "ingreso",
+              descripcion: `Ajuste por edición Pedido Web #${poSelectedPedido.numero} (+${formatCurrency(diferencia)})`,
+              metodo_pago: metodoPago,
+              monto: diferencia,
+              referencia_id: venta.id,
+              referencia_tipo: "venta",
+              cuenta_bancaria: cuentaBancaria,
+            });
+            if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
+          } else {
+            // Total decreased: register refund (egreso)
+            const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
+              fecha: hoy, hora,
+              tipo: "egreso",
+              descripcion: `Ajuste por edición Pedido Web #${poSelectedPedido.numero} (${formatCurrency(diferencia)})`,
+              metodo_pago: metodoPago,
+              monto: Math.abs(diferencia),
+              referencia_id: venta.id,
+              referencia_tipo: "ajuste_edicion",
+              cuenta_bancaria: cuentaBancaria,
+            });
+            if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
+          }
+
+          // Adjust cuenta_corriente if client has CC entries for this venta
+          if (venta.cliente_id) {
+            const { data: ccRows } = await supabase
+              .from("cuenta_corriente")
+              .select("id, debe, haber")
+              .eq("venta_id", venta.id);
+
+            if (ccRows && ccRows.length > 0) {
+              // There are CC entries — adjust the client's balance
+              const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
+              const saldoActual = clienteData?.saldo || 0;
+
+              if (diferencia > 0) {
+                // More expensive: client owes more
+                const nuevoSaldo = saldoActual + diferencia;
+                await supabase.from("cuenta_corriente").insert({
+                  cliente_id: venta.cliente_id,
+                  fecha: hoy,
+                  comprobante: `Edición Pedido Web #${poSelectedPedido.numero}`,
+                  descripcion: `Ajuste por edición de pedido (aumento)`,
+                  debe: diferencia,
+                  haber: 0,
+                  saldo: nuevoSaldo,
+                  forma_pago: "Ajuste",
+                  venta_id: venta.id,
+                });
+                await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
+              } else {
+                // Cheaper: client owes less
+                const nuevoSaldo = saldoActual + diferencia; // diferencia is negative
+                await supabase.from("cuenta_corriente").insert({
+                  cliente_id: venta.cliente_id,
+                  fecha: hoy,
+                  comprobante: `Edición Pedido Web #${poSelectedPedido.numero}`,
+                  descripcion: `Ajuste por edición de pedido (reducción)`,
+                  debe: 0,
+                  haber: Math.abs(diferencia),
+                  saldo: nuevoSaldo,
+                  forma_pago: "Ajuste",
+                  venta_id: venta.id,
+                });
+                await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
+              }
+            }
+          }
+        }
       }
 
       if (errores.length > 0) {
