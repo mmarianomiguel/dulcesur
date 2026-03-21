@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { showAdminToast } from "@/components/admin-toast";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,7 @@ import {
   AlertTriangle,
   Globe,
 } from "lucide-react";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface PedidoItem {
   id?: number;
@@ -95,6 +97,7 @@ const estadoBadge: Record<string, { bg: string; text: string; label: string }> =
 };
 
 export default function PedidosOnlinePage() {
+  const currentUser = useCurrentUser();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterEstado, setFilterEstado] = useState("todos");
@@ -290,7 +293,7 @@ export default function PedidosOnlinePage() {
           cantidad_despues: stockDespues,
           referencia: `Edición Pedido Web #${selectedPedido.numero}`,
           descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
         });
       }
 
@@ -409,13 +412,13 @@ export default function PedidosOnlinePage() {
       }
 
       if (errores.length > 0) {
-        alert("Guardado con advertencias:\n" + errores.join("\n"));
+        showAdminToast("Guardado con advertencias: " + errores.join(". "), "info");
       }
       setHasChanges(false);
       fetchPedidos();
       setDetailOpen(false);
     } catch (err: any) {
-      alert("Error al guardar: " + (err.message || "Error desconocido"));
+      showAdminToast("Error al guardar: " + (err.message || "Error desconocido"), "error");
     } finally {
       setSaving(false);
     }
@@ -456,7 +459,7 @@ export default function PedidosOnlinePage() {
           cantidad_despues: stockDespues,
           referencia: `Cancelación Pedido Web #${pedido.numero}`,
           descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
         });
       }
     }
@@ -480,7 +483,7 @@ export default function PedidosOnlinePage() {
           cantidad_despues: stockDespues,
           referencia: `Reactivación Pedido Web #${pedido.numero}`,
           descripcion: `Descuento stock - ${item.nombre} (${item.presentacion})`,
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
         });
       }
     }

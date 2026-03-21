@@ -32,6 +32,7 @@ import {
   Loader2,
   ClipboardEdit,
 } from "lucide-react";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface LineItem {
   id: string;
@@ -78,6 +79,7 @@ function formatCurrency(value: number) {
 }
 
 export default function CargaManualPage() {
+  const currentUser = useCurrentUser();
   // Data
   const [clients, setClients] = useState<Cliente[]>([]);
   const [products, setProducts] = useState<Producto[]>([]);
@@ -378,7 +380,7 @@ export default function CargaManualPage() {
               cantidad: item.qty,
               referencia: `${tipoComprobante} ${num}`,
               descripcion: `${isNC ? "Devolucion" : "Venta"} - ${item.description}`,
-              usuario: "Admin Sistema",
+              usuario: currentUser?.nombre || "Admin Sistema",
               orden_id: venta.id,
             });
           }

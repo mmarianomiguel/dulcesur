@@ -42,6 +42,7 @@ import {
   Wallet,
   Eye,
 } from "lucide-react";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface LineItem {
   id: string;
@@ -90,6 +91,7 @@ const METODOS_DEV: { value: MetodoDev; label: string; icon: React.ElementType }[
 ];
 
 export default function NotaCreditoPage() {
+  const currentUser = useCurrentUser();
   const [tab, setTab] = useState("listado");
 
   // List state
@@ -429,7 +431,7 @@ export default function NotaCreditoPage() {
             cantidad: unitsToReturn,
             referencia: `NC ${numero}`,
             descripcion: `Devolución combo ${item.description} - ${comp.nombre}`,
-            usuario: "Admin Sistema",
+            usuario: currentUser?.nombre || "Admin Sistema",
             orden_id: venta.id,
           });
           // Update local cache so subsequent iterations see updated stock
@@ -447,7 +449,7 @@ export default function NotaCreditoPage() {
           cantidad: unitsToReturn,
           referencia: `NC ${numero}`,
           descripcion: `Devolución - ${item.description}`,
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
           orden_id: venta.id,
         });
         prod.stock = newStock;

@@ -44,6 +44,7 @@ import {
   TruckIcon,
   FileText,
 } from "lucide-react";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 /* ───────── types ───────── */
 
@@ -125,6 +126,7 @@ function estadoConfig(estado: string) {
 /* ───────── component ───────── */
 
 export default function PedidosProveedorPage() {
+  const currentUser = useCurrentUser();
   // List state
   const [pedidos, setPedidos] = useState<PedidoRow[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -565,7 +567,7 @@ export default function PedidosProveedorPage() {
           cantidad: item.cantidad_recibir,
           referencia: `Compra #${numero} (Pedido ${pedidoDisplayNum(detailPedido.id)})`,
           descripcion: `Recepcion - ${item.descripcion}`,
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
           orden_id: compra.id,
         });
 

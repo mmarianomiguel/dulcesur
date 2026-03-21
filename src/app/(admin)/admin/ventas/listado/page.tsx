@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { showAdminToast } from "@/components/admin-toast";
 import {
   Select,
   SelectContent,
@@ -62,6 +63,7 @@ import {
 import Link from "next/link";
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptLineItem } from "@/components/receipt-print-view";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 // ─── Historial types ───
 interface ClienteInfo {
@@ -189,6 +191,7 @@ const estadoBadge: Record<string, { bg: string; text: string; label: string }> =
 };
 
 export default function ListadoVentasPage() {
+  const currentUser = useCurrentUser();
   // ─── Main tab state ───
   const [activeTab, setActiveTab] = useState<"historial" | "pedidos">("historial");
 
@@ -432,7 +435,7 @@ export default function ListadoVentasPage() {
               cantidad: unitsToRestore,
               referencia: `Anulación Venta #${v.numero}`,
               descripcion: `Anulación venta - ${(ci as any).productos?.nombre || item.descripcion}${motivoTexto}`,
-              usuario: "Admin Sistema",
+              usuario: currentUser?.nombre || "Admin Sistema",
               orden_id: v.id,
             });
           }
@@ -451,7 +454,7 @@ export default function ListadoVentasPage() {
             cantidad: unitsToRestore,
             referencia: `Anulación Venta #${v.numero}`,
             descripcion: `Anulación venta - ${item.descripcion}${motivoTexto}`,
-            usuario: "Admin Sistema",
+            usuario: currentUser?.nombre || "Admin Sistema",
             orden_id: v.id,
           });
         }
@@ -519,7 +522,7 @@ export default function ListadoVentasPage() {
       await supabase.from("pedidos_tienda").update({ estado: "cancelado" }).eq("numero", v.numero);
 
       if (errores.length > 0) {
-        alert(`Venta anulada con advertencias:\n${errores.join("\n")}`);
+        showAdminToast(`Venta anulada con advertencias: ${errores.join(". ")}`, "info");
       }
 
       setAnularVenta(null);
@@ -527,7 +530,7 @@ export default function ListadoVentasPage() {
       await fetchVentas();
       await fetchPedidos();
     } catch (err: any) {
-      alert(`Error al anular: ${err?.message || String(err)}`);
+      showAdminToast(`Error al anular: ${err?.message || String(err)}`, "error");
     } finally {
       setAnulando(false);
     }
@@ -807,7 +810,7 @@ export default function ListadoVentasPage() {
           cantidad_despues: stockDespues,
           referencia: `Edición Pedido Web #${poSelectedPedido.numero}`,
           descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
         });
       }
 
@@ -927,14 +930,14 @@ export default function ListadoVentasPage() {
       }
 
       if (errores.length > 0) {
-        alert("Guardado con advertencias:\n" + errores.join("\n"));
+        showAdminToast("Guardado con advertencias: " + errores.join(". "), "info");
       }
       setPoHasChanges(false);
       await fetchPedidos();
       await fetchVentas();
       setPoDetailOpen(false);
     } catch (err: any) {
-      alert("Error al guardar: " + (err.message || "Error desconocido"));
+      showAdminToast("Error al guardar: " + (err.message || "Error desconocido"), "error");
     } finally {
       setPoSaving(false);
     }
@@ -1004,7 +1007,7 @@ export default function ListadoVentasPage() {
           cantidad_despues: stockDespues,
           referencia: `Cancelación Pedido Web #${pedido.numero}`,
           descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
         });
       }
 
@@ -1077,7 +1080,7 @@ export default function ListadoVentasPage() {
           cantidad_despues: stockDespues,
           referencia: `Reactivación Pedido Web #${pedido.numero}`,
           descripcion: `Descuento stock - ${item.nombre} (${item.presentacion})`,
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
         });
       }
     }

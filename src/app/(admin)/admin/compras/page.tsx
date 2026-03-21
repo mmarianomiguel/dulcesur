@@ -39,6 +39,7 @@ import {
   ImageIcon,
   X,
 } from "lucide-react";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 /* ───────── types ───────── */
 
@@ -106,6 +107,7 @@ function todayString() {
 /* ───────── component ───────── */
 
 export default function ComprasPage() {
+  const currentUser = useCurrentUser();
   const [purchases, setPurchases] = useState<CompraRow[]>([]);
   const [providers, setProviders] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -391,7 +393,7 @@ export default function ComprasPage() {
           cantidad: item.cantidad,
           referencia: `Compra #${numero}`,
           descripcion: `Compra - ${item.nombre}`,
-          usuario: "Admin Sistema",
+          usuario: currentUser?.nombre || "Admin Sistema",
           orden_id: compra.id,
         });
 

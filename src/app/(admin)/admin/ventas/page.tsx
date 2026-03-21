@@ -52,6 +52,7 @@ import {
 
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale } from "@/components/receipt-print-view";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 // ---------- types ----------
 interface Presentacion {
@@ -127,6 +128,7 @@ function initials(name: string) {
 
 // ---------- component ----------
 export default function VentasPage() {
+  const currentUser = useCurrentUser();
   // --- data ---
   const [products, setProducts] = useState<Producto[]>([]);
   const [clients, setClients] = useState<Cliente[]>([]);
@@ -1297,7 +1299,7 @@ export default function VentasPage() {
         const { data: stockResult, error: stockRpcError } = await supabase.rpc("decrementar_stock_venta", {
           p_items: stockItems,
           p_referencia: `Venta #${numero}`,
-          p_usuario: "Admin Sistema",
+          p_usuario: currentUser?.nombre || "Admin Sistema",
           p_orden_id: venta.id,
         });
 
@@ -1327,7 +1329,7 @@ export default function VentasPage() {
                 cantidad_despues: stockDespues,
                 referencia: `Venta #${numero}`,
                 descripcion: item.descripcion,
-                usuario: "Admin Sistema",
+                usuario: currentUser?.nombre || "Admin Sistema",
                 orden_id: venta.id,
               });
             }
