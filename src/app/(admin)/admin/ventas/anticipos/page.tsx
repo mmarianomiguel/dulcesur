@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -130,7 +131,7 @@ export default function AnticiposPage() {
       const monto = parseFloat(nuevoMonto);
       const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "anticipo" });
       const numero = numData as string;
-      const fecha = new Date().toISOString().split("T")[0];
+      const fecha = todayARG();
 
       const { data: anticipo, error } = await supabase
         .from("anticipos")
@@ -160,9 +161,11 @@ export default function AnticiposPage() {
         referencia_tipo: "anticipo",
       });
 
-      // Add haber to cuenta_corriente
-      const clienteNombre =
-        clientes.find((c) => c.id === nuevoClienteId)?.nombre || "";
+      // Update client saldo and add haber to cuenta_corriente
+      const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", nuevoClienteId).single();
+      const saldoActual = freshCliente?.saldo ?? 0;
+      const newSaldo = saldoActual - monto;
+      await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", nuevoClienteId);
       await supabase.from("cuenta_corriente").insert({
         cliente_id: nuevoClienteId,
         fecha,
@@ -170,7 +173,7 @@ export default function AnticiposPage() {
         descripcion: `Anticipo/Seña - ${nuevoConcepto}`,
         debe: 0,
         haber: monto,
-        saldo: 0,
+        saldo: newSaldo,
         forma_pago: "Efectivo",
       });
 
@@ -223,7 +226,7 @@ export default function AnticiposPage() {
     if (!confirm("¿Confirmar devolución del anticipo?")) return;
     setSaving(true);
     try {
-      const fecha = new Date().toISOString().split("T")[0];
+      const fecha = todayARG();
       await supabase
         .from("anticipos")
         .update({ estado: "Devuelto" })
@@ -238,6 +241,22 @@ export default function AnticiposPage() {
         monto: anticipo.monto,
         referencia_id: anticipo.id,
         referencia_tipo: "anticipo",
+      });
+
+      // Reverse saldo: add back the anticipo amount
+      const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", anticipo.cliente_id).single();
+      const saldoActual = freshCliente?.saldo ?? 0;
+      const newSaldo = saldoActual + anticipo.monto;
+      await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", anticipo.cliente_id);
+      await supabase.from("cuenta_corriente").insert({
+        cliente_id: anticipo.cliente_id,
+        fecha,
+        comprobante: anticipo.numero,
+        descripcion: `Devolución anticipo/seña - ${anticipo.concepto || ""}`,
+        debe: anticipo.monto,
+        haber: 0,
+        saldo: newSaldo,
+        forma_pago: "Efectivo",
       });
 
       fetchData();

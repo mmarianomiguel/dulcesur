@@ -116,7 +116,7 @@ export default function ResumenVendedorPage() {
     let query = supabase
       .from("ventas")
       .select("*, clientes(id, nombre), usuarios(id, nombre)")
-      .eq("estado", "completada")
+      .eq("estado", "cerrada")
       .gte("fecha", fechaDesde)
       .lte("fecha", fechaHasta);
 

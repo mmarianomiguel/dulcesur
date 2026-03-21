@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import type { Cliente, Producto, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,7 +99,7 @@ export default function NotaCreditoPage() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [listSearch, setListSearch] = useState("");
   const [ncFilterMode, setNcFilterMode] = useState<"day" | "month" | "range" | "all">("day");
-  const [ncFilterDay, setNcFilterDay] = useState(new Date().toISOString().split("T")[0]);
+  const [ncFilterDay, setNcFilterDay] = useState(todayARG());
   const [ncFilterMonth, setNcFilterMonth] = useState(String(new Date().getMonth() + 1));
   const [ncFilterYear, setNcFilterYear] = useState(String(new Date().getFullYear()));
   const [ncFilterFrom, setNcFilterFrom] = useState("");
@@ -359,7 +360,7 @@ export default function NotaCreditoPage() {
     const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "nota_credito" });
     const numero = numData || "00001-00000000";
 
-    const hoy = new Date().toISOString().split("T")[0];
+    const hoy = todayARG();
     const hora = new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
 
     const { data: venta } = await supabase
@@ -469,7 +470,8 @@ export default function NotaCreditoPage() {
     }
     // ── Cuenta corriente: solo si el método es Cuenta Corriente ──
     if (metodoDev === "Cuenta Corriente" && clientId) {
-      const nuevoSaldo = (selectedClient?.saldo || 0) - total;
+      const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+      const nuevoSaldo = (freshCliente?.saldo ?? selectedClient?.saldo ?? 0) - total;
       await supabase.from("cuenta_corriente").insert({
         cliente_id: clientId,
         fecha: hoy,

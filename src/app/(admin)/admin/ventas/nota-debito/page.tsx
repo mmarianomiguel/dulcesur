@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import type { Cliente, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -183,7 +184,7 @@ export default function NotaDebitoPage() {
     });
     const numero = numData || "00001-00000000";
 
-    const hoy = new Date().toISOString().split("T")[0];
+    const hoy = todayARG();
 
     const { data: venta } = await supabase
       .from("ventas")
@@ -220,6 +221,9 @@ export default function NotaDebitoPage() {
       await supabase.from("venta_items").insert(ventaItems);
 
       // Register debe in cuenta_corriente (debit to client)
+      const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+      const saldoActual = freshCliente?.saldo ?? selectedClient?.saldo ?? 0;
+      const nuevoSaldo = saldoActual + total;
       await supabase.from("cuenta_corriente").insert({
         cliente_id: clientId,
         fecha: hoy,
@@ -227,7 +231,7 @@ export default function NotaDebitoPage() {
         descripcion: `Nota de Débito ${numero}`,
         debe: total,
         haber: 0,
-        saldo: (selectedClient?.saldo || 0) + total,
+        saldo: nuevoSaldo,
         forma_pago: "Cuenta Corriente",
         venta_id: venta.id,
       });
@@ -235,7 +239,7 @@ export default function NotaDebitoPage() {
       // Update client saldo
       await supabase
         .from("clientes")
-        .update({ saldo: (selectedClient?.saldo || 0) + total })
+        .update({ saldo: nuevoSaldo })
         .eq("id", clientId);
 
       setItems([]);

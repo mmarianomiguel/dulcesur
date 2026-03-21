@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -196,7 +197,7 @@ export default function RemitosPage() {
         .insert({
           numero: nuevoNumero,
           tipo_comprobante: tipoFactura,
-          fecha: new Date().toISOString().split("T")[0],
+          fecha: todayARG(),
           cliente_id: r.cliente_id,
           vendedor_id: r.vendedor_id,
           forma_pago: r.forma_pago,

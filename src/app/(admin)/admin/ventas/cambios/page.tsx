@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -210,7 +211,7 @@ export default function CambiosPage() {
     try {
       const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "cambio" });
       const numero = numData as string;
-      const fecha = new Date().toISOString().split("T")[0];
+      const fecha = todayARG();
 
       const { data: cambio, error } = await supabase
         .from("cambios_articulos")

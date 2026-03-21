@@ -1339,7 +1339,8 @@ export default function VentasPage() {
 
         if (formaPago === "Cuenta Corriente") {
           if (clientId) {
-            const saldoActual = selectedClient?.saldo || 0;
+            const { data: freshCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+            const saldoActual = freshCC?.saldo ?? selectedClient?.saldo ?? 0;
             const newSaldo = saldoActual + total;
             const saldoAFavorAplicado = saldoActual < 0 ? Math.min(Math.abs(saldoActual), total) : 0;
             const deudaReal = total - saldoAFavorAplicado;
@@ -1370,7 +1371,8 @@ export default function VentasPage() {
           for (const entry of mixtoEntries) {
             if (entry.metodo === "Cuenta Corriente") {
               if (clientId) {
-                const saldoActualMixto = selectedClient?.saldo || 0;
+                const { data: freshCCMixto } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+                const saldoActualMixto = freshCCMixto?.saldo ?? selectedClient?.saldo ?? 0;
                 const newSaldoMixto = saldoActualMixto + entry.monto;
                 const favorAplicadoMixto = saldoActualMixto < 0 ? Math.min(Math.abs(saldoActualMixto), entry.monto) : 0;
                 await supabase.from("cuenta_corriente").insert({

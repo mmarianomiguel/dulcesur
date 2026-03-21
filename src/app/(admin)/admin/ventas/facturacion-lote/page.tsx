@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,7 +143,7 @@ export default function FacturacionLotePage() {
           .insert({
             numero: nuevoNumero,
             tipo_comprobante: tipoFactura,
-            fecha: new Date().toISOString().split("T")[0],
+            fecha: todayARG(),
             cliente_id: r.cliente_id,
             vendedor_id: r.vendedor_id,
             forma_pago: r.forma_pago,

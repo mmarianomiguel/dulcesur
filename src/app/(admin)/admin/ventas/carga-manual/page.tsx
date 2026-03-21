@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import type { Cliente, Producto, Usuario, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,7 @@ export default function CargaManualPage() {
   // Form
   const [tipoComprobante, setTipoComprobante] = useState("Remito X");
   const [numero, setNumero] = useState("");
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
+  const [fecha, setFecha] = useState(todayARG());
   const [clientId, setClientId] = useState("");
   const [vendedorId, setVendedorId] = useState("");
   const [formaPago, setFormaPago] = useState("Efectivo");

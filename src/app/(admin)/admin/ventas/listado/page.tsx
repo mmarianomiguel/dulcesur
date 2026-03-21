@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { todayARG } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,7 +201,7 @@ export default function ListadoVentasPage() {
   const [filterType, setFilterType] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
   const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("month");
-  const [filterDay, setFilterDay] = useState(new Date().toISOString().split("T")[0]);
+  const [filterDay, setFilterDay] = useState(todayARG());
   const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
   const [filterFrom, setFilterFrom] = useState("");
