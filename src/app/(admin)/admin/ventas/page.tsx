@@ -1735,32 +1735,49 @@ export default function VentasPage() {
                           })()}
                         </div>
                         <div className="flex items-center gap-0.5 lg:gap-1">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-6 w-6 lg:h-7 lg:w-7"
-                            onClick={(e) => { e.stopPropagation(); const step = item.presentacion === "Unidad" && item.unit === "Mt" ? 0.5 : 1; updateQty(item.id, item.qty - step, item.presentacion === "Unidad"); }}
-                          >
-                            <Minus className="w-3 h-3" />
-                          </Button>
-                          <Input
-                            type="number"
-                            value={item.qty}
-                            onChange={(e) => updateQty(item.id, Number(e.target.value))}
-                            onBlur={(e) => { const v = Number(e.target.value); if (v > 0 && item.presentacion === "Unidad") updateQty(item.id, v, true); }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-10 lg:w-14 h-6 lg:h-7 text-center text-xs lg:text-sm"
-                            min={item.presentacion === "Unidad" && item.unit === "Mt" ? 0.5 : 1}
-                            step={item.presentacion === "Unidad" && item.unit === "Mt" ? 0.5 : 1}
-                          />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-6 w-6 lg:h-7 lg:w-7"
-                            onClick={(e) => { e.stopPropagation(); const step = item.presentacion === "Unidad" && item.unit === "Mt" ? 0.5 : 1; updateQty(item.id, item.qty + step, item.presentacion === "Unidad"); }}
-                          >
-                            <Plus className="w-3 h-3" />
-                          </Button>
+                          {(() => {
+                            const isMedio = (item.unidades_por_presentacion || 1) < 1;
+                            const step = item.presentacion === "Unidad" && item.unit === "Mt" ? 0.5 : 1;
+                            const displayQty = isMedio ? item.qty * (item.unidades_por_presentacion || 0.5) : item.qty;
+                            const displayStep = isMedio ? (item.unidades_por_presentacion || 0.5) : step;
+                            return (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6 lg:h-7 lg:w-7"
+                                  onClick={(e) => { e.stopPropagation(); updateQty(item.id, item.qty - 1, item.presentacion === "Unidad"); }}
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <Input
+                                  type="number"
+                                  value={displayQty}
+                                  onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    if (isMedio) {
+                                      updateQty(item.id, Math.round(v / (item.unidades_por_presentacion || 0.5)));
+                                    } else {
+                                      updateQty(item.id, v);
+                                    }
+                                  }}
+                                  onBlur={(e) => { const v = Number(e.target.value); if (v > 0 && item.presentacion === "Unidad") updateQty(item.id, v, true); }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-10 lg:w-14 h-6 lg:h-7 text-center text-xs lg:text-sm"
+                                  min={displayStep}
+                                  step={displayStep}
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6 lg:h-7 lg:w-7"
+                                  onClick={(e) => { e.stopPropagation(); updateQty(item.id, item.qty + 1, item.presentacion === "Unidad"); }}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                              </>
+                            );
+                          })()}
                         </div>
                         <div className="text-right w-16 lg:w-24 shrink-0">
                           <p className="text-xs lg:text-sm font-semibold">{formatCurrency(item.subtotal)}</p>
