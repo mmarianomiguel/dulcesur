@@ -214,7 +214,9 @@ export default function ListadoVentasPage() {
 
   const marcarEntregado = async (v: VentaRow) => {
     setActionLoading(v.id);
-    await supabase.from("ventas").update({ entregado: true }).eq("id", v.id);
+    await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
+    // Sync to pedidos_tienda so client sees "entregado"
+    await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
     await fetchVentas();
     setActionLoading(null);
   };

@@ -171,7 +171,9 @@ export default function RemitosPage() {
 
   const marcarEntregado = async (r: RemitoRow) => {
     setActionLoading(r.id);
-    await supabase.from("ventas").update({ entregado: true }).eq("id", r.id);
+    await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", r.id);
+    // Sync to pedidos_tienda so client sees "entregado"
+    await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", r.numero);
     await fetchRemitos();
     setActionLoading(null);
   };

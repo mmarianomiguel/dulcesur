@@ -258,13 +258,18 @@ export default function HojaDeRutaPage() {
   })();
 
   const handleMarkDelivered = async (id: string) => {
+    const venta = ventas.find((v) => v.id === id);
     const { error } = await supabase
       .from("ventas")
-      .update({ entregado: true })
+      .update({ entregado: true, estado: "entregado" })
       .eq("id", id);
     if (error) {
       console.error(error);
       return;
+    }
+    // Sync estado to linked pedido_tienda (so client sees "entregado")
+    if (venta?.numero) {
+      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
     }
     setVentas((prev) => prev.filter((v) => v.id !== id));
   };
