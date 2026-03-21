@@ -528,15 +528,10 @@ export default function ListadoVentasPage() {
                     <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="Factura A">Factura A</SelectItem>
-                      <SelectItem value="Factura B">Factura B</SelectItem>
-                      <SelectItem value="Factura C">Factura C</SelectItem>
                       <SelectItem value="Remito X">Remito X</SelectItem>
                       <SelectItem value="Pedido Web">Pedido Web</SelectItem>
-                      <SelectItem value="Nota de Crédito A">Nota de Crédito A</SelectItem>
                       <SelectItem value="Nota de Crédito B">Nota de Crédito B</SelectItem>
                       <SelectItem value="Nota de Crédito C">Nota de Crédito C</SelectItem>
-                      <SelectItem value="Nota de Débito A">Nota de Débito A</SelectItem>
                       <SelectItem value="Nota de Débito B">Nota de Débito B</SelectItem>
                       <SelectItem value="Nota de Débito C">Nota de Débito C</SelectItem>
                     </SelectContent>
