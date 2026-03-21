@@ -5,6 +5,14 @@ import Link from "next/link";
 import { ArrowLeft, User, Lock, Check, AlertCircle, MapPin, DollarSign } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
 
@@ -179,22 +187,26 @@ export default function PerfilPage() {
 
     setPwSaving(true);
 
+    const hashedCurrent = await hashPassword(currentPassword);
+
     const { data: match } = await supabase
       .from("clientes_auth")
-      .select("id")
+      .select("id, password_hash")
       .eq("id", clienteAuthId)
-      .eq("password_hash", currentPassword)
       .single();
 
-    if (!match) {
+    // Compare with hash AND plaintext (backwards compatibility for old accounts)
+    if (!match || (match.password_hash !== hashedCurrent && match.password_hash !== currentPassword)) {
       setPwMsg("La contraseña actual es incorrecta.");
       setPwSaving(false);
       return;
     }
 
+    const hashedNew = await hashPassword(newPassword);
+
     const { error } = await supabase
       .from("clientes_auth")
-      .update({ password_hash: newPassword })
+      .update({ password_hash: hashedNew })
       .eq("id", clienteAuthId);
 
     if (error) {

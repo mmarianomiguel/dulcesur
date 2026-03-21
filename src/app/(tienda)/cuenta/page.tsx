@@ -5,6 +5,14 @@ import Link from "next/link";
 import { User, Package, LogOut, AlertCircle, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 const PROVINCIAS = [
   "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes",
   "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza", "Misiones",
@@ -67,11 +75,12 @@ export default function CuentaPage() {
     setError("");
     setLoading(true);
     try {
+      const hashedInput = await hashPassword(loginPassword);
+
       const { data, error: dbError } = await supabase
         .from("clientes_auth")
-        .select("id, nombre, email")
+        .select("id, nombre, email, password_hash")
         .eq("email", loginEmail)
-        .eq("password_hash", loginPassword)
         .single();
 
       if (dbError || !data) {
@@ -80,7 +89,23 @@ export default function CuentaPage() {
         return;
       }
 
-      localStorage.setItem("cliente_auth", JSON.stringify(data));
+      // Compare with hash AND plaintext (backwards compatibility for old accounts)
+      if (data.password_hash !== hashedInput && data.password_hash !== loginPassword) {
+        setError("Email o contraseña incorrectos.");
+        setLoading(false);
+        return;
+      }
+
+      // If password was stored in plaintext, upgrade it to hashed
+      if (data.password_hash === loginPassword) {
+        await supabase
+          .from("clientes_auth")
+          .update({ password_hash: hashedInput })
+          .eq("id", data.id);
+      }
+
+      const { password_hash: _, ...clienteData } = data;
+      localStorage.setItem("cliente_auth", JSON.stringify(clienteData));
       window.location.reload();
     } catch {
       setError("Error al iniciar sesión.");
@@ -126,13 +151,15 @@ export default function CuentaPage() {
         .select("id")
         .single();
 
+      const hashedPassword = await hashPassword(regPassword);
+
       const { data, error: dbError } = await supabase
         .from("clientes_auth")
         .insert({
           nombre: regNombre,
           email: regEmail,
           telefono: regTelefono,
-          password_hash: regPassword,
+          password_hash: hashedPassword,
           cliente_id: clienteData?.id || null,
         })
         .select("id, nombre, email")
