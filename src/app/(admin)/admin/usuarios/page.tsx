@@ -71,6 +71,7 @@ export default function UsuariosPage() {
     const { data } = await supabase
       .from("usuarios")
       .select("*, roles(nombre)")
+      .eq("activo", true)
       .order("nombre");
     setUsuarios(data || []);
     setLoading(false);

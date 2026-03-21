@@ -64,8 +64,8 @@ const TIPOS_COMPROBANTE = [
 const FORMAS_PAGO = [
   "Efectivo",
   "Transferencia",
-  "Tarjeta",
   "Cuenta Corriente",
+  "Mixto",
 ];
 
 function formatCurrency(value: number) {

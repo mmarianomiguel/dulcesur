@@ -10,8 +10,10 @@ interface CartItem {
   nombre: string;
   imagen_url?: string;
   imagen?: string;
-  presentacion: string;
+  presentacion?: string;
   precio: number;
+  precio_original?: number;
+  descuento?: number;
   cantidad: number;
 }
 

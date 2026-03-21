@@ -126,7 +126,7 @@ function ProductosContent() {
   useEffect(() => {
     function syncCart() {
       const stored = localStorage.getItem("carrito");
-      const carrito: { id: string; cantidad: number }[] = stored ? JSON.parse(stored) : [];
+      let carrito: { id: string; cantidad: number }[]; try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
       const map: Record<string, number> = {};
       carrito.forEach((item) => {
         const parts = item.id.split("_");
@@ -460,7 +460,7 @@ function ProductosContent() {
     const price = disc > 0 ? Math.round(basePrice * (1 - disc / 100)) : basePrice;
     const cartKey = presLabel ? `${producto.id}_${presLabel}` : producto.id;
     const stored = localStorage.getItem("carrito");
-    const carrito: any[] = stored ? JSON.parse(stored) : [];
+    let carrito: any[]; try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
     const existing = carrito.find((item: any) => item.id === cartKey);
     if (existing) {
       existing.cantidad += amount;

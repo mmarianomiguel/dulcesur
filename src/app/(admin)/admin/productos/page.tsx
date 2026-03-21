@@ -2558,7 +2558,7 @@ export default function ProductosPage() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Fecha</p>
-                    <p className="font-medium">{new Date(ordenDetail.fecha).toLocaleDateString("es-AR")}</p>
+                    <p className="font-medium">{new Date(ordenDetail.fecha + "T12:00:00").toLocaleDateString("es-AR")}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Cliente</p>

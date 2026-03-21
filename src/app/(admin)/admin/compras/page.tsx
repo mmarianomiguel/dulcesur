@@ -936,7 +936,7 @@ export default function ComprasPage() {
             </div>
             <p className="text-muted-foreground text-sm">
               {detailCompra.proveedores?.nombre || "Sin proveedor"} &middot;{" "}
-              {new Date(detailCompra.fecha).toLocaleDateString("es-AR")}
+              {new Date(detailCompra.fecha + "T12:00:00").toLocaleDateString("es-AR")}
             </p>
           </div>
           <div className="text-right">
@@ -954,7 +954,7 @@ export default function ComprasPage() {
               </div>
               <div>
                 <span className="text-xs text-muted-foreground block">Fecha</span>
-                <span className="font-medium">{new Date(detailCompra.fecha).toLocaleDateString("es-AR")}</span>
+                <span className="font-medium">{new Date(detailCompra.fecha + "T12:00:00").toLocaleDateString("es-AR")}</span>
               </div>
               <div>
                 <span className="text-xs text-muted-foreground block">Forma de pago</span>
@@ -1154,7 +1154,7 @@ export default function ComprasPage() {
                       onClick={() => openDetail(p)}
                     >
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.numero}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{new Date(p.fecha).toLocaleDateString("es-AR")}</td>
+                      <td className="py-3 px-4 text-muted-foreground">{new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
                       <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "---"}</td>
                       <td className="py-3 px-4 text-muted-foreground text-xs">{p.forma_pago || "---"}</td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.total)}</td>

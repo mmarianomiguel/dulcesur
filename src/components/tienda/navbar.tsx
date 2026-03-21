@@ -30,15 +30,16 @@ export default function TiendaNavbar() {
   const { openCart, itemCount, subtotal } = useCart();
   const router = useRouter();
   const categoryBarRef = useRef<HTMLDivElement>(null);
+  const [config, setConfig] = useState<{ logo_url?: string; nombre?: string; telefono?: string; envio_gratis_minimo?: number } | null>(null);
 
   useEffect(() => {
-    supabase
-      .from("categorias")
-      .select("id, nombre")
-      .limit(12)
-      .then(({ data }) => {
-        if (data) setCategorias(data);
-      });
+    Promise.all([
+      supabase.from("categorias").select("id, nombre").limit(12),
+      supabase.from("empresa").select("logo_url, nombre, telefono").limit(1).single(),
+    ]).then(([{ data: cats }, { data: emp }]) => {
+      if (cats) setCategorias(cats);
+      if (emp) setConfig(emp as any);
+    });
   }, []);
 
   // Lock body scroll when mobile menu is open
@@ -81,16 +82,15 @@ export default function TiendaNavbar() {
             Atención: Lunes a Viernes de 9 a 18hs
           </span>
           <div className="flex items-center gap-4">
-            <Link href="/ayuda" className="hover:text-pink-400 transition">
-              Ayuda
-            </Link>
             <Link href="/cuenta" className="hover:text-pink-400 transition">
               Mi cuenta
             </Link>
-            <a href="tel:+541112345678" className="flex items-center gap-1 hover:text-pink-400 transition" suppressHydrationWarning>
-              <Phone className="h-3 w-3" />
-              <span suppressHydrationWarning>+54 11 1234-5678</span>
-            </a>
+            {config?.telefono && (
+              <a href={`tel:${config.telefono.replace(/[^+\d]/g, "")}`} className="flex items-center gap-1 hover:text-pink-400 transition" suppressHydrationWarning>
+                <Phone className="h-3 w-3" />
+                <span suppressHydrationWarning>{config.telefono}</span>
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -110,8 +110,8 @@ export default function TiendaNavbar() {
           {/* Logo */}
           <Link href="/" className="flex-shrink-0">
             <Image
-              src="https://www.dulcesur.com/assets/logotipo.png"
-              alt="DulceSur"
+              src={config?.logo_url || "https://www.dulcesur.com/assets/logotipo.png"}
+              alt={config?.nombre || "Tienda"}
               width={130}
               height={44}
               className="h-10 w-auto"
@@ -223,8 +223,8 @@ export default function TiendaNavbar() {
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <Image
-            src="https://www.dulcesur.com/assets/logotipo.png"
-            alt="DulceSur"
+            src={config?.logo_url || "https://www.dulcesur.com/assets/logotipo.png"}
+            alt={config?.nombre || "Tienda"}
             width={110}
             height={37}
             className="h-8 w-auto"

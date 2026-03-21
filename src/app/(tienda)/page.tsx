@@ -26,12 +26,12 @@ import { supabase } from "@/lib/supabase";
 /* ──────────────── types ──────────────── */
 
 interface Categoria {
-  id: number;
+  id: string;
   nombre: string;
 }
 
 interface Producto {
-  id: number;
+  id: string;
   nombre: string;
   precio: number;
   imagen_url: string | null;
@@ -41,11 +41,12 @@ interface Producto {
 }
 
 interface CarritoItem {
-  id: number;
+  id: string;
   nombre: string;
   precio: number;
   imagen_url: string | null;
   cantidad: number;
+  presentacion?: string;
 }
 
 interface Bloque {
@@ -269,10 +270,10 @@ function ProductosDestacadosBlock({
   const titulo = config.titulo_seccion || "Productos Destacados";
   const maxItems = config.max_items || 8;
   const prods = productos.slice(0, maxItems);
-  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
 
-  const getQty = (id: number) => quantities[id] ?? 1;
-  const setQty = (id: number, val: number) =>
+  const getQty = (id: string) => quantities[id] ?? 1;
+  const setQty = (id: string, val: number) =>
     setQuantities((prev) => ({ ...prev, [id]: Math.max(1, val) }));
 
   return (
@@ -602,23 +603,26 @@ export default function TiendaPage() {
 
   function agregarAlCarrito(producto: Producto, qty: number = 1) {
     const stored = localStorage.getItem("carrito");
-    const carrito: CarritoItem[] = stored ? JSON.parse(stored) : [];
+    let carrito: CarritoItem[];
+    try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
 
-    const existing = carrito.find((item) => item.id === producto.id);
+    const cartKey = `${producto.id}_Unidad`;
+    const existing = carrito.find((item) => item.id === cartKey);
     if (existing) {
       existing.cantidad += qty;
     } else {
       carrito.push({
-        id: producto.id,
+        id: cartKey,
         nombre: producto.nombre,
         precio: producto.precio,
         imagen_url: producto.imagen_url,
         cantidad: qty,
+        presentacion: "Unidad",
       });
     }
 
     localStorage.setItem("carrito", JSON.stringify(carrito));
-    window.dispatchEvent(new CustomEvent("cart-updated"));
+    window.dispatchEvent(new Event("cart-updated"));
     showToast(`${producto.nombre} se agregó al carrito`);
   }
 

@@ -802,8 +802,15 @@ export default function VentasPage() {
       if (e.key.length === 1) {
         const timeSinceLast = now - lastKeyTime;
         lastKeyTime = now;
+        const isScannerSpeed = barcodeBuffer.current.length > 0 && timeSinceLast < 50;
+
+        // Manual-speed digit outside an input → let keyboard shortcuts handler deal with qty
+        if (!isScannerSpeed && !inInput && /^\d$/.test(e.key) && barcodeBuffer.current.length === 0) {
+          return;
+        }
+
         // Scanner types fast (< 50ms between keys). Manual typing is slower.
-        if (barcodeBuffer.current.length === 0 || timeSinceLast < 50) {
+        if (barcodeBuffer.current.length === 0 || isScannerSpeed) {
           barcodeBuffer.current += e.key;
         } else {
           barcodeBuffer.current = e.key;
@@ -859,8 +866,7 @@ export default function VentasPage() {
           return;
         }
         // Type numbers to set quantity of selected item
-        // Skip if scanner is on — digits go to barcode buffer first, then fall back to qty
-        if (selectedItemIdx >= 0 && e.key >= "0" && e.key <= "9" && !scannerEnabled) {
+        if (selectedItemIdx >= 0 && e.key >= "0" && e.key <= "9") {
           e.preventDefault();
           qtyBuffer.current += e.key;
           if (qtyBufferTimer.current) clearTimeout(qtyBufferTimer.current);

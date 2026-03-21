@@ -21,15 +21,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
   Plus,
   Search,
   Eye,
-  Receipt,
   DollarSign,
   Loader2,
   ClipboardList,
@@ -42,6 +36,12 @@ import {
   X,
   Edit,
   Check,
+  Calendar,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  TruckIcon,
+  FileText,
 } from "lucide-react";
 
 /* ───────── types ───────── */
@@ -106,18 +106,18 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function estadoBadgeVariant(estado: string): "default" | "secondary" | "destructive" | "outline" {
+function estadoConfig(estado: string) {
   switch (estado) {
     case "Borrador":
-      return "secondary";
+      return { color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300", icon: FileText };
     case "Enviado":
-      return "default";
+      return { color: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300", icon: TruckIcon };
     case "Recibido":
-      return "outline";
+      return { color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300", icon: CheckCircle2 };
     case "Recibido Parcial":
-      return "destructive";
+      return { color: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300", icon: Clock };
     default:
-      return "secondary";
+      return { color: "bg-gray-100 text-gray-700", icon: FileText };
   }
 }
 
@@ -131,7 +131,7 @@ export default function PedidosProveedorPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState("all");
-  const [pedFilterMode, setPedFilterMode] = useState<"day" | "month" | "range" | "all">("all");
+  const [pedFilterMode, setPedFilterMode] = useState<"day" | "month" | "range" | "all">("month");
   const [pedFilterDay, setPedFilterDay] = useState(new Date().toISOString().split("T")[0]);
   const [pedFilterMonth, setPedFilterMonth] = useState(String(new Date().getMonth() + 1));
   const [pedFilterYear, setPedFilterYear] = useState(String(new Date().getFullYear()));
@@ -180,6 +180,10 @@ export default function PedidosProveedorPage() {
   const [receiveRegistrarCaja, setReceiveRegistrarCaja] = useState(true);
   const [receiveActualizarPrecios, setReceiveActualizarPrecios] = useState(true);
   const [receiveItems, setReceiveItems] = useState<{ id: string; cantidad_pedida: number; cantidad_recibida_prev: number; cantidad_recibir: number; descripcion: string; codigo: string; precio_unitario: number }[]>([]);
+
+  // Delete state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; pedido: PedidoRow | null }>({ open: false, pedido: null });
+  const [deleting, setDeleting] = useState(false);
 
   /* ── fetch list ── */
 
@@ -364,14 +368,12 @@ export default function PedidosProveedorPage() {
     setSaveError("");
 
     try {
-      // Update header
       const total = detailItems.reduce((a, i) => a + i.subtotal, 0);
       await supabase
         .from("pedidos_proveedor")
         .update({ costo_total_estimado: total, observacion: observacion || null })
         .eq("id", detailPedido.id);
 
-      // Delete old items and re-insert
       await supabase.from("pedido_proveedor_items").delete().eq("pedido_id", detailPedido.id);
 
       const rows = detailItems.map((item) => ({
@@ -406,6 +408,28 @@ export default function PedidosProveedorPage() {
     setObservacion("");
   };
 
+  /* ── delete pedido ── */
+
+  const handleDeletePedido = async (pedido: PedidoRow) => {
+    setDeleting(true);
+    try {
+      await supabase.from("pedido_proveedor_items").delete().eq("pedido_id", pedido.id);
+      await supabase.from("pedidos_proveedor").delete().eq("id", pedido.id);
+      setDeleteConfirm({ open: false, pedido: null });
+      if (mode === "detail") {
+        setMode("list");
+        setDetailPedido(null);
+      }
+      await fetchData();
+      setSuccessMsg(`Pedido ${pedidoDisplayNum(pedido.id)} eliminado`);
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err: any) {
+      console.error("Error deleting pedido:", err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   /* ── open detail ── */
 
   const openDetail = async (pedido: PedidoRow) => {
@@ -417,7 +441,6 @@ export default function PedidosProveedorPage() {
       .select("*")
       .eq("pedido_id", pedido.id)
       .order("created_at");
-    // Handle cantidad_recibida potentially not existing yet
     const items = ((data || []) as any[]).map((item) => ({
       ...item,
       cantidad_recibida: item.cantidad_recibida ?? 0,
@@ -443,7 +466,6 @@ export default function PedidosProveedorPage() {
   const openReceiveDialog = () => {
     if (!detailPedido) return;
     setReceiveError("");
-    // Build receive items: only items that still have pending quantities
     const rItems = detailItems
       .filter((item) => {
         const pendiente = item.cantidad - (item.cantidad_recibida || 0);
@@ -453,7 +475,7 @@ export default function PedidosProveedorPage() {
         id: item.id,
         cantidad_pedida: item.cantidad,
         cantidad_recibida_prev: item.cantidad_recibida || 0,
-        cantidad_recibir: item.cantidad - (item.cantidad_recibida || 0), // Default: receive all pending
+        cantidad_recibir: item.cantidad - (item.cantidad_recibida || 0),
         descripcion: item.descripcion,
         codigo: item.codigo,
         precio_unitario: item.precio_unitario,
@@ -470,7 +492,6 @@ export default function PedidosProveedorPage() {
     setReceiveError("");
 
     try {
-      // Filter items that are actually being received (qty > 0)
       const itemsToReceive = receiveItems.filter((i) => i.cantidad_recibir > 0);
       if (itemsToReceive.length === 0) {
         setReceiveError("Debes ingresar al menos 1 producto a recibir");
@@ -478,17 +499,13 @@ export default function PedidosProveedorPage() {
         return;
       }
 
-      // 1. Get next compra number
       const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "compra" });
       const numero = numData || "C-0000";
       const fecha = new Date().toISOString().split("T")[0];
 
       const total = itemsToReceive.reduce((a, i) => a + i.cantidad_recibir * i.precio_unitario, 0);
-
-      // Determine estado_pago
       const estadoPago = receiveFormaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
 
-      // 2. Create compra
       const { data: compra, error: compraError } = await supabase
         .from("compras")
         .insert({
@@ -510,7 +527,6 @@ export default function PedidosProveedorPage() {
         return;
       }
 
-      // 3. Create compra items
       const compraItems = itemsToReceive.map((item) => ({
         compra_id: compra.id,
         producto_id: detailItems.find((di) => di.id === item.id)?.producto_id,
@@ -522,7 +538,6 @@ export default function PedidosProveedorPage() {
       }));
       await supabase.from("compra_items").insert(compraItems);
 
-      // 4. Update stock for each received product
       for (const item of itemsToReceive) {
         const detailItem = detailItems.find((di) => di.id === item.id);
         if (!detailItem?.producto_id) continue;
@@ -541,7 +556,6 @@ export default function PedidosProveedorPage() {
           .update({ stock: newStock })
           .eq("id", detailItem.producto_id);
 
-        // Log stock movement
         await supabase.from("stock_movimientos").insert({
           producto_id: detailItem.producto_id,
           tipo: "compra",
@@ -554,7 +568,6 @@ export default function PedidosProveedorPage() {
           orden_id: compra.id,
         });
 
-        // Update cost and price
         if (receiveActualizarPrecios && item.precio_unitario > 0) {
           const costoAnterior = prodData?.costo ?? 0;
           if (costoAnterior > 0 && item.precio_unitario !== costoAnterior) {
@@ -574,7 +587,6 @@ export default function PedidosProveedorPage() {
         }
       }
 
-      // 5. Update cantidad_recibida on pedido items
       for (const item of itemsToReceive) {
         const newRecibida = item.cantidad_recibida_prev + item.cantidad_recibir;
         await supabase
@@ -583,7 +595,6 @@ export default function PedidosProveedorPage() {
           .eq("id", item.id);
       }
 
-      // 6. Register caja movement
       if (total > 0 && receiveRegistrarCaja && receiveFormaPago !== "Cuenta Corriente") {
         const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
         await supabase.from("caja_movimientos").insert({
@@ -596,7 +607,6 @@ export default function PedidosProveedorPage() {
         });
       }
 
-      // 7. If CC, update proveedor saldo + CC entry
       if (receiveFormaPago === "Cuenta Corriente" && detailPedido.proveedor_id) {
         const { data: provData } = await supabase
           .from("proveedores")
@@ -619,8 +629,6 @@ export default function PedidosProveedorPage() {
         });
       }
 
-      // 8. Determine pedido status
-      // Re-fetch items to check if all received
       const { data: updatedItems } = await supabase
         .from("pedido_proveedor_items")
         .select("cantidad, cantidad_recibida")
@@ -640,7 +648,6 @@ export default function PedidosProveedorPage() {
       setShowReceiveDialog(false);
       setReceiveSaving(false);
 
-      // Refresh detail items
       const { data: refreshedItems } = await supabase
         .from("pedido_proveedor_items")
         .select("*")
@@ -672,7 +679,6 @@ export default function PedidosProveedorPage() {
       for (const p of data as any[]) {
         const stock = p.stock ?? 0;
         const minimo = p.stock_minimo ?? 0;
-        const maximo = p.stock_maximo ?? 0;
 
         if (stock >= minimo && stock >= 0) continue;
         const ppList = p.producto_proveedores || [];
@@ -686,6 +692,7 @@ export default function PedidosProveedorPage() {
         if (!groupMap[provId]) groupMap[provId] = { proveedor_nombre: provName, items: [] };
         if (groupMap[provId].items.some((i: SuggestedItem) => i.producto_id === p.id)) continue;
 
+        const maximo = p.stock_maximo ?? 0;
         let faltante: number;
         if (maximo > 0) {
           faltante = Math.max(pp.cantidad_minima_pedido || 1, maximo - stock);
@@ -789,8 +796,9 @@ export default function PedidosProveedorPage() {
 
   /* ── stats ── */
 
-  const totalPedidos = pedidos.length;
-  const pendientes = pedidos.filter((p) => p.estado === "Borrador" || p.estado === "Enviado" || p.estado === "Recibido Parcial").length;
+  const borradores = pedidos.filter((p) => p.estado === "Borrador").length;
+  const enviados = pedidos.filter((p) => p.estado === "Enviado" || p.estado === "Recibido Parcial").length;
+  const recibidos = pedidos.filter((p) => p.estado === "Recibido").length;
   const costoTotal = pedidos.reduce((a, p) => a + (p.costo_total_estimado || 0), 0);
 
   const filtered = pedidos.filter((p) => {
@@ -800,6 +808,8 @@ export default function PedidosProveedorPage() {
     const matchEstado = filterEstado === "all" || p.estado === filterEstado;
     return matchSearch && matchEstado;
   });
+
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
   /* ═══════════════════ RENDER ═══════════════════ */
 
@@ -817,7 +827,6 @@ export default function PedidosProveedorPage() {
           </div>
         </div>
 
-        {/* Provider & category selection */}
         <Card className="overflow-visible">
           <CardContent className="pt-6 overflow-visible">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
@@ -889,7 +898,6 @@ export default function PedidosProveedorPage() {
           </CardContent>
         </Card>
 
-        {/* Items table */}
         <Card>
           <CardContent className="pt-0">
             {items.length === 0 ? (
@@ -951,7 +959,6 @@ export default function PedidosProveedorPage() {
           </CardContent>
         </Card>
 
-        {/* Observations + actions */}
         {items.length > 0 && (
           <Card>
             <CardContent className="pt-6 space-y-4">
@@ -985,95 +992,106 @@ export default function PedidosProveedorPage() {
     const isParcial = detailPedido.estado === "Recibido Parcial";
     const canReceive = detailPedido.estado === "Enviado" || isParcial;
     const canEdit = detailPedido.estado === "Borrador";
+    const canDelete = detailPedido.estado === "Borrador";
     const detailTotal = detailItems.reduce((a, i) => a + i.subtotal, 0);
+    const cfg = estadoConfig(detailPedido.estado);
+    const EstadoIcon = cfg.icon;
 
     return (
       <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => { setMode("list"); setDetailPedido(null); setEditingDetail(false); }}>
+        {/* Header */}
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" className="mt-1" onClick={() => { setMode("list"); setDetailPedido(null); setEditingDetail(false); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-                Pedido {pedidoDisplayNum(detailPedido.id)}
+                {pedidoDisplayNum(detailPedido.id)}
               </h1>
-              <Badge variant={estadoBadgeVariant(detailPedido.estado)} className="text-xs">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${cfg.color}`}>
+                <EstadoIcon className="w-3.5 h-3.5" />
                 {detailPedido.estado}
-              </Badge>
+              </span>
             </div>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-sm mt-0.5">
               {detailPedido.proveedores?.nombre || "Sin proveedor"} &middot;{" "}
-              {new Date(detailPedido.fecha).toLocaleDateString("es-AR")}
+              {new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR")}
             </p>
+          </div>
+          <div className="flex gap-2 flex-wrap justify-end">
+            {canEdit && !editingDetail && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setEditingDetail(true)}>
+                  <Edit className="w-4 h-4 mr-1.5" />Editar
+                </Button>
+                <Button size="sm" onClick={() => changeEstado("Enviado")}>
+                  <Send className="w-4 h-4 mr-1.5" />Marcar Enviado
+                </Button>
+              </>
+            )}
+            {canEdit && editingDetail && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setEditingDetail(false)}>Cancelar</Button>
+                <Button size="sm" onClick={saveEditedBorrador} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
+                  Guardar
+                </Button>
+              </>
+            )}
+            {canReceive && (
+              <Button size="sm" onClick={openReceiveDialog}>
+                <Package className="w-4 h-4 mr-1.5" />Recibir Mercaderia
+              </Button>
+            )}
+            {canDelete && !editingDetail && (
+              <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => setDeleteConfirm({ open: true, pedido: detailPedido })}>
+                <Trash2 className="w-4 h-4 mr-1.5" />Eliminar
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* Success message */}
         {successMsg && (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
             {successMsg}
           </div>
         )}
 
-        {/* Status actions */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Proveedor:</span>{" "}
-                  <span className="font-medium ml-1">{detailPedido.proveedores?.nombre || "\u2014"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Fecha:</span>{" "}
-                  <span className="font-medium ml-1">{new Date(detailPedido.fecha).toLocaleDateString("es-AR")}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Total estimado:</span>{" "}
-                  <span className="font-medium ml-1">{formatCurrency(detailTotal)}</span>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {canEdit && !editingDetail && (
-                  <Button size="sm" variant="outline" onClick={() => setEditingDetail(true)}>
-                    <Edit className="w-4 h-4 mr-2" />Editar
-                  </Button>
-                )}
-                {canEdit && editingDetail && (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => setEditingDetail(false)}>Cancelar</Button>
-                    <Button size="sm" onClick={saveEditedBorrador} disabled={saving}>
-                      {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                      Guardar
-                    </Button>
-                  </>
-                )}
-                {detailPedido.estado === "Borrador" && !editingDetail && (
-                  <Button size="sm" onClick={() => changeEstado("Enviado")}>
-                    <Send className="w-4 h-4 mr-2" />Marcar Enviado
-                  </Button>
-                )}
-                {canReceive && (
-                  <Button size="sm" onClick={openReceiveDialog}>
-                    <Package className="w-4 h-4 mr-2" />Recibir Mercaderia
-                  </Button>
-                )}
-              </div>
-            </div>
-            {detailPedido.observacion && !editingDetail && (
-              <p className="text-sm text-muted-foreground mt-3 border-t pt-3">{detailPedido.observacion}</p>
-            )}
-            {editingDetail && (
-              <div className="mt-3 border-t pt-3 space-y-2">
-                <Label className="text-xs text-muted-foreground">Observaciones</Label>
-                <Input value={observacion} onChange={(e) => setObservacion(e.target.value)} placeholder="Notas..." />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Info row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Proveedor</p>
+            <p className="text-sm font-semibold mt-0.5">{detailPedido.proveedores?.nombre || "\u2014"}</p>
+          </div>
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Fecha</p>
+            <p className="text-sm font-semibold mt-0.5">{new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR")}</p>
+          </div>
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Items</p>
+            <p className="text-sm font-semibold mt-0.5">{detailItems.length} productos</p>
+          </div>
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Total estimado</p>
+            <p className="text-sm font-semibold mt-0.5 text-emerald-600">{formatCurrency(detailTotal)}</p>
+          </div>
+        </div>
 
-        {/* Items */}
+        {detailPedido.observacion && !editingDetail && (
+          <div className="rounded-xl border bg-muted/30 px-4 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Observaciones</p>
+            <p className="text-sm">{detailPedido.observacion}</p>
+          </div>
+        )}
+        {editingDetail && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Observaciones</Label>
+            <Input value={observacion} onChange={(e) => setObservacion(e.target.value)} placeholder="Notas..." />
+          </div>
+        )}
+
+        {/* Items table */}
         <Card>
           <CardContent className="pt-0">
             <div className="overflow-x-auto">
@@ -1118,7 +1136,7 @@ export default function PedidosProveedorPage() {
                         {(isParcial || detailPedido.estado === "Recibido") && (
                           <td className="py-3 px-4 text-center">
                             {pendiente > 0 ? (
-                              <span className="text-orange-500 font-medium">{pendiente}</span>
+                              <span className="text-amber-600 font-medium">{pendiente}</span>
                             ) : (
                               <Check className="w-4 h-4 text-emerald-500 mx-auto" />
                             )}
@@ -1165,7 +1183,6 @@ export default function PedidosProveedorPage() {
                 Ingresa la cantidad recibida de cada producto. Los items no recibidos quedaran pendientes.
               </p>
 
-              {/* Items to receive */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -1189,7 +1206,7 @@ export default function PedidosProveedorPage() {
                           </td>
                           <td className="py-2 px-3 text-center text-muted-foreground">{item.cantidad_pedida}</td>
                           <td className="py-2 px-3 text-center text-muted-foreground">{item.cantidad_recibida_prev}</td>
-                          <td className="py-2 px-3 text-center text-orange-500 font-medium">{pendiente}</td>
+                          <td className="py-2 px-3 text-center text-amber-600 font-medium">{pendiente}</td>
                           <td className="py-2 px-3 text-center">
                             <Input
                               type="number"
@@ -1223,7 +1240,6 @@ export default function PedidosProveedorPage() {
                 </div>
               </div>
 
-              {/* Options */}
               <div className="space-y-3">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Forma de pago</Label>
@@ -1375,6 +1391,7 @@ export default function PedidosProveedorPage() {
   // ── LIST VIEW ──
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Pedidos a Proveedores</h1>
@@ -1390,7 +1407,6 @@ export default function PedidosProveedorPage() {
         </div>
       </div>
 
-      {/* Success message */}
       {successMsg && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
           {successMsg}
@@ -1398,94 +1414,113 @@ export default function PedidosProveedorPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <ClipboardList className="w-5 h-5 text-primary" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          onClick={() => setFilterEstado(filterEstado === "Borrador" ? "all" : "Borrador")}
+          className={`rounded-xl border px-4 py-3 text-left transition-all hover:shadow-sm ${filterEstado === "Borrador" ? "ring-2 ring-slate-400 bg-slate-50 dark:bg-slate-900" : "bg-card"}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+              <FileText className="w-4.5 h-4.5 text-slate-600 dark:text-slate-400" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total pedidos</p>
-              <p className="text-xl font-bold">{totalPedidos}</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Borradores</p>
+              <p className="text-lg font-bold">{borradores}</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
-              <Receipt className="w-5 h-5 text-orange-500" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Pendientes</p>
-              <p className="text-xl font-bold">{pendientes}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-emerald-500" />
+          </div>
+        </button>
+        <button
+          onClick={() => setFilterEstado(filterEstado === "Enviado" ? "all" : "Enviado")}
+          className={`rounded-xl border px-4 py-3 text-left transition-all hover:shadow-sm ${filterEstado === "Enviado" ? "ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-950" : "bg-card"}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+              <TruckIcon className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Costo total estimado</p>
-              <p className="text-xl font-bold">{formatCurrency(costoTotal)}</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Enviados</p>
+              <p className="text-lg font-bold">{enviados}</p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </button>
+        <button
+          onClick={() => setFilterEstado(filterEstado === "Recibido" ? "all" : "Recibido")}
+          className={`rounded-xl border px-4 py-3 text-left transition-all hover:shadow-sm ${filterEstado === "Recibido" ? "ring-2 ring-emerald-400 bg-emerald-50 dark:bg-emerald-950" : "bg-card"}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+              <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Recibidos</p>
+              <p className="text-lg font-bold">{recibidos}</p>
+            </div>
+          </div>
+        </button>
+        <div className="rounded-xl border bg-card px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
+              <DollarSign className="w-4.5 h-4.5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Costo total</p>
+              <p className="text-lg font-bold">{formatCurrency(costoTotal)}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar pedido o proveedor..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar pedido o proveedor..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9" />
         </div>
-        <Tabs value={filterEstado} onValueChange={setFilterEstado}>
-          <TabsList>
-            <TabsTrigger value="all">Todos</TabsTrigger>
-            <TabsTrigger value="Borrador">Borrador</TabsTrigger>
-            <TabsTrigger value="Enviado">Enviado</TabsTrigger>
-            <TabsTrigger value="Recibido Parcial">Parcial</TabsTrigger>
-            <TabsTrigger value="Recibido">Recibido</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="flex items-end gap-2">
-          <Select value={pedFilterMode} onValueChange={(v) => setPedFilterMode((v ?? "all") as "day" | "month" | "range" | "all")}>
-            <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="day">Dia</SelectItem>
-              <SelectItem value="month">Mensual</SelectItem>
-              <SelectItem value="range">Entre fechas</SelectItem>
-            </SelectContent>
-          </Select>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center rounded-lg border bg-card overflow-hidden">
+            {(["all", "day", "month", "range"] as const).map((m) => {
+              const labels = { all: "Todo", day: "Dia", month: "Mes", range: "Rango" };
+              return (
+                <button
+                  key={m}
+                  onClick={() => setPedFilterMode(m)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${pedFilterMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                >
+                  {labels[m]}
+                </button>
+              );
+            })}
+          </div>
+
           {pedFilterMode === "day" && (
-            <Input type="date" value={pedFilterDay} onChange={(e) => setPedFilterDay(e.target.value)} className="w-40" />
+            <Input type="date" value={pedFilterDay} onChange={(e) => setPedFilterDay(e.target.value)} className="w-40 h-9" />
           )}
           {pedFilterMode === "month" && (
-            <>
+            <div className="flex items-center gap-1.5">
               <Select value={pedFilterMonth} onValueChange={(v) => setPedFilterMonth(v ?? "1")}>
-                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-24 h-9 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"].map((m, i) => (
+                  {meses.map((m, i) => (
                     <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Input type="number" value={pedFilterYear} onChange={(e) => setPedFilterYear(e.target.value)} className="w-20" />
-            </>
+              <Input type="number" value={pedFilterYear} onChange={(e) => setPedFilterYear(e.target.value)} className="w-20 h-9 text-xs" />
+            </div>
           )}
           {pedFilterMode === "range" && (
-            <>
-              <div className="flex items-center gap-1">
-                <Label className="text-xs text-muted-foreground">Desde</Label>
-                <Input type="date" value={pedFilterFrom} onChange={(e) => setPedFilterFrom(e.target.value)} className="w-40" />
-              </div>
-              <div className="flex items-center gap-1">
-                <Label className="text-xs text-muted-foreground">Hasta</Label>
-                <Input type="date" value={pedFilterTo} onChange={(e) => setPedFilterTo(e.target.value)} className="w-40" />
-              </div>
-            </>
+            <div className="flex items-center gap-1.5">
+              <Input type="date" value={pedFilterFrom} onChange={(e) => setPedFilterFrom(e.target.value)} className="w-36 h-9" />
+              <span className="text-xs text-muted-foreground">a</span>
+              <Input type="date" value={pedFilterTo} onChange={(e) => setPedFilterTo(e.target.value)} className="w-36 h-9" />
+            </div>
+          )}
+
+          {filterEstado !== "all" && (
+            <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground" onClick={() => setFilterEstado("all")}>
+              <X className="w-3.5 h-3.5 mr-1" />Limpiar filtro
+            </Button>
           )}
         </div>
       </div>
@@ -1507,43 +1542,96 @@ export default function PedidosProveedorPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">N</th>
+                    <th className="text-left py-3 px-4 font-medium">Pedido</th>
                     <th className="text-left py-3 px-4 font-medium">Fecha</th>
                     <th className="text-left py-3 px-4 font-medium">Proveedor</th>
                     <th className="text-right py-3 px-4 font-medium">Total estimado</th>
                     <th className="text-center py-3 px-4 font-medium">Estado</th>
-                    <th className="text-right py-3 px-4 font-medium w-16"></th>
+                    <th className="text-right py-3 px-4 font-medium w-24"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((p) => (
-                    <tr
-                      key={p.id}
-                      className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => openDetail(p)}
-                    >
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{pedidoDisplayNum(p.id)}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{new Date(p.fecha).toLocaleDateString("es-AR")}</td>
-                      <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "\u2014"}</td>
-                      <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.costo_total_estimado || 0)}</td>
-                      <td className="py-3 px-4 text-center">
-                        <Badge variant={estadoBadgeVariant(p.estado)} className="text-xs font-normal">
-                          {p.estado}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openDetail(p); }}>
-                          <Eye className="w-3.5 h-3.5" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map((p) => {
+                    const cfg = estadoConfig(p.estado);
+                    const Icon = cfg.icon;
+                    return (
+                      <tr
+                        key={p.id}
+                        className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer group"
+                        onClick={() => openDetail(p)}
+                      >
+                        <td className="py-3 px-4">
+                          <span className="font-mono text-xs font-medium">{pedidoDisplayNum(p.id)}</span>
+                        </td>
+                        <td className="py-3 px-4 text-muted-foreground">
+                          {new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR")}
+                        </td>
+                        <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "\u2014"}</td>
+                        <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.costo_total_estimado || 0)}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium ${cfg.color}`}>
+                            <Icon className="w-3 h-3" />
+                            {p.estado}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {p.estado === "Borrador" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ open: true, pedido: p }); }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openDetail(p); }}>
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => !open && setDeleteConfirm({ open: false, pedido: null })}>
+        <DialogContent className="max-w-sm">
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <AlertTriangle className="w-7 h-7 text-red-500" />
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold">Eliminar pedido</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Estas seguro de eliminar el pedido <strong>{deleteConfirm.pedido ? pedidoDisplayNum(deleteConfirm.pedido.id) : ""}</strong>?
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Esta accion no se puede deshacer.</p>
+            </div>
+            <div className="flex gap-2 w-full">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteConfirm({ open: false, pedido: null })}>
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={() => deleteConfirm.pedido && handleDeletePedido(deleteConfirm.pedido)}
+                disabled={deleting}
+              >
+                {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

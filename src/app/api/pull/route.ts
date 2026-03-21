@@ -10,9 +10,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const repoPath = process.env.REPO_PATH || process.cwd()
+
   return new Promise<NextResponse>((resolve) => {
     exec(
-      'git -C /Users/santiago/Desktop/enexpro/dulcesur pull origin main',
+      `git -C "${repoPath}" pull origin main`,
       (err, stdout, stderr) => {
         if (err) {
           resolve(NextResponse.json({ error: stderr }, { status: 500 }))

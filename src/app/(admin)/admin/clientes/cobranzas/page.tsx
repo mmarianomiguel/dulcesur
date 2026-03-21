@@ -333,7 +333,7 @@ export default function CobranzasPage() {
                 <tbody>
                   {movimientos.map((m) => (
                     <tr key={m.id} className="border-b last:border-0">
-                      <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha).toLocaleDateString("es-AR")}</td>
+                      <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
                       <td className="py-2 px-3 font-mono text-xs">{m.comprobante || "—"}</td>
                       <td className="py-2 px-3 text-right">{m.debe > 0 ? formatCurrency(m.debe) : ""}</td>
                       <td className="py-2 px-3 text-right">{m.haber > 0 ? formatCurrency(m.haber) : ""}</td>

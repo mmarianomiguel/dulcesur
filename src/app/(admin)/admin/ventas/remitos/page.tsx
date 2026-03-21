@@ -418,7 +418,7 @@ export default function RemitosPage() {
                   {remitos.map((r) => (
                     <tr key={r.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{r.numero}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{new Date(r.fecha).toLocaleDateString("es-AR")}</td>
+                      <td className="py-3 px-4 text-muted-foreground">{new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
                       <td className="py-3 px-4 font-medium">{r.clientes?.nombre || "—"}</td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(r.total)}</td>
                       <td className="py-3 px-4 text-center">
@@ -484,7 +484,7 @@ export default function RemitosPage() {
           {detailRemito && (
             <div className="w-full overflow-hidden space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Fecha:</span> <span className="font-medium ml-1">{new Date(detailRemito.fecha).toLocaleDateString("es-AR")}</span></div>
+                <div><span className="text-muted-foreground">Fecha:</span> <span className="font-medium ml-1">{new Date(detailRemito.fecha + "T12:00:00").toLocaleDateString("es-AR")}</span></div>
                 <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium ml-1">{detailRemito.clientes?.nombre || "—"}</span></div>
                 <div><span className="text-muted-foreground">Entrega:</span> <Badge variant={detailRemito.entregado ? "default" : "secondary"} className="ml-1">{detailRemito.entregado ? "Entregado" : "Pendiente"}</Badge></div>
                 <div><span className="text-muted-foreground">Facturado:</span> <Badge variant={detailRemito.facturado ? "default" : "outline"} className="ml-1">{detailRemito.facturado ? "Si" : "No"}</Badge></div>

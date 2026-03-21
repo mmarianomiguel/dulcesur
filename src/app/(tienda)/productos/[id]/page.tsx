@@ -82,7 +82,8 @@ export default function ProductoDetallePage() {
   useEffect(() => {
     function syncCart() {
       const stored = localStorage.getItem("carrito");
-      const carrito: { id: string; cantidad: number }[] = stored ? JSON.parse(stored) : [];
+      let carrito: { id: string; cantidad: number }[];
+      try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
       const map: Record<string, number> = {};
       carrito.forEach((item) => map[item.id] = (map[item.id] || 0) + item.cantidad);
       setCartQtys(map);
@@ -278,7 +279,8 @@ export default function ProductoDetallePage() {
 
   function addToCart(prod: Producto, price: number, presLabel: string, qty: number, precioOriginal?: number, descuento?: number) {
     const stored = localStorage.getItem("carrito");
-    const carrito: any[] = stored ? JSON.parse(stored) : [];
+    let carrito: any[];
+    try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
     const cartKey = `${prod.id}_${presLabel}`;
     const existing = carrito.find((item: any) => item.id === cartKey);
     if (existing) {
