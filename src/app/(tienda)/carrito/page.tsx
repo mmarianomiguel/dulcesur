@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft } from "lucide-react";
+import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, AlertTriangle } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface CartItem {
   id: string;
@@ -27,6 +28,8 @@ const formatCurrency = (value: number) =>
 export default function CarritoPage() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Map of product id -> available stock in units
+  const [stockMap, setStockMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const raw = localStorage.getItem("carrito");
@@ -37,6 +40,36 @@ export default function CarritoPage() {
     }
     setLoaded(true);
   }, []);
+
+  // Check real stock for all cart items
+  useEffect(() => {
+    if (!loaded || items.length === 0) return;
+    const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
+    supabase
+      .from("productos")
+      .select("id, stock")
+      .in("id", productIds)
+      .then(({ data }) => {
+        const map: Record<string, number> = {};
+        for (const p of data || []) map[p.id] = p.stock;
+        setStockMap(map);
+      });
+  }, [loaded, items]);
+
+  const getStockDisponible = (item: CartItem) => {
+    const prodId = item.id.split("_")[0];
+    const stock = stockMap[prodId];
+    if (stock === undefined) return null; // still loading
+    const match = item.id.match(/Caja \(x(\d+)\)/);
+    const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+    const presUnits = isMedio ? 0.5 : match ? Number(match[1]) : 1;
+    return Math.floor(stock / presUnits);
+  };
+
+  const hayStockInsuficiente = items.some((item) => {
+    const disponible = getStockDisponible(item);
+    return disponible !== null && item.cantidad > disponible;
+  });
 
   const persist = (updated: CartItem[]) => {
     setItems(updated);
@@ -85,10 +118,14 @@ export default function CarritoPage() {
       <h1 className="text-2xl font-bold mb-6">Mi Carrito</h1>
 
       <div className="space-y-4">
-        {items.map((item) => (
+        {items.map((item) => {
+          const disponible = getStockDisponible(item);
+          const sinStock = disponible !== null && disponible <= 0;
+          const stockBajo = disponible !== null && disponible > 0 && item.cantidad > disponible;
+          return (
           <div
             key={item.id}
-            className="flex items-center gap-4 bg-white rounded-xl border p-4"
+            className={`flex items-center gap-4 bg-white rounded-xl border p-4 ${sinStock ? "opacity-60 border-red-300 bg-red-50/50" : stockBajo ? "border-amber-300 bg-amber-50/50" : ""}`}
           >
             <div className="relative h-16 w-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
               {(item.imagen_url || item.imagen) ? (
@@ -108,6 +145,18 @@ export default function CarritoPage() {
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{item.nombre}</p>
               <p className="text-sm text-gray-500">{item.presentacion}</p>
+              {sinStock && (
+                <p className="text-xs text-red-600 font-semibold flex items-center gap-1 mt-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Producto agotado
+                </p>
+              )}
+              {stockBajo && (
+                <p className="text-xs text-amber-600 font-semibold flex items-center gap-1 mt-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Solo {disponible} disponible{disponible !== 1 ? "s" : ""}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -117,12 +166,13 @@ export default function CarritoPage() {
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="w-8 text-center font-medium">
+              <span className={`w-8 text-center font-medium ${sinStock || stockBajo ? "text-red-600" : ""}`}>
                 {item.cantidad}
               </span>
               <button
                 onClick={() => updateQty(item.id, 1)}
                 className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-gray-50 transition"
+                disabled={sinStock}
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -144,7 +194,8 @@ export default function CarritoPage() {
               <Trash2 className="h-5 w-5" />
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-8 border-t pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -161,12 +212,19 @@ export default function CarritoPage() {
             <p className="text-sm text-gray-500">Subtotal</p>
             <p className="text-xl font-bold">{formatCurrency(subtotal)}</p>
           </div>
-          <Link
-            href="/checkout"
-            className="bg-pink-500 text-white px-8 py-2.5 rounded-lg font-medium hover:bg-pink-600 transition"
-          >
-            Ir al checkout
-          </Link>
+          {hayStockInsuficiente ? (
+            <span className="bg-gray-300 text-gray-500 px-8 py-2.5 rounded-lg font-medium cursor-not-allowed flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Revisá tu carrito
+            </span>
+          ) : (
+            <Link
+              href="/checkout"
+              className="bg-pink-500 text-white px-8 py-2.5 rounded-lg font-medium hover:bg-pink-600 transition"
+            >
+              Ir al checkout
+            </Link>
+          )}
         </div>
       </div>
     </div>

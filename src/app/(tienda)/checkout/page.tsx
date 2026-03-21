@@ -400,6 +400,36 @@ export default function CheckoutPage() {
     setErrors([]);
     setSubmitting(true);
 
+    // Validate real-time stock before processing
+    const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
+    const { data: stockData } = await supabase.from("productos").select("id, stock, nombre").in("id", productIds);
+    const stockMap: Record<string, { stock: number; nombre: string }> = {};
+    for (const p of stockData || []) stockMap[p.id] = { stock: p.stock, nombre: p.nombre };
+
+    const stockErrors: string[] = [];
+    for (const item of items) {
+      const prodId = item.id.split("_")[0];
+      const prod = stockMap[prodId];
+      if (!prod) continue;
+      const match = item.id.match(/Caja \(x(\d+)\)/);
+      const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+      const presUnits = isMedio ? 0.5 : match ? Number(match[1]) : 1;
+      const unitsNeeded = item.cantidad * presUnits;
+      if (unitsNeeded > prod.stock) {
+        const disponible = Math.floor(prod.stock / presUnits);
+        stockErrors.push(disponible <= 0
+          ? `"${item.nombre}" se agotó`
+          : `"${item.nombre}" solo tiene ${disponible} disponible${disponible !== 1 ? "s" : ""}`
+        );
+      }
+    }
+    if (stockErrors.length > 0) {
+      setErrors([`Stock insuficiente: ${stockErrors.join(". ")}. Revisá tu carrito.`]);
+      setSubmitting(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     try {
       const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
       const numero = numData || ("PED-" + Date.now());
