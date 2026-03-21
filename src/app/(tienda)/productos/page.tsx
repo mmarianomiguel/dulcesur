@@ -369,7 +369,32 @@ function ProductosContent() {
       query = query.range(from, from + PER_PAGE - 1);
 
       const { data, count } = await query;
-      setProductos((data as Producto[]) || []);
+      const prods = (data as Producto[]) || [];
+
+      // Compute effective stock for combo products from their components
+      const comboProds = prods.filter((p) => p.es_combo);
+      if (comboProds.length > 0) {
+        const comboIds = comboProds.map((p) => p.id);
+        const { data: comboItems } = await supabase
+          .from("combo_items")
+          .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)")
+          .in("combo_id", comboIds);
+        const comboStockMap: Record<string, number> = {};
+        for (const ci of (comboItems || []) as any[]) {
+          const compStock = ci.productos?.stock ?? 0;
+          const maxFromComp = Math.floor(compStock / (ci.cantidad || 1));
+          comboStockMap[ci.combo_id] = ci.combo_id in comboStockMap
+            ? Math.min(comboStockMap[ci.combo_id], maxFromComp)
+            : maxFromComp;
+        }
+        for (const p of prods) {
+          if (p.es_combo && p.id in comboStockMap) {
+            p.stock = comboStockMap[p.id];
+          }
+        }
+      }
+
+      setProductos(prods);
       setTotal(count || 0);
       setLoading(false);
     }

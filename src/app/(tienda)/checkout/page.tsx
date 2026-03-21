@@ -405,9 +405,31 @@ export default function CheckoutPage() {
 
     // Validate real-time stock before processing
     const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
-    const { data: stockData } = await supabase.from("productos").select("id, stock, nombre").in("id", productIds);
+    const { data: stockData } = await supabase.from("productos").select("id, stock, nombre, es_combo").in("id", productIds);
     const stockMap: Record<string, { stock: number; nombre: string }> = {};
     for (const p of stockData || []) stockMap[p.id] = { stock: p.stock, nombre: p.nombre };
+
+    // For combo products, compute stock from components
+    const comboIds = (stockData || []).filter((p: any) => p.es_combo).map((p: any) => p.id);
+    if (comboIds.length > 0) {
+      const { data: comboItems } = await supabase
+        .from("combo_items")
+        .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)")
+        .in("combo_id", comboIds);
+      const comboStockMap: Record<string, number> = {};
+      for (const ci of (comboItems || []) as any[]) {
+        const compStock = ci.productos?.stock ?? 0;
+        const maxFromComp = Math.floor(compStock / (ci.cantidad || 1));
+        comboStockMap[ci.combo_id] = ci.combo_id in comboStockMap
+          ? Math.min(comboStockMap[ci.combo_id], maxFromComp)
+          : maxFromComp;
+      }
+      for (const id of comboIds) {
+        if (id in comboStockMap && stockMap[id]) {
+          stockMap[id].stock = comboStockMap[id];
+        }
+      }
+    }
 
     const stockErrors: string[] = [];
     for (const item of items) {

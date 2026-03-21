@@ -51,19 +51,40 @@ export default function CarritoPage() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // Check real stock for all cart items
+  // Check real stock for all cart items (including combo component stock)
   useEffect(() => {
     if (!loaded || items.length === 0) return;
     const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
-    supabase
-      .from("productos")
-      .select("id, stock")
-      .in("id", productIds)
-      .then(({ data }) => {
-        const map: Record<string, number> = {};
-        for (const p of data || []) map[p.id] = p.stock;
-        setStockMap(map);
-      });
+    (async () => {
+      const { data } = await supabase
+        .from("productos")
+        .select("id, stock, es_combo")
+        .in("id", productIds);
+      const map: Record<string, number> = {};
+      for (const p of data || []) map[p.id] = p.stock;
+
+      // For combo products, compute stock from components
+      const comboIds = (data || []).filter((p: any) => p.es_combo).map((p: any) => p.id);
+      if (comboIds.length > 0) {
+        const { data: comboItems } = await supabase
+          .from("combo_items")
+          .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)")
+          .in("combo_id", comboIds);
+        const comboStockMap: Record<string, number> = {};
+        for (const ci of (comboItems || []) as any[]) {
+          const compStock = ci.productos?.stock ?? 0;
+          const maxFromComp = Math.floor(compStock / (ci.cantidad || 1));
+          comboStockMap[ci.combo_id] = ci.combo_id in comboStockMap
+            ? Math.min(comboStockMap[ci.combo_id], maxFromComp)
+            : maxFromComp;
+        }
+        for (const id of comboIds) {
+          if (id in comboStockMap) map[id] = comboStockMap[id];
+        }
+      }
+
+      setStockMap(map);
+    })();
   }, [loaded, items]);
 
   const getPresUnits = (item: CartItem) => {
