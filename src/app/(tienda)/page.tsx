@@ -476,8 +476,15 @@ function PorQueElegirnosBlock({ config }: { config: Record<string, any> }) {
 function sanitizeHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/on\w+="[^"]*"/gi, '')
-    .replace(/on\w+='[^']*'/gi, '');
+    .replace(/<iframe[\s\S]*?(<\/iframe>|\/?>)/gi, '')
+    .replace(/<object[\s\S]*?(<\/object>|\/?>)/gi, '')
+    .replace(/<embed[\s\S]*?\/?>|<applet[\s\S]*?(<\/applet>|\/?>)/gi, '')
+    .replace(/<link[\s\S]*?\/?>|<meta[\s\S]*?\/?>|<base[\s\S]*?\/?>/gi, '')
+    .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/on\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/on\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/javascript\s*:/gi, 'blocked:')
+    .replace(/data\s*:\s*text\/html/gi, 'blocked:text/html');
 }
 
 function TextoLibreBlock({ config }: { config: Record<string, any> }) {
