@@ -514,7 +514,7 @@ export default function ListadoVentasPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Origen</Label>
                   <Select value={filterOrigen} onValueChange={(v) => setFilterOrigen(v ?? "all")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="pos">Punto de Venta</SelectItem>
@@ -525,13 +525,18 @@ export default function ListadoVentasPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Tipo de comprobante</Label>
                   <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="Factura A">Factura A</SelectItem>
+                      <SelectItem value="Factura B">Factura B</SelectItem>
+                      <SelectItem value="Factura C">Factura C</SelectItem>
                       <SelectItem value="Remito X">Remito X</SelectItem>
                       <SelectItem value="Pedido Web">Pedido Web</SelectItem>
+                      <SelectItem value="Nota de Crédito A">Nota de Crédito A</SelectItem>
                       <SelectItem value="Nota de Crédito B">Nota de Crédito B</SelectItem>
                       <SelectItem value="Nota de Crédito C">Nota de Crédito C</SelectItem>
+                      <SelectItem value="Nota de Débito A">Nota de Débito A</SelectItem>
                       <SelectItem value="Nota de Débito B">Nota de Débito B</SelectItem>
                       <SelectItem value="Nota de Débito C">Nota de Débito C</SelectItem>
                     </SelectContent>
@@ -540,7 +545,7 @@ export default function ListadoVentasPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Forma de cobro</Label>
                   <Select value={filterPayment} onValueChange={(v) => setFilterPayment(v ?? "all")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas</SelectItem>
                       <SelectItem value="Efectivo">Efectivo</SelectItem>
@@ -553,7 +558,7 @@ export default function ListadoVentasPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Período</Label>
                   <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Mensual" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="day">Día</SelectItem>
