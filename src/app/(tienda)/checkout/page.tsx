@@ -586,9 +586,10 @@ export default function CheckoutPage() {
       localStorage.removeItem("carrito");
       window.dispatchEvent(new Event("cart-updated"));
       setOrderNumber(numero);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setErrors(["Hubo un error al procesar tu pedido. Intentá de nuevo."]);
+      const msg = err?.message || err?.details || JSON.stringify(err);
+      setErrors([`Hubo un error al procesar tu pedido: ${msg}`]);
     } finally {
       setSubmitting(false);
     }
