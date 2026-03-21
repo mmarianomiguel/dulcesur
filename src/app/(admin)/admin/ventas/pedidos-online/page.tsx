@@ -52,6 +52,7 @@ interface PedidoItem {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  unidades_por_presentacion: number;
 }
 
 interface Pedido {
@@ -126,13 +127,13 @@ export default function PedidosOnlinePage() {
     const ids = data.map((p: any) => p.id);
     const { data: allItems } = await supabase
       .from("pedido_tienda_items")
-      .select("*")
+      .select("*, unidades_por_presentacion")
       .in("pedido_id", ids);
 
     const itemsByPedido: Record<number, PedidoItem[]> = {};
     (allItems || []).forEach((item: any) => {
       if (!itemsByPedido[item.pedido_id]) itemsByPedido[item.pedido_id] = [];
-      itemsByPedido[item.pedido_id].push(item);
+      itemsByPedido[item.pedido_id].push({ ...item, unidades_por_presentacion: item.unidades_por_presentacion || 1 });
     });
 
     setPedidos(data.map((p: any) => ({ ...p, items: itemsByPedido[p.id] || [] })));
@@ -205,6 +206,7 @@ export default function PedidosOnlinePage() {
         cantidad: 1,
         precio_unitario: product.precio,
         subtotal: product.precio,
+        unidades_por_presentacion: 1,
       }]);
       setHasChanges(true);
     }
@@ -217,46 +219,50 @@ export default function PedidosOnlinePage() {
   const handleSave = async () => {
     if (!selectedPedido) return;
     setSaving(true);
+    const errores: string[] = [];
 
     try {
       const originalItems = selectedPedido.items;
 
-      // Calculate stock differences per product
+      // Calculate stock differences per product (in UNITS, accounting for unidades_por_presentacion)
       const stockDiffs: Record<string, number> = {};
       for (const orig of originalItems) {
-        stockDiffs[orig.producto_id] = (stockDiffs[orig.producto_id] || 0) + orig.cantidad;
+        const upp = orig.unidades_por_presentacion || 1;
+        stockDiffs[orig.producto_id] = (stockDiffs[orig.producto_id] || 0) + (orig.cantidad * upp);
       }
       for (const item of editItems) {
-        stockDiffs[item.producto_id] = (stockDiffs[item.producto_id] || 0) - item.cantidad;
+        const upp = item.unidades_por_presentacion || 1;
+        stockDiffs[item.producto_id] = (stockDiffs[item.producto_id] || 0) - (item.cantidad * upp);
       }
-      // stockDiffs > 0 means items were removed → return stock
-      // stockDiffs < 0 means items were added → decrement stock
+      // stockDiffs > 0 means units freed → return stock
+      // stockDiffs < 0 means units consumed → decrement stock
 
       // Apply stock adjustments
       for (const [productoId, diff] of Object.entries(stockDiffs)) {
         if (Math.abs(diff) < 0.001) continue;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", productoId).single();
-        if (prod) {
-          const stockAntes = prod.stock;
-          const stockDespues = stockAntes + diff;
-          await supabase.from("productos").update({ stock: stockDespues }).eq("id", productoId);
-          await supabase.from("stock_movimientos").insert({
-            producto_id: productoId,
-            tipo: diff > 0 ? "Ajuste" : "Venta",
-            cantidad: diff,
-            cantidad_antes: stockAntes,
-            cantidad_despues: stockDespues,
-            referencia: `Edición Pedido Web #${selectedPedido.numero}`,
-            descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
-            usuario: "Admin Sistema",
-          });
-        }
+        const { data: prod, error: prodErr } = await supabase.from("productos").select("stock").eq("id", productoId).single();
+        if (prodErr || !prod) { errores.push(`Producto ${productoId} no encontrado`); continue; }
+        const stockAntes = prod.stock;
+        const stockDespues = stockAntes + diff;
+        const { error: updErr } = await supabase.from("productos").update({ stock: stockDespues }).eq("id", productoId);
+        if (updErr) { errores.push(`Error stock: ${updErr.message}`); continue; }
+        await supabase.from("stock_movimientos").insert({
+          producto_id: productoId,
+          tipo: diff > 0 ? "Ajuste" : "Venta",
+          cantidad: diff,
+          cantidad_antes: stockAntes,
+          cantidad_despues: stockDespues,
+          referencia: `Edición Pedido Web #${selectedPedido.numero}`,
+          descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
+          usuario: "Admin Sistema",
+        });
       }
 
       // Delete existing items
-      await supabase.from("pedido_tienda_items").delete().eq("pedido_id", selectedPedido.id);
+      const { error: delErr } = await supabase.from("pedido_tienda_items").delete().eq("pedido_id", selectedPedido.id);
+      if (delErr) throw new Error(`Error eliminando items: ${delErr.message}`);
 
-      // Insert updated items
+      // Insert updated items (with unidades_por_presentacion)
       const newItems = editItems.map((item) => ({
         pedido_id: selectedPedido.id,
         producto_id: item.producto_id,
@@ -265,18 +271,21 @@ export default function PedidosOnlinePage() {
         cantidad: item.cantidad,
         precio_unitario: item.precio_unitario,
         subtotal: item.precio_unitario * item.cantidad,
+        unidades_por_presentacion: item.unidades_por_presentacion || 1,
       }));
 
-      await supabase.from("pedido_tienda_items").insert(newItems);
+      const { error: insErr } = await supabase.from("pedido_tienda_items").insert(newItems);
+      if (insErr) throw new Error(`Error insertando items: ${insErr.message}`);
 
       // Update pedido total
       const nuevoSubtotal = editItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0);
       const nuevoTotal = nuevoSubtotal + (selectedPedido.costo_envio || 0);
 
-      await supabase.from("pedidos_tienda").update({
+      const { error: pedErr } = await supabase.from("pedidos_tienda").update({
         subtotal: nuevoSubtotal,
         total: nuevoTotal,
       }).eq("id", selectedPedido.id);
+      if (pedErr) throw new Error(`Error actualizando pedido: ${pedErr.message}`);
 
       // Sync linked venta + venta_items
       const { data: venta } = await supabase
@@ -286,13 +295,14 @@ export default function PedidosOnlinePage() {
         .maybeSingle();
 
       if (venta) {
-        await supabase.from("ventas").update({
+        const { error: ventaErr } = await supabase.from("ventas").update({
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
         }).eq("id", venta.id);
+        if (ventaErr) errores.push(`Error sync venta: ${ventaErr.message}`);
 
         await supabase.from("venta_items").delete().eq("venta_id", venta.id);
-        await supabase.from("venta_items").insert(
+        const { error: viErr } = await supabase.from("venta_items").insert(
           editItems.map((item) => ({
             venta_id: venta.id,
             producto_id: item.producto_id,
@@ -302,11 +312,15 @@ export default function PedidosOnlinePage() {
             subtotal: item.precio_unitario * item.cantidad,
             unidad_medida: "Un",
             presentacion: item.presentacion,
-            unidades_por_presentacion: 1,
+            unidades_por_presentacion: item.unidades_por_presentacion || 1,
           }))
         );
+        if (viErr) errores.push(`Error sync venta_items: ${viErr.message}`);
       }
 
+      if (errores.length > 0) {
+        alert("Guardado con advertencias:\n" + errores.join("\n"));
+      }
       setHasChanges(false);
       fetchPedidos();
       setDetailOpen(false);
@@ -317,8 +331,10 @@ export default function PedidosOnlinePage() {
     }
   };
 
-  // Update estado — sync to linked venta
+  // Update estado — sync to linked venta, return stock on cancel
   const handleEstadoChange = async (pedido: Pedido, nuevoEstado: string) => {
+    const estadoAnterior = pedido.estado;
+
     await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
 
     // Sync estado to linked venta
@@ -326,6 +342,54 @@ export default function PedidosOnlinePage() {
     if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
     if (nuevoEstado === "cancelado") ventaUpdate.entregado = false;
     await supabase.from("ventas").update(ventaUpdate).eq("numero", pedido.numero);
+
+    // Return stock when cancelling (only if wasn't already cancelled)
+    if (nuevoEstado === "cancelado" && estadoAnterior !== "cancelado") {
+      for (const item of pedido.items) {
+        if (!item.producto_id) continue;
+        const upp = item.unidades_por_presentacion || 1;
+        const unitsToRestore = item.cantidad * upp;
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        if (!prod) continue;
+        const stockAntes = prod.stock;
+        const stockDespues = stockAntes + unitsToRestore;
+        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id,
+          tipo: "anulacion",
+          cantidad: unitsToRestore,
+          cantidad_antes: stockAntes,
+          cantidad_despues: stockDespues,
+          referencia: `Cancelación Pedido Web #${pedido.numero}`,
+          descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
+          usuario: "Admin Sistema",
+        });
+      }
+    }
+
+    // Re-decrement stock if un-cancelling (restoring a previously cancelled pedido)
+    if (estadoAnterior === "cancelado" && nuevoEstado !== "cancelado") {
+      for (const item of pedido.items) {
+        if (!item.producto_id) continue;
+        const upp = item.unidades_por_presentacion || 1;
+        const unitsToDecrement = item.cantidad * upp;
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        if (!prod) continue;
+        const stockAntes = prod.stock;
+        const stockDespues = stockAntes - unitsToDecrement;
+        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id,
+          tipo: "Venta",
+          cantidad: -unitsToDecrement,
+          cantidad_antes: stockAntes,
+          cantidad_despues: stockDespues,
+          referencia: `Reactivación Pedido Web #${pedido.numero}`,
+          descripcion: `Descuento stock - ${item.nombre} (${item.presentacion})`,
+          usuario: "Admin Sistema",
+        });
+      }
+    }
 
     fetchPedidos();
   };
