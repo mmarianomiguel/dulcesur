@@ -523,14 +523,12 @@ export default function ListaPreciosPage() {
             pdf.text(lineText, x + cellW / 2, nameY + li * nameLineH, { align: "center" });
           }
 
-          // Big price — centered vertically between name end and divider, auto-shrink if tight
+          // Big price — centered vertically between name end and divider
           const nameEnd = nameY + maxNameLines * nameLineH;
-          const availableH = dividerY - nameEnd;
-          const priceFontSize = Math.min(config.combinado_tamañoPrecio, availableH * 1.8);
-          const priceZoneCenter = nameEnd + availableH / 2;
+          const priceZoneCenter = nameEnd + (dividerY - nameEnd) / 2;
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(priceFontSize);
-          pdf.text(formatPrice(displayPrice), x + cellW / 2, priceZoneCenter + priceFontSize * 0.15, { align: "center" });
+          pdf.setFontSize(config.combinado_tamañoPrecio);
+          pdf.text(formatPrice(displayPrice), x + cellW / 2, priceZoneCenter + config.combinado_tamañoPrecio * 0.15, { align: "center" });
         });
       }
 
