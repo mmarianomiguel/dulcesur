@@ -96,6 +96,7 @@ interface VentaRow {
   cliente_id: string | null;
   vendedor_id: string | null;
   origen: string | null;
+  metodo_entrega: string | null;
   clientes: ClienteInfo | null;
 }
 
@@ -1180,27 +1181,29 @@ export default function ListadoVentasPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-3 px-4 font-medium">Origen</th>
-                        <th className="text-left py-3 px-4 font-medium">Tipo</th>
                         <th className="text-left py-3 px-4 font-medium">N°</th>
+                        <th className="text-left py-3 px-4 font-medium">Tipo</th>
                         <th className="text-left py-3 px-4 font-medium">Fecha / Hora</th>
                         <th className="text-left py-3 px-4 font-medium">Cliente</th>
                         <th className="text-left py-3 px-4 font-medium">Forma pago</th>
+                        <th className="text-center py-3 px-4 font-medium">Entrega</th>
                         <th className="text-center py-3 px-4 font-medium">Estado</th>
                         <th className="text-right py-3 px-4 font-medium">Total</th>
                         <th className="text-right py-3 px-4 font-medium">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {ventas.map((v) => (
+                      {ventas.map((v) => {
+                        const vEstado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "pendiente";
+                        const est = estadoBadge[vEstado] || estadoBadge.pendiente;
+                        return (
                         <tr key={v.id} className={`border-b last:border-0 transition-colors ${v.estado === "anulada" ? "opacity-50 bg-red-50/50" : "hover:bg-muted/50"}`}>
-                          <td className="py-3 px-4">
-                            <Badge variant="outline" className={`text-xs font-normal ${v.origen === "tienda" ? "border-pink-300 text-pink-700 bg-pink-50" : "border-blue-300 text-blue-700 bg-blue-50"}`}>
-                              {v.origen === "tienda" ? "Tienda" : "POS"}
-                            </Badge>
-                          </td>
+                          <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{v.numero}</td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5">
+                              <Badge variant="outline" className={`text-xs font-normal ${v.origen === "tienda" ? "border-pink-300 text-pink-700 bg-pink-50" : "border-blue-300 text-blue-700 bg-blue-50"}`}>
+                                {v.origen === "tienda" ? "Tienda" : "POS"}
+                              </Badge>
                               <Badge variant={v.tipo_comprobante.includes("Nota de Crédito") ? "destructive" : "secondary"} className="text-xs font-normal">
                                 {v.tipo_comprobante}
                               </Badge>
@@ -1209,7 +1212,6 @@ export default function ListadoVentasPage() {
                               )}
                             </div>
                           </td>
-                          <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{v.numero}</td>
                           <td className="py-3 px-4 text-muted-foreground">
                             <div>{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR")}</div>
                             {v.created_at && (
@@ -1224,16 +1226,21 @@ export default function ListadoVentasPage() {
                           </td>
                           <td className="py-3 px-4 text-center">
                             {v.tipo_comprobante.includes("Nota de Crédito") ? (
-                              <Badge variant="outline" className="text-xs">N/A</Badge>
-                            ) : (() => {
-                              const vEstado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "pendiente";
-                              const est = estadoBadge[vEstado] || estadoBadge.pendiente;
-                              return (
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
-                                  {est.label}
-                                </span>
-                              );
-                            })()}
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : (
+                              <Badge variant={v.entregado ? "default" : "secondary"} className={`text-xs ${!v.entregado ? "" : "bg-blue-100 text-blue-700 hover:bg-blue-100"}`}>
+                                {v.entregado ? "Entregado" : "Pendiente"}
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {v.tipo_comprobante.includes("Nota de Crédito") ? (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : (
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
+                                {est.label}
+                              </span>
+                            )}
                           </td>
                           <td className={`py-3 px-4 text-right font-semibold ${v.estado === "anulada" ? "line-through text-muted-foreground" : v.tipo_comprobante.includes("Nota de Crédito") ? "text-red-500" : ""}`}>
                             {v.tipo_comprobante.includes("Nota de Crédito") ? `-${formatCurrency(v.total)}` : formatCurrency(v.total)}
@@ -1280,7 +1287,8 @@ export default function ListadoVentasPage() {
                             </DropdownMenu>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                   {ventas.length > 0 && (
@@ -1394,6 +1402,7 @@ export default function ListadoVentasPage() {
                     <thead>
                       <tr className="border-b text-muted-foreground">
                         <th className="text-left py-3 px-4 font-medium">N°</th>
+                        <th className="text-left py-3 px-4 font-medium">Tipo</th>
                         <th className="text-left py-3 px-4 font-medium">Fecha / Hora</th>
                         <th className="text-left py-3 px-4 font-medium">Cliente</th>
                         <th className="text-left py-3 px-4 font-medium">Forma pago</th>
@@ -1406,9 +1415,15 @@ export default function ListadoVentasPage() {
                     <tbody>
                       {poFiltered.map((pedido) => {
                         const est = estadoBadge[pedido.estado] || estadoBadge.pendiente;
+                        const capitalPago = pedido.metodo_pago ? pedido.metodo_pago.charAt(0).toUpperCase() + pedido.metodo_pago.slice(1) : "—";
                         return (
                           <tr key={pedido.id} className={`border-b last:border-0 transition-colors ${pedido.estado === "cancelado" ? "opacity-50 bg-red-50/50" : "hover:bg-muted/50"}`}>
                             <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{pedido.numero}</td>
+                            <td className="py-3 px-4">
+                              <Badge variant="outline" className="text-xs font-normal border-pink-300 text-pink-700 bg-pink-50">
+                                Pedido Web
+                              </Badge>
+                            </td>
                             <td className="py-3 px-4 text-muted-foreground">
                               <div>{new Date(pedido.created_at).toLocaleDateString("es-AR")}</div>
                               <div className="text-xs text-muted-foreground/70">
@@ -1420,7 +1435,7 @@ export default function ListadoVentasPage() {
                               <p className="text-[10px] text-muted-foreground">{pedido.email}</p>
                             </td>
                             <td className="py-3 px-4">
-                              <Badge variant="outline" className="text-xs font-normal">{pedido.metodo_pago}</Badge>
+                              <Badge variant="outline" className="text-xs font-normal">{capitalPago}</Badge>
                             </td>
                             <td className="py-3 px-4 text-center">
                               <Badge variant={pedido.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${pedido.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : ""}`}>
@@ -1487,77 +1502,153 @@ export default function ListadoVentasPage() {
       {/* HISTORIAL DETAIL DIALOG */}
       {/* ══════════════════════════════════════════════════════════ */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="truncate">Comprobante {detailVenta?.numero}</DialogTitle>
-          </DialogHeader>
-          {detailVenta && (
-            <div className="w-full overflow-hidden space-y-4">
-              {detailVenta.estado === "anulada" && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-                  <Ban className="w-4 h-4 text-red-600" />
-                  <span className="text-sm font-semibold text-red-700">COMPROBANTE ANULADO</span>
+        <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
+          {detailVenta && (() => {
+            const dvEstado = detailVenta.estado === "anulada" ? "cancelado" : detailVenta.entregado ? "entregado" : detailVenta.estado || "pendiente";
+            const dvBadge = estadoBadge[dvEstado] || estadoBadge.pendiente;
+            return (
+            <>
+              {/* Header */}
+              <div className="px-6 py-4 border-b bg-muted/30">
+                <DialogHeader className="p-0 space-y-0">
+                  <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-primary" />
+                    {detailVenta.tipo_comprobante} #{detailVenta.numero}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex items-center gap-3 mt-1">
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(detailVenta.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })}
+                    {detailVenta.created_at && `, ${new Date(detailVenta.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}`}
+                  </p>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${dvBadge.bg} ${dvBadge.text}`}>
+                    {dvBadge.label}
+                  </span>
+                  {detailVenta.estado === "anulada" && (
+                    <Badge variant="destructive" className="text-[10px] font-bold">ANULADA</Badge>
+                  )}
                 </div>
-              )}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Tipo:</span> <span className="font-medium ml-1">{detailVenta.tipo_comprobante}</span></div>
-                <div><span className="text-muted-foreground">Fecha:</span> <span className="font-medium ml-1">{new Date(detailVenta.fecha + "T12:00:00").toLocaleDateString("es-AR")}</span></div>
-                <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium ml-1">{detailVenta.forma_pago}</span></div>
-                <div><span className="text-muted-foreground">Entrega:</span> <Badge variant={detailVenta.entregado ? "default" : "secondary"} className="ml-1">{detailVenta.entregado ? "Entregado" : "Pendiente"}</Badge></div>
               </div>
-              <div className="text-sm"><span className="text-muted-foreground">Cliente:</span> <span className="font-medium ml-1">{detailVenta.clientes?.nombre || "—"}</span></div>
-              <div className="flex gap-2">
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* Client + Delivery info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                      <User className="w-4 h-4" /> Cliente
+                    </h3>
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
+                      <p className="font-medium">{detailVenta.clientes?.nombre || "Consumidor Final"}</p>
+                      {detailVenta.clientes?.telefono && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{detailVenta.clientes.telefono}</p>}
+                      {detailVenta.clientes?.domicilio && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3" />{detailVenta.clientes.domicilio}</p>}
+                      {detailVenta.clientes?.cuit && <p className="text-xs text-muted-foreground">CUIT: {detailVenta.clientes.cuit}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                      <Truck className="w-4 h-4" /> Entrega y Pago
+                    </h3>
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
+                      <p className="flex items-center gap-1.5">
+                        {detailVenta.entregado ? (
+                          <><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Entregado</>
+                        ) : (
+                          <><Clock className="w-3.5 h-3.5 text-amber-500" /> Pendiente de entrega</>
+                        )}
+                      </p>
+                      {detailVenta.metodo_entrega && (
+                        <p className="text-xs text-muted-foreground">
+                          {detailVenta.metodo_entrega === "envio" ? "Envio a domicilio" : detailVenta.metodo_entrega === "retiro" ? "Retiro en local" : detailVenta.metodo_entrega}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Pago: {detailVenta.forma_pago}</p>
+                      {detailVenta.vendedor_id && <p className="text-xs text-muted-foreground">Vendedor: {getVendedorNombre(detailVenta.vendedor_id)}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                {detailVenta.observacion && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                    <p className="font-medium text-amber-800 text-xs mb-1">Observación:</p>
+                    <p className="text-amber-700">{detailVenta.observacion}</p>
+                  </div>
+                )}
+
+                {/* Items table */}
+                <div>
+                  <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground mb-3">
+                    <Package className="w-4 h-4" /> Productos ({detailItems.length})
+                  </h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Producto</th>
+                          <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-16">Cant.</th>
+                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
+                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>
+                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailItems.map((item) => {
+                          const cleanDesc = item.descripcion
+                            .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+                            .replace(/\s*\(Unidad\)$/, "")
+                            .replace(/(\([^)]+\))\s*\1/gi, "$1")
+                            .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
+                            .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
+                          const isCombo = detailComboIds.has(item.producto_id || "");
+                          const upp = item.unidades_por_presentacion ?? 1;
+                          const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
+                          return (
+                          <tr key={item.id} className="border-b last:border-0">
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-1.5">
+                                {isCombo && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white tracking-wider shrink-0">COMBO</span>
+                                )}
+                                <span className="font-medium">{cleanDesc}</span>
+                              </div>
+                              {item.codigo && <p className="text-[10px] text-muted-foreground font-mono">{item.codigo}</p>}
+                            </td>
+                            <td className="px-3 py-2 text-center">{displayQty}</td>
+                            <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
+                            <td className="px-3 py-2 text-right text-xs">{item.descuento > 0 ? `-${item.descuento}%` : ""}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                          </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Totals */}
+                  <div className="mt-3 space-y-1 text-sm text-right">
+                    {detailVenta.descuento_porcentaje > 0 && (
+                      <p className="text-muted-foreground">Descuento ({detailVenta.descuento_porcentaje}%): <span className="font-medium text-red-500">-{formatCurrency(detailVenta.subtotal * detailVenta.descuento_porcentaje / 100)}</span></p>
+                    )}
+                    {detailVenta.recargo_porcentaje > 0 && (
+                      <p className="text-muted-foreground">Recargo ({detailVenta.recargo_porcentaje}%): <span className="font-medium text-foreground">+{formatCurrency(detailVenta.subtotal * detailVenta.recargo_porcentaje / 100)}</span></p>
+                    )}
+                    <p className="text-base font-bold">Total: {formatCurrency(detailVenta.total)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 px-6 py-3 border-t bg-muted/30">
                 <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); preparePrint(detailVenta); }}>
                   <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
                 </Button>
+                <Button variant="outline" onClick={() => setDetailOpen(false)}>
+                  Cerrar
+                </Button>
               </div>
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50 text-muted-foreground">
-                      <th className="text-left py-2 px-3 font-medium">Código</th>
-                      <th className="text-left py-2 px-3 font-medium">Artículo</th>
-                      <th className="text-center py-2 px-3 font-medium">Cant</th>
-                      <th className="text-right py-2 px-3 font-medium">Precio</th>
-                      <th className="text-right py-2 px-3 font-medium">Desc.%</th>
-                      <th className="text-right py-2 px-3 font-medium">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailItems.map((item) => {
-                      const cleanDesc = item.descripcion
-                        .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
-                        .replace(/\s*\(Unidad\)$/, "")
-                        .replace(/(\([^)]+\))\s*\1/gi, "$1")
-                        .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
-                        .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
-                      const isCombo = detailComboIds.has(item.producto_id || "");
-                      const upp = item.unidades_por_presentacion ?? 1;
-                      const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
-                      return (
-                      <tr key={item.id} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.codigo}</td>
-                        <td className="py-2 px-3">
-                          {isCombo && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white mr-1.5 tracking-wider">COMBO</span>
-                          )}
-                          {cleanDesc}
-                        </td>
-                        <td className="py-2 px-3 text-center">{displayQty}</td>
-                        <td className="py-2 px-3 text-right">{formatCurrency(item.precio_unitario)}</td>
-                        <td className="py-2 px-3 text-right">{item.descuento > 0 ? `(-${item.descuento}%)` : ""}</td>
-                        <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex justify-end text-lg font-bold">
-                Total: {formatCurrency(detailVenta.total)}
-              </div>
-            </div>
-          )}
+            </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
