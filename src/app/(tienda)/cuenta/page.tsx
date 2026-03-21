@@ -58,14 +58,31 @@ export default function CuentaPage() {
     const stored = localStorage.getItem("cliente_auth");
     if (stored) {
       const parsed = JSON.parse(stored);
-      setCliente(parsed);
-      // Fetch order count
+      // Verify client still exists in DB
       supabase
-        .from("pedidos_tienda")
-        .select("id", { count: "exact", head: true })
-        .eq("cliente_auth_id", parsed.id)
-        .then(({ count }) => {
-          if (count !== null) setOrderCount(count);
+        .from("clientes_auth")
+        .select("id, nombre, email")
+        .eq("id", parsed.id)
+        .single()
+        .then(({ data: clienteDB, error: clienteErr }) => {
+          if (clienteErr || !clienteDB) {
+            // Client no longer exists — clear stale session
+            localStorage.removeItem("cliente_auth");
+            setCliente(null);
+            return;
+          }
+          // Update local data with DB values
+          const fresh = { id: clienteDB.id, nombre: clienteDB.nombre, email: clienteDB.email };
+          setCliente(fresh);
+          localStorage.setItem("cliente_auth", JSON.stringify(fresh));
+          // Fetch order count
+          supabase
+            .from("pedidos_tienda")
+            .select("id", { count: "exact", head: true })
+            .eq("cliente_auth_id", parsed.id)
+            .then(({ count }) => {
+              if (count !== null) setOrderCount(count);
+            });
         });
     }
   }, []);

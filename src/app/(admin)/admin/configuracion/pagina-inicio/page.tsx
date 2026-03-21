@@ -1331,7 +1331,7 @@ function BlockConfigForm({
               onValueChange={(v) => onConfigChange("max_items", parseInt((v ?? "8"), 10))}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Cantidad máxima" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="4">4</SelectItem>
@@ -1347,7 +1347,7 @@ function BlockConfigForm({
               onValueChange={(v) => onConfigChange("orden", v ?? "recientes")}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Orden" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="recientes">Más recientes</SelectItem>
@@ -1452,7 +1452,7 @@ function BlockConfigForm({
               onValueChange={(v) => onConfigChange("alto", v ?? "mediano")}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Alto" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pequeno">Pequeño (200px)</SelectItem>
@@ -1540,7 +1540,7 @@ function IconSelect({
       <Label>Icono</Label>
       <Select value={value} onValueChange={(v) => onChange(v ?? value)}>
         <SelectTrigger className="w-full">
-          <SelectValue />
+          <SelectValue placeholder="Icono" />
         </SelectTrigger>
         <SelectContent>
           {ICON_OPTIONS.map((icon) => (

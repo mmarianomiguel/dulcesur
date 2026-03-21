@@ -405,7 +405,7 @@ export default function CobranzasPage() {
             <div className="space-y-2">
               <Label>Forma de pago</Label>
               <Select value={cobroFormaPago} onValueChange={(v) => setCobroFormaPago(v || "Efectivo")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Efectivo">Efectivo</SelectItem>
                   <SelectItem value="Transferencia">Transferencia</SelectItem>

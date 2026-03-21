@@ -103,12 +103,18 @@ export default function PedidosPage() {
       if (!stored) return;
       const { id } = JSON.parse(stored);
 
-      // Get cliente_id linked to this auth
-      const { data: authRec } = await supabase
+      // Verify client still exists in DB
+      const { data: authRec, error: authErr } = await supabase
         .from("clientes_auth")
         .select("cliente_id")
         .eq("id", id)
         .single();
+      if (authErr || !authRec) {
+        // Client no longer exists — clear stale session
+        localStorage.removeItem("cliente_auth");
+        window.location.href = "/cuenta";
+        return;
+      }
       const clienteId = authRec?.cliente_id;
 
       // Fetch pedidos tienda

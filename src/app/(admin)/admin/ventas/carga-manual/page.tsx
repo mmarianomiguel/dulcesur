@@ -430,7 +430,7 @@ export default function CargaManualPage() {
                     onValueChange={(v) => setTipoComprobante(v || "Remito X")}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Tipo de comprobante" />
                     </SelectTrigger>
                     <SelectContent>
                       {TIPOS_COMPROBANTE.map((t) => (
@@ -503,7 +503,7 @@ export default function CargaManualPage() {
                     onValueChange={(v) => setFormaPago(v || "Efectivo")}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Forma de pago" />
                     </SelectTrigger>
                     <SelectContent>
                       {FORMAS_PAGO.map((f) => (

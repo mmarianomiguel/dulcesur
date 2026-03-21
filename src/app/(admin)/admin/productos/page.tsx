@@ -1783,7 +1783,7 @@ export default function ProductosPage() {
                 onValueChange={(v) => setForm({ ...form, visibilidad: v || "visible" })}
               >
                 <SelectTrigger className={`w-32 h-8 text-xs font-medium ${form.visibilidad === "visible" ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-orange-300 bg-orange-50 text-orange-700"}`}>
-                  <SelectValue />
+                  <SelectValue placeholder="Visibilidad" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="visible">Visible</SelectItem>
@@ -1859,7 +1859,7 @@ export default function ProductosPage() {
                         onValueChange={(v) => setForm({ ...form, unidad_medida: v || "UN" })}
                       >
                         <SelectTrigger className="h-9">
-                          <SelectValue />
+                          <SelectValue placeholder="Unidad de medida" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="UN">Unidad</SelectItem>

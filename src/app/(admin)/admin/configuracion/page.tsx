@@ -331,7 +331,7 @@ export default function ConfiguracionPage() {
                     <div className="space-y-2">
                       <Label>Situación IVA</Label>
                       <Select value={empresa?.situacion_iva || ""} onValueChange={(v) => e("situacion_iva", v || "")}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar situación IVA" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Responsable Inscripto">Responsable Inscripto</SelectItem>
                           <SelectItem value="Monotributista">Monotributista</SelectItem>
@@ -401,7 +401,7 @@ export default function ConfiguracionPage() {
                     <div className="space-y-2">
                       <Label>Tipo comprobante default</Label>
                       <Select value={empresa?.tipo_comprobante_default || ""} onValueChange={(v) => e("tipo_comprobante_default", v || "")}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Remito X">Remito X</SelectItem>
                           <SelectItem value="Factura B">Factura B</SelectItem>
@@ -412,7 +412,7 @@ export default function ConfiguracionPage() {
                     <div className="space-y-2">
                       <Label>Lista de precios default</Label>
                       <Select value={empresa?.lista_precios_default || ""} onValueChange={(v) => e("lista_precios_default", v || "")}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Contado">Contado</SelectItem>
                           <SelectItem value="Mayorista">Mayorista</SelectItem>
@@ -422,7 +422,7 @@ export default function ConfiguracionPage() {
                     <div className="space-y-2">
                       <Label>Moneda</Label>
                       <Select value={empresa?.moneda_default || ""} onValueChange={(v) => e("moneda_default", v || "")}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="ARS">Pesos (ARS)</SelectItem>
                           <SelectItem value="USD">Dólares (USD)</SelectItem>
@@ -446,7 +446,7 @@ export default function ConfiguracionPage() {
                   <div className="max-w-sm space-y-2">
                     <Label>Formato de ticket</Label>
                     <Select value={empresa?.formato_ticket || ""} onValueChange={(v) => e("formato_ticket", v || "")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="58mm">58mm (Ticket)</SelectItem>
                         <SelectItem value="80mm">80mm (Ticket)</SelectItem>
@@ -813,7 +813,7 @@ export default function ConfiguracionPage() {
                         <div className="space-y-1">
                           <Label>Tipo</Label>
                           <Select value={cuentaForm.tipo} onValueChange={(v) => setCuentaForm({ ...cuentaForm, tipo: v ?? "" })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Caja de Ahorro">Caja de Ahorro</SelectItem>
                               <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>

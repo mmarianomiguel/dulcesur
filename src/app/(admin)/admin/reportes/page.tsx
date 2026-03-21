@@ -324,7 +324,7 @@ export default function ReportesPage() {
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Periodo</Label>
               <Select value={ventaDateMode} onValueChange={(v) => setVentaDateMode(v as any)}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-40"><SelectValue placeholder="Período" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="dia">Hoy</SelectItem>
                   <SelectItem value="mensual">Mensual</SelectItem>
@@ -347,7 +347,7 @@ export default function ReportesPage() {
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Tipo</Label>
               <Select value={ventaTipo} onValueChange={(v) => setVentaTipo(v || "todos")}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-40"><SelectValue placeholder="Tipo" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   <SelectItem value="pedido_web">Pedido Web</SelectItem>

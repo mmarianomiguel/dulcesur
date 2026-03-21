@@ -876,7 +876,7 @@ export default function ComprasPage() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Forma de pago</Label>
                 <Select value={formaPago} onValueChange={(v) => setFormaPago(v ?? "")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Efectivo">Efectivo</SelectItem>
                     <SelectItem value="Transferencia">Transferencia</SelectItem>
@@ -1079,7 +1079,7 @@ export default function ComprasPage() {
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Periodo</Label>
                 <Select value={purchaseFilterMode} onValueChange={(v) => setPurchaseFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-32"><SelectValue placeholder="Período" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="day">Dia</SelectItem>
@@ -1094,7 +1094,7 @@ export default function ComprasPage() {
               {purchaseFilterMode === "month" && (
                 <>
                   <Select value={purchaseFilterMonth} onValueChange={(v) => setPurchaseFilterMonth(v ?? "1")}>
-                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-32"><SelectValue placeholder="Mes" /></SelectTrigger>
                     <SelectContent>
                       {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((m, i) => (
                         <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>

@@ -169,13 +169,13 @@ export default function ResumenMensualPage() {
         </div>
         <div className="flex items-center gap-2">
           <Select value={mes} onValueChange={(v) => setMes(v ?? mes)}>
-            <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
             <SelectContent>
               {MESES.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={anio} onValueChange={(v) => setAnio(v ?? anio)}>
-            <SelectTrigger className="w-24 h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-24 h-9"><SelectValue placeholder="Año" /></SelectTrigger>
             <SelectContent>
               {[2024, 2025, 2026, 2027].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
             </SelectContent>

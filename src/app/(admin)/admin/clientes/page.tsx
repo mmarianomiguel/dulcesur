@@ -658,7 +658,7 @@ export default function ClientesPage() {
                 </div>
                 <div className="space-y-1.5 min-w-[180px]">
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">ZONA DE ENTREGA</span>
-                  <Select value={filterZona} onValueChange={(v) => setFilterZona(v === "all" ? "" : (v || ""))}>
+                  <Select value={filterZona || "all"} onValueChange={(v) => setFilterZona(v === "all" ? "" : (v || ""))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Todas las zonas" />
                     </SelectTrigger>
@@ -1289,7 +1289,7 @@ export default function ClientesPage() {
             <div className="space-y-2">
               <Label>Forma de pago</Label>
               <Select value={cobroFormaPago} onValueChange={(v) => setCobroFormaPago(v || "Efectivo")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Efectivo">Efectivo</SelectItem>
                   <SelectItem value="Transferencia">Transferencia</SelectItem>
@@ -1389,7 +1389,7 @@ export default function ClientesPage() {
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label>Zona de entrega</Label>
-                  <Select value={form.zona_entrega} onValueChange={(v) => f("zona_entrega", v === "none" ? "" : (v || ""))}>
+                  <Select value={form.zona_entrega || "none"} onValueChange={(v) => f("zona_entrega", v === "none" ? "" : (v || ""))}>
                     <SelectTrigger><SelectValue placeholder="Sin zona asignada" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin zona asignada</SelectItem>
@@ -1420,9 +1420,10 @@ export default function ClientesPage() {
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label>Vendedor</Label>
-                  <Select value={form.vendedor_id} onValueChange={(v) => f("vendedor_id", v || "")}>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <Select value={form.vendedor_id || "none"} onValueChange={(v) => f("vendedor_id", v === "none" ? "" : (v || ""))}>
+                    <SelectTrigger><SelectValue placeholder="Sin vendedor" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">Sin vendedor</SelectItem>
                       {vendedores.map((v) => (
                         <SelectItem key={v.id} value={v.id}>{v.nombre}</SelectItem>
                       ))}
@@ -1448,7 +1449,7 @@ export default function ClientesPage() {
                 <div className="space-y-2">
                   <Label>Situación IVA</Label>
                   <Select value={form.situacion_iva} onValueChange={(v) => f("situacion_iva", v || "Consumidor final")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Consumidor final">Consumidor final</SelectItem>
                       <SelectItem value="Responsable Inscripto">Responsable Inscripto</SelectItem>

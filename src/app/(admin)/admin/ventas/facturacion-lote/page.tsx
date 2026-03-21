@@ -219,7 +219,7 @@ export default function FacturacionLotePage() {
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Cliente</Label>
               <Select value={filterCliente} onValueChange={(v) => setFilterCliente(v || "all")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Cliente" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {clientes.map((c) => (

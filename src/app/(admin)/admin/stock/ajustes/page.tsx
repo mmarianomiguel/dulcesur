@@ -311,7 +311,7 @@ export default function AjustesStockPage() {
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Período</Label>
           <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-32"><SelectValue placeholder="Período" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="day">Día</SelectItem>
@@ -326,7 +326,7 @@ export default function AjustesStockPage() {
         {filterMode === "month" && (
           <>
             <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-32"><SelectValue placeholder="Mes" /></SelectTrigger>
               <SelectContent>
                 {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((m, i) => (
                   <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
@@ -469,7 +469,7 @@ export default function AjustesStockPage() {
                   }
                 }}>
                   <SelectTrigger className="h-8 w-64 text-sm">
-                    <SelectValue />
+                    <SelectValue placeholder="Motivo" />
                   </SelectTrigger>
                   <SelectContent>
                     {MOTIVOS_GLOBALES.map((m) => (
@@ -548,7 +548,7 @@ export default function AjustesStockPage() {
                           onValueChange={(v) => v && updateRow(idx, "motivo", v)}
                         >
                           <SelectTrigger className="h-7 text-xs" onClick={(e) => e.stopPropagation()}>
-                            <SelectValue />
+                            <SelectValue placeholder="Motivo" />
                           </SelectTrigger>
                           <SelectContent>
                             {MOTIVOS_ITEM.map((m) => (

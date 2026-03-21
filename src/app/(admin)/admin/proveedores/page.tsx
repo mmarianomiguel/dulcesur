@@ -585,7 +585,7 @@ export default function ProveedoresPage() {
                 <Label>Forma de pago</Label>
                 <Select value={pagoForm.forma_pago} onValueChange={(v) => setPagoForm({ ...pagoForm, forma_pago: v ?? "" })}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Seleccionar forma de pago" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Efectivo">Efectivo</SelectItem>

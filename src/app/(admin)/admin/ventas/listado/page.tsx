@@ -579,7 +579,7 @@ export default function ListadoVentasPage() {
               {filterMode === "month" && (
                 <div className="flex gap-2 mt-3">
                   <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
-                    <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-40"><SelectValue placeholder="Mes" /></SelectTrigger>
                     <SelectContent>
                       {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
                     </SelectContent>

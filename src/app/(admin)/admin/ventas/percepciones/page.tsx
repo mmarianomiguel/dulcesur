@@ -436,7 +436,7 @@ export default function PercepcionesPage() {
                   onValueChange={(v) => setNuevoTipo(v as "IIBB" | "IVA")}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Tipo" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="IIBB">IIBB</SelectItem>

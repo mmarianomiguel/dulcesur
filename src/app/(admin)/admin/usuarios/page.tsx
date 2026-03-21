@@ -349,13 +349,14 @@ export default function UsuariosPage() {
             <div className="space-y-2">
               <Label>Rol</Label>
               <Select
-                value={form.rol_id}
-                onValueChange={(v) => setForm({ ...form, rol_id: v ?? "" })}
+                value={form.rol_id || "none"}
+                onValueChange={(v) => setForm({ ...form, rol_id: v === "none" ? "" : (v ?? "") })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar rol" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Seleccionar rol</SelectItem>
                   {roles.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
                       {r.nombre}

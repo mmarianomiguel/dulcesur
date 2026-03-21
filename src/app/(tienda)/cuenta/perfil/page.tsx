@@ -63,11 +63,17 @@ export default function PerfilPage() {
     setClienteAuthId(id);
 
     const fetchProfile = async () => {
-      const { data } = await supabase
+      const { data, error: fetchErr } = await supabase
         .from("clientes_auth")
         .select("nombre, email, telefono, cliente_id")
         .eq("id", id)
         .single();
+      if (fetchErr || !data) {
+        // Client no longer exists — clear stale session
+        localStorage.removeItem("cliente_auth");
+        window.location.href = "/cuenta";
+        return;
+      }
       if (data) {
         setNombre(data.nombre);
         setEmail(data.email);

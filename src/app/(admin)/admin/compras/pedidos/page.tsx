@@ -1244,7 +1244,7 @@ export default function PedidosProveedorPage() {
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Forma de pago</Label>
                   <Select value={receiveFormaPago} onValueChange={(v) => setReceiveFormaPago(v ?? "")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Efectivo">Efectivo</SelectItem>
                       <SelectItem value="Transferencia">Transferencia</SelectItem>
@@ -1499,7 +1499,7 @@ export default function PedidosProveedorPage() {
           {pedFilterMode === "month" && (
             <div className="flex items-center gap-1.5">
               <Select value={pedFilterMonth} onValueChange={(v) => setPedFilterMonth(v ?? "1")}>
-                <SelectTrigger className="w-24 h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-24 h-9 text-xs"><SelectValue placeholder="Mes" /></SelectTrigger>
                 <SelectContent>
                   {meses.map((m, i) => (
                     <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>

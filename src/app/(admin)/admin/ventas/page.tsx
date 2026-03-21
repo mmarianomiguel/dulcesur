@@ -2521,7 +2521,7 @@ export default function VentasPage() {
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Situación IVA</label>
                 <Select value={newClientData.situacion_iva} onValueChange={(v) => setNewClientData((d) => ({ ...d, situacion_iva: v ?? "Consumidor final" }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Situación IVA" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Consumidor final">Consumidor final</SelectItem>
                     <SelectItem value="Responsable inscripto">Responsable inscripto</SelectItem>

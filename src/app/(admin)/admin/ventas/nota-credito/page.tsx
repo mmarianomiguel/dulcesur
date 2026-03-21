@@ -561,7 +561,7 @@ export default function NotaCreditoPage() {
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Período</Label>
                     <Select value={ncFilterMode} onValueChange={(v) => setNcFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-36"><SelectValue placeholder="Período" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
                         <SelectItem value="day">Día</SelectItem>
@@ -576,7 +576,7 @@ export default function NotaCreditoPage() {
                   {ncFilterMode === "month" && (
                     <>
                       <Select value={ncFilterMonth} onValueChange={(v) => setNcFilterMonth(v ?? "1")}>
-                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-32"><SelectValue placeholder="Mes" /></SelectTrigger>
                         <SelectContent>
                           {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((m, i) => (
                             <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>

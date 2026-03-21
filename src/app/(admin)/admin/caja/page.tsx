@@ -887,13 +887,13 @@ export default function CajaPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Metodo de pago</Label>
+                <Label>Método de pago</Label>
                 <Select
                   value={movForm.metodo_pago}
                   onValueChange={(v) => setMovForm({ ...movForm, metodo_pago: v ?? "" })}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Seleccionar método" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Efectivo">Efectivo</SelectItem>
