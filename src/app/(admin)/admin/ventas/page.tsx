@@ -1621,8 +1621,8 @@ export default function VentasPage() {
             className="flex items-center gap-2 w-full rounded-xl border bg-card px-3 py-2 text-left hover:bg-accent transition-colors"
           >
             {deliveryMethod === "pickup" ? (
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <Store className="w-4 h-4 text-blue-600" />
+              <div className="w-8 h-8 rounded-full bg-sky-50 flex items-center justify-center border border-sky-200">
+                <Store className="w-4 h-4 text-sky-700" />
               </div>
             ) : (
               <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -1691,7 +1691,7 @@ export default function VentasPage() {
                               </span>
                             )}
                             {item.es_combo && (
-                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-pink-100 text-pink-700">
+                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                                 COMBO
                               </span>
                             )}
@@ -2840,21 +2840,21 @@ export default function VentasPage() {
               }}
               className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
                 deliveryMethod === "pickup"
-                  ? "border-blue-500 bg-blue-50"
+                  ? "border-sky-400 bg-sky-50"
                   : "border-border hover:bg-accent"
               }`}
             >
               <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                deliveryMethod === "pickup" ? "bg-blue-100" : "bg-muted"
+                deliveryMethod === "pickup" ? "bg-sky-100" : "bg-muted"
               }`}>
-                <Store className={`w-5 h-5 ${deliveryMethod === "pickup" ? "text-blue-600" : "text-muted-foreground"}`} />
+                <Store className={`w-5 h-5 ${deliveryMethod === "pickup" ? "text-sky-700" : "text-muted-foreground"}`} />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold">Retiro en Tienda</p>
                 <p className="text-xs text-muted-foreground">El cliente retira en el local</p>
               </div>
               {deliveryMethod === "pickup" && (
-                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-sky-500 flex items-center justify-center">
                   <Check className="w-3.5 h-3.5 text-white" />
                 </div>
               )}
@@ -3077,7 +3077,7 @@ export default function VentasPage() {
           <div className="grid grid-cols-2 gap-6 text-sm">
             {/* Navegacion */}
             <div>
-              <h4 className="font-semibold mb-2 text-blue-600 uppercase text-xs tracking-wider">Navegacion</h4>
+              <h4 className="font-semibold mb-2 text-primary uppercase text-xs tracking-wider">Navegacion</h4>
               <div className="space-y-1.5">
                 {[
                   ["F10 / Shift+?", "Mostrar atajos"],

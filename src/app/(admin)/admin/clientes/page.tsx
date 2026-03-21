@@ -961,7 +961,7 @@ export default function ClientesPage() {
                     onClick={() => toggleZonaDia(dia)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                       zonaForm.dias.includes(dia)
-                        ? "bg-blue-600 text-white border-blue-600"
+                        ? "bg-primary text-primary-foreground border-primary"
                         : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
                     }`}
                   >
@@ -1414,7 +1414,7 @@ export default function ClientesPage() {
                           <Badge
                             key={dia}
                             variant={selectedZona.dias.includes(dia) ? "default" : "outline"}
-                            className={`text-xs ${selectedZona.dias.includes(dia) ? "bg-blue-600" : "opacity-40"}`}
+                            className={`text-xs ${selectedZona.dias.includes(dia) ? "bg-primary" : "opacity-40"}`}
                           >
                             {dia.substring(0, 3)}
                           </Badge>
