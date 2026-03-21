@@ -90,6 +90,15 @@ interface PdfConfig {
   combinado_mostrarLogo: boolean;
   combinado_mostrarWeb: boolean;
   combinado_mostrarFecha: boolean;
+  combinado_nombreOffset: number;
+  combinado_divisorY: number;
+  combinado_efectLabelY: number;
+  combinado_efectPrecioY: number;
+  combinado_transfLabelY: number;
+  combinado_transfPrecioY: number;
+  combinado_footerLineY: number;
+  combinado_footerTextY: number;
+  combinado_footerFontSize: number;
   poster_tamañoNombre: number;
   poster_tamañoPrecio: number;
   poster_mostrarLogo: boolean;
@@ -105,9 +114,10 @@ const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", 
 const DEFAULT_CONFIG: PdfConfig = {
   porcentajeTransferencia: 2,
   webUrl: "www.dulcesur.com",
-  logoTamaño: 8,
+  logoTamaño: 10,
   combinado_columnas: 3, combinado_filas: 3, combinado_tamañoNombre: 9, combinado_tamañoPrecio: 22,
   combinado_mostrarPrecioCaja: true, combinado_mostrarLogo: true, combinado_mostrarWeb: true, combinado_mostrarFecha: true,
+  combinado_nombreOffset: 1, combinado_divisorY: 15, combinado_efectLabelY: 13.5, combinado_efectPrecioY: 11, combinado_transfLabelY: 9, combinado_transfPrecioY: 6.5, combinado_footerLineY: 4.5, combinado_footerTextY: 2, combinado_footerFontSize: 5,
   poster_tamañoNombre: 36, poster_tamañoPrecio: 72, poster_mostrarLogo: true, poster_mostrarWeb: true, poster_mostrarPrecioUnitario: true,
 };
 
@@ -190,7 +200,7 @@ export default function ListaPreciosPage() {
   useEffect(() => {
     try {
       const savedConfig = localStorage.getItem("listaPreciosConfig");
-      if (savedConfig) setConfig(JSON.parse(savedConfig));
+      if (savedConfig) setConfig({ ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) });
       const savedLogo = localStorage.getItem("listaPreciosLogo");
       if (savedLogo) setLogoBase64(savedLogo);
     } catch {}
@@ -408,24 +418,49 @@ export default function ListaPreciosPage() {
 
           // ── BOTTOM ZONE (all positions relative to bottom) ──
 
-          // Footer text: web (left) + date (right) — 3mm from bottom
-          const footerTextY = bottom - 3;
+          // Footer text: web (left) + date (right)
+          const footerTextY = bottom - config.combinado_footerTextY;
           pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(4.5);
+          pdf.setFontSize(config.combinado_footerFontSize);
           pdf.setTextColor(150);
           if (config.combinado_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerTextY);
           if (config.combinado_mostrarFecha) pdf.text(today, x + cellW - pad - 1, footerTextY, { align: "right" });
           pdf.setTextColor(0);
 
-          // Footer line — 6mm from bottom
-          const footerLineY = bottom - 6;
+          // Footer line
+          const footerLineY = bottom - config.combinado_footerLineY;
           pdf.setDrawColor(220);
           pdf.setLineWidth(0.2);
           pdf.line(x + pad, footerLineY, x + cellW - pad, footerLineY);
 
+          // Divider line (below the big price)
+          const dividerY = bottom - config.combinado_divisorY;
+          pdf.setDrawColor(220);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + pad, dividerY, x + cellW - pad, dividerY);
+
+          // EFEC row — between divider and footer
+          const efectLabelY = bottom - config.combinado_efectLabelY;
+          const efectPriceY = bottom - config.combinado_efectPrecioY;
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5.5);
+          pdf.setTextColor(140);
+          pdf.text("Efect.", x + pad, efectLabelY);
+          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
+            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, efectLabelY, { align: "right" });
+          }
+          pdf.setTextColor(0);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(7);
+          pdf.text(formatPrice(displayPrice), x + pad, efectPriceY);
+          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
+            pdf.setFontSize(6.5);
+            pdf.text(formatPrice(boxPrice), x + cellW - pad, efectPriceY, { align: "right" });
+          }
+
           // TRANSF row
-          const transfLabelY = bottom - 13;
-          const transfPriceY = bottom - 10;
+          const transfLabelY = bottom - config.combinado_transfLabelY;
+          const transfPriceY = bottom - config.combinado_transfPrecioY;
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(140);
@@ -444,31 +479,6 @@ export default function ListaPreciosPage() {
           }
           pdf.setTextColor(0);
 
-          // EFEC row
-          const efectLabelY = bottom - 19;
-          const efectPriceY = bottom - 16;
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(5.5);
-          pdf.setTextColor(140);
-          pdf.text("Efect.", x + pad, efectLabelY);
-          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, efectLabelY, { align: "right" });
-          }
-          pdf.setTextColor(0);
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(7);
-          pdf.text(formatPrice(displayPrice), x + pad, efectPriceY);
-          if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.setFontSize(6.5);
-            pdf.text(formatPrice(boxPrice), x + cellW - pad, efectPriceY, { align: "right" });
-          }
-
-          // Divider line — 21mm from bottom (just above Efect)
-          const dividerY = bottom - 21;
-          pdf.setDrawColor(220);
-          pdf.setLineWidth(0.2);
-          pdf.line(x + pad, dividerY, x + cellW - pad, dividerY);
-
           // ── TOP ZONE (flows down from top) ──
 
           // Logo (top-left)
@@ -486,7 +496,7 @@ export default function ListaPreciosPage() {
           }
 
           // Product name
-          const topAreaEnd = y + pad + Math.max(logoSize, 4) + 3;
+          const topAreaEnd = y + pad + Math.max(logoSize, 4) + config.combinado_nombreOffset;
           const nameMaxW = cellW - pad * 2;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.combinado_tamañoNombre);
@@ -966,7 +976,7 @@ export default function ListaPreciosPage() {
               ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            <div className="overflow-y-auto px-6 py-5 space-y-6" style={{ maxHeight: "60vh" }}>
               {configTab === "general" && (
                 <>
                   <div>
@@ -1024,6 +1034,47 @@ export default function ListaPreciosPage() {
                         <label className="block text-xs text-muted-foreground mb-1">Precio (pt)</label>
                         <input type="number" min={10} max={48} value={config.combinado_tamañoPrecio} onChange={(e) => updateConfig("combinado_tamañoPrecio", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
                       </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Posiciones (mm desde borde)</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Nombre offset (desde logo)</label>
+                        <input type="number" min={-5} max={10} step={0.5} value={config.combinado_nombreOffset} onChange={(e) => updateConfig("combinado_nombreOffset", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Línea divisoria</label>
+                        <input type="number" min={5} max={35} step={0.5} value={config.combinado_divisorY} onChange={(e) => updateConfig("combinado_divisorY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Efect. etiqueta</label>
+                        <input type="number" min={3} max={30} step={0.5} value={config.combinado_efectLabelY} onChange={(e) => updateConfig("combinado_efectLabelY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Efect. precio</label>
+                        <input type="number" min={3} max={30} step={0.5} value={config.combinado_efectPrecioY} onChange={(e) => updateConfig("combinado_efectPrecioY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Transf. etiqueta</label>
+                        <input type="number" min={3} max={25} step={0.5} value={config.combinado_transfLabelY} onChange={(e) => updateConfig("combinado_transfLabelY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Transf. precio</label>
+                        <input type="number" min={3} max={25} step={0.5} value={config.combinado_transfPrecioY} onChange={(e) => updateConfig("combinado_transfPrecioY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Línea footer</label>
+                        <input type="number" min={1} max={15} step={0.5} value={config.combinado_footerLineY} onChange={(e) => updateConfig("combinado_footerLineY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Footer texto</label>
+                        <input type="number" min={0.5} max={10} step={0.5} value={config.combinado_footerTextY} onChange={(e) => updateConfig("combinado_footerTextY", Number(e.target.value))} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <label className="block text-xs text-muted-foreground mb-1">Footer tamaño fuente (pt)</label>
+                      <input type="number" min={3} max={10} step={0.5} value={config.combinado_footerFontSize} onChange={(e) => updateConfig("combinado_footerFontSize", Number(e.target.value))} className="w-32 border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
                   </div>
                   <div>
