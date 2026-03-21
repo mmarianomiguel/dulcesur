@@ -454,18 +454,27 @@ export default function ListadoVentasPage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Listado de Ventas y Remitos</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Historial de Ventas</h1>
           <p className="text-muted-foreground text-sm">
             {ventas.length} comprobantes encontrados
             {ventas.length !== ventasActivas.length && ` (${ventas.length - ventasActivas.length} anulados)`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={exportCSV}>
-            <Download className="w-4 h-4 mr-2" />Exportar CSV
+            <Download className="w-4 h-4 mr-2" />Exportar
           </Button>
+          <Link href="/admin/ventas/carga-manual">
+            <Button variant="outline" size="sm"><FileText className="w-4 h-4 mr-2" />Carga manual</Button>
+          </Link>
+          <Link href="/admin/ventas/cambios">
+            <Button variant="outline" size="sm">Cambios</Button>
+          </Link>
+          <Link href="/admin/ventas/facturacion-lote">
+            <Button variant="outline" size="sm">Facturar lote</Button>
+          </Link>
           <Link href="/admin/ventas">
             <Button size="sm">Nueva venta</Button>
           </Link>
