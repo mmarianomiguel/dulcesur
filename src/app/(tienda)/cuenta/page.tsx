@@ -203,6 +203,8 @@ export default function CuentaPage() {
 
   const inputClass =
     "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all placeholder:text-gray-400";
+  const selectClass =
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all bg-white text-gray-900";
 
   if (!cliente) {
     return (
@@ -393,7 +395,7 @@ export default function CuentaPage() {
                         <select
                           value={regProvincia}
                           onChange={(e) => setRegProvincia(e.target.value)}
-                          className={inputClass}
+                          className={selectClass}
                         >
                           <option value="">Seleccionar provincia</option>
                           {PROVINCIAS.map((p) => (
