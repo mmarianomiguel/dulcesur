@@ -516,12 +516,12 @@ export default function ListadoVentasPage() {
             </Button>
           </div>
           {showFilters && (
-            <div className="border-t pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 overflow-visible">
+            <div className="border-t pt-4 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Origen</Label>
+                  <Label className="text-xs text-muted-foreground">Origen</Label>
                   <Select value={filterOrigen} onValueChange={(v) => setFilterOrigen(v ?? "all")}>
-                    <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="pos">Punto de Venta</SelectItem>
@@ -530,9 +530,9 @@ export default function ListadoVentasPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Tipo de comprobante</Label>
+                  <Label className="text-xs text-muted-foreground">Tipo de comprobante</Label>
                   <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
-                    <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="Remito X">Remito X</SelectItem>
@@ -545,9 +545,9 @@ export default function ListadoVentasPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Forma de cobro</Label>
+                  <Label className="text-xs text-muted-foreground">Forma de cobro</Label>
                   <Select value={filterPayment} onValueChange={(v) => setFilterPayment(v ?? "all")}>
-                    <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas</SelectItem>
                       <SelectItem value="Efectivo">Efectivo</SelectItem>
@@ -558,12 +558,12 @@ export default function ListadoVentasPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Período</Label>
-                  <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-                    <SelectTrigger><SelectValue placeholder="Mensual" /></SelectTrigger>
+                  <Label className="text-xs text-muted-foreground">Período</Label>
+                  <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "month") as "day" | "month" | "range" | "all")}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Mensual" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="day">Día</SelectItem>
+                      <SelectItem value="day">Dia</SelectItem>
                       <SelectItem value="month">Mensual</SelectItem>
                       <SelectItem value="range">Entre fechas</SelectItem>
                     </SelectContent>
@@ -571,28 +571,28 @@ export default function ListadoVentasPage() {
                 </div>
               </div>
               {filterMode === "day" && (
-                <div className="flex gap-2 mt-3 items-center">
-                  <Label className="text-xs">Fecha</Label>
-                  <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-44" />
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Fecha:</Label>
+                  <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-44 h-9" />
                 </div>
               )}
               {filterMode === "month" && (
-                <div className="flex gap-2 mt-3">
+                <div className="flex items-center gap-3">
                   <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
-                    <SelectTrigger className="w-40"><SelectValue placeholder="Mes" /></SelectTrigger>
+                    <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
                     <SelectContent>
                       {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
                     </SelectContent>
                   </Select>
-                  <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-24" />
+                  <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-24 h-9" />
                 </div>
               )}
               {filterMode === "range" && (
-                <div className="flex gap-2 mt-3 items-center">
-                  <Label className="text-xs">Desde</Label>
-                  <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40" />
-                  <Label className="text-xs">Hasta</Label>
-                  <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40" />
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs text-muted-foreground">Desde</Label>
+                  <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-9" />
+                  <Label className="text-xs text-muted-foreground">Hasta</Label>
+                  <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-9" />
                 </div>
               )}
             </div>

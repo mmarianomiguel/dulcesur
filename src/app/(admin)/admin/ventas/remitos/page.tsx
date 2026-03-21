@@ -375,21 +375,21 @@ export default function RemitosPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Buscar por numero/cliente</Label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Buscar por numero o cliente</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+                <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Desde</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9" />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Hasta</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9" />
             </div>
           </div>
         </CardContent>
