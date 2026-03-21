@@ -1022,7 +1022,18 @@ export default function ProductosPage() {
 
           const stock = getNum(row, "stock");
           const costo = getNum(row, "precio de costo", "costo");
-          const precio = getNum(row, "precio de venta", "precio venta", "pvp");
+          // Match "precio" but exclude columns containing "costo" to avoid collision
+          let precio = getNum(row, "precio de venta", "precio venta", "pvp");
+          if (precio === 0) {
+            // Fallback: look for a column named just "precio" (not "precio de costo")
+            for (const k of Object.keys(row)) {
+              const nk = normalize(k);
+              if (nk.includes("precio") && !nk.includes("costo") && !nk.includes("caja")) {
+                precio = parseFloat(String(row[k]).replace(",", ".")) || 0;
+                if (precio > 0) break;
+              }
+            }
+          }
           const unidadMedida = getVal(row, "unidad medida", "unidad") || "UN";
           const categoriaNombre = getVal(row, "categoria");
           const subcategoriaNombre = getVal(row, "subcategoria");
@@ -1136,8 +1147,8 @@ export default function ProductosPage() {
             }
           }
 
-          // NEW product - insert
-          const finalPrecio = precio > 0 ? precio : (costo > 0 ? costo : 0);
+          // NEW product - insert (never fallback costo as precio)
+          const finalPrecio = precio > 0 ? precio : 0;
           const payload: Record<string, unknown> = {
             codigo: codigo || `AUTO-${Date.now()}-${i}`,
             nombre: nombre || codigo,
@@ -1264,9 +1275,19 @@ export default function ProductosPage() {
   };
 
   const updatePresentacion = (index: number, field: string, value: string | number | null) => {
-    setPresentaciones((prev) =>
-      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p))
-    );
+    setPresentaciones((prev) => {
+      const updated = prev.map((p, i) => (i === index ? { ...p, [field]: value } : p));
+      // If unit row's costo/precio changed, sync to main form + recalc boxes
+      const target = updated[index];
+      if (target && target.cantidad === 1 && (field === "costo" || field === "precio") && typeof value === "number") {
+        setForm((f) => ({ ...f, [field]: value }));
+        return updated.map((p) => {
+          if (p._deleted || p.cantidad === 1) return p;
+          return { ...p, [field]: value * p.cantidad };
+        });
+      }
+      return updated;
+    });
   };
 
   const recalcBoxPrices = () => {
@@ -2023,7 +2044,18 @@ export default function ProductosPage() {
                   <Input
                     type="number"
                     value={form.costo}
-                    onChange={(e) => setForm({ ...form, costo: Number(e.target.value) })}
+                    onChange={(e) => {
+                      const newCosto = Number(e.target.value);
+                      setForm({ ...form, costo: newCosto });
+                      // Sync presentaciones: update unit row + recalc boxes
+                      setPresentaciones((prev) =>
+                        prev.map((p) => {
+                          if (p._deleted) return p;
+                          if (p.cantidad === 1) return { ...p, costo: newCosto };
+                          return { ...p, costo: newCosto * p.cantidad };
+                        })
+                      );
+                    }}
                     className="h-9"
                   />
                 </div>
@@ -2032,7 +2064,18 @@ export default function ProductosPage() {
                   <Input
                     type="number"
                     value={form.precio}
-                    onChange={(e) => setForm({ ...form, precio: Number(e.target.value) })}
+                    onChange={(e) => {
+                      const newPrecio = Number(e.target.value);
+                      setForm({ ...form, precio: newPrecio });
+                      // Sync presentaciones: update unit row + recalc boxes
+                      setPresentaciones((prev) =>
+                        prev.map((p) => {
+                          if (p._deleted) return p;
+                          if (p.cantidad === 1) return { ...p, precio: newPrecio };
+                          return { ...p, precio: newPrecio * p.cantidad };
+                        })
+                      );
+                    }}
                     className="h-9"
                   />
                 </div>
