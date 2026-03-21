@@ -104,7 +104,7 @@ export default function CarritoPage() {
         </p>
         <Link
           href="/productos"
-          className="inline-flex items-center gap-2 bg-pink-500 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-pink-600 transition"
+          className="inline-flex items-center gap-2 bg-pink-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-pink-700 transition"
         >
           <ArrowLeft className="h-4 w-4" />
           Ver productos
@@ -220,7 +220,7 @@ export default function CarritoPage() {
           ) : (
             <Link
               href="/checkout"
-              className="bg-pink-500 text-white px-8 py-2.5 rounded-lg font-medium hover:bg-pink-600 transition"
+              className="bg-pink-600 text-white px-8 py-2.5 rounded-xl font-medium hover:bg-pink-700 transition"
             >
               Ir al checkout
             </Link>

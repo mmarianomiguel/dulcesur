@@ -1309,7 +1309,7 @@ export default function CheckoutPage() {
             <button
               onClick={handleConfirm}
               disabled={submitting || (metodoEntrega === "retiro" && !!config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) || (metodoEntrega === "envio" && !!config && subtotal < config.monto_minimo_envio)}
-              className="mt-5 w-full bg-pink-500 hover:bg-pink-600 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-5 w-full bg-pink-600 hover:bg-pink-700 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <>

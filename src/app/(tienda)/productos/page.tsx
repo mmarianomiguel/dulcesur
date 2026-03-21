@@ -961,7 +961,7 @@ function ProductosContent() {
               backgroundPosition: "right 10px center",
             }}
           >
-            <option value="recientes">Mas recientes</option>
+            <option value="recientes">Más recientes</option>
             <option value="precio_asc">Menor precio</option>
             <option value="precio_desc">Mayor precio</option>
             <option value="az">A-Z</option>
@@ -1221,7 +1221,7 @@ function ProductosContent() {
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-xs sm:text-sm py-2 rounded-lg font-semibold transition-all shadow-sm shadow-pink-600/20"
+                            className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-xs sm:text-sm py-2 rounded-xl font-semibold transition-all shadow-sm shadow-pink-600/20"
                           >
                             Agregar {formatPrice(discountedPrice * qty)}
                           </button>
@@ -1366,7 +1366,7 @@ function ProductosContent() {
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-sm py-2.5 px-5 rounded-lg font-semibold transition-all shadow-sm shadow-pink-600/20"
+                            className="bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-sm py-2.5 px-5 rounded-xl font-semibold transition-all shadow-sm shadow-pink-600/20"
                           >
                             Agregar {formatPrice((() => { const d2 = getProductDiscount(producto, listPresLabel); return d2 > 0 ? Math.round(activePrice * (1 - d2 / 100)) : activePrice; })() * qty)}
                           </button>
