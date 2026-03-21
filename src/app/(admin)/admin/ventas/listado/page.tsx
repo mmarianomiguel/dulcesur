@@ -472,9 +472,6 @@ export default function ListadoVentasPage() {
           <Link href="/admin/ventas/cambios">
             <Button variant="outline" size="sm">Cambios</Button>
           </Link>
-          <Link href="/admin/ventas/facturacion-lote">
-            <Button variant="outline" size="sm">Facturar lote</Button>
-          </Link>
           <Link href="/admin/ventas">
             <Button size="sm">Nueva venta</Button>
           </Link>
