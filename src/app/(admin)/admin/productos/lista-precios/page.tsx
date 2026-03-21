@@ -115,7 +115,7 @@ const DEFAULT_CONFIG: PdfConfig = {
   porcentajeTransferencia: 2,
   webUrl: "www.dulcesur.com",
   logoTamaño: 10,
-  combinado_columnas: 3, combinado_filas: 3, combinado_tamañoNombre: 9, combinado_tamañoPrecio: 22,
+  combinado_columnas: 3, combinado_filas: 7, combinado_tamañoNombre: 9, combinado_tamañoPrecio: 22,
   combinado_mostrarPrecioCaja: true, combinado_mostrarLogo: true, combinado_mostrarWeb: true, combinado_mostrarFecha: true,
   combinado_nombreOffset: 1, combinado_divisorY: 15, combinado_efectLabelY: 13.5, combinado_efectPrecioY: 11, combinado_transfLabelY: 9, combinado_transfPrecioY: 6.5, combinado_footerLineY: 4.5, combinado_footerTextY: 2, combinado_footerFontSize: 5,
   poster_tamañoNombre: 36, poster_tamañoPrecio: 72, poster_mostrarLogo: true, poster_mostrarWeb: true, poster_mostrarPrecioUnitario: true,
@@ -1010,9 +1010,16 @@ export default function ListaPreciosPage() {
               {configTab === "combinado" && (
                 <div className="flex gap-6">
                   {/* Live Preview */}
-                  <div className="flex-shrink-0 w-56">
+                  <div className="flex-shrink-0" style={{ width: "240px" }}>
                     <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Vista previa</h3>
-                    <div className="border border-border rounded-lg bg-white relative" style={{ width: "220px", height: "300px" }}>
+                    {(() => {
+                      const cellWmm = (210 - 10) / config.combinado_columnas;
+                      const cellHmm = (297 - 10) / config.combinado_filas;
+                      const scale = 230 / cellWmm;
+                      const previewW = cellWmm * scale;
+                      const previewH = cellHmm * scale;
+                      return (
+                    <div className="border border-border rounded-lg bg-white relative" style={{ width: `${previewW}px`, height: `${previewH}px` }}>
                       {/* Logo */}
                       {config.combinado_mostrarLogo && logoBase64 && (
                         <img src={logoBase64} alt="Logo" className="absolute object-contain" style={{ top: "8px", left: "8px", width: `${config.logoTamaño * 2.5}px`, height: `${config.logoTamaño * 2.5}px` }} />
@@ -1068,6 +1075,8 @@ export default function ListaPreciosPage() {
                         </div>
                       </div>
                     </div>
+                      );
+                    })()}
                   </div>
                   {/* Controls */}
                   <div className="flex-1 space-y-6">
