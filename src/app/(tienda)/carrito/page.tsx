@@ -174,6 +174,7 @@ export default function CarritoPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => updateQty(item.id, -1)}
+                aria-label="Disminuir cantidad"
                 className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-gray-50 transition"
               >
                 <Minus className="h-4 w-4" />
@@ -183,6 +184,7 @@ export default function CarritoPage() {
               </span>
               <button
                 onClick={() => updateQty(item.id, 1)}
+                aria-label="Aumentar cantidad"
                 className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-gray-50 transition"
                 disabled={sinStock}
               >
@@ -201,6 +203,7 @@ export default function CarritoPage() {
 
             <button
               onClick={() => remove(item.id)}
+              aria-label="Eliminar producto"
               className="text-gray-400 hover:text-red-500 transition p-1"
             >
               <Trash2 className="h-5 w-5" />

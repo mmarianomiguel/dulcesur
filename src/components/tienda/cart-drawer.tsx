@@ -293,6 +293,7 @@ function CartDrawer() {
                       <div className="inline-flex items-center rounded-lg border border-gray-200">
                         <button
                           onClick={() => updateQuantity(item.id, item.cantidad - 1)}
+                          aria-label="Disminuir cantidad"
                           className="flex h-8 w-8 items-center justify-center text-gray-400 hover:bg-pink-50 hover:text-pink-600 transition-colors rounded-l-lg"
                         >
                           <Minus className="h-3.5 w-3.5" />
@@ -303,6 +304,7 @@ function CartDrawer() {
                         <button
                           onClick={() => updateQuantity(item.id, Math.min(item.cantidad + 1, maxQty))}
                           disabled={atMax}
+                          aria-label="Aumentar cantidad"
                           className="flex h-8 w-8 items-center justify-center text-gray-400 hover:bg-pink-50 hover:text-pink-600 transition-colors rounded-r-lg disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
                         >
                           <Plus className="h-3.5 w-3.5" />
