@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -254,7 +254,7 @@ export default function MarcasPage() {
     setCatLoading(false);
   }, []);
 
-  useState(() => { fetchCategorias(); });
+  useEffect(() => { fetchCategorias(); }, [fetchCategorias]);
 
   const handleSaveCat = async () => {
     if (!catNombre.trim()) return;

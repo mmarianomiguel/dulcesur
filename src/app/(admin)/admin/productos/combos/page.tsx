@@ -320,13 +320,13 @@ export default function CombosPage() {
                   <span className="text-muted-foreground">Stock</span>
                   <span className={`font-medium ${(comboItemsCache[c.id] || []).length === 0 ? "text-muted-foreground" : (() => {
                     const items = comboItemsCache[c.id] || [];
-                    const s = items.length === 0 ? 0 : Math.min(...items.map((i) => Math.floor((i.producto?.stock || 0) / i.cantidad)));
+                    const s = items.length === 0 ? 0 : Math.min(...items.map((i) => i.cantidad > 0 ? Math.floor((i.producto?.stock || 0) / i.cantidad) : 0));
                     return s > 0 ? "text-emerald-600" : "text-red-500";
                   })()}`}>
                     {(() => {
                       const items = comboItemsCache[c.id] || [];
                       if (items.length === 0) return "—";
-                      return Math.min(...items.map((i) => Math.floor((i.producto?.stock || 0) / i.cantidad)));
+                      return Math.min(...items.map((i) => i.cantidad > 0 ? Math.floor((i.producto?.stock || 0) / i.cantidad) : 0));
                     })()}
                   </span>
                 </div>

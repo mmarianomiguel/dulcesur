@@ -321,7 +321,7 @@ export default function ProductosPage() {
       }
       const stockMap: Record<string, number> = {};
       for (const [comboId, items] of Object.entries(byCombo)) {
-        stockMap[comboId] = items.length === 0 ? 0 : Math.min(...items.map((i) => Math.floor(i.stock / i.cantidad)));
+        stockMap[comboId] = items.length === 0 ? 0 : Math.min(...items.map((i) => i.cantidad > 0 ? Math.floor(i.stock / i.cantidad) : 0));
       }
       setComboStockMap(stockMap);
     }
@@ -1639,7 +1639,7 @@ export default function ProductosPage() {
                             const isMedio = pres.cantidad < 1;
                             return (
                             <Badge key={i} variant="outline" className={`text-[10px] px-1.5 py-0 ${isMedio ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-blue-50 text-blue-600 border-blue-200"}`}>
-                              {isMedio ? "Medio Cartón" : pres.nombre}{!isMedio && !pres.nombre.toLowerCase().includes(`x${pres.cantidad}`) ? ` (x${pres.cantidad})` : ""}
+                              {isMedio ? "Medio Cartón" : (pres.nombre || `x${pres.cantidad}`)}{!isMedio && !(pres.nombre || "").toLowerCase().includes(`x${pres.cantidad}`) ? ` (x${pres.cantidad})` : ""}
                             </Badge>
                             );
                           })}
@@ -2153,7 +2153,7 @@ export default function ProductosPage() {
                 </div>
                 {comboItems.length > 0 && (
                   <div className="mt-2 text-xs text-muted-foreground flex items-center gap-4">
-                    <span>Stock disponible: <strong>{Math.min(...comboItems.map((i) => Math.floor((i.producto?.stock || 0) / i.cantidad)))}</strong></span>
+                    <span>Stock disponible: <strong>{Math.min(...comboItems.map((i) => i.cantidad > 0 ? Math.floor((i.producto?.stock || 0) / i.cantidad) : 0))}</strong></span>
                     <span>Costo total: <strong>{formatCurrency(comboItems.reduce((a, i) => a + (i.producto?.costo || 0) * i.cantidad, 0))}</strong></span>
                   </div>
                 )}
