@@ -1023,7 +1023,7 @@ export default function ProductosPage() {
           const stock = getNum(row, "stock");
           const costo = getNum(row, "precio de costo", "costo");
           // Match "precio" but exclude columns containing "costo" to avoid collision
-          let precio = getNum(row, "precio de venta", "precio venta", "pvp");
+          let precio = getNum(row, "precio de venta", "precio venta", "pvp", "principal");
           if (precio === 0) {
             // Fallback: look for a column named just "precio" (not "precio de costo")
             for (const k of Object.keys(row)) {
