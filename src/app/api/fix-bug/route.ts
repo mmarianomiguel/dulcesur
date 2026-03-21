@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeFileSync } from 'fs'
 
-const SECRET = 'enexpro-pull-secret'
+const SECRET = process.env.PULL_SECRET
 
 export async function POST(req: NextRequest) {
+  if (!SECRET) {
+    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+  }
+
   const secret = req.headers.get('x-pull-secret')
   if (secret !== SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

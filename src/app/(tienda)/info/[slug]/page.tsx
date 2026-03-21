@@ -12,6 +12,13 @@ interface Pagina {
   contenido: string;
 }
 
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '')
+    .replace(/on\w+='[^']*'/gi, '');
+}
+
 export default function InfoPage() {
   const { slug } = useParams();
   const [pagina, setPagina] = useState<Pagina | null>(null);
@@ -54,7 +61,7 @@ export default function InfoPage() {
       <h1 className="text-3xl font-bold text-gray-900 mb-8">{pagina?.titulo}</h1>
       <div
         className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
-        dangerouslySetInnerHTML={{ __html: pagina?.contenido || "" }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(pagina?.contenido || "") }}
       />
     </div>
   );

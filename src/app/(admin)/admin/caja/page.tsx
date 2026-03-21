@@ -396,7 +396,7 @@ export default function CajaPage() {
       .reduce((a, m) => a + m.monto, 0);
 
     const gastos = movements
-      .filter((m) => m.tipo === "egreso" && m.descripcion.toLowerCase().includes("gasto"))
+      .filter((m) => m.tipo === "egreso" && (m.descripcion || "").toLowerCase().includes("gasto"))
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const notasCreditoEgresos = movements
@@ -408,7 +408,7 @@ export default function CajaPage() {
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const retiros = movements
-      .filter((m) => m.tipo === "egreso" && !m.descripcion.toLowerCase().includes("gasto") && m.referencia_tipo !== "nota_credito" && m.referencia_tipo !== "anulacion")
+      .filter((m) => m.tipo === "egreso" && !(m.descripcion || "").toLowerCase().includes("gasto") && m.referencia_tipo !== "nota_credito" && m.referencia_tipo !== "anulacion")
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const efectivoInicial = turno?.efectivo_inicial ?? 0;

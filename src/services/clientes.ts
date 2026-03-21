@@ -12,11 +12,13 @@ class ClienteService extends BaseService<Cliente> {
   }
 
   async search(term: string): Promise<Cliente[]> {
+    // Escape special characters to prevent filter injection
+    const safeTerm = term.replace(/[%_\\(),.*]/g, (ch) => `\\${ch}`);
     const { data } = await supabase
       .from(this.table)
       .select("*")
       .eq("activo", true)
-      .or(`nombre.ilike.%${term}%,email.ilike.%${term}%,telefono.ilike.%${term}%`)
+      .or(`nombre.ilike.%${safeTerm}%,email.ilike.%${safeTerm}%,telefono.ilike.%${safeTerm}%`)
       .order("nombre")
       .limit(20);
     return (data as Cliente[]) || [];

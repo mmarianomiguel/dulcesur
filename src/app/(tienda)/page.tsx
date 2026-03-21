@@ -473,6 +473,13 @@ function PorQueElegirnosBlock({ config }: { config: Record<string, any> }) {
   );
 }
 
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '')
+    .replace(/on\w+='[^']*'/gi, '');
+}
+
 function TextoLibreBlock({ config }: { config: Record<string, any> }) {
   const contenido = config.contenido || "";
   if (!contenido) return null;
@@ -482,7 +489,7 @@ function TextoLibreBlock({ config }: { config: Record<string, any> }) {
       <div className="max-w-7xl mx-auto px-4">
         <div
           className="prose prose-pink max-w-none"
-          dangerouslySetInnerHTML={{ __html: contenido }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(contenido) }}
         />
       </div>
     </section>
