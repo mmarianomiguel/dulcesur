@@ -434,7 +434,7 @@ export default function CheckoutPage() {
     try {
       const { data: numData, error: numError } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
       if (!numData || numError) {
-        setErrors(["No se pudo generar el número de pedido. Intentá de nuevo."]);
+        setErrors([`No se pudo generar el número de pedido: ${numError?.message || "sin respuesta"}. Intentá de nuevo.`]);
         setSubmitting(false);
         return;
       }

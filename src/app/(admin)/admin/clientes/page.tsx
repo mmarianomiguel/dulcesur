@@ -1390,7 +1390,11 @@ export default function ClientesPage() {
                 <div className="col-span-2 space-y-2">
                   <Label>Zona de entrega</Label>
                   <Select value={form.zona_entrega || "none"} onValueChange={(v) => f("zona_entrega", v === "none" ? "" : (v || ""))}>
-                    <SelectTrigger><SelectValue placeholder="Sin zona asignada" /></SelectTrigger>
+                    <SelectTrigger>
+                      {form.zona_entrega
+                        ? (zonas.find((z) => z.id === form.zona_entrega)?.nombre ?? "Sin zona asignada")
+                        : "Sin zona asignada"}
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin zona asignada</SelectItem>
                       {zonas.map((z) => (
@@ -1421,7 +1425,11 @@ export default function ClientesPage() {
                 <div className="col-span-2 space-y-2">
                   <Label>Vendedor</Label>
                   <Select value={form.vendedor_id || "none"} onValueChange={(v) => f("vendedor_id", v === "none" ? "" : (v || ""))}>
-                    <SelectTrigger><SelectValue placeholder="Sin vendedor" /></SelectTrigger>
+                    <SelectTrigger>
+                      {form.vendedor_id
+                        ? (vendedores.find((v) => v.id === form.vendedor_id)?.nombre ?? "Sin vendedor")
+                        : "Sin vendedor"}
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin vendedor</SelectItem>
                       {vendedores.map((v) => (
