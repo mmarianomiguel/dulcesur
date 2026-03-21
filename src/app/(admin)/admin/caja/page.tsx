@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG } from "@/lib/formatters";
+import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useDialog } from "@/hooks/use-dialog";
 import { cajaService, ventaService } from "@/services";
@@ -1343,86 +1344,56 @@ export default function CajaPage() {
         </DialogContent>
       </Dialog>
       {/* Venta Detail Dialog */}
-      <Dialog open={ventaDetailOpen} onOpenChange={setVentaDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Venta {ventaDetail?.numero}</DialogTitle>
-          </DialogHeader>
-          {ventaDetail && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium ml-1">{(ventaDetail as any).clientes?.nombre || "—"}</span></div>
-                <div><span className="text-muted-foreground">Vendedor:</span> <span className="font-medium ml-1">{(ventaDetail as any).vendedor_id ? sellersMap[(ventaDetail as any).vendedor_id] || "—" : "—"}</span></div>
-                <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium ml-1">{ventaDetail.forma_pago}</span></div>
-                <div><span className="text-muted-foreground">Total:</span> <span className="font-bold ml-1 text-emerald-600">{formatCurrency(ventaDetail.total)}</span></div>
-              </div>
-
-              {/* Mixed payment detail */}
-              {ventaDetail.forma_pago === "Mixto" && ventaDetailMovs.length > 0 && (
-                <div className="space-y-1.5 p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase">Detalle pago mixto</p>
-                  {ventaDetailMovs.filter((m: any) => m.tipo === "ingreso").map((m: any, i: number) => {
-                    const desc = (m.descripcion || "").toLowerCase();
-                    const isDebtCollection = desc.includes("cobro") || desc.includes("saldo") || desc.includes("deuda");
-                    return (
-                      <div key={i} className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          {m.metodo_pago}
-                          {isDebtCollection && (
-                            <span className="ml-1 text-xs text-amber-600 font-medium">(Cobro saldo anterior)</span>
-                          )}
-                        </span>
-                        <span className="font-medium">{formatCurrency(Math.abs(m.monto))}</span>
-                      </div>
-                    );
-                  })}
+      <VentaDetailDialog
+        open={ventaDetailOpen}
+        onOpenChange={setVentaDetailOpen}
+        data={ventaDetail ? {
+          numero: ventaDetail.numero,
+          created_at: (ventaDetail as any).created_at || ventaDetail.fecha,
+          fecha: ventaDetail.fecha,
+          estado: ventaDetail.estado,
+          tipo_comprobante: (ventaDetail as any).tipo_comprobante,
+          forma_pago: ventaDetail.forma_pago,
+          total: ventaDetail.total,
+          subtotal: ventaDetail.subtotal,
+          descuento_porcentaje: (ventaDetail as any).descuento_porcentaje,
+          recargo_porcentaje: (ventaDetail as any).recargo_porcentaje,
+          observacion: ventaDetail.observacion,
+          entregado: (ventaDetail as any).entregado,
+          nombre_cliente: (ventaDetail as any).clientes?.nombre || "Consumidor Final",
+          telefono: (ventaDetail as any).clientes?.telefono || undefined,
+          domicilio: (ventaDetail as any).clientes?.domicilio || undefined,
+          cuit: (ventaDetail as any).clientes?.cuit || undefined,
+          vendedor: (ventaDetail as any).vendedor_id ? sellersMap[(ventaDetail as any).vendedor_id] || undefined : undefined,
+          origen: "historial",
+        } : null}
+        items={ventaDetailItems.map((item: any) => ({
+          id: item.id,
+          producto_id: item.producto_id,
+          codigo: item.codigo || undefined,
+          descripcion: item.descripcion || item.nombre_producto || "",
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          descuento: item.descuento,
+          subtotal: item.subtotal,
+          unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
+        }))}
+        footerExtra={ventaDetail?.forma_pago === "Mixto" && ventaDetailMovs.length > 0 ? (
+          <div className="space-y-1 p-2.5 bg-muted/50 rounded-lg min-w-[200px]">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase">Pago Mixto</p>
+            {ventaDetailMovs.filter((m: any) => m.tipo === "ingreso").map((m: any, i: number) => {
+              const desc = (m.descripcion || "").toLowerCase();
+              const isDebt = desc.includes("cobro") || desc.includes("saldo") || desc.includes("deuda");
+              return (
+                <div key={i} className="flex justify-between text-xs gap-3">
+                  <span className="text-muted-foreground">{m.metodo_pago}{isDebt && <span className="ml-1 text-amber-600">(Saldo ant.)</span>}</span>
+                  <span className="font-medium">{formatCurrency(Math.abs(m.monto))}</span>
                 </div>
-              )}
-
-              {/* Items */}
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50 text-muted-foreground">
-                      <th className="text-left py-2 px-3 font-medium">Producto</th>
-                      <th className="text-center py-2 px-3 font-medium">Cant</th>
-                      <th className="text-right py-2 px-3 font-medium">Precio</th>
-                      <th className="text-right py-2 px-3 font-medium">Desc%</th>
-                      <th className="text-right py-2 px-3 font-medium">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ventaDetailItems.map((item: any) => {
-                      const unidades = item.unidades_por_presentacion || 1;
-                      const isBox = unidades > 1;
-                      const unitPrice = isBox ? item.precio_unitario / unidades : item.precio_unitario;
-                      // Clean description: remove duplicate presentations and "(Unidad)"
-                      const rawName = item.descripcion || item.nombre_producto || "";
-                      const cleanName = rawName
-                        .replace(/\s*\(Unidad\)/gi, "")
-                        .replace(/\s*[-–]\s*Unidad$/i, "")
-                        .replace(/(\([^)]+\))\s*\1/gi, "$1")
-                        .trim();
-                      return (
-                        <tr key={item.id} className="border-b last:border-0">
-                          <td className="py-2 px-3">
-                            <span>{cleanName}</span>
-                            {item.es_combo && <span className="ml-1.5 text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-medium">Combo</span>}
-                          </td>
-                          <td className="py-2 px-3 text-center">{unidades > 0 && unidades < 1 ? item.cantidad * unidades : item.cantidad}</td>
-                          <td className="py-2 px-3 text-right">{formatCurrency(unitPrice)}{isBox && <span className="block text-[10px] text-muted-foreground">c/u (x{unidades})</span>}</td>
-                          <td className="py-2 px-3 text-right">{item.descuento ? `${item.descuento}%` : "—"}</td>
-                          <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+              );
+            })}
+          </div>
+        ) : undefined}
+      />
     </div>
   );
 }

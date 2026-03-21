@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import Link from "next/link";
+import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import {
   Truck,
   Package,
@@ -1173,116 +1174,34 @@ export default function HojaDeRutaPage() {
       </>)}
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="w-5 h-5" />
-              Detalle de Venta
-              {detailVenta && (
-                <span className="font-mono text-sm text-gray-500 ml-2">
-                  {detailVenta.numero}
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-
-          {detailVenta && (
-            <div className="space-y-4 mt-2">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Cliente:</span>{" "}
-                  <span className="font-medium">
-                    {detailVenta.clientes?.nombre ?? "Sin cliente"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Fecha:</span>{" "}
-                  <span className="font-medium">{detailVenta.fecha}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Direccion:</span>{" "}
-                  {(() => {
-                    const dir = [detailVenta.clientes?.domicilio, detailVenta.clientes?.localidad].filter(Boolean).join(", ");
-                    return dir ? (
-                      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline inline-flex items-center gap-1">
-                        {dir} <Navigation className="w-3 h-3" />
-                      </a>
-                    ) : <span className="font-medium">N/A</span>;
-                  })()}
-                </div>
-                <div>
-                  <span className="text-gray-500">Forma de pago:</span>{" "}
-                  <span className="font-medium">
-                    {detailVenta.forma_pago || "N/A"}
-                  </span>
-                </div>
-                {detailVenta.clientes?.telefono && (
-                  <div>
-                    <span className="text-gray-500">Telefono:</span>{" "}
-                    <a href={`tel:${detailVenta.clientes.telefono}`} className="font-medium text-blue-600 hover:underline">
-                      {detailVenta.clientes.telefono}
-                    </a>
-                  </div>
-                )}
-                <div>
-                  <span className="text-gray-500">Saldo cliente:</span>{" "}
-                  <span className="font-medium text-orange-600">
-                    {formatCurrency(detailVenta.clientes?.saldo ?? 0)}
-                  </span>
-                </div>
-              </div>
-
-              {detailVenta.observacion && (
-                <div className="text-sm bg-gray-50 rounded-lg p-3">
-                  <span className="text-gray-500 font-medium">
-                    Observacion:
-                  </span>{" "}
-                  {detailVenta.observacion}
-                </div>
-              )}
-
-              {/* Items table */}
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr className="text-left text-gray-500">
-                      <th className="py-2 px-3">Producto</th>
-                      <th className="py-2 px-3 text-center">Cant.</th>
-                      <th className="py-2 px-3 text-right">Precio Unit.</th>
-                      <th className="py-2 px-3 text-right">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailVenta.venta_items?.map((item) => (
-                      <tr key={item.id} className="border-t">
-                        <td className="py-2 px-3 font-medium">
-                          {item.descripcion}
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          {item.cantidad} {item.unidad_medida ?? ""}
-                        </td>
-                        <td className="py-2 px-3 text-right">
-                          {formatCurrency(item.precio_unitario)}
-                        </td>
-                        <td className="py-2 px-3 text-right font-medium">
-                          {formatCurrency(item.subtotal)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex justify-end pt-2 border-t">
-                <div className="text-lg font-bold">
-                  Total: {formatCurrency(detailVenta.total)}
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <VentaDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        data={detailVenta ? {
+          numero: detailVenta.numero,
+          created_at: detailVenta.fecha,
+          fecha: detailVenta.fecha,
+          estado: detailVenta.estado,
+          tipo_comprobante: detailVenta.tipo_comprobante,
+          forma_pago: detailVenta.forma_pago,
+          metodo_entrega: detailVenta.metodo_entrega || undefined,
+          total: detailVenta.total,
+          observacion: detailVenta.observacion,
+          entregado: detailVenta.entregado,
+          nombre_cliente: detailVenta.clientes?.nombre || "Sin cliente",
+          telefono: detailVenta.clientes?.telefono || undefined,
+          domicilio: [detailVenta.clientes?.domicilio, detailVenta.clientes?.localidad].filter(Boolean).join(", ") || undefined,
+          origen: detailVenta.origen === "tienda" ? "pedidos" : "historial",
+        } : null}
+        items={detailVenta?.venta_items?.map((item) => ({
+          id: item.id,
+          descripcion: item.descripcion,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          subtotal: item.subtotal,
+          unidad_medida: item.unidad_medida,
+        })) || []}
+      />
 
       {/* Payment Dialog */}
       <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>

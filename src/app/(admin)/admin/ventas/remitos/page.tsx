@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -478,72 +479,48 @@ export default function RemitosPage() {
       </Card>
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="truncate">Remito {detailRemito?.numero}</DialogTitle>
-          </DialogHeader>
-          {detailRemito && (
-            <div className="w-full overflow-hidden space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Fecha:</span> <span className="font-medium ml-1">{new Date(detailRemito.fecha + "T12:00:00").toLocaleDateString("es-AR")}</span></div>
-                <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium ml-1">{detailRemito.clientes?.nombre || "—"}</span></div>
-                <div><span className="text-muted-foreground">Entrega:</span> <Badge variant={detailRemito.entregado ? "default" : "secondary"} className="ml-1">{detailRemito.entregado ? "Entregado" : "Pendiente"}</Badge></div>
-                <div><span className="text-muted-foreground">Facturado:</span> <Badge variant={detailRemito.facturado ? "default" : "outline"} className="ml-1">{detailRemito.facturado ? "Si" : "No"}</Badge></div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); preparePrint(detailRemito); }}>
-                  <Printer className="w-3.5 h-3.5 mr-1.5" />
-                  Imprimir
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); exportPDF(detailRemito); }}>
-                  <Download className="w-3.5 h-3.5 mr-1.5" />
-                  Exportar PDF
-                </Button>
-              </div>
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50 text-muted-foreground">
-                      <th className="text-left py-2 px-3 font-medium">Código</th>
-                      <th className="text-left py-2 px-3 font-medium">Artículo</th>
-                      <th className="text-center py-2 px-3 font-medium">Cant</th>
-                      <th className="text-right py-2 px-3 font-medium">Precio</th>
-                      <th className="text-right py-2 px-3 font-medium">Desc.%</th>
-                      <th className="text-right py-2 px-3 font-medium">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailItems.map((item) => {
-                      const isCombo = detailComboIds.has(item.producto_id || "");
-                      const upp = item.unidades_por_presentacion ?? 1;
-                      const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
-                      return (
-                      <tr key={item.id} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.codigo}</td>
-                        <td className="py-2 px-3">
-                          {isCombo && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white mr-1.5 tracking-wider">COMBO</span>
-                          )}
-                          {item.descripcion}
-                        </td>
-                        <td className="py-2 px-3 text-center">{displayQty}</td>
-                        <td className="py-2 px-3 text-right">{formatCurrency(item.precio_unitario)}</td>
-                        <td className="py-2 px-3 text-right">{item.descuento > 0 ? `(-${item.descuento}%)` : ""}</td>
-                        <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex justify-end text-lg font-bold">
-                Total: {formatCurrency(detailRemito.total)}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <VentaDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        data={detailRemito ? {
+          numero: detailRemito.numero,
+          created_at: detailRemito.fecha,
+          fecha: detailRemito.fecha,
+          estado: detailRemito.estado,
+          tipo_comprobante: detailRemito.tipo_comprobante,
+          forma_pago: detailRemito.forma_pago,
+          total: detailRemito.total,
+          subtotal: detailRemito.subtotal,
+          descuento_porcentaje: detailRemito.descuento_porcentaje,
+          recargo_porcentaje: detailRemito.recargo_porcentaje,
+          observacion: detailRemito.observacion,
+          entregado: detailRemito.entregado,
+          nombre_cliente: detailRemito.clientes?.nombre || "Consumidor Final",
+          telefono: detailRemito.clientes?.telefono || undefined,
+          domicilio: detailRemito.clientes?.domicilio || undefined,
+          cuit: detailRemito.clientes?.cuit || undefined,
+          vendedor: getVendedorNombre(detailRemito.vendedor_id),
+          origen: "historial",
+          comboIds: detailComboIds,
+        } : null}
+        items={detailItems.map((item) => ({
+          id: item.id,
+          producto_id: item.producto_id,
+          codigo: item.codigo || undefined,
+          descripcion: item.descripcion,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          descuento: item.descuento,
+          subtotal: item.subtotal,
+          unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
+        }))}
+        onPrint={detailRemito ? () => { setDetailOpen(false); preparePrint(detailRemito); } : undefined}
+        footerExtra={detailRemito ? (
+          <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); exportPDF(detailRemito); }}>
+            <Download className="w-3.5 h-3.5 mr-1.5" />Exportar PDF
+          </Button>
+        ) : undefined}
+      />
 
       {/* Hidden print view - using shared ReceiptPrintView */}
       {printRemito && (

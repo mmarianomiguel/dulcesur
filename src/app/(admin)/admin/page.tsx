@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
+import { VentaDetailDialog } from "@/components/venta-detail-dialog";
+import type { VentaDetailData, VentaDetailItem } from "@/components/venta-detail-dialog";
 import {
   DollarSign,
   TrendingUp,
@@ -809,112 +811,56 @@ export default function DashboardPage() {
       )}
 
       {/* Pedido Detail Dialog */}
-      <Dialog open={pedidoDetailOpen} onOpenChange={setPedidoDetailOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5" />
-              Pedido #{pedidoDetail?.numero}
-            </DialogTitle>
-          </DialogHeader>
-          {pedidoDetail && (() => {
-            const pedidoEstado = pedidoEstadoMap[pedidoDetail.numero] || "pendiente";
-            const isRetiro = pedidoDetail.metodo_entrega === "retiro";
-            const isArmado = pedidoEstado === "armado";
-            return (
-              <div className="space-y-4 mt-2">
-                <div className="grid grid-cols-2 gap-3 text-sm bg-muted/50 rounded-lg p-4">
-                  <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{pedidoDetail.clientes?.nombre || "Sin cliente"}</span></div>
-                  <div><span className="text-muted-foreground">Estado:</span>{" "}
-                    {isArmado ? (
-                      <Badge className="text-xs ml-1 bg-violet-100 text-violet-700 hover:bg-violet-100">Armado</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-xs ml-1">Pendiente</Badge>
-                    )}
-                  </div>
-                  <div><span className="text-muted-foreground">Entrega:</span> <span className="font-medium">{pedidoDetail.metodo_entrega === "envio" ? "Envio a domicilio" : "Retiro en local"}</span></div>
-                  <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium">{pedidoDetail.forma_pago}</span></div>
-                  {pedidoDetail.clientes?.domicilio && (
-                    <div className="col-span-2"><span className="text-muted-foreground">Direccion:</span> <span className="font-medium">{[pedidoDetail.clientes.domicilio, pedidoDetail.clientes.localidad].filter(Boolean).join(", ")}</span></div>
-                  )}
-                  {pedidoDetail.clientes?.telefono && (
-                    <div><span className="text-muted-foreground">Telefono:</span> <span className="font-medium">{pedidoDetail.clientes.telefono}</span></div>
-                  )}
-                  {pedidoEntregaMap[pedidoDetail.numero] && (
-                    <div><span className="text-muted-foreground">Fecha entrega:</span> <span className="font-medium">{new Date(pedidoEntregaMap[pedidoDetail.numero] + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</span></div>
-                  )}
-                  <div><span className="text-muted-foreground">Pedido:</span> <span className="font-medium">{new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}</span></div>
-                </div>
-
-                {pedidoDetail.observacion && (
-                  <div className="text-sm bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-900/30">
-                    <span className="text-muted-foreground font-medium">Observaciones:</span> {pedidoDetail.observacion}
-                  </div>
-                )}
-
-                <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50 text-muted-foreground">
-                        <th className="text-left py-2 px-3 font-medium">Código</th>
-                        <th className="text-left py-2 px-3 font-medium">Artículo</th>
-                        <th className="text-center py-2 px-3 font-medium">Cant</th>
-                        <th className="text-right py-2 px-3 font-medium">Precio</th>
-                        <th className="text-right py-2 px-3 font-medium">Desc.%</th>
-                        <th className="text-right py-2 px-3 font-medium">Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pedidoDetail.venta_items.map((item) => {
-                        const isCombo = comboProductIds.has(item.producto_id || "");
-                        const upp = item.unidades_por_presentacion ?? 1;
-                        const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
-                        return (
-                          <tr key={item.id} className="border-b last:border-0">
-                            <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.codigo || ""}</td>
-                            <td className="py-2 px-3">
-                              {isCombo && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white mr-1.5 tracking-wider">COMBO</span>
-                              )}
-                              {cleanItemDescription(item.descripcion, item.presentacion)}
-                            </td>
-                            <td className="py-2 px-3 text-center">{displayQty}</td>
-                            <td className="py-2 px-3 text-right">{formatCurrency(item.precio_unitario)}</td>
-                            <td className="py-2 px-3 text-right">{item.descuento > 0 ? `(-${item.descuento}%)` : ""}</td>
-                            <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5"
-                      onClick={() => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); }}>
-                      <Printer className="w-3.5 h-3.5" /> Imprimir Remito
-                    </Button>
-                    {isRetiro && !isArmado && (
-                      <Button variant="outline" size="sm" className="gap-1.5 text-violet-600 border-violet-200 hover:bg-violet-50"
-                        disabled={actionLoading === pedidoDetail.id}
-                        onClick={() => { handleMarkArmado(pedidoDetail); }}>
-                        <PackageCheck className="w-3.5 h-3.5" /> Marcar Armado
-                      </Button>
-                    )}
-                    <Button variant="default" size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                      disabled={actionLoading === pedidoDetail.id}
-                      onClick={() => { setPedidoDetailOpen(false); handleMarkDelivered(pedidoDetail); }}>
-                      <CheckCircle className="w-3.5 h-3.5" /> Marcar Entregado
-                    </Button>
-                  </div>
-                  <div className="text-lg font-bold">Total: {formatCurrency(pedidoDetail.total)}</div>
-                </div>
-              </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      <VentaDetailDialog
+        open={pedidoDetailOpen}
+        onOpenChange={setPedidoDetailOpen}
+        data={pedidoDetail ? {
+          numero: pedidoDetail.numero,
+          created_at: pedidoDetail.created_at,
+          fecha: pedidoDetail.fecha,
+          estado: pedidoEstadoMap[pedidoDetail.numero] || "pendiente",
+          forma_pago: pedidoDetail.forma_pago,
+          metodo_entrega: pedidoDetail.metodo_entrega || undefined,
+          total: pedidoDetail.total,
+          subtotal: pedidoDetail.subtotal,
+          observacion: pedidoDetail.observacion,
+          entregado: pedidoDetail.entregado,
+          nombre_cliente: pedidoDetail.clientes?.nombre || "Consumidor Final",
+          telefono: pedidoDetail.clientes?.telefono || undefined,
+          domicilio: [pedidoDetail.clientes?.domicilio, pedidoDetail.clientes?.localidad].filter(Boolean).join(", ") || undefined,
+          fecha_entrega: pedidoEntregaMap[pedidoDetail.numero] || null,
+          origen: "pedidos",
+          comboIds: comboProductIds,
+        } : null}
+        items={pedidoDetail?.venta_items.map((item) => ({
+          id: item.id,
+          producto_id: item.producto_id,
+          codigo: item.codigo || undefined,
+          descripcion: item.descripcion,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          descuento: item.descuento,
+          subtotal: item.subtotal,
+          unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
+        })) || []}
+        onPrint={pedidoDetail ? () => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); } : undefined}
+        footerExtra={pedidoDetail ? (
+          <div className="flex gap-2">
+            {pedidoDetail.metodo_entrega === "retiro" && (pedidoEstadoMap[pedidoDetail.numero] || "pendiente") !== "armado" && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-violet-600 border-violet-200 hover:bg-violet-50"
+                disabled={actionLoading === pedidoDetail.id}
+                onClick={() => handleMarkArmado(pedidoDetail)}>
+                <PackageCheck className="w-3.5 h-3.5" /> Marcar Armado
+              </Button>
+            )}
+            <Button variant="default" size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              disabled={actionLoading === pedidoDetail.id}
+              onClick={() => { setPedidoDetailOpen(false); handleMarkDelivered(pedidoDetail); }}>
+              <CheckCircle className="w-3.5 h-3.5" /> Marcar Entregado
+            </Button>
+          </div>
+        ) : undefined}
+      />
 
       {/* Hidden print container */}
       <div ref={printRef} className="hidden">
