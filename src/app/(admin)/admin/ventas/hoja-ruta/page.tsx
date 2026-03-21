@@ -423,8 +423,8 @@ export default function HojaDeRutaPage() {
 
 
   const navTabs = [
-    { name: "Todas las Ventas", href: "/ventas/listado" },
-    { name: "Entregas y Ruta", href: "/ventas/hoja-ruta" },
+    { name: "Todas las Ventas", href: "/admin/ventas/listado" },
+    { name: "Entregas y Ruta", href: "/admin/ventas/hoja-ruta" },
   ];
 
   return (
@@ -436,7 +436,7 @@ export default function HojaDeRutaPage() {
             key={tab.href}
             href={tab.href}
             className={`rounded-lg px-6 py-2.5 text-sm transition-all ${
-              tab.href === "/ventas/hoja-ruta"
+              tab.href === "/admin/ventas/hoja-ruta"
                 ? "bg-white shadow-sm font-semibold text-gray-900"
                 : "text-gray-500 hover:text-gray-700"
             }`}
