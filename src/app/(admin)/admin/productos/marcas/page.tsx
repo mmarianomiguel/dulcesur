@@ -348,7 +348,7 @@ export default function MarcasPage() {
       <PageHeader
         title="Marcas y Categorías"
         description="Gestionar marcas, categorías y subcategorías de productos"
-        backHref="/productos"
+        backHref="/admin/productos"
         actions={
           activeTab === "marcas" ? <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" />Nueva marca</Button>
           : activeTab === "categorias" ? <Button onClick={() => { setCatNombre(""); setEditingCat(null); setCatDialogOpen(true); }}><Plus className="w-4 h-4 mr-2" />Nueva categoría</Button>
