@@ -1,0 +1,694 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Search,
+  Loader2,
+  Eye,
+  Truck,
+  Store,
+  ShoppingCart,
+  Package,
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  Clock,
+  Plus,
+  X,
+  Trash2,
+  Save,
+  CheckCircle,
+  AlertTriangle,
+  Globe,
+} from "lucide-react";
+
+interface PedidoItem {
+  id?: number;
+  pedido_id?: number;
+  producto_id: string;
+  nombre: string;
+  presentacion: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+interface Pedido {
+  id: number;
+  numero: string;
+  created_at: string;
+  estado: string;
+  nombre_cliente: string;
+  email: string;
+  telefono: string;
+  metodo_entrega: string;
+  direccion_texto: string | null;
+  fecha_entrega: string | null;
+  metodo_pago: string;
+  subtotal: number;
+  costo_envio: number;
+  total: number;
+  observacion: string | null;
+  cliente_auth_id: string | null;
+  items: PedidoItem[];
+}
+
+interface ProductoSearch {
+  id: string;
+  codigo: string;
+  nombre: string;
+  precio: number;
+}
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
+
+const estadoBadge: Record<string, { bg: string; text: string; label: string }> = {
+  pendiente: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", label: "Pendiente" },
+  armado: { bg: "bg-violet-50 border-violet-200", text: "text-violet-700", label: "Armado" },
+  confirmado: { bg: "bg-blue-50 border-blue-200", text: "text-blue-700", label: "Confirmado" },
+  entregado: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", label: "Entregado" },
+  cancelado: { bg: "bg-red-50 border-red-200", text: "text-red-700", label: "Cancelado" },
+};
+
+export default function PedidosOnlinePage() {
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterEstado, setFilterEstado] = useState("todos");
+  const [filterEntrega, setFilterEntrega] = useState("todos");
+  const [search, setSearch] = useState("");
+
+  // Detail/Edit dialog
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
+  const [editItems, setEditItems] = useState<PedidoItem[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Add product search
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [productResults, setProductResults] = useState<ProductoSearch[]>([]);
+  const [searchingProducts, setSearchingProducts] = useState(false);
+
+  const fetchPedidos = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("pedidos_tienda")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!data) { setLoading(false); return; }
+
+    // Fetch items for all pedidos
+    const ids = data.map((p: any) => p.id);
+    const { data: allItems } = await supabase
+      .from("pedido_tienda_items")
+      .select("*")
+      .in("pedido_id", ids);
+
+    const itemsByPedido: Record<number, PedidoItem[]> = {};
+    (allItems || []).forEach((item: any) => {
+      if (!itemsByPedido[item.pedido_id]) itemsByPedido[item.pedido_id] = [];
+      itemsByPedido[item.pedido_id].push(item);
+    });
+
+    setPedidos(data.map((p: any) => ({ ...p, items: itemsByPedido[p.id] || [] })));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchPedidos(); }, [fetchPedidos]);
+
+  // Filter pedidos
+  const filtered = pedidos.filter((p) => {
+    if (filterEstado !== "todos" && p.estado !== filterEstado) return false;
+    if (filterEntrega !== "todos" && p.metodo_entrega !== filterEntrega) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!p.numero.toLowerCase().includes(q) && !p.nombre_cliente.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Open detail
+  const openDetail = (pedido: Pedido) => {
+    setSelectedPedido(pedido);
+    setEditItems(pedido.items.map((i) => ({ ...i })));
+    setHasChanges(false);
+    setDetailOpen(true);
+  };
+
+  // Update item quantity
+  const updateItemQty = (index: number, qty: number) => {
+    if (qty <= 0) return;
+    setEditItems((prev) => prev.map((item, i) =>
+      i === index ? { ...item, cantidad: qty, subtotal: qty * item.precio_unitario } : item
+    ));
+    setHasChanges(true);
+  };
+
+  // Remove item
+  const removeItem = (index: number) => {
+    if (editItems.length <= 1) return; // Don't allow empty pedido
+    setEditItems((prev) => prev.filter((_, i) => i !== index));
+    setHasChanges(true);
+  };
+
+  // Search products to add
+  const searchProducts = async (query: string) => {
+    setProductSearch(query);
+    if (query.length < 2) { setProductResults([]); return; }
+    setSearchingProducts(true);
+    const { data } = await supabase
+      .from("productos")
+      .select("id, codigo, nombre, precio")
+      .eq("activo", true)
+      .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
+      .limit(10);
+    setProductResults((data || []) as ProductoSearch[]);
+    setSearchingProducts(false);
+  };
+
+  // Add product to pedido
+  const addProduct = (product: ProductoSearch) => {
+    // Check if already exists
+    const existing = editItems.findIndex((i) => i.producto_id === product.id);
+    if (existing >= 0) {
+      updateItemQty(existing, editItems[existing].cantidad + 1);
+    } else {
+      setEditItems((prev) => [...prev, {
+        producto_id: product.id,
+        nombre: product.nombre,
+        presentacion: "Unidad",
+        cantidad: 1,
+        precio_unitario: product.precio,
+        subtotal: product.precio,
+      }]);
+      setHasChanges(true);
+    }
+    setAddProductOpen(false);
+    setProductSearch("");
+    setProductResults([]);
+  };
+
+  // Save changes
+  const handleSave = async () => {
+    if (!selectedPedido) return;
+    setSaving(true);
+
+    try {
+      // Delete existing items
+      await supabase.from("pedido_tienda_items").delete().eq("pedido_id", selectedPedido.id);
+
+      // Insert updated items
+      const newItems = editItems.map((item) => ({
+        pedido_id: selectedPedido.id,
+        producto_id: item.producto_id,
+        nombre: item.nombre,
+        presentacion: item.presentacion,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio_unitario,
+        subtotal: item.precio_unitario * item.cantidad,
+      }));
+
+      await supabase.from("pedido_tienda_items").insert(newItems);
+
+      // Update pedido total
+      const nuevoSubtotal = editItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0);
+      const nuevoTotal = nuevoSubtotal + (selectedPedido.costo_envio || 0);
+
+      await supabase.from("pedidos_tienda").update({
+        subtotal: nuevoSubtotal,
+        total: nuevoTotal,
+      }).eq("id", selectedPedido.id);
+
+      // Also update linked venta if exists
+      const { data: venta } = await supabase
+        .from("ventas")
+        .select("id")
+        .eq("numero", selectedPedido.numero)
+        .eq("origen", "online")
+        .maybeSingle();
+
+      if (venta) {
+        const ventaItems = editItems.map((item) => ({
+          descripcion: item.nombre,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          subtotal: item.precio_unitario * item.cantidad,
+          presentacion: item.presentacion,
+          producto_id: item.producto_id,
+        }));
+
+        await supabase.from("ventas").update({
+          total: nuevoTotal,
+          items: ventaItems,
+        }).eq("id", venta.id);
+      }
+
+      setHasChanges(false);
+      fetchPedidos();
+      setDetailOpen(false);
+    } catch (err: any) {
+      alert("Error al guardar: " + (err.message || "Error desconocido"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Update estado
+  const handleEstadoChange = async (pedido: Pedido, nuevoEstado: string) => {
+    await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
+
+    if (nuevoEstado === "entregado") {
+      await supabase.from("ventas").update({ entregado: true }).eq("numero", pedido.numero).eq("origen", "online");
+    }
+
+    fetchPedidos();
+  };
+
+  // Stats
+  const pendientes = pedidos.filter((p) => p.estado === "pendiente").length;
+  const armados = pedidos.filter((p) => p.estado === "armado").length;
+  const totalPendiente = pedidos.filter((p) => p.estado === "pendiente" || p.estado === "armado").reduce((s, p) => s + p.total, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Pedidos Online</h1>
+          <p className="text-sm text-muted-foreground">{pedidos.length} pedidos en total</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Globe className="w-5 h-5 text-primary" />
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Pendientes</p>
+            <p className="text-2xl font-bold text-amber-600">{pendientes}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Armados</p>
+            <p className="text-2xl font-bold text-violet-600">{armados}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Total por entregar</p>
+            <p className="text-2xl font-bold">{formatCurrency(totalPendiente)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Total pedidos</p>
+            <p className="text-2xl font-bold">{pedidos.length}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por numero, cliente o email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+            <Select value={filterEstado} onValueChange={(v) => setFilterEstado(v || "todos")}>
+              <SelectTrigger className="w-40 h-9">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los estados</SelectItem>
+                <SelectItem value="pendiente">Pendiente</SelectItem>
+                <SelectItem value="armado">Armado</SelectItem>
+                <SelectItem value="confirmado">Confirmado</SelectItem>
+                <SelectItem value="entregado">Entregado</SelectItem>
+                <SelectItem value="cancelado">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterEntrega} onValueChange={(v) => setFilterEntrega(v || "todos")}>
+              <SelectTrigger className="w-40 h-9">
+                <SelectValue placeholder="Entrega" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas</SelectItem>
+                <SelectItem value="envio">Envio</SelectItem>
+                <SelectItem value="retiro_local">Retiro en local</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pedidos list */}
+      <Card>
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="text-center py-16">
+              <ShoppingCart className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
+              <p className="text-sm text-muted-foreground">No hay pedidos con los filtros seleccionados</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="text-left px-4 py-3 font-medium text-xs text-muted-foreground">Pedido</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-muted-foreground">Cliente</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-muted-foreground">Entrega</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-muted-foreground">Fecha entrega</th>
+                    <th className="text-center px-4 py-3 font-medium text-xs text-muted-foreground">Items</th>
+                    <th className="text-right px-4 py-3 font-medium text-xs text-muted-foreground">Total</th>
+                    <th className="text-center px-4 py-3 font-medium text-xs text-muted-foreground">Estado</th>
+                    <th className="text-center px-4 py-3 font-medium text-xs text-muted-foreground">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((pedido) => {
+                    const est = estadoBadge[pedido.estado] || estadoBadge.pendiente;
+                    return (
+                      <tr key={pedido.id} className="border-b hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold">#{pedido.numero}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(pedido.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{pedido.nombre_cliente}</p>
+                          <p className="text-[10px] text-muted-foreground">{pedido.email}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {pedido.metodo_entrega === "envio" ? (
+                              <><Truck className="w-3.5 h-3.5 text-blue-500" /><span className="text-xs">Envio</span></>
+                            ) : (
+                              <><Store className="w-3.5 h-3.5 text-green-500" /><span className="text-xs">Retiro</span></>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {pedido.fecha_entrega ? new Date(pedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" }) : "---"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge variant="secondary" className="text-xs">{pedido.items.length}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold">{formatCurrency(pedido.total)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
+                            {est.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => openDetail(pedido)}>
+                            <Eye className="w-3.5 h-3.5" />
+                            Ver / Editar
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Detail / Edit Dialog */}
+      <Dialog open={detailOpen} onOpenChange={(open) => {
+        if (!open && hasChanges) {
+          if (!confirm("Tenés cambios sin guardar. ¿Cerrar de todas formas?")) return;
+        }
+        setDetailOpen(open);
+      }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
+          {selectedPedido && (
+            <>
+              {/* Header */}
+              <div className="px-6 py-4 border-b bg-muted/30">
+                <DialogHeader className="p-0 space-y-0">
+                  <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5 text-primary" />
+                    Pedido #{selectedPedido.numero}
+                  </DialogTitle>
+                </DialogHeader>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Creado el {new Date(selectedPedido.created_at).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* Client info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                      <User className="w-4 h-4" /> Cliente
+                    </h3>
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
+                      <p className="font-medium">{selectedPedido.nombre_cliente}</p>
+                      {selectedPedido.email && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="w-3 h-3" />{selectedPedido.email}</p>}
+                      {selectedPedido.telefono && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{selectedPedido.telefono}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                      <Truck className="w-4 h-4" /> Entrega
+                    </h3>
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
+                      <p className="flex items-center gap-1.5">
+                        {selectedPedido.metodo_entrega === "envio" ? (
+                          <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
+                        ) : (
+                          <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
+                        )}
+                      </p>
+                      {selectedPedido.direccion_texto && (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3 mt-0.5 shrink-0" />{selectedPedido.direccion_texto}</p>
+                      )}
+                      {selectedPedido.fecha_entrega && (
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(selectedPedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Pago: {selectedPedido.metodo_pago}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedPedido.observacion && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                    <p className="font-medium text-amber-800 text-xs mb-1">Observacion del cliente:</p>
+                    <p className="text-amber-700">{selectedPedido.observacion}</p>
+                  </div>
+                )}
+
+                {/* Estado */}
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-medium">Estado:</Label>
+                  <Select
+                    value={selectedPedido.estado}
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      handleEstadoChange(selectedPedido, v);
+                      setSelectedPedido({ ...selectedPedido, estado: v });
+                    }}
+                  >
+                    <SelectTrigger className="w-44 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendiente">Pendiente</SelectItem>
+                      <SelectItem value="armado">Armado</SelectItem>
+                      <SelectItem value="confirmado">Confirmado</SelectItem>
+                      <SelectItem value="entregado">Entregado</SelectItem>
+                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Items table */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                      <Package className="w-4 h-4" /> Productos ({editItems.length})
+                    </h3>
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setAddProductOpen(true)}>
+                      <Plus className="w-3 h-3" /> Agregar producto
+                    </Button>
+                  </div>
+
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Producto</th>
+                          <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-24">Presentacion</th>
+                          <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-20">Cant.</th>
+                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
+                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
+                          <th className="w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editItems.map((item, idx) => (
+                          <tr key={idx} className="border-b last:border-0">
+                            <td className="px-3 py-2 font-medium">{item.nombre}</td>
+                            <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
+                            <td className="px-3 py-2 text-center">
+                              <Input
+                                type="number"
+                                min={1}
+                                value={item.cantidad}
+                                onChange={(e) => updateItemQty(idx, Number(e.target.value))}
+                                className="h-7 w-16 text-center mx-auto"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad)}</td>
+                            <td className="px-2 py-2">
+                              <button
+                                onClick={() => removeItem(idx)}
+                                className="text-muted-foreground hover:text-destructive disabled:opacity-30"
+                                disabled={editItems.length <= 1}
+                                title="Quitar producto"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Totals */}
+                  <div className="mt-3 space-y-1 text-sm text-right">
+                    <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0))}</span></p>
+                    {(selectedPedido.costo_envio || 0) > 0 && (
+                      <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(selectedPedido.costo_envio)}</span></p>
+                    )}
+                    <p className="text-base font-bold">Total: {formatCurrency(editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0) + (selectedPedido.costo_envio || 0))}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/30">
+                <div>
+                  {hasChanges && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Cambios sin guardar
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => {
+                    if (hasChanges && !confirm("Tenés cambios sin guardar. ¿Cerrar de todas formas?")) return;
+                    setDetailOpen(false);
+                  }}>
+                    Cerrar
+                  </Button>
+                  {hasChanges && (
+                    <Button onClick={handleSave} disabled={saving}>
+                      {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                      Guardar cambios
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Product Dialog */}
+      <Dialog open={addProductOpen} onOpenChange={setAddProductOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Agregar producto al pedido
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o codigo..."
+                value={productSearch}
+                onChange={(e) => searchProducts(e.target.value)}
+                className="pl-9"
+                autoFocus
+              />
+            </div>
+            {searchingProducts && <div className="text-center py-4"><Loader2 className="w-4 h-4 animate-spin mx-auto" /></div>}
+            {productResults.length > 0 && (
+              <div className="border rounded-lg max-h-60 overflow-y-auto">
+                {productResults.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => addProduct(p)}
+                    className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b last:border-0 flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{p.nombre}</p>
+                      <p className="text-xs text-muted-foreground">{p.codigo}</p>
+                    </div>
+                    <span className="text-sm font-semibold">{formatCurrency(p.precio)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {productSearch.length >= 2 && !searchingProducts && productResults.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No se encontraron productos</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
