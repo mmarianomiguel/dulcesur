@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { showAdminToast } from "@/components/admin-toast";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -200,15 +201,15 @@ export default function CombosPage() {
     // Validation
     const nombre = form.nombre.trim();
     if (!nombre) {
-      alert("El nombre del combo es obligatorio");
+      showAdminToast("El nombre del combo es obligatorio", "error");
       return;
     }
     if (comboItems.length === 0) {
-      alert("Un combo debe tener al menos un producto");
+      showAdminToast("Un combo debe tener al menos un producto", "error");
       return;
     }
     if (form.precio <= 0) {
-      alert("El precio debe ser mayor a 0");
+      showAdminToast("El precio debe ser mayor a 0", "error");
       return;
     }
 
@@ -267,7 +268,7 @@ export default function CombosPage() {
       setDialogOpen(false);
       fetchData();
     } catch (err) {
-      alert((err as Error).message);
+      showAdminToast((err as Error).message, "error");
     } finally {
       setSaving(false);
     }

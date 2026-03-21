@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { showAdminToast } from "@/components/admin-toast";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -138,7 +139,7 @@ export default function UsuariosPage() {
         });
         const result = await res.json();
         if (!res.ok) {
-          alert(result.error || "Error al crear usuario");
+          showAdminToast(result.error || "Error al crear usuario", "error");
           setSaving(false);
           return;
         }
@@ -146,7 +147,7 @@ export default function UsuariosPage() {
       setDialogOpen(false);
       fetchUsuarios();
     } catch {
-      alert("Error al guardar");
+      showAdminToast("Error al guardar", "error");
     }
     setSaving(false);
   };

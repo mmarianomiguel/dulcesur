@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { showAdminToast } from "@/components/admin-toast";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -771,7 +772,7 @@ export default function PaginaInicioEditor() {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error("Error saving:", err);
-      alert("Error al guardar los cambios");
+      showAdminToast("Error al guardar los cambios", "error");
     } finally {
       setSaving(false);
     }

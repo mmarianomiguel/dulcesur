@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { showAdminToast } from "@/components/admin-toast";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -237,7 +238,7 @@ export default function AjustesStockPage() {
     }).select("id").single();
 
     if (ajusteError) {
-      alert(`Error al crear ajuste: ${ajusteError.message}`);
+      showAdminToast(`Error al crear ajuste: ${ajusteError.message}`, "error");
       setSaving(false);
       return;
     }

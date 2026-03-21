@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { showAdminToast } from "@/components/admin-toast";
 import {
   Select,
   SelectContent,
@@ -257,7 +258,7 @@ export default function ClientesPage() {
   };
 
   const handleSave = async () => {
-    if (!form.nombre.trim()) { alert("El nombre del cliente es obligatorio."); return; }
+    if (!form.nombre.trim()) { showAdminToast("El nombre del cliente es obligatorio.", "error"); return; }
     const selectedZona = zonas.find((z) => z.id === form.zona_entrega);
     const payload = {
       codigo_cliente: form.codigo_cliente || null,
@@ -294,12 +295,21 @@ export default function ClientesPage() {
   const handleResetPassword = async () => {
     if (!authId || !resetPw) return;
     setResetMsg("");
-    const { error } = await supabase.from("clientes_auth").update({ password_hash: resetPw }).eq("id", authId);
-    if (error) {
-      setResetMsg("Error al restablecer la contraseña: " + error.message);
-    } else {
-      setResetMsg("Contraseña restablecida correctamente.");
-      setResetPw("");
+    try {
+      const res = await fetch("/api/auth/tienda", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-password", clienteAuthId: authId, newPassword: resetPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setResetMsg(data.error || "Error al restablecer la contraseña.");
+      } else {
+        setResetMsg("Contraseña restablecida correctamente.");
+        setResetPw("");
+      }
+    } catch {
+      setResetMsg("Error al restablecer la contraseña.");
     }
   };
 
