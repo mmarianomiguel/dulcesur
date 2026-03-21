@@ -3289,26 +3289,23 @@ export default function VentasPage() {
             <p className="text-[11px] text-muted-foreground">Los productos no seleccionados se facturarán con la cantidad actual.</p>
 
             <div className="flex flex-col gap-2 pt-1">
-              <Button
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={handleStockAdjust}
-                disabled={stockExceedDialog.adjustSet.size === 0 && stockExceedDialog.issues.length > 1}
-              >
-                {stockExceedDialog.adjustSet.size === stockExceedDialog.issues.length
-                  ? "Ajustar todos a disponible"
-                  : stockExceedDialog.adjustSet.size > 0
-                  ? `Ajustar seleccionados (${stockExceedDialog.adjustSet.size})`
-                  : "Facturar igual"}
-              </Button>
-              {stockExceedDialog.adjustSet.size > 0 && stockExceedDialog.adjustSet.size < stockExceedDialog.issues.length && (
+              {stockExceedDialog.adjustSet.size > 0 && (
                 <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleStockContinue}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={handleStockAdjust}
                 >
-                  Facturar todo igual
+                  {stockExceedDialog.adjustSet.size === stockExceedDialog.issues.length
+                    ? "Ajustar todos a disponible"
+                    : `Ajustar seleccionados (${stockExceedDialog.adjustSet.size})`}
                 </Button>
               )}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleStockContinue}
+              >
+                Facturar igual (ignorar stock)
+              </Button>
               <Button
                 variant="ghost"
                 className="w-full text-muted-foreground"
