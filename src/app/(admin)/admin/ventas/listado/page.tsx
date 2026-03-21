@@ -236,6 +236,10 @@ export default function ListadoVentasPage() {
   const [poSaving, setPoSaving] = useState(false);
   const [poHasChanges, setPoHasChanges] = useState(false);
 
+  // PO Cancel confirmation
+  const [poCancelPedido, setPoCancelPedido] = useState<Pedido | null>(null);
+  const [poCancelling, setPoCancelling] = useState(false);
+
   // PO Add product search
   const [poAddProductOpen, setPoAddProductOpen] = useState(false);
   const [poProductSearch, setPoProductSearch] = useState("");
@@ -323,6 +327,7 @@ export default function ListadoVentasPage() {
     // Sync to pedidos_tienda so client sees "entregado"
     await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
     await fetchVentas();
+    await fetchPedidos();
     setActionLoading(null);
   };
 
@@ -451,6 +456,9 @@ export default function ListadoVentasPage() {
       }).eq("id", v.id);
       if (anularErr) throw new Error(`Error marcando como anulada: ${anularErr.message}`);
 
+      // 6. Sync to pedidos_tienda so client sees "cancelado"
+      await supabase.from("pedidos_tienda").update({ estado: "cancelado" }).eq("numero", v.numero);
+
       if (errores.length > 0) {
         alert(`Venta anulada con advertencias:\n${errores.join("\n")}`);
       }
@@ -458,6 +466,7 @@ export default function ListadoVentasPage() {
       setAnularVenta(null);
       setAnularMotivo("");
       await fetchVentas();
+      await fetchPedidos();
     } catch (err: any) {
       alert(`Error al anular: ${err?.message || String(err)}`);
     } finally {
@@ -806,7 +815,8 @@ export default function ListadoVentasPage() {
         alert("Guardado con advertencias:\n" + errores.join("\n"));
       }
       setPoHasChanges(false);
-      fetchPedidos();
+      await fetchPedidos();
+      await fetchVentas();
       setPoDetailOpen(false);
     } catch (err: any) {
       alert("Error al guardar: " + (err.message || "Error desconocido"));
@@ -815,17 +825,28 @@ export default function ListadoVentasPage() {
     }
   };
 
-  // Update estado -- sync to linked venta, return stock on cancel
+  // Update estado -- sync to linked venta, return stock + caja + CC on cancel
   const poHandleEstadoChange = async (pedido: Pedido, nuevoEstado: string) => {
     const estadoAnterior = pedido.estado;
+    const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    const hora = new Date().toTimeString().split(" ")[0];
 
     await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
+
+    // Find linked venta
+    const { data: ventaLinked } = await supabase
+      .from("ventas")
+      .select("id, cliente_id")
+      .eq("numero", pedido.numero)
+      .maybeSingle();
 
     // Sync estado to linked venta
     const ventaUpdate: Record<string, unknown> = { estado: nuevoEstado };
     if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
     if (nuevoEstado === "cancelado") ventaUpdate.entregado = false;
-    await supabase.from("ventas").update(ventaUpdate).eq("numero", pedido.numero);
+    if (ventaLinked) {
+      await supabase.from("ventas").update(ventaUpdate).eq("id", ventaLinked.id);
+    }
 
     // Return stock when cancelling (only if wasn't already cancelled)
     if (nuevoEstado === "cancelado" && estadoAnterior !== "cancelado") {
@@ -848,6 +869,55 @@ export default function ListadoVentasPage() {
           descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
           usuario: "Admin Sistema",
         });
+      }
+
+      // Reverse caja_movimientos for linked venta
+      if (ventaLinked) {
+        const { data: cajaRows } = await supabase
+          .from("caja_movimientos")
+          .select("*")
+          .eq("referencia_id", ventaLinked.id)
+          .eq("referencia_tipo", "venta");
+        for (const cm of cajaRows || []) {
+          await supabase.from("caja_movimientos").insert({
+            fecha: hoy, hora,
+            tipo: "egreso",
+            descripcion: `Cancelación Pedido Web #${pedido.numero}`,
+            metodo_pago: (cm as any).metodo_pago,
+            monto: (cm as any).monto,
+            referencia_id: ventaLinked.id,
+            referencia_tipo: "anulacion",
+            cuenta_bancaria: (cm as any).cuenta_bancaria || null,
+          });
+        }
+
+        // Reverse cuenta_corriente entries
+        if (ventaLinked.cliente_id) {
+          const { data: ccRows } = await supabase
+            .from("cuenta_corriente")
+            .select("*")
+            .eq("venta_id", ventaLinked.id);
+          if (ccRows && ccRows.length > 0) {
+            const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", ventaLinked.cliente_id).single();
+            let saldoActual = clienteData?.saldo || 0;
+            for (const cc of ccRows) {
+              const nuevoSaldo = saldoActual - (cc as any).debe + (cc as any).haber;
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: ventaLinked.cliente_id,
+                fecha: hoy,
+                comprobante: `Cancelación Pedido Web #${pedido.numero}`,
+                descripcion: `Cancelación de pedido online`,
+                debe: (cc as any).haber,
+                haber: (cc as any).debe,
+                saldo: nuevoSaldo,
+                forma_pago: "Anulación",
+                venta_id: ventaLinked.id,
+              });
+              saldoActual = nuevoSaldo;
+            }
+            await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", ventaLinked.cliente_id);
+          }
+        }
       }
     }
 
@@ -875,7 +945,8 @@ export default function ListadoVentasPage() {
       }
     }
 
-    fetchPedidos();
+    await fetchPedidos();
+    await fetchVentas();
   };
 
   // PO Stats
@@ -1314,52 +1385,46 @@ export default function ListadoVentasPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="text-left px-4 py-3 font-medium">Pedido</th>
-                        <th className="text-left px-4 py-3 font-medium">Cliente</th>
-                        <th className="text-left px-4 py-3 font-medium">Entrega</th>
-                        <th className="text-left px-4 py-3 font-medium">Fecha entrega</th>
-                        <th className="text-center px-4 py-3 font-medium">Items</th>
-                        <th className="text-right px-4 py-3 font-medium">Total</th>
-                        <th className="text-center px-4 py-3 font-medium">Estado</th>
-                        <th className="text-right px-4 py-3 font-medium">Acciones</th>
+                        <th className="text-left py-3 px-4 font-medium">N°</th>
+                        <th className="text-left py-3 px-4 font-medium">Fecha / Hora</th>
+                        <th className="text-left py-3 px-4 font-medium">Cliente</th>
+                        <th className="text-left py-3 px-4 font-medium">Forma pago</th>
+                        <th className="text-center py-3 px-4 font-medium">Entrega</th>
+                        <th className="text-center py-3 px-4 font-medium">Estado</th>
+                        <th className="text-right py-3 px-4 font-medium">Total</th>
+                        <th className="text-right py-3 px-4 font-medium">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {poFiltered.map((pedido) => {
                         const est = estadoBadge[pedido.estado] || estadoBadge.pendiente;
                         return (
-                          <tr key={pedido.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3">
-                              <p className="font-semibold">#{pedido.numero}</p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {new Date(pedido.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                              </p>
+                          <tr key={pedido.id} className={`border-b last:border-0 transition-colors ${pedido.estado === "cancelado" ? "opacity-50 bg-red-50/50" : "hover:bg-muted/50"}`}>
+                            <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{pedido.numero}</td>
+                            <td className="py-3 px-4 text-muted-foreground">
+                              <div>{new Date(pedido.created_at).toLocaleDateString("es-AR")}</div>
+                              <div className="text-xs text-muted-foreground/70">
+                                {new Date(pedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
+                              </div>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="py-3 px-4">
                               <p className="font-medium">{pedido.nombre_cliente}</p>
                               <p className="text-[10px] text-muted-foreground">{pedido.email}</p>
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1.5">
-                                {pedido.metodo_entrega === "envio" ? (
-                                  <><Truck className="w-3.5 h-3.5 text-blue-500" /><span className="text-xs">Envio</span></>
-                                ) : (
-                                  <><Store className="w-3.5 h-3.5 text-green-500" /><span className="text-xs">Retiro</span></>
-                                )}
-                              </div>
+                            <td className="py-3 px-4">
+                              <Badge variant="outline" className="text-xs font-normal">{pedido.metodo_pago}</Badge>
                             </td>
-                            <td className="px-4 py-3 text-xs">
-                              {pedido.fecha_entrega ? new Date(pedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" }) : "---"}
+                            <td className="py-3 px-4 text-center">
+                              <Badge variant={pedido.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${pedido.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : ""}`}>
+                                {pedido.metodo_entrega === "envio" ? "Envio" : "Retiro"}
+                              </Badge>
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              <Badge variant="secondary" className="text-xs">{pedido.items.length}</Badge>
-                            </td>
-                            <td className="px-4 py-3 text-right font-semibold">{formatCurrency(pedido.total)}</td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="py-3 px-4 text-center">
                               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
                                 {est.label}
                               </span>
                             </td>
+                            <td className={`py-3 px-4 text-right font-semibold ${pedido.estado === "cancelado" ? "line-through text-muted-foreground" : ""}`}>{formatCurrency(pedido.total)}</td>
                             <td className="px-4 py-3 text-right">
                               <DropdownMenu>
                                 <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground">
@@ -1387,7 +1452,7 @@ export default function ListadoVentasPage() {
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
-                                        onClick={() => poHandleEstadoChange(pedido, "cancelado")}
+                                        onClick={() => setPoCancelPedido(pedido)}
                                         className="text-red-600 focus:text-red-600 focus:bg-red-50"
                                       >
                                         <Ban className="w-4 h-4 mr-2" />
@@ -1773,6 +1838,56 @@ export default function ListadoVentasPage() {
               <p className="text-sm text-muted-foreground text-center py-4">No se encontraron productos</p>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* PO CANCEL CONFIRMATION DIALOG */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      <Dialog open={!!poCancelPedido} onOpenChange={(open) => { if (!open) setPoCancelPedido(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              Cancelar pedido
+            </DialogTitle>
+          </DialogHeader>
+          {poCancelPedido && (
+            <div className="space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm space-y-2">
+                <p className="font-medium text-red-800">Esta acción revertirá:</p>
+                <ul className="list-disc list-inside text-red-700 space-y-1">
+                  <li>El stock de los productos será restaurado</li>
+                  <li>Se generará un egreso en caja para compensar</li>
+                  <li>Se revertirán los movimientos en cuenta corriente</li>
+                </ul>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-muted-foreground">Pedido:</span> <span className="font-medium">#{poCancelPedido.numero}</span></div>
+                <div><span className="text-muted-foreground">Total:</span> <span className="font-bold">{formatCurrency(poCancelPedido.total)}</span></div>
+                <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{poCancelPedido.nombre_cliente}</span></div>
+                <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium">{poCancelPedido.metodo_pago}</span></div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setPoCancelPedido(null)} disabled={poCancelling}>
+                  Volver
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={poCancelling}
+                  onClick={async () => {
+                    setPoCancelling(true);
+                    await poHandleEstadoChange(poCancelPedido, "cancelado");
+                    setPoCancelling(false);
+                    setPoCancelPedido(null);
+                  }}
+                >
+                  {poCancelling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Ban className="w-4 h-4 mr-2" />}
+                  Confirmar cancelación
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
