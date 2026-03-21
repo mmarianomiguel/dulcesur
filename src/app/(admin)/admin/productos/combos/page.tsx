@@ -197,6 +197,21 @@ export default function CombosPage() {
   }, [dialogOpen, selectedRow, comboItems]);
 
   const handleSave = async () => {
+    // Validation
+    const nombre = form.nombre.trim();
+    if (!nombre) {
+      alert("El nombre del combo es obligatorio");
+      return;
+    }
+    if (comboItems.length === 0) {
+      alert("Un combo debe tener al menos un producto");
+      return;
+    }
+    if (form.precio <= 0) {
+      alert("El precio debe ser mayor a 0");
+      return;
+    }
+
     setSaving(true);
     try {
       // Generate unique code if empty or editing with same code conflict
@@ -207,7 +222,7 @@ export default function CombosPage() {
 
       const payload: Record<string, unknown> = {
         codigo,
-        nombre: form.nombre,
+        nombre,
         precio: form.precio,
         costo: form.costo,
         stock: form.stock,

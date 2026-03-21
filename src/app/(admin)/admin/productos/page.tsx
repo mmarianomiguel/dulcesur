@@ -479,14 +479,32 @@ export default function ProductosPage() {
   };
 
   const handleSave = async () => {
+    // Validation
+    const nombre = form.nombre.trim();
+    if (!nombre) {
+      showAdminToast("El nombre del producto es obligatorio", "error");
+      return;
+    }
+    const codigo = form.codigo.trim() || (isCombo ? `COMBO-${Date.now()}` : "");
+    if (!codigo) {
+      showAdminToast("El código del producto es obligatorio", "error");
+      return;
+    }
+    if (form.precio <= 0) {
+      showAdminToast("El precio debe ser mayor a 0", "error");
+      return;
+    }
+    if (isCombo && comboItems.length === 0) {
+      showAdminToast("Un combo debe tener al menos un producto", "error");
+      return;
+    }
+
     setSaving(true);
     try {
-      let codigo = form.codigo.trim();
-      if (!codigo && isCombo) codigo = `COMBO-${Date.now()}`;
 
       const payload: Record<string, unknown> = {
         codigo,
-        nombre: form.nombre,
+        nombre,
         categoria_id: form.categoria_id || null,
         subcategoria_id: form.subcategoria_id || null,
         marca_id: form.marca_id || null,
@@ -624,7 +642,7 @@ export default function ProductosPage() {
   const handleDuplicate = async (p: ProductoWithRelations) => {
     // Open edit dialog pre-filled with duplicated data
     setEditingProduct(null); // null = new product mode
-    const newCode = `${p.codigo}-COPIA`;
+    const newCode = `${p.codigo}-COPIA-${Date.now().toString(36).slice(-4).toUpperCase()}`;
     setForm({
       codigo: newCode,
       nombre: `${p.nombre} (Copia)`,
