@@ -338,15 +338,14 @@ export default function ProductoDetallePage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
-        <div className="mb-6 h-5 w-72 animate-pulse rounded bg-gray-100" />
-        <div className="grid gap-10 md:grid-cols-2">
-          <div className="aspect-square w-full animate-pulse rounded-2xl bg-gray-100" />
-          <div className="flex flex-col gap-5">
-            <div className="h-8 w-3/4 animate-pulse rounded-lg bg-gray-100" />
-            <div className="h-10 w-40 animate-pulse rounded-lg bg-gray-100" />
-            <div className="h-14 w-full animate-pulse rounded-xl bg-gray-100" />
-            <div className="h-14 w-full animate-pulse rounded-2xl bg-gray-100" />
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex flex-col lg:flex-row gap-10">
+          <div className="flex-1 aspect-square bg-gray-100 rounded-2xl animate-pulse" />
+          <div className="flex-1 space-y-4">
+            <div className="h-8 bg-gray-100 rounded w-3/4 animate-pulse" />
+            <div className="h-6 bg-gray-100 rounded w-1/4 animate-pulse" />
+            <div className="h-10 bg-gray-100 rounded w-1/2 animate-pulse" />
+            <div className="h-12 bg-gray-100 rounded w-full animate-pulse mt-6" />
           </div>
         </div>
       </div>
@@ -374,8 +373,12 @@ export default function ProductoDetallePage() {
         <Link href="/" className="hover:text-pink-600 transition">Inicio</Link>
         <ChevronRight className="h-3.5 w-3.5" />
         <Link href="/productos" className="hover:text-pink-600 transition">Productos</Link>
+        {producto.categorias?.nombre && <>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <Link href={`/productos?categoria=${producto.categoria_id}`} className="hover:text-pink-600 transition">{producto.categorias.nombre}</Link>
+        </>}
         <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-gray-700 font-medium truncate">{producto.nombre}</span>
+        <span className="text-gray-700 font-medium truncate max-w-[200px]">{producto.nombre}</span>
       </nav>
 
       {/* Main */}

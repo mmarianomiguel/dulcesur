@@ -241,7 +241,7 @@ function CartDrawer() {
                   className="flex gap-4 border-b border-gray-50 py-4 last:border-0"
                 >
                   {/* Image */}
-                  <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                  <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
                     {(item.imagen || item.imagen_url) ? (
                       <Image
                         src={(item.imagen || item.imagen_url)!}

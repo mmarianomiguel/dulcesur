@@ -139,7 +139,7 @@ export default function CarritoPage() {
             key={item.id}
             className={`flex items-center gap-4 bg-white rounded-xl border p-4 ${sinStock ? "opacity-60 border-red-300 bg-red-50/50" : stockBajo ? "border-amber-300 bg-amber-50/50" : ""}`}
           >
-            <div className="relative h-16 w-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
+            <div className="relative h-20 w-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
               {(item.imagen_url || item.imagen) ? (
                 <Image
                   src={(item.imagen_url || item.imagen)!}

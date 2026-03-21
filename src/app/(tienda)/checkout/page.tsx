@@ -661,6 +661,23 @@ export default function CheckoutPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* Progress steps */}
+      <div className="flex items-center justify-center gap-2 mb-8">
+        {[
+          { n: 1, label: "Datos" },
+          { n: 2, label: "Entrega" },
+          { n: 3, label: "Pago" },
+        ].map((step, i) => (
+          <div key={step.n} className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <div className="w-7 h-7 rounded-full bg-pink-600 text-white flex items-center justify-center text-xs font-bold">{step.n}</div>
+              <span className="text-sm font-medium text-gray-700 hidden sm:inline">{step.label}</span>
+            </div>
+            {i < 2 && <div className="w-8 h-px bg-gray-300" />}
+          </div>
+        ))}
+      </div>
+
       {/* Errors */}
       {errors.length > 0 && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">

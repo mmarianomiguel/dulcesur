@@ -71,17 +71,17 @@ export default function TiendaNavbar() {
 
   return (
     <>
-      {/* ── Top bar (desktop only) ── */}
-      <div className="hidden bg-gray-900 text-white md:block">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-1.5 text-xs">
+      {/* ── Top bar ── */}
+      <div className="bg-gray-900 text-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-center md:justify-between px-4 py-1.5 text-[10px] md:text-xs">
           <span className="flex items-center gap-1.5">
             <Truck className="h-3.5 w-3.5" />
             Envío gratis en compras +$50.000
           </span>
-          <span className="text-gray-400">
+          <span className="hidden md:inline text-gray-400">
             Atención: Lunes a Viernes de 9 a 18hs
           </span>
-          <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-4">
             <Link href="/cuenta" className="hover:text-pink-400 transition">
               Mi cuenta
             </Link>

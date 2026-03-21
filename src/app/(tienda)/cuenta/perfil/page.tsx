@@ -434,7 +434,7 @@ export default function PerfilPage() {
                 <input type="password" required placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirmar nueva</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirmar contraseña nueva</label>
                 <input type="password" required placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} />
               </div>
             </div>
