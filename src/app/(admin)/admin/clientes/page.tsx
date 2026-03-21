@@ -744,7 +744,15 @@ export default function ClientesPage() {
                                 )}
                               </div>
                               {client.domicilio && (
-                                <p className="text-xs text-muted-foreground mt-0.5">{client.domicilio}</p>
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([client.domicilio, client.localidad, client.provincia].filter(Boolean).join(", "))}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline mt-0.5 inline-flex items-center gap-1"
+                                >
+                                  <MapPin className="w-3 h-3" />
+                                  {client.domicilio}
+                                </a>
                               )}
                             </td>
                             <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{client.cuit || "—"}</td>
@@ -1354,7 +1362,20 @@ export default function ClientesPage() {
                   <Input value={form.numero_documento} onChange={(e) => f("numero_documento", e.target.value)} />
                 </div>
                 <div className="col-span-2 space-y-2">
-                  <Label>Domicilio</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Domicilio</Label>
+                    {form.domicilio && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([form.domicilio, form.localidad, form.provincia].filter(Boolean).join(", "))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        Ver en mapa
+                      </a>
+                    )}
+                  </div>
                   <Input value={form.domicilio} onChange={(e) => f("domicilio", e.target.value)} />
                 </div>
                 <div className="space-y-2">

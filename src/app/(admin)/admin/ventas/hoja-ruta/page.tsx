@@ -36,6 +36,10 @@ import {
   ArrowUp,
   ArrowDown,
   Globe,
+  MessageCircle,
+  Navigation,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface ClienteInfo {
@@ -837,173 +841,130 @@ export default function HojaDeRutaPage() {
             <div className="text-center py-12 text-gray-400">
               <Truck className="w-10 h-10 mx-auto mb-3 opacity-50" />
               <p className="font-medium text-gray-500">
-                No hay entregas pendientes para esta fecha
+                No hay entregas pendientes
               </p>
               <p className="text-sm mt-1">
                 Selecciona otra fecha o espera nuevas ventas
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-gray-500">
-                    <th className="pb-3 px-3 w-24">Orden</th>
-                    <th className="pb-3 px-3">Nro. Venta</th>
-                    <th className="pb-3 px-3">Fecha</th>
-                    <th className="pb-3 px-3">Cliente</th>
-                    <th className="pb-3 px-3">Entrega</th>
-                    <th className="pb-3 px-3">Direccion</th>
-                    <th className="pb-3 px-3 text-right">Total</th>
-                    <th className="pb-3 px-3 text-right">Pagado</th>
-                    <th className="pb-3 px-3 text-right">Debe</th>
-                    <th className="pb-3 px-3">Estado Pago</th>
-                    <th className="pb-3 px-3 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedVentas.map((venta) => {
-                    const pagado = pagadoPorVenta[venta.id] || 0;
-                    const debe = Math.max(0, venta.total - pagado);
-                    const estaPago = debe <= 0;
+            <div className="space-y-3">
+              {sortedVentas.map((venta, idx) => {
+                const pagado = pagadoPorVenta[venta.id] || 0;
+                const debe = Math.max(0, venta.total - pagado);
+                const estaPago = debe <= 0;
+                const direccion = [venta.clientes?.domicilio, venta.clientes?.localidad].filter(Boolean).join(", ");
+                const mapsUrl = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}` : null;
+                const tel = venta.clientes?.telefono?.replace(/\D/g, "") || "";
+                const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
 
-                    return (
-                      <tr
-                        key={venta.id}
-                        className="border-b hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min={1}
-                              value={orden[venta.id] ?? ""}
-                              onChange={(e) =>
-                                handleOrdenChange(venta.id, e.target.value)
-                              }
-                              className="w-14 h-8 text-center text-sm"
-                            />
-                            <div className="flex flex-col">
-                              <button
-                                onClick={() => moveOrder(venta.id, "up")}
-                                className="text-gray-400 hover:text-gray-700 p-0.5"
-                              >
-                                <ArrowUp className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => moveOrder(venta.id, "down")}
-                                className="text-gray-400 hover:text-gray-700 p-0.5"
-                              >
-                                <ArrowDown className="w-3 h-3" />
-                              </button>
-                            </div>
+                return (
+                  <Card key={venta.id} className={`overflow-hidden ${estaPago ? "border-green-200" : "border-orange-200"}`}>
+                    <CardContent className="p-0">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b">
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 text-xs font-bold text-gray-600">
+                            {orden[venta.id] ?? idx + 1}
+                          </span>
+                          <div>
+                            <span className="font-mono text-xs font-semibold text-gray-700">{venta.numero}</span>
+                            <span className="text-xs text-gray-400 ml-2">{venta.tipo_comprobante}</span>
                           </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="font-mono text-xs font-semibold text-gray-700">
-                            {venta.numero}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-xs text-gray-400">{venta.tipo_comprobante}</span>
-                            {venta.origen === "tienda" && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-pink-300 text-pink-600 bg-pink-50">Web</Badge>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-gray-400 mt-0.5">Pago: {venta.forma_pago}</div>
-                        </td>
-                        <td className="py-3 px-3 text-xs text-gray-500">
-                          {venta.fecha}
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="font-medium text-gray-900">
-                            {venta.clientes?.nombre ?? "Sin cliente"}
-                          </div>
-                          {venta.clientes?.telefono && (
-                            <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                              <Phone className="w-3 h-3" />
-                              {venta.clientes.telefono}
-                            </div>
+                          {venta.origen === "tienda" && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-pink-300 text-pink-600 bg-pink-50">Web</Badge>
                           )}
-                        </td>
-                        <td className="py-3 px-3">
-                          <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : "bg-gray-100 text-gray-600 hover:bg-gray-100"}`}>
-                            {venta.metodo_entrega === "envio" ? "Envío" : "Retiro en local"}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className={estaPago ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}>
+                            {estaPago ? "Pagado" : `Debe ${formatCurrency(debe)}`}
                           </Badge>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-start gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
-                            <div className="text-gray-700">
-                              {[
-                                venta.clientes?.domicilio,
-                                venta.clientes?.localidad,
-                              ]
-                                .filter(Boolean)
-                                .join(", ") || "Sin direccion"}
-                            </div>
+                          {/* Order arrows - desktop */}
+                          <div className="hidden sm:flex flex-col">
+                            <button onClick={() => moveOrder(venta.id, "up")} className="text-gray-400 hover:text-gray-700 p-0.5"><ArrowUp className="w-3 h-3" /></button>
+                            <button onClick={() => moveOrder(venta.id, "down")} className="text-gray-400 hover:text-gray-700 p-0.5"><ArrowDown className="w-3 h-3" /></button>
                           </div>
-                        </td>
-                        <td className="py-3 px-3 text-right font-semibold text-gray-900">
-                          {formatCurrency(venta.total)}
-                        </td>
-                        <td className="py-3 px-3 text-right text-green-600 font-medium">
-                          {formatCurrency(pagado)}
-                        </td>
-                        <td className="py-3 px-3 text-right text-orange-600 font-medium">
-                          {debe > 0 ? formatCurrency(debe) : "-"}
-                        </td>
-                        <td className="py-3 px-3">
-                          <Badge
-                            variant="secondary"
-                            className={
-                              estaPago
-                                ? "bg-green-100 text-green-700 hover:bg-green-100"
-                                : "bg-orange-100 text-orange-700 hover:bg-orange-100"
-                            }
-                          >
-                            {estaPago ? "Pagado" : "Debe"}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center justify-end gap-1">
-                            {debe > 0 && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50"
-                                onClick={() => openPayDialog(venta)}
-                                title="Registrar pago"
-                              >
-                                <DollarSign className="w-3 h-3 mr-1" />
-                                Cobrar
-                              </Button>
+                        </div>
+                      </div>
+
+                      {/* Client info */}
+                      <div className="px-4 py-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-gray-900 truncate text-base">{venta.clientes?.nombre ?? "Sin cliente"}</p>
+                            {direccion && (
+                              <p className="flex items-start gap-1.5 text-sm text-gray-500 mt-0.5">
+                                <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                <span>{direccion}</span>
+                              </p>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => handleViewDetail(venta)}
-                              title="Ver detalle"
-                            >
-                              <Eye className="w-4 h-4 text-gray-500" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs text-green-600 border-green-300 hover:bg-green-50"
-                              onClick={() => handleMarkDelivered(venta.id)}
-                              title="Marcar como entregado"
-                            >
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Entregado
-                            </Button>
+                            {venta.clientes?.telefono && (
+                              <p className="flex items-center gap-1.5 text-sm text-gray-500 mt-0.5">
+                                <Phone className="w-3.5 h-3.5 shrink-0" />
+                                {venta.clientes.telefono}
+                              </p>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <div className="text-right shrink-0">
+                            <p className="text-lg font-bold text-gray-900">{formatCurrency(venta.total)}</p>
+                            <p className="text-xs text-gray-400">{venta.forma_pago}</p>
+                            <p className="text-xs text-gray-400">{venta.fecha}</p>
+                          </div>
+                        </div>
+
+                        {/* Quick contact buttons */}
+                        <div className="flex items-center gap-2 pt-1">
+                          {venta.clientes?.telefono && (
+                            <a href={`tel:${venta.clientes.telefono}`} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors">
+                              <Phone className="w-3.5 h-3.5" />
+                              Llamar
+                            </a>
+                          )}
+                          {whatsappUrl && (
+                            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors">
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              WhatsApp
+                            </a>
+                          )}
+                          {mapsUrl && (
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-50 text-purple-700 text-xs font-medium hover:bg-purple-100 transition-colors">
+                              <Navigation className="w-3.5 h-3.5" />
+                              Cómo llegar
+                            </a>
+                          )}
+                          <Button variant="ghost" size="sm" className="h-8 text-xs text-gray-500 ml-auto" onClick={() => handleViewDetail(venta)}>
+                            <Eye className="w-3.5 h-3.5 mr-1" />
+                            Ver items
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Action bar */}
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-t">
+                        {debe > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 sm:flex-none h-9 text-sm text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                            onClick={() => openPayDialog(venta)}
+                          >
+                            <DollarSign className="w-4 h-4 mr-1.5" />
+                            Cobrar
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          className="flex-1 sm:flex-none h-9 text-sm bg-green-600 hover:bg-green-700 text-white"
+                          onClick={() => handleMarkDelivered(venta.id)}
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1.5" />
+                          Marcar Entregado
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -1041,14 +1002,14 @@ export default function HojaDeRutaPage() {
                 </div>
                 <div>
                   <span className="text-gray-500">Direccion:</span>{" "}
-                  <span className="font-medium">
-                    {[
-                      detailVenta.clientes?.domicilio,
-                      detailVenta.clientes?.localidad,
-                    ]
-                      .filter(Boolean)
-                      .join(", ") || "N/A"}
-                  </span>
+                  {(() => {
+                    const dir = [detailVenta.clientes?.domicilio, detailVenta.clientes?.localidad].filter(Boolean).join(", ");
+                    return dir ? (
+                      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline inline-flex items-center gap-1">
+                        {dir} <Navigation className="w-3 h-3" />
+                      </a>
+                    ) : <span className="font-medium">N/A</span>;
+                  })()}
                 </div>
                 <div>
                   <span className="text-gray-500">Forma de pago:</span>{" "}
@@ -1059,9 +1020,9 @@ export default function HojaDeRutaPage() {
                 {detailVenta.clientes?.telefono && (
                   <div>
                     <span className="text-gray-500">Telefono:</span>{" "}
-                    <span className="font-medium">
+                    <a href={`tel:${detailVenta.clientes.telefono}`} className="font-medium text-blue-600 hover:underline">
                       {detailVenta.clientes.telefono}
-                    </span>
+                    </a>
                   </div>
                 )}
                 <div>
