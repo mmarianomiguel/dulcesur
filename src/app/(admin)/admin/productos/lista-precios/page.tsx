@@ -495,18 +495,26 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(0);
           }
 
-          // Product name
+          // Product name — auto-shrink font if name is too long
           const topAreaEnd = y + pad + Math.max(logoSize, 4) + config.combinado_nombreOffset;
           const nameMaxW = cellW - pad * 2;
+          let nameFontSize = config.combinado_tamañoNombre;
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.combinado_tamañoNombre);
-          const nameLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
-          const nameLineH = config.combinado_tamañoNombre * 0.45;
+          pdf.setFontSize(nameFontSize);
+          let nameLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
+          // If more than 2 lines, shrink font until it fits in 2, min 60% of original
+          const minNameFont = nameFontSize * 0.6;
+          while (nameLines.length > 2 && nameFontSize > minNameFont) {
+            nameFontSize -= 0.5;
+            pdf.setFontSize(nameFontSize);
+            nameLines = pdf.splitTextToSize(product.nombre, nameMaxW);
+          }
+          const nameLineH = nameFontSize * 0.45;
           const maxNameLines = Math.min(nameLines.length, 2);
           const nameY = topAreaEnd + 1;
           for (let li = 0; li < maxNameLines; li++) {
             let lineText = String(nameLines[li]);
-            if (li === 1 && nameLines.length > 2) {
+            if (li === maxNameLines - 1 && nameLines.length > maxNameLines) {
               while (pdf.getTextWidth(lineText + "...") > nameMaxW && lineText.length > 0) {
                 lineText = lineText.slice(0, -1);
               }
@@ -515,12 +523,14 @@ export default function ListaPreciosPage() {
             pdf.text(lineText, x + cellW / 2, nameY + li * nameLineH, { align: "center" });
           }
 
-          // Big price — centered vertically between name end and divider
+          // Big price — centered vertically between name end and divider, auto-shrink if tight
           const nameEnd = nameY + maxNameLines * nameLineH;
-          const priceZoneCenter = nameEnd + (dividerY - nameEnd) / 2;
+          const availableH = dividerY - nameEnd;
+          const priceFontSize = Math.min(config.combinado_tamañoPrecio, availableH * 1.8);
+          const priceZoneCenter = nameEnd + availableH / 2;
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(config.combinado_tamañoPrecio);
-          pdf.text(formatPrice(displayPrice), x + cellW / 2, priceZoneCenter + config.combinado_tamañoPrecio * 0.15, { align: "center" });
+          pdf.setFontSize(priceFontSize);
+          pdf.text(formatPrice(displayPrice), x + cellW / 2, priceZoneCenter + priceFontSize * 0.15, { align: "center" });
         });
       }
 
