@@ -1304,15 +1304,23 @@ export default function VentasPage() {
         if (stockRpcError) { setErrorModal({ open: true, message: `Error al actualizar stock: ${stockRpcError.message}` }); setSaving(false); return; }
 
         if (stockResult && !stockResult.ok) {
-          // Stock insufficient - delete the venta we just created and alert
-          await supabase.from("venta_items").delete().eq("venta_id", venta.id);
-          await supabase.from("ventas").delete().eq("id", venta.id);
-          const faltantes = (stockResult.faltantes || [])
-            .map((f: any) => `${f.descripcion}: pedido ${f.cantidad_pedida}, disponible ${f.stock_disponible}`)
-            .join("\n");
-          alert(`Stock insuficiente:\n${faltantes}`);
-          setSaving(false);
-          return;
+          // Stock insufficient but POS allows selling anyway - manually decrement stock
+          for (const item of stockItems) {
+            // Decrement stock directly, allowing negative values
+            const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+            if (prod) {
+              await supabase.from("productos").update({ stock: prod.stock - item.cantidad }).eq("id", item.producto_id);
+            }
+            // Record stock movement
+            await supabase.from("stock_movimientos").insert({
+              producto_id: item.producto_id,
+              tipo: "Venta",
+              cantidad: -item.cantidad,
+              referencia: `Venta #${numero}`,
+              usuario: "Admin Sistema",
+              orden_id: venta.id,
+            });
+          }
         }
 
         const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
