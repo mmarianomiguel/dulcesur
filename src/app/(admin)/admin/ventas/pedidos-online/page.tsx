@@ -243,28 +243,35 @@ export default function PedidosOnlinePage() {
         total: nuevoTotal,
       }).eq("id", selectedPedido.id);
 
-      // Also update linked venta if exists
+      // Sync linked venta + venta_items (used by listado, hoja de ruta, comprobantes, historial)
       const { data: venta } = await supabase
         .from("ventas")
         .select("id")
         .eq("numero", selectedPedido.numero)
-        .eq("origen", "online")
         .maybeSingle();
 
       if (venta) {
-        const ventaItems = editItems.map((item) => ({
-          descripcion: item.nombre,
-          cantidad: item.cantidad,
-          precio_unitario: item.precio_unitario,
-          subtotal: item.precio_unitario * item.cantidad,
-          presentacion: item.presentacion,
-          producto_id: item.producto_id,
-        }));
-
+        // Update venta totals
         await supabase.from("ventas").update({
+          subtotal: nuevoSubtotal,
           total: nuevoTotal,
-          items: ventaItems,
         }).eq("id", venta.id);
+
+        // Replace venta_items
+        await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+        await supabase.from("venta_items").insert(
+          editItems.map((item) => ({
+            venta_id: venta.id,
+            producto_id: item.producto_id,
+            descripcion: `${item.nombre} (${item.presentacion})`,
+            cantidad: item.cantidad,
+            precio_unitario: item.precio_unitario,
+            subtotal: item.precio_unitario * item.cantidad,
+            unidad_medida: "Un",
+            presentacion: item.presentacion,
+            unidades_por_presentacion: 1,
+          }))
+        );
       }
 
       setHasChanges(false);
@@ -277,13 +284,15 @@ export default function PedidosOnlinePage() {
     }
   };
 
-  // Update estado
+  // Update estado — sync to linked venta
   const handleEstadoChange = async (pedido: Pedido, nuevoEstado: string) => {
     await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
 
-    if (nuevoEstado === "entregado") {
-      await supabase.from("ventas").update({ entregado: true }).eq("numero", pedido.numero).eq("origen", "online");
-    }
+    // Sync estado to linked venta
+    const ventaUpdate: Record<string, unknown> = { estado: nuevoEstado };
+    if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
+    if (nuevoEstado === "cancelado") ventaUpdate.entregado = false;
+    await supabase.from("ventas").update(ventaUpdate).eq("numero", pedido.numero);
 
     fetchPedidos();
   };
