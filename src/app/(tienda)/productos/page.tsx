@@ -1237,22 +1237,34 @@ function ProductosContent() {
                             <span className="text-lg font-bold text-gray-900">{formatPrice(discountedPrice)}</span>
                             <span className="text-xs text-gray-400 line-through">{formatPrice(activePrice)}</span>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
-                            {(() => {
-                              const pa = producto.precio_anterior;
-                              const dateStr = producto.fecha_actualizacion || producto.updated_at;
-                              if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
-                              const daysAgo = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24);
-                              if (daysAgo > 3) return null;
-                              if (producto.precio > pa) {
-                                return <span className="text-[10px] text-amber-500 font-medium">↑</span>;
-                              }
-                              return <span className="text-[10px] text-green-500 font-medium">↓</span>;
-                            })()}
-                          </div>
-                        )}
+                        ) : (() => {
+                          const pa = producto.precio_anterior;
+                          const dateStr = producto.fecha_actualizacion || producto.updated_at;
+                          const showChange = pa && pa > 0 && pa !== producto.precio && dateStr &&
+                            (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3;
+                          const isUp = showChange && producto.precio > (pa || 0);
+                          const isDown = showChange && producto.precio < (pa || 0);
+                          return (
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
+                                {isUp && (
+                                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                                    ↑ Aumentó
+                                  </span>
+                                )}
+                                {isDown && (
+                                  <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                    ↓ Bajó
+                                  </span>
+                                )}
+                              </div>
+                              {showChange && (
+                                <span className="text-[11px] text-gray-400 line-through">{formatPrice(pa!)}</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Presentacion pills */}

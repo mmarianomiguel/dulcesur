@@ -409,20 +409,30 @@ function ProductosDestacadosBlock({
                       <p className="text-sm font-medium text-gray-800 line-clamp-2 mt-1.5 min-h-[2.5rem]">
                         {prod.nombre}
                       </p>
-                      <div className="mt-2 flex items-center gap-1.5">
-                        <p className="text-xl font-bold text-gray-900">
-                          {formatPrice(prod.precio)}
-                        </p>
+                      <div className="mt-2">
                         {(() => {
                           const pa = prod.precio_anterior;
                           const dateStr = prod.fecha_actualizacion || prod.updated_at;
-                          if (!pa || pa <= 0 || pa === prod.precio || !dateStr) return null;
-                          const daysAgo = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24);
-                          if (daysAgo > 3) return null;
-                          if (prod.precio > pa) {
-                            return <span className="text-[10px] text-amber-500 font-medium">↑</span>;
-                          }
-                          return <span className="text-[10px] text-green-500 font-medium">↓</span>;
+                          const showChange = pa && pa > 0 && pa !== prod.precio && dateStr &&
+                            (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3;
+                          const isUp = showChange && prod.precio > (pa || 0);
+                          const isDown = showChange && prod.precio < (pa || 0);
+                          return (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xl font-bold text-gray-900">{formatPrice(prod.precio)}</p>
+                                {isUp && (
+                                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">↑ Aumentó</span>
+                                )}
+                                {isDown && (
+                                  <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">↓ Bajó</span>
+                                )}
+                              </div>
+                              {showChange && (
+                                <span className="text-[11px] text-gray-400 line-through">{formatPrice(pa!)}</span>
+                              )}
+                            </>
+                          );
                         })()}
                       </div>
                     </div>
