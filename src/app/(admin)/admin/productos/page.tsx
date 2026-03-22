@@ -312,7 +312,7 @@ export default function ProductosPage() {
     }
 
     const [allProdsRaw, allPres, allCI] = await Promise.all([
-      fetchAllPages("productos", "id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, descripcion_detallada, visibilidad, updated_at, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
+      fetchAllPages("productos", "id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, updated_at, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
       fetchAllPages("presentaciones", "producto_id, sku, nombre, cantidad"),
       fetchAllPages("combo_items", "combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)"),
     ]);
@@ -1738,15 +1738,13 @@ export default function ProductosPage() {
                       </button>
                     </th>
                     <th className="py-3 px-2 font-medium w-10"></th>
-                    <th className="text-left py-3 px-4 font-medium">Codigo</th>
-                    <th className="text-left py-3 px-4 font-medium">Articulo</th>
-                    <th className="text-left py-3 px-4 font-medium">Categoria</th>
+                    <th className="text-left py-3 px-4 font-medium">Código</th>
+                    <th className="text-left py-3 px-4 font-medium">Artículo</th>
+                    <th className="text-left py-3 px-4 font-medium">Categoría</th>
                     <th className="text-left py-3 px-4 font-medium">Marca</th>
                     <th className="text-center py-3 px-4 font-medium">Stock</th>
-                    <th className="text-center py-3 px-4 font-medium">Min / Max</th>
-                    <th className="text-right py-3 px-4 font-medium">PVP</th>
-                    <th className="text-left py-3 px-4 font-medium">Últ. actualización</th>
-                    <th className="text-right py-3 px-4 font-medium w-32">Acciones</th>
+                    <th className="text-right py-3 px-4 font-medium">Precio</th>
+                    <th className="text-right py-3 px-4 font-medium w-24">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1814,55 +1812,21 @@ export default function ProductosPage() {
                           );
                         })()}
                       </td>
-                      <td className="py-3 px-4 text-center text-xs text-muted-foreground">
-                        {product.stock_minimo ?? 0} / {product.stock_maximo ?? 0}
-                      </td>
                       <td className="py-3 px-4 text-right font-semibold">
                         {formatCurrency(product.precio)}
                       </td>
-                      <td className="py-3 px-4 text-muted-foreground text-xs">
-                        {(() => {
-                          const d = (product as any).updated_at;
-                          if (!d) return "\u2014";
-                          const date = new Date(d);
-                          return isNaN(date.getTime()) ? "\u2014" : date.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
-                        })()}
-                      </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEdit(product)}
-                          >
+                        <div className="flex justify-end gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(product)} title="Editar">
                             <Edit className="w-3.5 h-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground"
-                            onClick={() => openHistory(product)}
-                            title="Historial"
-                          >
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openHistory(product)} title="Historial">
                             <Clock className="w-3.5 h-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground"
-                            onClick={() => handleDuplicate(product)}
-                            title="Duplicar"
-                          >
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => handleDuplicate(product)} title="Duplicar">
                             <Copy className="w-3.5 h-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDelete(product.id)}
-                            title="Eliminar"
-                          >
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(product.id)} title="Eliminar">
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </div>
