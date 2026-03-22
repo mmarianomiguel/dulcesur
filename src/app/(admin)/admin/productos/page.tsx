@@ -2133,9 +2133,10 @@ export default function ProductosPage() {
                   <Label className="text-xs text-muted-foreground">Costo</Label>
                   <Input
                     type="number"
+                    min="0"
                     value={form.costo}
                     onChange={(e) => {
-                      const newCosto = Number(e.target.value);
+                      const newCosto = Math.max(0, Number(e.target.value));
                       setForm({ ...form, costo: newCosto });
                       // Sync presentaciones: update unit row + recalc boxes
                       setPresentaciones((prev) =>
@@ -2153,9 +2154,10 @@ export default function ProductosPage() {
                   <Label className="text-xs text-muted-foreground">Precio</Label>
                   <Input
                     type="number"
+                    min="0"
                     value={form.precio}
                     onChange={(e) => {
-                      const newPrecio = Number(e.target.value);
+                      const newPrecio = Math.max(0, Number(e.target.value));
                       setForm({ ...form, precio: newPrecio });
                       // Sync presentaciones: update unit row + recalc boxes
                       setPresentaciones((prev) =>
@@ -2190,8 +2192,9 @@ export default function ProductosPage() {
                   <Label className="text-xs text-muted-foreground">Stock</Label>
                   <Input
                     type="number"
+                    min="0"
                     value={form.stock}
-                    onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })}
+                    onChange={(e) => setForm({ ...form, stock: Math.max(0, Number(e.target.value)) })}
                     className="h-9"
                   />
                 </div>
@@ -2199,8 +2202,9 @@ export default function ProductosPage() {
                   <Label className="text-xs text-muted-foreground">Min</Label>
                   <Input
                     type="number"
+                    min="0"
                     value={form.stock_minimo}
-                    onChange={(e) => setForm({ ...form, stock_minimo: Number(e.target.value) })}
+                    onChange={(e) => setForm({ ...form, stock_minimo: Math.max(0, Number(e.target.value)) })}
                     className="h-9"
                   />
                 </div>
@@ -2208,8 +2212,9 @@ export default function ProductosPage() {
                   <Label className="text-xs text-muted-foreground">Max</Label>
                   <Input
                     type="number"
+                    min="0"
                     value={form.stock_maximo}
-                    onChange={(e) => setForm({ ...form, stock_maximo: Number(e.target.value) })}
+                    onChange={(e) => setForm({ ...form, stock_maximo: Math.max(0, Number(e.target.value)) })}
                     className="h-9"
                   />
                 </div>
@@ -2428,16 +2433,18 @@ export default function ProductosPage() {
                             <td className="py-2 px-3">
                               <Input
                                 type="number"
+                                min="0"
                                 value={pres.costo}
-                                onChange={(e) => updatePresentacion(idx, "costo", Number(e.target.value))}
+                                onChange={(e) => updatePresentacion(idx, "costo", Math.max(0, Number(e.target.value)))}
                                 className="h-7 text-sm text-right"
                               />
                             </td>
                             <td className="py-2 px-3">
                               <Input
                                 type="number"
+                                min="0"
                                 value={pres.precio}
-                                onChange={(e) => updatePresentacion(idx, "precio", Number(e.target.value))}
+                                onChange={(e) => updatePresentacion(idx, "precio", Math.max(0, Number(e.target.value)))}
                                 className="h-7 text-sm text-right"
                               />
                             </td>

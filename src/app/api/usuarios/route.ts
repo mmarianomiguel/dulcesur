@@ -41,6 +41,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Only admins can create admin accounts
+    if (es_admin) {
+      const { data: creator } = await supabaseAdmin
+        .from("usuarios")
+        .select("es_admin")
+        .eq("auth_id", user.id)
+        .single();
+      if (!creator?.es_admin) {
+        return NextResponse.json(
+          { error: "Solo administradores pueden crear cuentas de admin" },
+          { status: 403 }
+        );
+      }
+    }
+
     // Create user in Supabase Auth
     const { data: authData, error: authError } =
       await supabaseAdmin.auth.admin.createUser({
