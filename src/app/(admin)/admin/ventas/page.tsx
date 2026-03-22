@@ -1260,7 +1260,18 @@ export default function VentasPage() {
         .select()
         .single();
 
-      if (ventaError) { setErrorModal({ open: true, message: `Error al crear venta: ${ventaError.message}` }); setSaving(false); return; }
+      if (ventaError) {
+        // Retry with new number if duplicate key
+        if (ventaError.message?.includes("duplicate key") || ventaError.message?.includes("ventas_numero_unique")) {
+          const { data: retryNum } = await supabase.rpc("next_numero", { p_tipo: "venta" });
+          if (retryNum) {
+            const { data: retryVenta, error: retryErr } = await supabase.from("ventas").insert({ ...{ numero: retryNum, tipo_comprobante: tipoComprobante, fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), cliente_id: clientId || null, vendedor_id: vendedorId || null, forma_pago: formaPago, subtotal, descuento_porcentaje: descuento, recargo_porcentaje: recargo, total, estado: "cerrada", observacion: despacho, metodo_entrega: deliveryMethod === "delivery" ? "envio" : "retiro", lista_precio_id: listaPrecioId || null } }).select().single();
+            if (!retryErr && retryVenta) { Object.assign(venta || {}, retryVenta); } else { setErrorModal({ open: true, message: `Error al crear venta: ${retryErr?.message || ventaError.message}` }); setSaving(false); return; }
+          }
+        } else {
+          setErrorModal({ open: true, message: `Error al crear venta: ${ventaError.message}` }); setSaving(false); return;
+        }
+      }
       if (venta) {
         const ventaItems = items.map((i) => ({
           venta_id: venta.id,
