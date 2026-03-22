@@ -135,7 +135,29 @@ export default function RemitosPage() {
     try {
       const stored = localStorage.getItem("receipt_config");
       if (stored) setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
-    } catch (err) { console.error("Error generating remito:", err); }
+    } catch (err) { console.error("Error loading receipt config:", err); }
+    // Load empresa data for logo fallback
+    supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single().then(({ data: emp }) => {
+      if (emp) {
+        setReceiptConfig((prev) => ({
+          ...prev,
+          empresaNombre: prev.empresaNombre || emp.nombre || "",
+          empresaDomicilio: prev.empresaDomicilio || emp.domicilio || "",
+          empresaTelefono: prev.empresaTelefono || emp.telefono || "",
+          empresaCuit: prev.empresaCuit || emp.cuit || "",
+          empresaIva: prev.empresaIva || emp.situacion_iva || "",
+        }));
+      }
+    });
+    // Load logo from tienda_config if not in receipt_config
+    supabase.from("tienda_config").select("logo_url").limit(1).single().then(({ data: tc }) => {
+      if (tc?.logo_url) {
+        setReceiptConfig((prev) => ({
+          ...prev,
+          logoUrl: prev.logoUrl || tc.logo_url,
+        }));
+      }
+    });
   }, [fetchRemitos]);
 
   const openDetail = async (r: RemitoRow) => {

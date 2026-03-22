@@ -425,7 +425,10 @@ export default function VentasPage() {
   // ---------- discount helper ----------
   const getProductDiscount = (product: Producto, presName: string): number => {
     let bestDiscount = 0;
+    const isCombo = !!(product as any).es_combo;
     for (const d of activeDiscounts) {
+      // Skip if discount excludes combos and product is combo
+      if (d.excluir_combos && isCombo) continue;
       // Check presentation filter
       if (d.presentacion === "unidad" && presName !== "Unidad") continue;
       if (d.presentacion === "caja" && presName === "Unidad") continue;
@@ -2368,6 +2371,11 @@ export default function VentasPage() {
                     <div>
                       <div className="flex items-center gap-1.5">
                         <p className="text-sm font-medium">{p.nombre}</p>
+                        {(p as any).es_combo && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700">
+                            COMBO
+                          </span>
+                        )}
                         {(() => {
                           const unitDisc = getProductDiscount(p, "Unidad");
                           return unitDisc > 0 ? (
