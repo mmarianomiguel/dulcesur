@@ -31,7 +31,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
-import { formatCurrency, todayARG } from "@/lib/formatters";
+import { formatCurrency, todayARG, currentMonthPadded } from "@/lib/formatters";
 
 interface Vendedor {
   id: string;
@@ -64,7 +64,7 @@ export default function VendedoresPage() {
   // Date filter
   const [filterMode, setFilterMode] = useState<"day" | "month" | "range">("day");
   const [filterDay, setFilterDay] = useState(todayARG());
-  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
+  const [filterMonth, setFilterMonth] = useState(currentMonthPadded());
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
   const [filterFrom, setFilterFrom] = useState(todayARG());
   const [filterTo, setFilterTo] = useState(todayARG());

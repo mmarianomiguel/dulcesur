@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -174,14 +174,6 @@ interface ProductoSearch {
 }
 
 // ─── Helpers ───
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
-}
-
-function formatDatePDF(fecha: string) {
-  const d = new Date(fecha + "T12:00:00");
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
-}
 
 const estadoBadge: Record<string, { bg: string; text: string; label: string }> = {
   pendiente: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", label: "Pendiente" },
@@ -206,7 +198,7 @@ export default function ListadoVentasPage() {
   const [filterPayment, setFilterPayment] = useState("all");
   const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("month");
   const [filterDay, setFilterDay] = useState(todayARG());
-  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
+  const [filterMonth, setFilterMonth] = useState(currentMonthPadded());
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
@@ -399,7 +391,7 @@ export default function ListadoVentasPage() {
     setAnulando(true);
     const v = anularVenta;
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-    const hora = new Date().toTimeString().split(" ")[0];
+    const hora = nowTimeARG();
     const motivoTexto = anularMotivo ? ` (${anularMotivo})` : "";
     const errores: string[] = [];
 
@@ -927,7 +919,7 @@ export default function ListadoVentasPage() {
         // Adjust caja + CC if total changed
         if (Math.abs(diferencia) > 0.01) {
           const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-          const hora = new Date().toTimeString().split(" ")[0];
+          const hora = nowTimeARG();
 
           const { data: cajaRows } = await supabase
             .from("caja_movimientos")
@@ -997,7 +989,7 @@ export default function ListadoVentasPage() {
     const estadoAnterior = pedido.estado;
     const isHistorial = pedido._source === "historial";
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-    const hora = new Date().toTimeString().split(" ")[0];
+    const hora = nowTimeARG();
 
     // Only update pedidos_tienda for actual pedidos (not historial ventas)
     if (pedido._source !== "historial" && pedido.id > 0) {

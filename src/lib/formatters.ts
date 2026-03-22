@@ -49,6 +49,25 @@ export function formatDateShort(dateStr: string): string {
   });
 }
 
+/** Formats date for PDF: "05/01/2026" (padded) */
+export function formatDatePDF(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + (dateStr.includes("T") ? "" : "T12:00:00"));
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
+}
+
+/** Returns current month padded: "03" */
+export function currentMonthPadded(): string {
+  return String(new Date().getMonth() + 1).padStart(2, "0");
+}
+
+/** Returns current year: "2026" */
+export function currentYear(): string {
+  return String(new Date().getFullYear());
+}
+
 // ─── Text ───
 export function initials(name: string): string {
   return name

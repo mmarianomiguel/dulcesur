@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { todayARG } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -912,7 +913,7 @@ export default function ProductosPage() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Productos");
-    XLSX.writeFile(wb, `Productos_${APP_NAME}_${new Date().toISOString().split("T")[0]}.xlsx`);
+    XLSX.writeFile(wb, `Productos_${APP_NAME}_${todayARG()}.xlsx`);
   };
 
   // Import Excel

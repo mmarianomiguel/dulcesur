@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG ,  nowTimeARG } from "@/lib/formatters";
 import type { Cliente, ZonaEntrega } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -451,7 +451,7 @@ export default function ClientesPage() {
     if (!payMovVenta || payMovMonto <= 0 || !movClient?.id) return;
     setPayMovSaving(true);
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-    const hora = new Date().toTimeString().split(" ")[0];
+    const hora = nowTimeARG();
     const saldoPend = payMovVenta.saldo_pendiente || 0;
     const montoReal = Math.min(payMovMonto, saldoPend);
     const restante = saldoPend - montoReal;
@@ -559,7 +559,7 @@ export default function ClientesPage() {
 
     await supabase.from("caja_movimientos").insert({
       fecha: hoy,
-      hora: new Date().toTimeString().split(" ")[0],
+      hora: nowTimeARG(),
       tipo: "ingreso",
       descripcion: `Cobro a ${cobroClient.nombre}`,
       metodo_pago: cobroFormaPago,

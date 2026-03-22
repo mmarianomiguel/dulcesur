@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, nowTimeARG, currentMonthPadded } from "@/lib/formatters";
 import type { Proveedor } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -115,7 +115,7 @@ export default function ComprasPage() {
   const [search, setSearch] = useState("");
   const [purchaseFilterMode, setPurchaseFilterMode] = useState<"day" | "month" | "range" | "all">("day");
   const [purchaseFilterDay, setPurchaseFilterDay] = useState(todayString());
-  const [purchaseFilterMonth, setPurchaseFilterMonth] = useState(String(new Date().getMonth() + 1));
+  const [purchaseFilterMonth, setPurchaseFilterMonth] = useState(currentMonthPadded());
   const [purchaseFilterYear, setPurchaseFilterYear] = useState(String(new Date().getFullYear()));
   const [purchaseFilterFrom, setPurchaseFilterFrom] = useState(todayString());
   const [purchaseFilterTo, setPurchaseFilterTo] = useState(todayString());
@@ -436,7 +436,7 @@ export default function ComprasPage() {
         const prov = providers.find((p) => p.id === selectedProveedorId);
         await supabase.from("caja_movimientos").insert({
           fecha: fecha || todayString(),
-          hora: new Date().toTimeString().split(" ")[0],
+          hora: nowTimeARG(),
           tipo: "egreso",
           descripcion: `Compra ${numero} - ${prov?.nombre || "Proveedor"}`,
           metodo_pago: formaPago,

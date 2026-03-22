@@ -1,5 +1,6 @@
 "use client";
 
+import { nowTimeARG } from "@/lib/formatters";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -336,7 +337,7 @@ export default function HojaDeRutaPage() {
 
     setPaySaving(true);
     const hoy = getArgentinaToday();
-    const hora = new Date().toTimeString().split(" ")[0];
+    const hora = nowTimeARG();
     const montoReal = Math.min(totalPagando, debe);
     const saldoPendiente = debe - montoReal;
     const cuentaSeleccionada = payCuentaBancariaId ? cuentasBancarias.find((c) => c.id === payCuentaBancariaId) : null;

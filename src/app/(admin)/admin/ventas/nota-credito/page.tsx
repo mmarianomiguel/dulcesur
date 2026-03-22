@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, currentMonthPadded } from "@/lib/formatters";
 import type { Cliente, Producto, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,7 @@ export default function NotaCreditoPage() {
   const [listSearch, setListSearch] = useState("");
   const [ncFilterMode, setNcFilterMode] = useState<"day" | "month" | "range" | "all">("day");
   const [ncFilterDay, setNcFilterDay] = useState(todayARG());
-  const [ncFilterMonth, setNcFilterMonth] = useState(String(new Date().getMonth() + 1));
+  const [ncFilterMonth, setNcFilterMonth] = useState(currentMonthPadded());
   const [ncFilterYear, setNcFilterYear] = useState(String(new Date().getFullYear()));
   const [ncFilterFrom, setNcFilterFrom] = useState("");
   const [ncFilterTo, setNcFilterTo] = useState("");

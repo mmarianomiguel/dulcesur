@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG ,  nowTimeARG } from "@/lib/formatters";
 import type { Cliente, Producto, Usuario, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -314,7 +314,7 @@ export default function CargaManualPage() {
         !tipoComprobante.startsWith("Nota de Crédito");
       await supabase.from("caja_movimientos").insert({
         fecha,
-        hora: new Date().toTimeString().split(" ")[0],
+        hora: nowTimeARG(),
         tipo: isIngreso ? "ingreso" : "egreso",
         descripcion: `${tipoComprobante} #${num} (Manual)`,
         metodo_pago: formaPago,

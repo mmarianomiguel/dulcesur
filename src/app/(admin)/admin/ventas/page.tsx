@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { todayARG, nowTimeARG } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { logAudit } from "@/lib/audit";
 import type { Cliente, Producto, Usuario } from "@/types/database";
@@ -302,8 +303,8 @@ export default function VentasPage() {
       .from("descuentos")
       .select("*")
       .eq("activo", true)
-      .lte("fecha_inicio", new Date().toISOString().split("T")[0]);
-    setActiveDiscounts((descuentosData || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= new Date().toISOString().split("T")[0]));
+      .lte("fecha_inicio", todayARG());
+    setActiveDiscounts((descuentosData || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= todayARG()));
 
     // Pre-load all presentaciones for search by code
     const { data: allPres } = await supabase.from("presentaciones").select("*");
@@ -1329,7 +1330,7 @@ export default function VentasPage() {
         }
 
         const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-        const hora = new Date().toTimeString().split(" ")[0];
+        const hora = nowTimeARG();
 
         if (formaPago === "Cuenta Corriente") {
           if (clientId) {

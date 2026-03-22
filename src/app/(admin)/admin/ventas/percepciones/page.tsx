@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { todayARG } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -217,7 +218,7 @@ export default function PercepcionesPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `percepciones_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `percepciones_${todayARG()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

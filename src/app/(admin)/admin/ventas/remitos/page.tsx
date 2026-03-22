@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, formatCurrency, formatDatePDF } from "@/lib/formatters";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,15 +76,6 @@ interface VentaItemRow {
   subtotal: number;
   presentacion?: string;
   unidades_por_presentacion?: number;
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
-}
-
-function formatDatePDF(fecha: string) {
-  const d = new Date(fecha + "T12:00:00");
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 }
 
 export default function RemitosPage() {

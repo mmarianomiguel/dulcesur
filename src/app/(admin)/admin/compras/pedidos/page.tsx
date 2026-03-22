@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, nowTimeARG, currentMonthPadded } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,7 +136,7 @@ export default function PedidosProveedorPage() {
   const [filterEstado, setFilterEstado] = useState("all");
   const [pedFilterMode, setPedFilterMode] = useState<"day" | "month" | "range" | "all">("month");
   const [pedFilterDay, setPedFilterDay] = useState(todayARG());
-  const [pedFilterMonth, setPedFilterMonth] = useState(String(new Date().getMonth() + 1));
+  const [pedFilterMonth, setPedFilterMonth] = useState(currentMonthPadded());
   const [pedFilterYear, setPedFilterYear] = useState(String(new Date().getFullYear()));
   const [pedFilterFrom, setPedFilterFrom] = useState(todayARG());
   const [pedFilterTo, setPedFilterTo] = useState(todayARG());
@@ -602,7 +602,7 @@ export default function PedidosProveedorPage() {
         const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
         await supabase.from("caja_movimientos").insert({
           fecha,
-          hora: new Date().toTimeString().split(" ")[0],
+          hora: nowTimeARG(),
           tipo: "egreso",
           descripcion: `Compra ${numero} - ${provNombre} (Pedido ${pedidoDisplayNum(detailPedido.id)})`,
           metodo_pago: receiveFormaPago,

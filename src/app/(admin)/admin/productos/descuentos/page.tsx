@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { todayARG } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -142,7 +143,7 @@ export default function DescuentosPage() {
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [porcentaje, setPorcentaje] = useState(10);
-  const [fechaInicio, setFechaInicio] = useState(() => new Date().toISOString().split("T")[0]);
+  const [fechaInicio, setFechaInicio] = useState(() => todayARG());
   const [fechaFin, setFechaFin] = useState("");
   const [aplicaA, setAplicaA] = useState("todos");
   const [categoriasIds, setCategoriasIds] = useState<string[]>([]);
@@ -204,7 +205,7 @@ export default function DescuentosPage() {
     setNombre("");
     setDescripcion("");
     setPorcentaje(10);
-    setFechaInicio(new Date().toISOString().split("T")[0]);
+    setFechaInicio(todayARG());
     setFechaFin("");
     setAplicaA("todos");
     setCategoriasIds([]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { nowTimeARG } from "@/lib/formatters";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -361,7 +362,7 @@ export default function PedidosOnlinePage() {
         // Adjust caja + CC if total changed
         if (Math.abs(diferencia) > 0.01) {
           const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-          const hora = new Date().toTimeString().split(" ")[0];
+          const hora = nowTimeARG();
 
           const { data: cajaRows } = await supabase
             .from("caja_movimientos")

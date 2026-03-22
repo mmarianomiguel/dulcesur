@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG } from "@/lib/formatters";
+import { todayARG ,  nowTimeARG } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -181,7 +181,7 @@ export default function CobranzasPage() {
     // Register caja movement
     await supabase.from("caja_movimientos").insert({
       fecha: hoy,
-      hora: new Date().toTimeString().split(" ")[0],
+      hora: nowTimeARG(),
       tipo: "ingreso",
       descripcion: `Cobro a ${cobroClient.nombre}`,
       metodo_pago: cobroFormaPago,
