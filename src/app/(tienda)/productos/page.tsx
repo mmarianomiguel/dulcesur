@@ -1195,7 +1195,7 @@ function ProductosContent() {
                             </span>
                           );
                         })()}
-                        {disc === 0 && (() => {
+                        {(() => {
                           const pa = producto.precio_anterior;
                           const dateStr = producto.fecha_actualizacion || producto.updated_at;
                           if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
@@ -1209,6 +1209,7 @@ function ProductosContent() {
                               </span>
                             );
                           }
+                          if (disc > 0) return null;
                           return (
                             <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg">
                               ↓ -{pct}%
