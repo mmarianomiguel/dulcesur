@@ -34,6 +34,7 @@ interface Categoria {
   id: string;
   nombre: string;
   count?: number;
+  restringida?: boolean;
 }
 
 interface Subcategoria {
