@@ -31,6 +31,7 @@ import {
   X,
   Loader2,
   ClipboardEdit,
+  ClipboardList,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
@@ -406,16 +407,15 @@ export default function CargaManualPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Carga Manual</h1>
-          <p className="text-muted-foreground text-sm">
-            Registrar comprobantes de forma manual
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <ClipboardList className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Carga Manual</h1>
+            <p className="text-sm text-muted-foreground">Registrar comprobantes de forma manual</p>
+          </div>
         </div>
-        <Badge variant="outline">
-          <ClipboardEdit className="w-3.5 h-3.5 mr-1" />
-          Manual
-        </Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

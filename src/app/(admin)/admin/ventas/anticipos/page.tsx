@@ -31,6 +31,7 @@ import {
   Undo2,
   Loader2,
   Download,
+  Wallet,
 } from "lucide-react";
 
 interface Anticipo {
@@ -281,11 +282,14 @@ export default function AnticiposPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Anticipos / Señas</h1>
-          <p className="text-muted-foreground">
-            Gestión de anticipos y señas de clientes
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <Wallet className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Anticipos / Señas</h1>
+            <p className="text-sm text-muted-foreground">Gestión de anticipos y señas de clientes</p>
+          </div>
         </div>
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -325,28 +329,32 @@ export default function AnticiposPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por cliente o número..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Select value={filtroEstado} onValueChange={(v) => setFiltroEstado(v ?? "all")}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="Vigente">Vigente</SelectItem>
-            <SelectItem value="Aplicado">Aplicado</SelectItem>
-            <SelectItem value="Devuelto">Devuelto</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por cliente o número..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={filtroEstado} onValueChange={(v) => setFiltroEstado(v ?? "all")}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="Vigente">Vigente</SelectItem>
+                <SelectItem value="Aplicado">Aplicado</SelectItem>
+                <SelectItem value="Devuelto">Devuelto</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Table */}
       <Card>

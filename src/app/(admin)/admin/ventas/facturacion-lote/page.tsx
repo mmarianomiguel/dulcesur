@@ -192,9 +192,16 @@ export default function FacturacionLotePage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Facturacion por Lote</h1>
-        <p className="text-muted-foreground text-sm">Facturar multiples remitos a la vez</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <FileText className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Facturación en Lote</h1>
+            <p className="text-sm text-muted-foreground">Facturar múltiples remitos a la vez</p>
+          </div>
+        </div>
       </div>
 
       {/* Stats */}

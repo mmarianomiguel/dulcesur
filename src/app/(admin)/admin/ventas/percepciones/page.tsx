@@ -225,11 +225,14 @@ export default function PercepcionesPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Percepciones</h1>
-          <p className="text-muted-foreground">
-            Seguimiento y reporte de percepciones impositivas
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <FileText className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Percepciones</h1>
+            <p className="text-sm text-muted-foreground">Seguimiento y reporte de percepciones impositivas</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCSV}>
@@ -282,41 +285,57 @@ export default function PercepcionesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex gap-2">
-          <Input
-            type="date"
-            value={fechaDesde}
-            onChange={(e) => setFechaDesde(e.target.value)}
-            className="w-[160px]"
-          />
-          <Input
-            type="date"
-            value={fechaHasta}
-            onChange={(e) => setFechaHasta(e.target.value)}
-            className="w-[160px]"
-          />
-        </div>
-        <Select value={filtroTipo} onValueChange={(v) => setFiltroTipo(v ?? "all")}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="IIBB">IIBB</SelectItem>
-            <SelectItem value="IVA">IVA</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Filtrar jurisdicción..."
-            value={filtroJurisdiccion}
-            onChange={(e) => setFiltroJurisdiccion(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Desde</Label>
+                <Input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
+                  className="w-[160px]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Hasta</Label>
+                <Input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={(e) => setFechaHasta(e.target.value)}
+                  className="w-[160px]"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Tipo</Label>
+              <Select value={filtroTipo} onValueChange={(v) => setFiltroTipo(v ?? "all")}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="IIBB">IIBB</SelectItem>
+                  <SelectItem value="IVA">IVA</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 flex-1 max-w-xs">
+              <Label className="text-xs text-muted-foreground">Jurisdicción</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Filtrar jurisdicción..."
+                  value={filtroJurisdiccion}
+                  onChange={(e) => setFiltroJurisdiccion(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Table */}
       <Card>

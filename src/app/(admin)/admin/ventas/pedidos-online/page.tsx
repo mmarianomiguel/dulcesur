@@ -508,12 +508,14 @@ export default function PedidosOnlinePage() {
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Pedidos Online</h1>
-          <p className="text-sm text-muted-foreground">{pedidos.length} pedidos en total</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Globe className="w-5 h-5 text-primary" />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <ShoppingCart className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Pedidos Online</h1>
+            <p className="text-sm text-muted-foreground">{pedidos.length} pedidos en total</p>
+          </div>
         </div>
       </div>
 

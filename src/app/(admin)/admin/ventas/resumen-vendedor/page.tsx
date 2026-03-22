@@ -218,14 +218,15 @@ export default function ResumenVendedorPage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-            Resumen por Vendedor
-          </h1>
-          <p className="text-muted-foreground">
-            Rendimiento de ventas por vendedor
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <Users className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Resumen por Vendedor</h1>
+            <p className="text-sm text-muted-foreground">Rendimiento de ventas por vendedor</p>
+          </div>
         </div>
         <Button onClick={exportCSV} variant="outline">
           <Download className="h-4 w-4 mr-2" />
@@ -238,7 +239,7 @@ export default function ResumenVendedorPage() {
         <CardContent className="pt-6">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>Desde</Label>
+              <Label className="text-xs text-muted-foreground">Desde</Label>
               <Input
                 type="date"
                 value={fechaDesde}
@@ -246,7 +247,7 @@ export default function ResumenVendedorPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Hasta</Label>
+              <Label className="text-xs text-muted-foreground">Hasta</Label>
               <Input
                 type="date"
                 value={fechaHasta}
@@ -254,7 +255,7 @@ export default function ResumenVendedorPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Vendedor</Label>
+              <Label className="text-xs text-muted-foreground">Vendedor</Label>
               <Select
                 value={selectedVendedor}
                 onValueChange={(v) => setSelectedVendedor(v ?? "all")}

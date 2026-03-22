@@ -262,16 +262,15 @@ export default function NotaDebitoPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Notas de Débito</h1>
-          <p className="text-muted-foreground text-sm">
-            Crear y consultar notas de débito
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <FileText className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Notas de Débito</h1>
+            <p className="text-sm text-muted-foreground">Crear y consultar notas de débito</p>
+          </div>
         </div>
-        <Badge variant="outline">
-          <FilePlus className="w-3.5 h-3.5 mr-1" />
-          ND
-        </Badge>
       </div>
 
       {/* Stats */}
