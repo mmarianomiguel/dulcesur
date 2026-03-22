@@ -2167,13 +2167,19 @@ export default function ProductosPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Stock</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={form.stock}
-                    onChange={(e) => setForm({ ...form, stock: Math.max(0, Number(e.target.value)) })}
-                    className="h-9"
-                  />
+                  {form.es_combo ? (
+                    <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                      Automático (combo)
+                    </div>
+                  ) : (
+                    <Input
+                      type="number"
+                      min="0"
+                      value={form.stock}
+                      onChange={(e) => setForm({ ...form, stock: Math.max(0, Number(e.target.value)) })}
+                      className="h-9"
+                    />
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Min</Label>
