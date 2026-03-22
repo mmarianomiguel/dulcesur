@@ -58,6 +58,7 @@ interface TiendaConfig {
   monto_minimo_pedido: number;
   monto_minimo_envio: number;
   recargo_transferencia: number;
+  costo_envio: number;
 }
 
 const formatCurrency = (value: number) =>
@@ -181,6 +182,7 @@ export default function CheckoutPage() {
         monto_minimo_pedido: data.monto_minimo_pedido ?? 0,
         monto_minimo_envio: 50000,
         recargo_transferencia: data.recargo_transferencia ?? 0,
+        costo_envio: data.costo_envio ?? 0,
       };
       setConfig(cfg);
       const dates = getAvailableDates(cfg.dias_entrega, cfg.dias_max_programacion, cfg.hora_corte);
@@ -345,8 +347,7 @@ export default function CheckoutPage() {
 
   const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
   const totalSavings = items.reduce((s, i) => i.precio_original ? s + (i.precio_original - i.precio) * i.cantidad : s, 0);
-  // TODO: shipping cost is hardcoded - add a costo_envio column to tienda_config and use it here
-  const costoEnvioBase = 500;
+  const costoEnvioBase = config?.costo_envio ?? 0;
   const envioGratis =
     metodoEntrega === "retiro" ||
     (config && config.umbral_envio_gratis > 0 && subtotal >= config.umbral_envio_gratis);

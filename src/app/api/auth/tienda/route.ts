@@ -78,7 +78,7 @@ async function handleLogin({ email, password }: { email: string; password: strin
     return NextResponse.json({ error: "Email o contraseña incorrectos." }, { status: 401 });
   }
 
-  // Try bcrypt first, then SHA-256 legacy, then plaintext legacy
+  // Try bcrypt first, then SHA-256 legacy (plaintext comparison removed for security)
   let valid = false;
   let needsUpgrade = false;
 
@@ -86,12 +86,9 @@ async function handleLogin({ email, password }: { email: string; password: strin
     // Already bcrypt
     valid = await bcrypt.compare(password, data.password_hash);
   } else {
-    // Legacy: SHA-256 hash or plaintext
+    // Legacy: SHA-256 hash only
     const sha256 = await sha256Hash(password);
     if (data.password_hash === sha256) {
-      valid = true;
-      needsUpgrade = true;
-    } else if (data.password_hash === password) {
       valid = true;
       needsUpgrade = true;
     }
@@ -195,13 +192,13 @@ async function handleChangePassword({
     return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
   }
 
-  // Verify current password (bcrypt, SHA-256 legacy, or plaintext legacy)
+  // Verify current password (bcrypt or SHA-256 legacy)
   let valid = false;
   if (match.password_hash.startsWith("$2")) {
     valid = await bcrypt.compare(currentPassword, match.password_hash);
   } else {
     const sha256 = await sha256Hash(currentPassword);
-    valid = match.password_hash === sha256 || match.password_hash === currentPassword;
+    valid = match.password_hash === sha256;
   }
 
   if (!valid) {

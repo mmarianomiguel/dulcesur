@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       const { data, error } = await supabaseAdmin.from(table).select("*");
 
       if (error) {
-        console.warn(`Error exporting table ${table}: ${error.message}`);
+        // Skip table on error
         backupData[table] = [];
         continue;
       }

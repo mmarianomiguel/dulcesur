@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showAdminToast } from "@/components/admin-toast";
 import { APP_NAME } from "@/lib/constants";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -94,7 +95,7 @@ const BLOCK_TYPES: BlockTypeDef[] = [
       titulo: "Bienvenido a nuestra tienda",
       subtitulo: "Encontrá los mejores productos",
       boton_texto: "Ver productos",
-      boton_link: "/tienda/productos",
+      boton_link: "/productos",
       boton_secundario_texto: "",
       boton_secundario_link: "",
       color_inicio: "#4f46e5",
@@ -146,7 +147,7 @@ const BLOCK_TYPES: BlockTypeDef[] = [
       titulo: "Promoción Especial",
       subtitulo: "Hasta 30% de descuento",
       boton_texto: "Ver ofertas",
-      link: "/tienda/productos",
+      link: "/productos",
       color_fondo: "#4f46e5",
     },
   },
@@ -604,7 +605,7 @@ function PreviewTextoLibre({ config }: { config: Record<string, unknown> }) {
   }
   return (
     <section className="py-12">
-      <div className="max-w-7xl mx-auto px-4 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: contenido }} />
+      <div className="max-w-7xl mx-auto px-4 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeHtml(contenido) }} />
     </section>
   );
 }

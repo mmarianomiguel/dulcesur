@@ -223,9 +223,9 @@ export default function FooterConfigPage() {
                   <p className="text-xs text-muted-foreground">/info/{p.slug}</p>
                 </div>
                 <Badge variant={p.activa ? "secondary" : "outline"} className="text-[10px]">{p.activa ? "Activa" : "Oculta"}</Badge>
-                <Switch checked={p.activa} onCheckedChange={(v) => supabase.from("paginas_info").update({ activa: v }).eq("id", p.id).then(() => fetchData())} />
+                <Switch checked={p.activa} onCheckedChange={(v) => { supabase.from("paginas_info").update({ activa: v }).eq("id", p.id).then(() => fetchData()); }} />
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditPage(p)}><Pencil className="w-3.5 h-3.5" /></Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => supabase.from("paginas_info").delete().eq("id", p.id).then(() => fetchData())}><Trash2 className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { supabase.from("paginas_info").delete().eq("id", p.id).then(() => fetchData()); }}><Trash2 className="w-3.5 h-3.5" /></Button>
               </div>
             ))}
             {paginas.length === 0 && <div className="p-8 text-center text-muted-foreground text-sm">Sin páginas</div>}
