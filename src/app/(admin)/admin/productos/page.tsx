@@ -48,6 +48,7 @@ import {
   Layers,
   ChevronDown,
   Copy,
+  Check,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ImageUpload } from "@/components/image-upload";
@@ -146,6 +147,10 @@ export default function ProductosPage() {
   const marcaRef = useRef<HTMLDivElement>(null);
   const [pageSize] = useState(50);
   const importRef = useRef<HTMLInputElement>(null);
+
+  // Mass selection state
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   // History dialog state
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1355,6 +1360,37 @@ export default function ProductosPage() {
     return arr;
   }, [products, debouncedSearch, presCodigoMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, comboFilter, sortBy]);
 
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => setSelected(new Set(filtered.map((p) => p.id)));
+  const deselectAll = () => setSelected(new Set());
+  const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+
+  const handleMassDelete = async () => {
+    if (selected.size === 0) return;
+    if (!window.confirm(`¿Eliminar ${selected.size} producto${selected.size > 1 ? "s" : ""}? Esta acción los desactivará.`)) return;
+    setDeleting(true);
+    try {
+      const ids = Array.from(selected);
+      for (let i = 0; i < ids.length; i += 200) {
+        const batch = ids.slice(i, i + 200);
+        await supabase.from("productos").update({ activo: false, visibilidad: "oculto" }).in("id", batch);
+      }
+      showAdminToast(`${selected.size} producto${selected.size > 1 ? "s" : ""} eliminado${selected.size > 1 ? "s" : ""}`, "success");
+      setSelected(new Set());
+      fetchProducts();
+    } catch (err: any) {
+      showAdminToast(err.message || "Error al eliminar productos", "error");
+    }
+    setDeleting(false);
+  };
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safeCurrentPage = Math.min(page, totalPages);
   const paginatedProducts = useMemo(
@@ -1644,6 +1680,37 @@ export default function ProductosPage() {
         </CardContent>
       </Card>
 
+      {/* Selection toolbar */}
+      {!loading && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={allFilteredSelected ? deselectAll : selectAllFiltered}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {allFilteredSelected ? "Deseleccionar todos" : "Seleccionar todos"} ({filtered.length})
+            </button>
+            {selected.size > 0 && (
+              <>
+                <span className="text-border">|</span>
+                <button onClick={deselectAll} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Limpiar selección</button>
+              </>
+            )}
+          </div>
+          {selected.size > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-2.5 py-1 rounded-full text-xs font-medium">
+                {selected.size} seleccionado{selected.size > 1 ? "s" : ""}
+              </span>
+              <Button variant="destructive" size="sm" onClick={handleMassDelete} disabled={deleting}>
+                {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Eliminar ({selected.size})
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <Card>
         <CardContent className="pt-0">
@@ -1656,6 +1723,13 @@ export default function ProductosPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
+                    <th className="py-3 px-2 font-medium w-8">
+                      <button onClick={allFilteredSelected ? deselectAll : selectAllFiltered}>
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${allFilteredSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
+                          {allFilteredSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                        </div>
+                      </button>
+                    </th>
                     <th className="py-3 px-2 font-medium w-10"></th>
                     <th className="text-left py-3 px-4 font-medium">Codigo</th>
                     <th className="text-left py-3 px-4 font-medium">Articulo</th>
@@ -1669,11 +1743,20 @@ export default function ProductosPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedProducts.map((product) => (
+                  {paginatedProducts.map((product) => {
+                    const isSelected = selected.has(product.id);
+                    return (
                     <tr
                       key={product.id}
-                      className="border-b last:border-0 hover:bg-muted/50 transition-colors"
+                      className={`border-b last:border-0 transition-colors ${isSelected ? "bg-accent" : "hover:bg-muted/50"}`}
                     >
+                      <td className="py-3 px-2">
+                        <button onClick={() => toggleSelect(product.id)}>
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
+                            {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                          </div>
+                        </button>
+                      </td>
                       <td className="py-3 px-2">
                         {product.imagen_url ? (
                           <img src={product.imagen_url} alt="" className="w-8 h-8 rounded object-cover" />
@@ -1778,7 +1861,8 @@ export default function ProductosPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

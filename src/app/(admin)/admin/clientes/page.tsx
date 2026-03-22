@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { showAdminToast } from "@/components/admin-toast";
+import * as XLSX from "xlsx";
 import {
   Select,
   SelectContent,
@@ -47,6 +48,8 @@ import {
   Eye,
   Download,
   MapPin,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -141,6 +144,9 @@ export default function ClientesPage() {
   const [payMovMetodo, setPayMovMetodo] = useState<"Efectivo" | "Transferencia">("Efectivo");
   const [payMovSaving, setPayMovSaving] = useState(false);
   const vendedorRef = useRef<HTMLDivElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState("");
 
   // Cobranzas state
   const [cobranzasSearch, setCobranzasSearch] = useState("");
@@ -569,6 +575,164 @@ export default function ClientesPage() {
     a.click();
   };
 
+  const handleExportClients = () => {
+    const rows = filtered.map((c) => {
+      const zona = zonas.find((z) => z.id === c.zona_entrega);
+      const vendedor = vendedores.find((v) => v.id === (c as any).vendedor_id);
+      return {
+        "Codigo": (c as any).codigo_cliente || "",
+        "Nombre": c.nombre,
+        "CUIT": c.cuit || "",
+        "Situacion IVA": c.situacion_iva,
+        "Tipo Factura": c.tipo_factura || "",
+        "Razon Social": c.razon_social || "",
+        "Domicilio": c.domicilio || "",
+        "Domicilio Fiscal": c.domicilio_fiscal || "",
+        "Telefono": c.telefono || "",
+        "Email": c.email || "",
+        "Provincia": c.provincia || "",
+        "Localidad": c.localidad || "",
+        "Codigo Postal": c.codigo_postal || "",
+        "Barrio": (c as any).barrio || "",
+        "Zona Entrega": zona?.nombre || "",
+        "Vendedor": vendedor?.nombre || "",
+        "Saldo": c.saldo,
+        "Observacion": c.observacion || "",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [
+      { wch: 10 }, { wch: 30 }, { wch: 14 }, { wch: 22 }, { wch: 12 },
+      { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 16 }, { wch: 28 },
+      { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 16 },
+      { wch: 20 }, { wch: 12 }, { wch: 30 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Clientes");
+    XLSX.writeFile(wb, `Clientes_${todayARG()}.xlsx`);
+    showAdminToast(`${rows.length} clientes exportados`, "success");
+  };
+
+  const handleImportClients = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setImporting(true);
+    setImportProgress("Leyendo archivo...");
+
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws);
+
+      if (rows.length === 0) {
+        showAdminToast("El archivo está vacío", "error");
+        setImporting(false);
+        return;
+      }
+
+      const normalize = (key: string) => key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const getVal = (row: Record<string, any>, ...keys: string[]) => {
+        for (const k of Object.keys(row)) {
+          const nk = normalize(k);
+          for (const target of keys) {
+            if (nk === normalize(target) || nk.includes(normalize(target))) return String(row[k] || "").trim();
+          }
+        }
+        return "";
+      };
+
+      // Build zona lookup
+      const zonaMap: Record<string, string> = {};
+      zonas.forEach((z) => { zonaMap[z.nombre.toLowerCase()] = z.id; });
+
+      // Build vendedor lookup
+      const vendMap: Record<string, string> = {};
+      vendedores.forEach((v) => { vendMap[v.nombre.toLowerCase()] = v.id; });
+
+      let imported = 0, updated = 0, failed = 0;
+
+      for (let i = 0; i < rows.length; i++) {
+        setImportProgress(`Procesando ${i + 1} de ${rows.length}...`);
+        const row = rows[i];
+        const nombre = getVal(row, "nombre", "cliente", "razon social");
+        if (!nombre) { failed++; continue; }
+
+        const codigo = getVal(row, "codigo", "cod");
+        const cuit = getVal(row, "cuit");
+        const sitIva = getVal(row, "situacion iva", "iva") || "Consumidor final";
+        const tipoFactura = getVal(row, "tipo factura");
+        const razonSocial = getVal(row, "razon social");
+        const domicilio = getVal(row, "domicilio", "direccion");
+        const domicilioFiscal = getVal(row, "domicilio fiscal");
+        const telefono = getVal(row, "telefono", "tel", "celular");
+        const email = getVal(row, "email", "correo", "mail");
+        const provincia = getVal(row, "provincia");
+        const localidad = getVal(row, "localidad", "ciudad");
+        const codigoPostal = getVal(row, "codigo postal", "cp");
+        const barrio = getVal(row, "barrio");
+        const zonaName = getVal(row, "zona entrega", "zona");
+        const vendedorName = getVal(row, "vendedor");
+        const observacion = getVal(row, "observacion", "notas");
+
+        const payload: Record<string, any> = {
+          nombre,
+          situacion_iva: sitIva,
+          codigo_cliente: codigo || null,
+          cuit: cuit || null,
+          tipo_factura: tipoFactura || null,
+          razon_social: razonSocial || null,
+          domicilio: domicilio || null,
+          domicilio_fiscal: domicilioFiscal || null,
+          telefono: telefono || null,
+          email: email || null,
+          provincia: provincia || null,
+          localidad: localidad || null,
+          codigo_postal: codigoPostal || null,
+          barrio: barrio || null,
+          observacion: observacion || null,
+          activo: true,
+        };
+
+        if (zonaName && zonaMap[zonaName.toLowerCase()]) {
+          payload.zona_entrega = zonaMap[zonaName.toLowerCase()];
+          const z = zonas.find((zz) => zz.id === payload.zona_entrega);
+          if (z) payload.dias_entrega = z.dias;
+        }
+        if (vendedorName && vendMap[vendedorName.toLowerCase()]) {
+          payload.vendedor_id = vendMap[vendedorName.toLowerCase()];
+        }
+
+        // Check if client exists by CUIT or by exact name
+        let existingId: string | null = null;
+        if (cuit) {
+          const { data: byCuit } = await supabase.from("clientes").select("id").eq("cuit", cuit).eq("activo", true).maybeSingle();
+          if (byCuit) existingId = byCuit.id;
+        }
+        if (!existingId) {
+          const { data: byName } = await supabase.from("clientes").select("id").eq("nombre", nombre).eq("activo", true).maybeSingle();
+          if (byName) existingId = byName.id;
+        }
+
+        if (existingId) {
+          await supabase.from("clientes").update(payload).eq("id", existingId);
+          updated++;
+        } else {
+          await supabase.from("clientes").insert(payload);
+          imported++;
+        }
+      }
+
+      showAdminToast(`Importación completa: ${imported} nuevos, ${updated} actualizados${failed > 0 ? `, ${failed} omitidos` : ""}`, "success");
+      fetchClients();
+    } catch (err: any) {
+      showAdminToast("Error al importar: " + (err.message || "Error desconocido"), "error");
+    }
+    setImporting(false);
+    setImportProgress("");
+  };
+
   const filtered = useMemo(() => {
     const searchLower = search.toLowerCase();
     const domicilioLower = filterDomicilio.toLowerCase();
@@ -599,6 +763,18 @@ export default function ClientesPage() {
             <Button variant="outline" size="sm" onClick={exportCSV}>
               <Download className="w-4 h-4 mr-2" />Exportar
             </Button>
+          )}
+          {activeTab === "listado" && (
+            <>
+              <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportClients} />
+              <Button variant="outline" size="sm" onClick={handleExportClients}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />Exportar Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => importRef.current?.click()} disabled={importing}>
+                {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                {importing ? importProgress : "Importar Excel"}
+              </Button>
+            </>
           )}
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo cliente</Button>
         </div>
