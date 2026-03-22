@@ -63,6 +63,9 @@ interface Producto {
   categorias: { nombre: string } | null;
   marcas: { nombre: string } | null;
   es_combo?: boolean;
+  precio_anterior?: number | null;
+  fecha_actualizacion?: string | null;
+  updated_at?: string;
 }
 
 /* ───── Skeleton loader ───── */
@@ -1189,6 +1192,26 @@ function ProductosContent() {
                           return (
                             <span className="bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-lg shadow-green-500/30">
                               -{boxDisc}% comprando por caja
+                            </span>
+                          );
+                        })()}
+                        {(() => {
+                          const pa = producto.precio_anterior;
+                          const dateStr = producto.fecha_actualizacion || producto.updated_at;
+                          if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
+                          const daysAgo = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24);
+                          if (daysAgo > 3) return null;
+                          const pct = Math.abs(Math.round(((producto.precio - pa) / pa) * 100));
+                          if (producto.precio > pa) {
+                            return (
+                              <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg">
+                                ↑ +{pct}%
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg">
+                              ↓ -{pct}%
                             </span>
                           );
                         })()}

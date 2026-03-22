@@ -47,6 +47,10 @@ interface Producto {
   activo: boolean;
   stock: number;
   categorias?: Categoria | null;
+  precio_anterior?: number | null;
+  fecha_actualizacion?: string | null;
+  updated_at?: string;
+  created_at?: string;
 }
 
 interface CarritoItem {
@@ -392,6 +396,18 @@ function ProductosDestacadosBlock({
                             Nuevo
                           </span>
                         )}
+                        {(() => {
+                          const pa = prod.precio_anterior;
+                          const dateStr = prod.fecha_actualizacion || prod.updated_at;
+                          if (!pa || pa <= 0 || pa === prod.precio || !dateStr) return null;
+                          const daysAgo = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24);
+                          if (daysAgo > 3) return null;
+                          const pct = Math.abs(Math.round(((prod.precio - pa) / pa) * 100));
+                          if (prod.precio > pa) {
+                            return <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">↑ +{pct}%</span>;
+                          }
+                          return <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">↓ -{pct}%</span>;
+                        })()}
                       </div>
                     </div>
 
