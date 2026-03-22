@@ -350,8 +350,8 @@ export default function ProductoDetallePage() {
     ? (comboStock ?? 0)
     : (producto?.stock ?? 0);
   const availableStock = producto ? Math.max(0, effectiveStock - totalUnitsInCart) : 0;
-  const maxQty = Math.floor(availableStock / presQty);
-  const canBuy = maxQty > 0;
+  const maxQty = availableStock > 0 ? Math.max(1, Math.floor(availableStock / presQty)) : 0;
+  const canBuy = availableStock > 0;
 
   const stockLabel = !producto ? "" :
     !canBuy ? "Sin stock" :
@@ -597,7 +597,7 @@ export default function ProductoDetallePage() {
                   .map(({ p, idx }) => {
                   const isUnit = Number(p.cantidad) === 1;
                   const selected = selectedPresIdx === idx;
-                  const presMax = Math.floor(availableStock / Number(p.cantidad));
+                  const presMax = availableStock > 0 ? Math.max(1, Math.floor(availableStock / Number(p.cantidad))) : 0;
                   const disabled = presMax <= 0;
                   return (
                     <button

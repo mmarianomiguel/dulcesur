@@ -334,15 +334,23 @@ function ProductosDestacadosBlock({
   }).slice(0, maxItems);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [diasNuevo, setDiasNuevo] = useState(7);
+
+  useEffect(() => {
+    supabase.from("tienda_config").select("dias_badge_nuevo").limit(1).single().then(({ data }) => {
+      if (data?.dias_badge_nuevo != null) setDiasNuevo(data.dias_badge_nuevo);
+    });
+  }, []);
 
   const getQty = (id: string) => quantities[id] ?? 1;
   const setQty = (id: string, val: number) =>
     setQuantities((prev) => ({ ...prev, [id]: Math.max(1, val) }));
 
   const isNew = (prod: Producto) => {
+    if (diasNuevo <= 0) return false;
     const created = new Date((prod as any).created_at);
     const daysAgo = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-    return daysAgo <= 7;
+    return daysAgo <= diasNuevo;
   };
 
   return (

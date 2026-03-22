@@ -61,6 +61,7 @@ interface TiendaConfig {
   dias_atencion: string[];
   minimo_unidades_mayorista: number;
   dias_ocultar_sin_stock: number;
+  dias_badge_nuevo: number;
 }
 
 interface CategoriaDestacada {
@@ -190,6 +191,7 @@ export default function TiendaConfigPage() {
       dias_atencion: config.dias_atencion,
       minimo_unidades_mayorista: config.minimo_unidades_mayorista,
       dias_ocultar_sin_stock: config.dias_ocultar_sin_stock,
+      dias_badge_nuevo: config.dias_badge_nuevo,
     }).eq("id", config.id);
 
     // Sync categorias_destacadas: delete all and re-insert
@@ -635,6 +637,31 @@ export default function TiendaConfigPage() {
                         />
                         <p className="text-xs text-muted-foreground">
                           Los productos sin stock se ocultan de la tienda si no se actualizan en esta cantidad de días. Poné 0 para no ocultar nunca.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
+                        <Star className="w-5 h-5 text-green-500" />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-xs text-muted-foreground font-normal">
+                          Días para badge &quot;Nuevo&quot;
+                        </Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={config?.dias_badge_nuevo ?? 7}
+                          onChange={(e) => update("dias_badge_nuevo", Number(e.target.value))}
+                          className="h-9 w-32"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Los productos creados en los últimos X días muestran el badge &quot;Nuevo&quot;. Poné 0 para desactivar.
                         </p>
                       </div>
                     </div>

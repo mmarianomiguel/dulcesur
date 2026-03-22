@@ -1341,14 +1341,14 @@ function ProductosContent() {
                           }).map(({ pr, idx }) => {
                             const isActive = activeIdx === idx;
                             const label = pr.cantidad === 1 ? "Unidad" : (pr.cantidad <= 0.5 || (pr.nombre && pr.nombre.toLowerCase().includes("medio"))) ? "Medio Cartón" : `Caja x${pr.cantidad}`;
-                            const presDisabled = Math.floor(availableStock / Number(pr.cantidad)) <= 0;
+                            const presDisabled = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad)))) <= 0;
                             return (
                               <button
                                 key={idx}
                                 disabled={presDisabled}
                                 onClick={() => {
                                   setSelectedPres((prev) => ({ ...prev, [producto.id]: idx }));
-                                  const newMax = Math.floor(availableStock / Number(pr.cantidad));
+                                  const newMax = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad))));
                                   if (qty > newMax) setQuantities((prev) => ({ ...prev, [producto.id]: Math.max(1, newMax) }));
                                 }}
                                 className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border ${
@@ -1371,8 +1371,8 @@ function ProductosContent() {
                       {(() => {
                         const activePres = pres && pres.length > 1 ? pres[selectedPres[producto.id] ?? 0] : null;
                         const presUnits = activePres ? Number(activePres.cantidad) : 1;
-                        const maxForPres = Math.floor(availableStock / presUnits);
-                        const canBuy = maxForPres > 0;
+                        const maxForPres = availableStock > 0 ? Math.max(1, Math.floor(availableStock / presUnits)) : 0;
+                        const canBuy = availableStock > 0;
                         return canBuy ? (
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center justify-between">
@@ -1501,14 +1501,14 @@ function ProductosContent() {
                             }).map(({ pr, idx }) => {
                               const isActive = (selectedPres[producto.id] ?? 0) === idx;
                               const label = pr.cantidad === 1 ? "Unidad" : (pr.cantidad <= 0.5 || (pr.nombre && pr.nombre.toLowerCase().includes("medio"))) ? "Medio Cartón" : `Caja x${pr.cantidad}`;
-                              const presDisabled = Math.floor(availableStock / Number(pr.cantidad)) <= 0;
+                              const presDisabled = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad)))) <= 0;
                               return (
                                 <button
                                   key={idx}
                                   disabled={presDisabled}
                                   onClick={() => {
                                     setSelectedPres((prev) => ({ ...prev, [producto.id]: idx }));
-                                    const newMax = Math.floor(availableStock / Number(pr.cantidad));
+                                    const newMax = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad))));
                                     if (qty > newMax) setQuantities((prev) => ({ ...prev, [producto.id]: Math.max(1, newMax) }));
                                   }}
                                   className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border ${
@@ -1526,8 +1526,8 @@ function ProductosContent() {
                       {(() => {
                         const activePres = pres && pres.length > 1 ? pres[selectedPres[producto.id] ?? 0] : null;
                         const presUnits = activePres ? Number(activePres.cantidad) : 1;
-                        const maxForPres = Math.floor(availableStock / presUnits);
-                        const canBuy = maxForPres > 0;
+                        const maxForPres = availableStock > 0 ? Math.max(1, Math.floor(availableStock / presUnits)) : 0;
+                        const canBuy = availableStock > 0;
                         return canBuy ? (
                         <div className="shrink-0 flex items-center gap-2">
                           <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
