@@ -231,24 +231,37 @@ export default function ListaPreciosPage() {
   // Fetch products from Supabase
   const fetchProducts = useCallback(async () => {
     setLoading(true);
-    const { data: dbProducts } = await supabase
-      .from("productos")
-      .select("*, categorias(nombre), marcas(nombre)")
-      .eq("activo", true)
-      .order("nombre");
 
-    const { data: presentaciones } = await supabase
-      .from("presentaciones")
-      .select("*");
+    // Fetch ALL products (Supabase limits to 1000 per query)
+    async function fetchAllRows(table: string, selectStr: string, filters?: (q: any) => any) {
+      const PAGE = 1000;
+      let all: any[] = [];
+      let from = 0;
+      while (true) {
+        let q = supabase.from(table).select(selectStr);
+        if (filters) q = filters(q);
+        const { data } = await q.range(from, from + PAGE - 1);
+        const rows = (data as any[]) || [];
+        all = all.concat(rows);
+        if (rows.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    }
+
+    const [dbProducts, presentaciones] = await Promise.all([
+      fetchAllRows("productos", "*, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
+      fetchAllRows("presentaciones", "*"),
+    ]);
 
     const presMap = new Map<string, DBPresentacion[]>();
-    (presentaciones || []).forEach((p: DBPresentacion) => {
+    presentaciones.forEach((p: DBPresentacion) => {
       const arr = presMap.get(p.producto_id) || [];
       arr.push(p);
       presMap.set(p.producto_id, arr);
     });
 
-    const mapped: Product[] = (dbProducts || []).map((p: DBProducto) => {
+    const mapped: Product[] = dbProducts.map((p: DBProducto) => {
       const pres = presMap.get(p.id) || [];
       const boxPres = pres.find((pr) => pr.cantidad > 1);
       const unitPres = pres.find((pr) => pr.cantidad === 1);
