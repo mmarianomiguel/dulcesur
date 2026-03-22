@@ -77,6 +77,8 @@ interface Filters {
   precioPorCaja: string;
   hayStock: string;
   aumento: string;
+  fechaDesde: string;
+  fechaHasta: string;
 }
 
 interface PdfConfig {
@@ -110,7 +112,7 @@ interface PdfConfig {
 type PdfStyle = "combinado" | "poster";
 type ConfigTab = "general" | PdfStyle;
 
-const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "" };
+const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "", fechaDesde: "", fechaHasta: "" };
 
 const DEFAULT_CONFIG: PdfConfig = {
   porcentajeTransferencia: 2,
@@ -333,6 +335,15 @@ export default function ListaPreciosPage() {
       if (filters.hayStock === "no" && p.hayStock) return false;
       if (filters.aumento === "si" && !p.aumento) return false;
       if (filters.aumento === "no" && p.aumento) return false;
+      if (filters.fechaDesde && p.fechaActualizacion) {
+        const d = new Date(p.fechaActualizacion);
+        if (!isNaN(d.getTime()) && d < new Date(filters.fechaDesde + "T00:00:00")) return false;
+      }
+      if (filters.fechaDesde && !p.fechaActualizacion) return false;
+      if (filters.fechaHasta && p.fechaActualizacion) {
+        const d = new Date(p.fechaActualizacion);
+        if (!isNaN(d.getTime()) && d > new Date(filters.fechaHasta + "T23:59:59")) return false;
+      }
       return true;
     });
   }, [products, filters]);
@@ -735,10 +746,17 @@ export default function ListaPreciosPage() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <Toggle label="Precio actualizado" value={filters.aumento} onChange={(v) => updateFilter("aumento", v)} />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Modificado desde</label>
+                  <input type="date" value={filters.fechaDesde} onChange={(e) => updateFilter("fechaDesde", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Modificado hasta</label>
+                  <input type="date" value={filters.fechaHasta} onChange={(e) => updateFilter("fechaHasta", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
                 <Toggle label="Con stock" value={filters.hayStock} onChange={(v) => updateFilter("hayStock", v)} />
-                <Toggle label="En oferta" value={filters.enOferta} onChange={(v) => updateFilter("enOferta", v)} />
+                <Toggle label="Precio actualizado" value={filters.aumento} onChange={(v) => updateFilter("aumento", v)} />
               </div>
               {activeFilterCount > 0 && (
                 <button onClick={() => setFilters({ ...DEFAULT_FILTERS, search: filters.search })} className="mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
@@ -782,6 +800,7 @@ export default function ListaPreciosPage() {
                 <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Categoría</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Marca</th>
                 <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Precio</th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Últ. mod.</th>
                 <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">Estado</th>
               </tr>
             </thead>
@@ -803,6 +822,9 @@ export default function ListaPreciosPage() {
                     </td>
                     <td className="px-3 py-3 text-muted-foreground text-xs">{p.marca}</td>
                     <td className="px-3 py-3 text-right font-semibold">{formatPrice(p.precioUnitario)}</td>
+                    <td className="px-3 py-3 text-center text-xs text-muted-foreground">
+                      {p.fechaActualizacion ? (() => { const d = new Date(p.fechaActualizacion); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }); })() : "—"}
+                    </td>
                     <td className="px-3 py-3 text-center">
                       {p.aumento ? (
                         <span className="inline-block bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Actualizado</span>
