@@ -92,13 +92,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const removeItem = useCallback(
     (id: string) => {
+      let removedName = "";
       setItems((prev) => {
         const removed = prev.find((i) => i.id === id);
+        if (removed) removedName = removed.nombre;
         const next = prev.filter((i) => i.id !== id);
         localStorage.setItem("carrito", JSON.stringify(next));
-        if (removed) showToast(removed.nombre, { type: "info", subtitle: "Eliminado del carrito" });
         return next;
       });
+      if (removedName) {
+        setTimeout(() => showToast(removedName, { type: "info", subtitle: "Eliminado del carrito" }), 0);
+      }
     },
     []
   );

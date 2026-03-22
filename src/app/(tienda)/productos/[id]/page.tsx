@@ -393,7 +393,8 @@ export default function ProductoDetallePage() {
     if (canAdd < qty) {
       showToast(`Se agregaron ${canAdd} (máximo disponible)`, { type: "info", subtitle: prod.nombre });
     } else {
-      showToast(prod.nombre, { subtitle: "Agregado al carrito" });
+      const presInfo = presLabel && presLabel !== "Unidad" ? ` · ${presLabel}` : "";
+      showToast(prod.nombre, { subtitle: `${qty} ${qty > 1 ? "agregados" : "agregado"} al carrito${presInfo}` });
     }
   }
 

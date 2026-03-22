@@ -543,7 +543,8 @@ function ProductosContent() {
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
     window.dispatchEvent(new Event("cart-updated"));
-    showToast(producto.nombre, { subtitle: "Agregado al carrito" });
+    const presInfo = presLabel && presLabel !== "Unidad" ? ` · ${presLabel}` : "";
+    showToast(producto.nombre, { subtitle: `${canAdd} ${canAdd > 1 ? "unidades agregadas" : "agregado"} al carrito${presInfo}` });
     setQuantities((prev) => ({ ...prev, [producto.id]: 1 }));
   }
 
