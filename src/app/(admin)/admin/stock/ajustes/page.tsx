@@ -17,6 +17,7 @@ import {
   Plus, Search, Loader2, AlertTriangle, X,
 } from "lucide-react";
 import { todayARG } from "@/lib/formatters";
+import { logAudit } from "@/lib/audit";
 
 /* ─── Types ─── */
 interface Producto {
@@ -274,6 +275,14 @@ export default function AjustesStockPage() {
         });
       }
     }
+
+    logAudit({
+      userName: usuario || "Admin",
+      action: "CREATE",
+      module: "stock",
+      entityId: ajuste?.id,
+      after: { motivo: motivoGlobal, observacion, items: rows.length, total },
+    });
 
     setDialogOpen(false);
     fetchData();

@@ -85,7 +85,7 @@ function saveReceiptConfig(config: ReceiptConfig) {
   localStorage.setItem("receipt_config", JSON.stringify(config));
 }
 
-type Section = "empresa" | "facturacion" | "impresion" | "comprobantes" | "cuentas" | "modulos";
+type Section = "empresa" | "facturacion" | "impresion" | "comprobantes" | "cuentas" | "modulos" | "backup";
 
 const NAV_ITEMS: { id: Section; label: string; icon: typeof Building2; description: string }[] = [
   { id: "empresa", label: "Empresa", icon: Building2, description: "Datos generales" },
@@ -94,6 +94,7 @@ const NAV_ITEMS: { id: Section; label: string; icon: typeof Building2; descripti
   { id: "comprobantes", label: "Comprobantes", icon: FileText, description: "Diseño y formato" },
   { id: "cuentas", label: "Cuentas Bancarias", icon: Landmark, description: "Transferencias" },
   { id: "modulos", label: "Módulos", icon: Puzzle, description: "Secciones del sistema" },
+  { id: "backup", label: "Backup", icon: Shield, description: "Exportar e importar datos" },
 ];
 
 const MODULE_META: Record<string, { icon: typeof Building2; description: string }> = {
@@ -104,6 +105,7 @@ const MODULE_META: Record<string, { icon: typeof Building2; description: string 
   Proveedores: { icon: Truck, description: "Gestión de proveedores" },
   Compras: { icon: ShoppingBag, description: "Órdenes de compra" },
   Caja: { icon: CreditCard, description: "Movimientos de caja y arqueos" },
+  "Auditoría": { icon: FileText, description: "Historial de acciones del sistema" },
   "Tienda Online": { icon: Globe, description: "E-commerce y pedidos online" },
   Configuración: { icon: Settings, description: "Ajustes del sistema" },
 };
@@ -122,7 +124,7 @@ export default function ConfiguracionPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   // ─── Module enable/disable ───
-  const allModulos = ["Dashboard", "Ventas", "Clientes", "Productos", "Proveedores", "Compras", "Caja", "Tienda Online", "Configuración"] as const;
+  const allModulos = ["Dashboard", "Ventas", "Clientes", "Productos", "Proveedores", "Compras", "Caja", "Stock", "Reportes", "Auditoría", "Tienda Online", "Configuración"] as const;
   const alwaysEnabled = ["Dashboard", "Configuración"];
   const [modulos, setModulos] = useState<Record<string, boolean>>(() => {
     const def: Record<string, boolean> = {};
@@ -917,6 +919,84 @@ export default function ConfiguracionPage() {
                 })}
               </div>
               <p className="text-xs text-muted-foreground mt-4">Dashboard y Configuración siempre están habilitados.</p>
+            </div>
+          )}
+
+          {activeSection === "backup" && (
+            <div>
+              <SectionHeader icon={Shield} title="Backup de Datos" description="Exportar e importar toda la información del sistema" color="bg-emerald-500/10 text-emerald-500" />
+              <div className="grid gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Exportar Backup</CardTitle>
+                    <CardDescription>Descarga un archivo JSON con todos los datos del sistema</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          showAdminToast("Generando backup...");
+                          const res = await fetch("/api/backup");
+                          if (!res.ok) throw new Error("Error al generar backup");
+                          const blob = await res.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          showAdminToast("Backup descargado correctamente");
+                        } catch {
+                          showAdminToast("Error al generar el backup", "error");
+                        }
+                      }}
+                    >
+                      Descargar Backup
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Restaurar Backup</CardTitle>
+                    <CardDescription>Restaura los datos desde un archivo JSON previamente exportado. Esto reemplazará todos los datos actuales.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="text-sm"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!confirm("Esto reemplazará TODOS los datos actuales. ¿Estás seguro?")) {
+                          e.target.value = "";
+                          return;
+                        }
+                        try {
+                          showAdminToast("Restaurando backup...");
+                          const text = await file.text();
+                          const json = JSON.parse(text);
+                          const res = await fetch("/api/backup", {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(json),
+                          });
+                          const result = await res.json();
+                          if (!res.ok) throw new Error(result.error);
+                          showAdminToast(`Backup restaurado: ${result.success_count} tablas exitosas`);
+                        } catch {
+                          showAdminToast("Error al restaurar el backup", "error");
+                        }
+                        e.target.value = "";
+                      }}
+                    />
+                    <p className="text-xs text-destructive mt-2">
+                      Advertencia: La restauración eliminará los datos actuales y los reemplazará con los del backup.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
         </div>

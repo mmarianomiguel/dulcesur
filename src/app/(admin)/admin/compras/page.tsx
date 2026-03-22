@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { logAudit } from "@/lib/audit";
 
 /* ───────── types ───────── */
 
@@ -463,6 +464,14 @@ export default function ComprasPage() {
           });
         }
       }
+
+      logAudit({
+        userName: currentUser?.nombre || "Admin Sistema",
+        action: "CREATE",
+        module: "compras",
+        entityId: compra.id,
+        after: { numero, total: totalCompra, forma_pago: formaPago, items: items.length },
+      });
 
       setSaving(false);
       resetForm();

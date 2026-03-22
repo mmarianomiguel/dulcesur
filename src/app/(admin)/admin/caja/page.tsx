@@ -50,6 +50,8 @@ import { EmptyState } from "@/components/empty-state";
 import { supabase } from "@/lib/supabase";
 import type { Venta, CajaMovimiento } from "@/types/database";
 import { showAdminToast } from "@/components/admin-toast";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { logAudit } from "@/lib/audit";
 
 // ─── Types ───
 
@@ -135,6 +137,7 @@ async function cerrarTurno(
 
 export default function CajaPage() {
   const today = todayARG();
+  const currentUser = useCurrentUser();
 
   // ─── Turno state ───
   const [turno, setTurno] = useState<TurnoCaja | null>(null);
@@ -280,6 +283,12 @@ export default function CajaPage() {
     }
     movDialog.onClose();
     refetchMov();
+    logAudit({
+      userName: currentUser?.nombre || "Admin Sistema",
+      action: "CREATE",
+      module: "caja",
+      after: { tipo: type, descripcion: movForm.descripcion, monto: movForm.monto, metodo_pago: movForm.metodo_pago },
+    });
     showAdminToast(type === "ingreso" ? "Ingreso registrado" : "Egreso registrado");
   };
 

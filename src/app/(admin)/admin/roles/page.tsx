@@ -40,29 +40,23 @@ interface Permiso {
   habilitado: boolean;
 }
 
-// Module/submodule structure
+// Module/submodule structure — MUST match sidebar.tsx navigation child names exactly
 const MODULE_STRUCTURE: { modulo: string; submodulos: string[] }[] = [
   { modulo: "Dashboard", submodulos: [] },
   {
     modulo: "Ventas",
     submodulos: [
       "Punto de venta",
-      "Listado",
+      "Historial y Pedidos",
+      "Entregas y Ruta",
       "Nota de Crédito",
       "Nota de Débito",
-      "Anticipo | Seña",
-      "Cambio de Artículos",
-      "Percepciones",
-      "Carga Manual",
-      "Entregas Pendientes",
-      "Hoja de Ruta",
-      "Resumen por Vendedor",
-      "Cobranzas",
+      "Anticipos",
     ],
   },
   {
     modulo: "Clientes",
-    submodulos: ["Listado", "Cobranzas"],
+    submodulos: ["Listado"],
   },
   {
     modulo: "Productos",
@@ -71,19 +65,28 @@ const MODULE_STRUCTURE: { modulo: string; submodulos: string[] }[] = [
       "Editar Precios",
       "Descuentos",
       "Marcas",
-      "Lista de Precios",
+      "Lista de Precios (PDF)",
     ],
   },
   { modulo: "Proveedores", submodulos: [] },
   {
     modulo: "Compras",
-    submodulos: ["Registrar", "Pedidos"],
+    submodulos: ["Registrar", "Pedidos", "Reposicion"],
   },
   { modulo: "Caja", submodulos: [] },
+  {
+    modulo: "Stock",
+    submodulos: ["Ajustes de Stock"],
+  },
+  {
+    modulo: "Reportes",
+    submodulos: ["General", "Resumen Mensual", "Resumen por Vendedor", "Percepciones"],
+  },
+  { modulo: "Auditoría", submodulos: [] },
   { modulo: "Tienda Online", submodulos: [] },
   {
     modulo: "Configuración",
-    submodulos: ["General", "Tienda Online", "Página de Inicio", "Usuarios", "Roles"],
+    submodulos: ["General", "Personalización", "Tienda Online", "Página de Inicio", "Footer", "Usuarios", "Roles"],
   },
 ];
 

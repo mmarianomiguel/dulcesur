@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { todayARG } from "@/lib/formatters";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +86,7 @@ function formatCurrency(value: number) {
 }
 
 export default function CambiosPage() {
+  const currentUser = useCurrentUser();
   const [cambios, setCambios] = useState<CambioRow[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -253,46 +255,44 @@ export default function CambiosPage() {
         if (itemsError) throw itemsError;
       }
 
+      const usuario = currentUser?.nombre || "Admin Sistema";
+
       // Adjust stock: entrada (client returns) => stock += cantidad
       for (const item of itemsEntrada) {
-        await supabase.rpc("increment_stock" as never, {
-          p_producto_id: item.producto_id,
-          p_cantidad: item.cantidad,
-        }).then(({ error: rpcErr }) => {
-          if (rpcErr) {
-            // Fallback: manual update
-            return supabase
-              .from("productos")
-              .select("stock")
-              .eq("id", item.producto_id)
-              .single()
-              .then(({ data: prod }) => {
-                if (prod) {
-                  return supabase
-                    .from("productos")
-                    .update({ stock: prod.stock + item.cantidad })
-                    .eq("id", item.producto_id);
-                }
-              });
-          }
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        const stockAntes = prod?.stock ?? 0;
+        const stockDespues = stockAntes + item.cantidad;
+        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id,
+          tipo: "devolucion",
+          cantidad_antes: stockAntes,
+          cantidad_despues: stockDespues,
+          cantidad: item.cantidad,
+          referencia: `Cambio #${numero} (entrada)`,
+          usuario,
+          orden_id: cambio.id,
+          reference_type: "cambio",
         });
       }
 
       // Adjust stock: salida (client takes) => stock -= cantidad
       for (const item of itemsSalida) {
-        await supabase
-          .from("productos")
-          .select("stock")
-          .eq("id", item.producto_id)
-          .single()
-          .then(({ data: prod }) => {
-            if (prod) {
-              return supabase
-                .from("productos")
-                .update({ stock: prod.stock - item.cantidad })
-                .eq("id", item.producto_id);
-            }
-          });
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        const stockAntes = prod?.stock ?? 0;
+        const stockDespues = stockAntes - item.cantidad;
+        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id,
+          tipo: "Venta",
+          cantidad_antes: stockAntes,
+          cantidad_despues: stockDespues,
+          cantidad: -item.cantidad,
+          referencia: `Cambio #${numero} (salida)`,
+          usuario,
+          orden_id: cambio.id,
+          reference_type: "cambio",
+        });
       }
 
       setDialogOpen(false);

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { logAudit } from "@/lib/audit";
 import type { Cliente, Producto, Usuario } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1489,6 +1490,14 @@ export default function VentasPage() {
           cashReceived: formaPago === "Efectivo" ? cashReceivedNum : undefined,
           cashChange: formaPago === "Efectivo" ? (cashReceivedNum - totalACobrar) : undefined,
         };
+
+        logAudit({
+          userName: currentUser?.nombre || "Admin Sistema",
+          action: "CREATE",
+          module: "ventas",
+          entityId: venta.id,
+          after: { numero, total, forma_pago: formaPago, items: items.length },
+        });
 
         resetSale();
         fetchData();

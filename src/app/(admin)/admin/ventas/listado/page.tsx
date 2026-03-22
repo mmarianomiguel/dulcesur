@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { todayARG } from "@/lib/formatters";
+import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -520,6 +521,15 @@ export default function ListadoVentasPage() {
 
       // 6. Sync to pedidos_tienda so client sees "cancelado"
       await supabase.from("pedidos_tienda").update({ estado: "cancelado" }).eq("numero", v.numero);
+
+      logAudit({
+        userName: currentUser?.nombre || "Admin Sistema",
+        action: "ANULACION",
+        module: "ventas",
+        entityId: v.id,
+        before: { numero: v.numero, total: v.total, estado: v.estado },
+        after: { estado: "anulada", motivo: anularMotivo },
+      });
 
       if (errores.length > 0) {
         showAdminToast(`Venta anulada con advertencias: ${errores.join(". ")}`, "info");
