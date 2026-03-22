@@ -319,14 +319,27 @@ function ProductosDestacadosBlock({
   loading: boolean;
   agregarAlCarrito: (p: Producto, qty: number) => void;
 }) {
+  const { filtrarCategorias } = useCategoriasPermitidas();
   const titulo = config.titulo_seccion || "Productos Destacados";
   const maxItems = config.max_items || 8;
-  const prods = productos.slice(0, maxItems);
+
+  // Filter out products from restricted categories
+  const visibleProds = productos.filter((p) => {
+    if (!p.categorias) return true;
+    return filtrarCategorias([p.categorias]).length > 0;
+  }).slice(0, maxItems);
+
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   const getQty = (id: string) => quantities[id] ?? 1;
   const setQty = (id: string, val: number) =>
     setQuantities((prev) => ({ ...prev, [id]: Math.max(1, val) }));
+
+  const isNew = (prod: Producto) => {
+    const created = new Date((prod as any).created_at);
+    const daysAgo = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+    return daysAgo <= 7;
+  };
 
   return (
     <section className="py-16 bg-gray-50/50">
@@ -341,9 +354,10 @@ function ProductosDestacadosBlock({
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-            {prods.map((prod) => {
+            {visibleProds.map((prod) => {
               const qty = getQty(prod.id);
               const sinStock = prod.stock <= 0;
+              const nuevo = isNew(prod);
               return (
                 <div
                   key={prod.id}
@@ -351,7 +365,7 @@ function ProductosDestacadosBlock({
                 >
                   <Link href={`/productos/${prod.id}`}>
                     {/* image */}
-                    <div className="relative aspect-[4/3] bg-gray-50 overflow-hidden">
+                    <div className="relative aspect-square bg-gray-50 overflow-hidden">
                       {prod.imagen_url ? (
                         <Image
                           src={prod.imagen_url}
@@ -371,6 +385,14 @@ function ProductosDestacadosBlock({
                           </span>
                         </div>
                       )}
+                      {/* Badges */}
+                      <div className="absolute top-2 left-2 flex flex-col gap-1">
+                        {nuevo && !sinStock && (
+                          <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                            Nuevo
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* content */}
@@ -438,7 +460,7 @@ function ProductosDestacadosBlock({
         )}
 
         {/* view all link */}
-        {!loading && prods.length > 0 && (
+        {!loading && visibleProds.length > 0 && (
           <div className="text-center mt-10">
             <Link
               href="/productos"
@@ -640,7 +662,8 @@ export default function TiendaPage() {
         let query = supabase
           .from("productos")
           .select("*, categorias(*)")
-          .eq("activo", true);
+          .eq("activo", true)
+          .eq("visibilidad", "visible");
 
         if (orden === "precio_asc") {
           query = query.order("precio", { ascending: true });
