@@ -659,7 +659,7 @@ export default function ListaPreciosPage() {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Lista de Precios</h1>
-              <p className="text-sm text-muted-foreground">{products.length} productos cargados</p>
+              <p className="text-sm text-muted-foreground">{filtered.length} de {products.length} productos</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -714,14 +714,14 @@ export default function ListaPreciosPage() {
             <div className="mt-4 pt-4 border-t border-border">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Categoria</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Categoría</label>
                   <select value={filters.categoria} onChange={(e) => { updateFilter("categoria", e.target.value); updateFilter("subcategoria", ""); }} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="">Todas</option>
                     {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Subcategoria</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Subcategoría</label>
                   <select value={filters.subcategoria} onChange={(e) => updateFilter("subcategoria", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="">Todas</option>
                     {subcategorias.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -735,12 +735,10 @@ export default function ListaPreciosPage() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <Toggle label="Precio actualizado" value={filters.aumento} onChange={(v) => updateFilter("aumento", v)} />
+                <Toggle label="Con stock" value={filters.hayStock} onChange={(v) => updateFilter("hayStock", v)} />
                 <Toggle label="En oferta" value={filters.enOferta} onChange={(v) => updateFilter("enOferta", v)} />
-                <Toggle label="Caja en oferta" value={filters.cajaEnOferta} onChange={(v) => updateFilter("cajaEnOferta", v)} />
-                <Toggle label="Precio por caja" value={filters.precioPorCaja} onChange={(v) => updateFilter("precioPorCaja", v)} />
-                <Toggle label="Hay stock" value={filters.hayStock} onChange={(v) => updateFilter("hayStock", v)} />
-                <Toggle label="Aumento" value={filters.aumento} onChange={(v) => updateFilter("aumento", v)} />
               </div>
               {activeFilterCount > 0 && (
                 <button onClick={() => setFilters({ ...DEFAULT_FILTERS, search: filters.search })} className="mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
@@ -783,13 +781,8 @@ export default function ListaPreciosPage() {
                 <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Producto</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Categoría</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Marca</th>
-                <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">P. Unit.</th>
-                <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">P. Caja</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Oferta</th>
-                <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">P. Oferta</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Uds/Caja</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Stock</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Fecha mod.</th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Precio</th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">Estado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -806,29 +799,18 @@ export default function ListaPreciosPage() {
                     <td className="px-3 py-3 font-medium">{p.nombre}</td>
                     <td className="px-3 py-3 text-muted-foreground hidden lg:table-cell">
                       <span className="text-xs">{p.categoria}</span>
-                      <span className="text-muted-foreground/50 text-xs block">{p.subcategoria}</span>
+                      {p.subcategoria && <span className="text-muted-foreground/50 text-xs block">{p.subcategoria}</span>}
                     </td>
-                    <td className="px-3 py-3 text-muted-foreground">{p.marca}</td>
-                    <td className="px-3 py-3 text-right font-mono">{formatPrice(p.precioUnitario)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-muted-foreground">{p.precioCaja > 0 ? `${formatPrice(p.precioCaja)}` : "—"}</td>
+                    <td className="px-3 py-3 text-muted-foreground text-xs">{p.marca}</td>
+                    <td className="px-3 py-3 text-right font-semibold">{formatPrice(p.precioUnitario)}</td>
                     <td className="px-3 py-3 text-center">
-                      {p.enOferta ? (
-                        <span className="inline-block bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">Sí</span>
+                      {p.aumento ? (
+                        <span className="inline-block bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Actualizado</span>
+                      ) : !p.hayStock ? (
+                        <span className="inline-block bg-red-100 text-red-600 text-[10px] font-medium px-2 py-0.5 rounded-full">Sin stock</span>
                       ) : (
-                        <span className="text-muted-foreground text-xs">No</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-muted-foreground">{p.enOferta && p.precioOferta > 0 ? `${formatPrice(p.precioOferta)}` : "—"}</td>
-                    <td className="px-3 py-3 text-center text-muted-foreground">{p.unidadesCaja > 0 ? p.unidadesCaja : "—"}</td>
-                    <td className="px-3 py-3 text-center">
-                      {p.hayStock ? (
                         <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
-                      ) : (
-                        <span className="inline-block w-2 h-2 rounded-full bg-red-400"></span>
                       )}
-                    </td>
-                    <td className="px-3 py-3 text-center text-xs text-muted-foreground">
-                      {p.fechaActualizacion ? (() => { const d = new Date(p.fechaActualizacion); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }); })() : "—"}
                     </td>
                   </tr>
                 );
