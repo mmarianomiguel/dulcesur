@@ -1217,57 +1217,60 @@ export default function CheckoutPage() {
           )}
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sticky top-24">
-            {/* Mobile: collapsible summary header */}
-            <button
-              onClick={() => setShowItemsDetail(!showItemsDetail)}
-              className="w-full flex items-center justify-between lg:hidden mb-3"
-            >
-              <h2 className="text-lg font-bold text-gray-900">Resumen ({items.reduce((s, i) => s + i.cantidad, 0)} productos)</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-gray-900">{formatCurrency(total)}</span>
-                <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${showItemsDetail ? "rotate-90" : ""}`} />
-              </div>
-            </button>
-            {/* Desktop: always visible title */}
-            <h2 className="text-lg font-bold text-gray-900 mb-5 hidden lg:block">Resumen del Pedido</h2>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-4 sm:mb-5">Resumen del Pedido</h2>
 
-            {/* Items list - always visible on desktop, collapsible on mobile */}
-            <div className={`space-y-3 mb-5 ${showItemsDetail ? "" : "hidden lg:block"}`}>
-              {items.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-3">
-                  <div className="flex-shrink-0">
-                    {(item.imagen || item.imagen_url) ? (
-                      <img
-                        src={(item.imagen || item.imagen_url)!}
-                        alt={item.nombre}
-                        className="w-12 h-12 rounded-lg object-contain bg-gray-50"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
-                        <ShoppingBag className="h-5 w-5 text-gray-400" />
+            {/* Items list - on mobile show first 3, expandable; on desktop show all */}
+            {(() => {
+              const PREVIEW_COUNT = 3;
+              const visibleItems = showItemsDetail ? items : items.slice(0, PREVIEW_COUNT);
+              const hiddenCount = items.length - PREVIEW_COUNT;
+              return (
+                <div className="space-y-3 mb-5">
+                  {visibleItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="flex-shrink-0">
+                        {(item.imagen || item.imagen_url) ? (
+                          <img
+                            src={(item.imagen || item.imagen_url)!}
+                            alt={item.nombre}
+                            className="w-12 h-12 rounded-lg object-contain bg-gray-50"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
+                            <ShoppingBag className="h-5 w-5 text-gray-400" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{item.nombre}</p>
-                    <p className="text-xs text-gray-400">
-                      {item.presentacion && `${item.presentacion} · `}x{(item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"))) ? item.cantidad * 0.5 : item.cantidad}
-                      {item.descuento ? <span className="ml-1.5 inline-flex items-center bg-red-100 text-red-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">-{item.descuento}%</span> : null}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    {item.precio_original ? (
-                      <>
-                        <p className="text-[11px] text-gray-400 line-through">{formatCurrency(item.precio_original * item.cantidad)}</p>
-                        <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.precio * item.cantidad)}</p>
-                      </>
-                    ) : (
-                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.precio * item.cantidad)}</p>
-                    )}
-                  </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{item.nombre}</p>
+                        <p className="text-xs text-gray-400">
+                          {item.presentacion && `${item.presentacion} · `}x{(item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"))) ? item.cantidad * 0.5 : item.cantidad}
+                          {item.descuento ? <span className="ml-1.5 inline-flex items-center bg-red-100 text-red-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">-{item.descuento}%</span> : null}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        {item.precio_original ? (
+                          <>
+                            <p className="text-[11px] text-gray-400 line-through">{formatCurrency(item.precio_original * item.cantidad)}</p>
+                            <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.precio * item.cantidad)}</p>
+                          </>
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.precio * item.cantidad)}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {hiddenCount > 0 && (
+                    <button
+                      onClick={() => setShowItemsDetail(!showItemsDetail)}
+                      className="w-full text-center text-sm font-medium text-pink-600 hover:text-pink-700 py-2 transition-colors"
+                    >
+                      {showItemsDetail ? "Ver menos" : `Ver ${hiddenCount} producto${hiddenCount !== 1 ? "s" : ""} más`}
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
             {/* Método de Pago */}
             <div className="border-t border-gray-100 pt-5 mb-5">
