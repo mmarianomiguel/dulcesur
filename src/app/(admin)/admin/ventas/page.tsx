@@ -324,7 +324,7 @@ export default function VentasPage() {
         setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
       }
     } catch {}
-    const { data: emp } = await supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva, logo_url, web").limit(1).single();
+    const { data: emp } = await supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single();
     if (emp) {
       setReceiptConfig((prev) => ({
         ...prev,

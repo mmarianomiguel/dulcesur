@@ -30,15 +30,16 @@ export default function TiendaNavbar() {
   const { openCart, itemCount, subtotal } = useCart();
   const router = useRouter();
   const categoryBarRef = useRef<HTMLDivElement>(null);
-  const [config, setConfig] = useState<{ logo_url?: string; nombre?: string; telefono?: string; envio_gratis_minimo?: number } | null>(null);
+  const [config, setConfig] = useState<{ logo_url?: string; nombre?: string; telefono?: string } | null>(null);
 
   useEffect(() => {
     Promise.all([
       supabase.from("categorias").select("id, nombre").limit(12),
-      supabase.from("empresa").select("logo_url, nombre, telefono").limit(1).single(),
-    ]).then(([{ data: cats }, { data: emp }]) => {
+      supabase.from("empresa").select("nombre, telefono").limit(1).single(),
+      supabase.from("tienda_config").select("logo_url").limit(1).single(),
+    ]).then(([{ data: cats }, { data: emp }, { data: tc }]) => {
       if (cats) setCategorias(cats);
-      if (emp) setConfig(emp as any);
+      if (emp || tc) setConfig({ ...emp, logo_url: tc?.logo_url } as any);
     });
   }, []);
 
@@ -295,7 +296,7 @@ export default function TiendaNavbar() {
             Mi cuenta
           </Link>
           <Link
-            href="/ayuda"
+            href="/info/faq"
             onClick={() => setMobileOpen(false)}
             className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
           >
