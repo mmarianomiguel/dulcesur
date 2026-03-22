@@ -1498,15 +1498,15 @@ export default function ListadoVentasPage() {
       {/* ══════════════════════════════════════════════════════════ */}
       {activeTab === "pedidos" && (
         <>
-          {/* Stats */}
+          {/* Stats - workflow focused */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card>
+            <Card className={`cursor-pointer transition-all ${poFilterEstado === "pendiente" ? "ring-2 ring-amber-400" : "hover:shadow-md"}`} onClick={() => setPoFilterEstado(poFilterEstado === "pendiente" ? "todos" : "pendiente")}>
               <CardContent className="pt-6 flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center"><Clock className="w-5 h-5 text-amber-500" /></div>
                 <div><p className="text-xs text-muted-foreground">Pendientes</p><p className="text-xl font-bold text-amber-600">{poPendientes}</p></div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className={`cursor-pointer transition-all ${poFilterEstado === "armado" ? "ring-2 ring-violet-400" : "hover:shadow-md"}`} onClick={() => setPoFilterEstado(poFilterEstado === "armado" ? "todos" : "armado")}>
               <CardContent className="pt-6 flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Package className="w-5 h-5 text-violet-500" /></div>
                 <div><p className="text-xs text-muted-foreground">Armados</p><p className="text-xl font-bold text-violet-600">{poArmados}</p></div>
@@ -1527,163 +1527,157 @@ export default function ListadoVentasPage() {
           </div>
 
           {/* Filters */}
-          <Card>
-            <CardContent className="pt-6 space-y-4 overflow-visible">
-              <div className="flex flex-wrap items-end gap-4">
-                <div className="flex-1 min-w-[200px] space-y-1.5">
-                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por numero, cliente o email..."
-                      value={poSearch}
-                      onChange={(e) => setPoSearch(e.target.value)}
-                      className="pl-9 h-9"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Estado</Label>
-                  <Select value={poFilterEstado} onValueChange={(v) => setPoFilterEstado(v || "todos")}>
-                    <SelectTrigger className="w-40 h-9">
-                      <SelectValue placeholder="Estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos los estados</SelectItem>
-                      <SelectItem value="pendiente">Pendiente</SelectItem>
-                      <SelectItem value="armado">Armado</SelectItem>
-                      <SelectItem value="confirmado">Confirmado</SelectItem>
-                      <SelectItem value="entregado">Entregado</SelectItem>
-                      <SelectItem value="cancelado">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Entrega</Label>
-                  <Select value={poFilterEntrega} onValueChange={(v) => setPoFilterEntrega(v || "todos")}>
-                    <SelectTrigger className="w-40 h-9">
-                      <SelectValue placeholder="Entrega" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todas</SelectItem>
-                      <SelectItem value="envio">Envio</SelectItem>
-                      <SelectItem value="retiro_local">Retiro en local</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[200px] max-w-md relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por numero, cliente o email..."
+                value={poSearch}
+                onChange={(e) => setPoSearch(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+            <Select value={poFilterEstado} onValueChange={(v) => setPoFilterEstado(v || "todos")}>
+              <SelectTrigger className="w-40 h-9">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="pendiente">Pendiente</SelectItem>
+                <SelectItem value="armado">Armado</SelectItem>
+                <SelectItem value="confirmado">Confirmado</SelectItem>
+                <SelectItem value="entregado">Entregado</SelectItem>
+                <SelectItem value="cancelado">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={poFilterEntrega} onValueChange={(v) => setPoFilterEntrega(v || "todos")}>
+              <SelectTrigger className="w-36 h-9">
+                <SelectValue placeholder="Entrega" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas</SelectItem>
+                <SelectItem value="envio">Envío</SelectItem>
+                <SelectItem value="retiro_local">Retiro</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          {/* Pedidos list */}
-          <Card>
-            <CardContent className="pt-0">
-              {poLoading ? (
-                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-              ) : poFiltered.length === 0 ? (
-                <div className="text-center py-16">
-                  <ShoppingCart className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground">No hay pedidos con los filtros seleccionados</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-3 px-4 font-medium">N°</th>
-                        <th className="text-left py-3 px-4 font-medium">Tipo</th>
-                        <th className="text-left py-3 px-4 font-medium">Fecha / Hora</th>
-                        <th className="text-left py-3 px-4 font-medium">Cliente</th>
-                        <th className="text-left py-3 px-4 font-medium">Forma pago</th>
-                        <th className="text-center py-3 px-4 font-medium">Entrega</th>
-                        <th className="text-center py-3 px-4 font-medium">Estado</th>
-                        <th className="text-right py-3 px-4 font-medium">Total</th>
-                        <th className="text-right py-3 px-4 font-medium">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {poFiltered.map((pedido) => {
-                        const est = estadoBadge[pedido.estado] || estadoBadge.pendiente;
-                        const capitalPago = pedido.metodo_pago ? pedido.metodo_pago.charAt(0).toUpperCase() + pedido.metodo_pago.slice(1) : "—";
-                        return (
-                          <tr key={pedido.id} className={`border-b last:border-0 transition-colors ${pedido.estado === "cancelado" ? "opacity-50 bg-red-50/50" : "hover:bg-muted/50"}`}>
-                            <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{pedido.numero}</td>
-                            <td className="py-3 px-4">
-                              <Badge variant="outline" className="text-xs font-normal border-pink-300 text-pink-700 bg-pink-50">
-                                Pedido Web
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-4 text-muted-foreground">
-                              <div>{new Date(pedido.created_at).toLocaleDateString("es-AR")}</div>
-                              <div className="text-xs text-muted-foreground/70">
-                                {new Date(pedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
+          {/* Pedidos cards */}
+          {poLoading ? (
+            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : poFiltered.length === 0 ? (
+            <div className="text-center py-16">
+              <ShoppingCart className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
+              <p className="text-sm text-muted-foreground">No hay pedidos con los filtros seleccionados</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {poFiltered.map((pedido) => {
+                const est = estadoBadge[pedido.estado] || estadoBadge.pendiente;
+                const capitalPago = pedido.metodo_pago ? pedido.metodo_pago.charAt(0).toUpperCase() + pedido.metodo_pago.slice(1) : "—";
+                const estadoSteps = ["pendiente", "armado", "entregado"];
+                const currentStep = pedido.estado === "cancelado" ? -1 : estadoSteps.indexOf(pedido.estado);
+                return (
+                  <Card key={pedido.id} className={`transition-all ${pedido.estado === "cancelado" ? "opacity-50" : "hover:shadow-md"}`}>
+                    <CardContent className="p-4 sm:p-5">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                        {/* Left: Customer & order info */}
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-base">{pedido.nombre_cliente}</span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
+                                  {est.label}
+                                </span>
                               </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <p className="font-medium">{pedido.nombre_cliente}</p>
-                              <p className="text-[10px] text-muted-foreground">{pedido.email}</p>
-                            </td>
-                            <td className="py-3 px-4">
-                              <Badge variant="outline" className="text-xs font-normal">{capitalPago}</Badge>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <Badge variant={pedido.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${pedido.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : ""}`}>
-                                {pedido.metodo_entrega === "envio" ? "Envio" : "Retiro"}
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
-                                {est.label}
-                              </span>
-                            </td>
-                            <td className={`py-3 px-4 text-right font-semibold ${pedido.estado === "cancelado" ? "line-through text-muted-foreground" : ""}`}>{formatCurrency(pedido.total)}</td>
-                            <td className="px-4 py-3 text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  <DropdownMenuItem onClick={() => poOpenDetail(pedido)}>
-                                    <Eye className="w-4 h-4 mr-2" />
-                                    Ver detalle
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => poOpenDetail(pedido)}>
-                                    <Pencil className="w-4 h-4 mr-2" />
-                                    Editar pedido
-                                  </DropdownMenuItem>
-                                  {pedido.estado !== "entregado" && pedido.estado !== "cancelado" && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem onClick={() => poHandleEstadoChange(pedido, "entregado")}>
-                                        <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                                        <span className="text-green-600">Marcar entregado</span>
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                  {pedido.estado !== "cancelado" && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() => setPoCancelPedido(pedido)}
-                                        className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                                      >
-                                        <Ban className="w-4 h-4 mr-2" />
-                                        Cancelar pedido
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{pedido.email}</span>
+                                {pedido.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{pedido.telefono}</span>}
+                                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(pedido.created_at).toLocaleDateString("es-AR")} {new Date(pedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className={`text-lg font-bold ${pedido.estado === "cancelado" ? "line-through text-muted-foreground" : ""}`}>{formatCurrency(pedido.total)}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">#{pedido.numero}</p>
+                            </div>
+                          </div>
+
+                          {/* Delivery & payment info */}
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <Badge variant="outline" className={`font-normal ${pedido.metodo_entrega === "envio" ? "border-blue-300 text-blue-700 bg-blue-50" : "border-gray-300"}`}>
+                              {pedido.metodo_entrega === "envio" ? (
+                                <><Truck className="w-3 h-3 mr-1" />Envío</>
+                              ) : (
+                                <><Store className="w-3 h-3 mr-1" />Retiro en local</>
+                              )}
+                            </Badge>
+                            {pedido.metodo_entrega === "envio" && pedido.direccion_texto && (
+                              <span className="text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[300px]">{pedido.direccion_texto}</span></span>
+                            )}
+                            <Badge variant="outline" className="font-normal">
+                              <DollarSign className="w-3 h-3 mr-1" />{capitalPago}
+                            </Badge>
+                            {pedido.items.length > 0 && (
+                              <span className="text-muted-foreground">{pedido.items.length} {pedido.items.length === 1 ? "producto" : "productos"}</span>
+                            )}
+                          </div>
+
+                          {/* Progress stepper */}
+                          {pedido.estado !== "cancelado" && (
+                            <div className="flex items-center gap-1 pt-1">
+                              {estadoSteps.map((step, i) => (
+                                <div key={step} className="flex items-center gap-1">
+                                  <div className={`w-2 h-2 rounded-full ${i <= currentStep ? "bg-primary" : "bg-gray-200"}`} />
+                                  <span className={`text-[10px] ${i <= currentStep ? "text-foreground font-medium" : "text-muted-foreground/50"}`}>
+                                    {step === "pendiente" ? "Pendiente" : step === "armado" ? "Armado" : "Entregado"}
+                                  </span>
+                                  {i < estadoSteps.length - 1 && <div className={`w-6 h-[2px] ${i < currentStep ? "bg-primary" : "bg-gray-200"}`} />}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {pedido.estado === "cancelado" && (
+                            <div className="flex items-center gap-1 pt-1">
+                              <Ban className="w-3 h-3 text-red-500" />
+                              <span className="text-[10px] text-red-500 font-medium">Pedido cancelado</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex sm:flex-col items-center gap-1.5 shrink-0">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(pedido)} title="Ver detalle">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(pedido)} title="Editar pedido">
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          {pedido.estado !== "entregado" && pedido.estado !== "cancelado" && (
+                            <>
+                              {pedido.estado === "pendiente" && (
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50" onClick={() => poHandleEstadoChange(pedido, "armado")} title="Marcar armado">
+                                  <Package className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => poHandleEstadoChange(pedido, "entregado")} title="Marcar entregado">
+                                <CheckCircle className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                          {pedido.estado !== "cancelado" && (
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setPoCancelPedido(pedido)} title="Cancelar pedido">
+                              <Ban className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 
