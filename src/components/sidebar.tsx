@@ -23,6 +23,7 @@ import {
   ClipboardList,
   BarChart3,
   PackageMinus,
+  FileText,
   X,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -117,6 +118,11 @@ const navigation: NavItem[] = [
       { name: "Resumen por Vendedor", href: "/admin/ventas/resumen-vendedor" },
       { name: "Percepciones", href: "/admin/ventas/percepciones" },
     ],
+  },
+  {
+    name: "Auditoría",
+    href: "/admin/auditoria",
+    icon: FileText,
   },
   { name: "Tienda Online", href: "/", icon: Store },
   {
@@ -447,7 +453,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{userName || "Admin"}</p>
                 <p className="text-xs text-sidebar-foreground/50 truncate flex items-center gap-1">
-                  <Building2 className="w-3 h-3" /> DulceSur
+                  <Building2 className="w-3 h-3" /> {wl.system_name || "DulceSur"}
                 </p>
               </div>
               <button

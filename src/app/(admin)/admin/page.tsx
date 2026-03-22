@@ -58,6 +58,7 @@ import {
 } from "recharts";
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
+import { useWhiteLabel } from "@/hooks/use-white-label";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
@@ -137,6 +138,7 @@ function cleanItemDescription(desc: string, presentacion?: string | null): strin
 }
 
 export default function DashboardPage() {
+  const { config: wl } = useWhiteLabel();
   const [loading, setLoading] = useState(true);
 
   // ─── Filter state ───
@@ -519,7 +521,7 @@ export default function DashboardPage() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm">Resumen de actividad — {getFilterLabel()}</p>
         </div>
-        <Badge variant="outline" className="text-xs w-fit">DulceSur</Badge>
+        <Badge variant="outline" className="text-xs w-fit">{wl.system_name || "DulceSur"}</Badge>
       </div>
 
       {/* ─── Pedidos Online ─── */}

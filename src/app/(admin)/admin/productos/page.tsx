@@ -53,6 +53,7 @@ import {
 import * as XLSX from "xlsx";
 import { ImageUpload } from "@/components/image-upload";
 import { showAdminToast } from "@/components/admin-toast";
+import { APP_NAME } from "@/lib/constants";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-AR", {
@@ -911,7 +912,7 @@ export default function ProductosPage() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Productos");
-    XLSX.writeFile(wb, `Productos_Dulcesur_${new Date().toISOString().split("T")[0]}.xlsx`);
+    XLSX.writeFile(wb, `Productos_${APP_NAME}_${new Date().toISOString().split("T")[0]}.xlsx`);
   };
 
   // Import Excel

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showAdminToast } from "@/components/admin-toast";
+import { APP_NAME } from "@/lib/constants";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -305,7 +306,7 @@ function PreviewHero({ config, onConfigChange }: { config: Record<string, unknow
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full">
         <div className="max-w-2xl">
           <span className="inline-block text-sm font-semibold text-white/80 tracking-widest uppercase mb-4">
-            {(config.marca as string) || "DulceSur"}
+            {(config.marca as string) || APP_NAME}
           </span>
           {onConfigChange ? (
             <EditableText

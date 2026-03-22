@@ -22,6 +22,7 @@ import {
   Loader2,
   DollarSign,
 } from "lucide-react";
+import { APP_NAME } from "@/lib/constants";
 
 interface CartItem {
   id: string;
@@ -680,7 +681,7 @@ export default function CheckoutPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             ¡Pedido confirmado!
           </h1>
-          <p className="text-gray-500 mb-6">Gracias por tu compra en DulceSur</p>
+          <p className="text-gray-500 mb-6">Gracias por tu compra en {APP_NAME}</p>
 
           <div className="inline-block bg-pink-50 border border-pink-200 rounded-xl px-6 py-3 mb-6">
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">N.° de pedido</p>
