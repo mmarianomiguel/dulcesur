@@ -204,9 +204,9 @@ export default function CheckoutPage() {
         dias_entrega: data.dias_entrega ?? [],
         dias_max_programacion: data.dias_max_programacion ?? 14,
         umbral_envio_gratis: data.umbral_envio_gratis ?? 0,
-        hora_corte: data.hora_corte ?? "12:00",
-        monto_minimo_pedido: data.monto_minimo_pedido ?? 0,
-        monto_minimo_envio: data.monto_minimo_envio ?? 50000,
+        hora_corte: data.hora_corte ?? "12:30",
+        monto_minimo_pedido: data.monto_minimo_pedido ?? 15000,
+        monto_minimo_envio: data.monto_minimo_envio ?? data.umbral_envio_gratis ?? 50000,
         recargo_transferencia: data.recargo_transferencia ?? 0,
         costo_envio: data.costo_envio ?? 0,
       };
@@ -316,7 +316,7 @@ export default function CheckoutPage() {
                 // Fetch config directly to avoid stale state
                 const { data: cfgData } = await supabase.from("tienda_config").select("dias_max_programacion, hora_corte").single();
                 const maxDias = cfgData?.dias_max_programacion ?? 14;
-                const horaCorte = cfgData?.hora_corte ?? "12:00";
+                const horaCorte = cfgData?.hora_corte ?? "12:30";
                 const clientDates = getAvailableDates(clientDias, maxDias, horaCorte);
                 setAvailableDates(clientDates);
                 if (clientDates.length > 0) setFechaEntrega(clientDates[0].value);

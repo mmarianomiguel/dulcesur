@@ -19,6 +19,13 @@ import {
   Settings,
   Plus,
   Minus,
+  Candy,
+  Store,
+  BookOpen,
+  Cigarette,
+  MoreHorizontal,
+  Pill,
+  Milk,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -28,6 +35,7 @@ import { supabase } from "@/lib/supabase";
 interface Categoria {
   id: string;
   nombre: string;
+  imagen_url?: string | null;
 }
 
 interface Producto {
@@ -211,6 +219,26 @@ function TrustBadgesBlock({ config }: { config: Record<string, any> }) {
   );
 }
 
+const categoryIcons: Record<string, LucideIcon> = {
+  kiosco: Candy,
+  almacen: Store,
+  libreria: BookOpen,
+  cigarros: Cigarette,
+  varios: MoreHorizontal,
+  analgesicos: Pill,
+  lacteos: Milk,
+};
+
+const categoryColors: Record<string, string> = {
+  kiosco: "bg-pink-50 text-pink-600 group-hover:bg-pink-100",
+  almacen: "bg-amber-50 text-amber-600 group-hover:bg-amber-100",
+  libreria: "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
+  cigarros: "bg-gray-100 text-gray-600 group-hover:bg-gray-200",
+  varios: "bg-purple-50 text-purple-600 group-hover:bg-purple-100",
+  analgesicos: "bg-green-50 text-green-600 group-hover:bg-green-100",
+  lacteos: "bg-sky-50 text-sky-600 group-hover:bg-sky-100",
+};
+
 function CategoriasDestacadasBlock({
   config,
   categorias,
@@ -237,18 +265,40 @@ function CategoriasDestacadasBlock({
           </div>
         ) : cats.length > 0 ? (
           <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-            {cats.map((cat) => (
-              <Link
-                key={cat.id}
-                href={`/productos?categoria=${cat.id}`}
-                className="group cursor-pointer rounded-2xl border border-gray-100 bg-white p-6 text-center hover:shadow-lg hover:border-pink-200 transition-all duration-300"
-              >
-                <p className="font-semibold text-gray-800">{cat.nombre}</p>
-                <p className="text-xs text-pink-600 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  Ver productos →
-                </p>
-              </Link>
-            ))}
+            {cats.map((cat) => {
+              const key = cat.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const Icon = categoryIcons[key] || Package;
+              const colorClasses = categoryColors[key] || "bg-gray-50 text-gray-600 group-hover:bg-gray-100";
+              return (
+                <Link
+                  key={cat.id}
+                  href={`/productos?categoria=${cat.id}`}
+                  className="group cursor-pointer rounded-2xl border border-gray-100 bg-white p-5 text-center hover:shadow-lg hover:border-pink-200 transition-all duration-300 flex flex-col items-center gap-3"
+                >
+                  {cat.imagen_url ? (
+                    <div className="w-14 h-14 rounded-xl overflow-hidden">
+                      <Image
+                        src={cat.imagen_url}
+                        alt={cat.nombre}
+                        width={56}
+                        height={56}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className={"w-14 h-14 rounded-xl flex items-center justify-center transition-colors " + colorClasses}>
+                      <Icon className="w-7 h-7" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">{cat.nombre}</p>
+                    <p className="text-[11px] text-pink-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      Ver productos →
+                    </p>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         ) : null}
       </div>
