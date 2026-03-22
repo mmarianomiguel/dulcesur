@@ -110,10 +110,10 @@ async function handleLogin({ email, password }: { email: string; password: strin
 }
 
 async function handleRegister({
-  nombre, email, password, telefono, domicilio, localidad, provincia, codigoPostal,
+  nombre, email, password, telefono, dni, domicilio, localidad, provincia, codigoPostal,
 }: {
   nombre: string; email: string; password: string; action: string;
-  telefono?: string; domicilio?: string; localidad?: string; provincia?: string; codigoPostal?: string;
+  telefono?: string; dni?: string; domicilio?: string; localidad?: string; provincia?: string; codigoPostal?: string;
 }) {
   if (!nombre || !email || !password) {
     return NextResponse.json({ error: "Nombre, email y contraseña son requeridos" }, { status: 400 });
@@ -139,6 +139,8 @@ async function handleRegister({
       nombre,
       email: email.toLowerCase().trim(),
       telefono: telefono || null,
+      numero_documento: dni || null,
+      tipo_documento: dni ? "DNI" : null,
       domicilio: domicilio || null,
       localidad: localidad || null,
       provincia: provincia || null,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { User, Package, LogOut, AlertCircle, ChevronRight } from "lucide-react";
+import { User, Package, MapPin, LogOut, AlertCircle, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 
@@ -35,6 +35,7 @@ export default function CuentaPage() {
   const [regNombre, setRegNombre] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regTelefono, setRegTelefono] = useState("");
+  const [regDni, setRegDni] = useState("");
   const [regDomicilio, setRegDomicilio] = useState("");
   const [regLocalidad, setRegLocalidad] = useState("");
   const [regProvincia, setRegProvincia] = useState("");
@@ -122,6 +123,7 @@ export default function CuentaPage() {
           email: regEmail,
           password: regPassword,
           telefono: regTelefono,
+          dni: regDni,
           domicilio: regDomicilio,
           localidad: regLocalidad,
           provincia: regProvincia,
@@ -288,6 +290,18 @@ export default function CuentaPage() {
                       placeholder="11 1234-5678"
                       value={regTelefono}
                       onChange={(e) => setRegTelefono(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      DNI
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="12345678"
+                      value={regDni}
+                      onChange={(e) => setRegDni(e.target.value)}
                       className={inputClass}
                     />
                   </div>
@@ -459,6 +473,22 @@ export default function CuentaPage() {
               <p className="text-gray-400 text-sm">
                 {orderCount > 0 ? `${orderCount} ${orderCount === 1 ? "pedido" : "pedidos"} realizados` : "Historial de compras"}
               </p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors" />
+        </Link>
+
+        <Link
+          href="/cuenta/direcciones"
+          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-pink-200 hover:shadow-md transition-all duration-200 p-5 group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
+              <MapPin className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900 group-hover:text-pink-600 transition-colors">Mis Direcciones</h2>
+              <p className="text-gray-400 text-sm">Direcciones de envío guardadas</p>
             </div>
           </div>
           <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors" />
