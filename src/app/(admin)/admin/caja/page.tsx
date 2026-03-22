@@ -38,7 +38,8 @@ import {
   Loader2,
 } from "lucide-react";
 
-import { formatCurrency, todayARG, nowTimeARG } from "@/lib/formatters";
+import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
+import { jsPDF } from "jspdf";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useDialog } from "@/hooks/use-dialog";
@@ -380,6 +381,136 @@ export default function CajaPage() {
     setHistVentas(filteredVts as unknown as Venta[]);
   };
 
+  // ─── Export turno to PDF ───
+  const exportTurnoPDF = (t: TurnoCaja, tvts: Venta[], tmovs: CajaMovimiento[]) => {
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const w = pdf.internal.pageSize.getWidth();
+    const margin = 15;
+    let y = 20;
+    const fmtCur = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+
+    // Header
+    pdf.setFontSize(18);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Resumen de Turno de Caja", margin, y);
+    y += 8;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+    pdf.text(`Turno #${t.numero} — ${formatDatePDF(t.fecha_apertura)}`, margin, y);
+    y += 5;
+    pdf.text(`Operador: ${t.operador}`, margin, y);
+    y += 5;
+    pdf.text(`Horario: ${t.hora_apertura?.substring(0, 5)} — ${t.hora_cierre?.substring(0, 5) || "En curso"}`, margin, y);
+    y += 10;
+
+    // Efectivo summary
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Resumen de Efectivo", margin, y);
+    y += 7;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+
+    const efRows = [
+      ["Efectivo Inicial", fmtCur(t.efectivo_inicial)],
+      ["Efectivo Real Contado", fmtCur(t.efectivo_real || 0)],
+      ["Diferencia", fmtCur(t.diferencia || 0)],
+    ];
+    for (const [label, val] of efRows) {
+      pdf.text(label, margin, y);
+      pdf.text(val, w - margin, y, { align: "right" });
+      y += 5;
+    }
+    if (t.notas) {
+      y += 2;
+      pdf.setFont("helvetica", "italic");
+      pdf.text(`Notas: ${t.notas}`, margin, y);
+      pdf.setFont("helvetica", "normal");
+      y += 7;
+    } else {
+      y += 5;
+    }
+
+    // Ventas summary
+    pdf.setDrawColor(200);
+    pdf.line(margin, y, w - margin, y);
+    y += 5;
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(`Ventas (${tvts.length})`, margin, y);
+    y += 7;
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", "normal");
+
+    if (tvts.length > 0) {
+      // Table header
+      pdf.setFont("helvetica", "bold");
+      pdf.text("N°", margin, y);
+      pdf.text("Cliente", margin + 35, y);
+      pdf.text("Forma Pago", margin + 85, y);
+      pdf.text("Total", w - margin, y, { align: "right" });
+      y += 5;
+      pdf.setFont("helvetica", "normal");
+      pdf.setDrawColor(220);
+      pdf.line(margin, y - 1, w - margin, y - 1);
+
+      for (const v of tvts) {
+        if (y > 270) { pdf.addPage(); y = 20; }
+        pdf.text(v.numero || "—", margin, y);
+        pdf.text(((v as any).clientes?.nombre || "—").substring(0, 25), margin + 35, y);
+        pdf.text(v.forma_pago || "—", margin + 85, y);
+        pdf.text(fmtCur(v.total), w - margin, y, { align: "right" });
+        y += 4.5;
+      }
+      y += 3;
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Total Ventas:", margin + 85, y);
+      pdf.text(fmtCur(tvts.reduce((a, v) => a + v.total, 0)), w - margin, y, { align: "right" });
+      y += 8;
+    }
+
+    // Movimientos
+    pdf.setDrawColor(200);
+    pdf.line(margin, y, w - margin, y);
+    y += 5;
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(`Movimientos de Caja (${tmovs.length})`, margin, y);
+    y += 7;
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", "normal");
+
+    if (tmovs.length > 0) {
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Hora", margin, y);
+      pdf.text("Descripción", margin + 20, y);
+      pdf.text("Método", margin + 100, y);
+      pdf.text("Monto", w - margin, y, { align: "right" });
+      y += 5;
+      pdf.setFont("helvetica", "normal");
+      pdf.line(margin, y - 1, w - margin, y - 1);
+
+      for (const m of tmovs) {
+        if (y > 270) { pdf.addPage(); y = 20; }
+        pdf.text(m.hora?.substring(0, 5) || "—", margin, y);
+        pdf.text((m.descripcion || "—").substring(0, 45), margin + 20, y);
+        pdf.text(m.metodo_pago || "—", margin + 100, y);
+        const prefix = m.tipo === "ingreso" ? "+" : "-";
+        pdf.text(`${prefix}${fmtCur(Math.abs(m.monto))}`, w - margin, y, { align: "right" });
+        y += 4.5;
+      }
+    }
+
+    // Footer
+    y += 5;
+    pdf.setFontSize(8);
+    pdf.setTextColor(150);
+    pdf.text(`Generado el ${new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} a las ${nowTimeARG().substring(0, 5)}`, margin, y);
+
+    pdf.save(`turno-${t.numero}-${t.fecha_apertura}.pdf`);
+    showAdminToast("PDF descargado");
+  };
+
   // ─── Derived calculations ───
 
   const {
@@ -550,7 +681,12 @@ export default function CajaPage() {
             </DialogHeader>
             {histDetail ? (
               <div className="space-y-4">
-                <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">← Volver al listado</Button>
+                <div className="flex items-center justify-between">
+                  <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">← Volver al listado</Button>
+                  <Button variant="outline" size="sm" onClick={() => exportTurnoPDF(histDetail, histVentas, histMovs)}>
+                    Descargar PDF
+                  </Button>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                   <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Turno</p><p className="font-bold">#{histDetail.numero}</p></div>
                   <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p></div>
@@ -977,9 +1113,14 @@ export default function CajaPage() {
 
           {histDetail ? (
             <div className="space-y-4">
-              <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">
-                ← Volver al listado
-              </Button>
+              <div className="flex items-center justify-between">
+                <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">
+                  ← Volver al listado
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportTurnoPDF(histDetail, histVentas, histMovs)}>
+                  Descargar PDF
+                </Button>
+              </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div className="rounded-lg border p-3">

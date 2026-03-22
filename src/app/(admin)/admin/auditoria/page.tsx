@@ -206,7 +206,7 @@ export default function AuditoriaPage() {
               <label className="text-xs text-muted-foreground mb-1 block">Módulo</label>
               <Select value={moduloFilter} onValueChange={(v) => setModuloFilter(v ?? "all")}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
+                  {moduloFilter === "all" ? "Todos" : moduloFilter}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
@@ -222,7 +222,7 @@ export default function AuditoriaPage() {
               <label className="text-xs text-muted-foreground mb-1 block">Acción</label>
               <Select value={accionFilter} onValueChange={(v) => setAccionFilter(v ?? "all")}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Todas" />
+                  {accionFilter === "all" ? "Todas" : accionFilter}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
@@ -332,9 +332,14 @@ export default function AuditoriaPage() {
                                       <p className="text-xs font-semibold text-muted-foreground mb-2">
                                         Datos anteriores
                                       </p>
-                                      <pre className="text-xs bg-background rounded-lg p-3 overflow-auto max-h-64 border">
-                                        {JSON.stringify(log.before_data, null, 2)}
-                                      </pre>
+                                      <div className="text-xs bg-background rounded-lg p-3 overflow-auto max-h-64 border space-y-1">
+                                        {Object.entries(typeof log.before_data === "string" ? JSON.parse(log.before_data) : log.before_data).map(([k, v]) => (
+                                          <div key={k} className="flex gap-2">
+                                            <span className="font-medium text-muted-foreground min-w-[120px]">{k}:</span>
+                                            <span className="text-foreground">{typeof v === "object" ? JSON.stringify(v) : String(v ?? "—")}</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   )}
                                   {log.after_data && (
@@ -342,9 +347,14 @@ export default function AuditoriaPage() {
                                       <p className="text-xs font-semibold text-muted-foreground mb-2">
                                         Datos posteriores
                                       </p>
-                                      <pre className="text-xs bg-background rounded-lg p-3 overflow-auto max-h-64 border">
-                                        {JSON.stringify(log.after_data, null, 2)}
-                                      </pre>
+                                      <div className="text-xs bg-background rounded-lg p-3 overflow-auto max-h-64 border space-y-1">
+                                        {Object.entries(typeof log.after_data === "string" ? JSON.parse(log.after_data) : log.after_data).map(([k, v]) => (
+                                          <div key={k} className="flex gap-2">
+                                            <span className="font-medium text-muted-foreground min-w-[120px]">{k}:</span>
+                                            <span className="text-foreground">{typeof v === "object" ? JSON.stringify(v) : String(v ?? "—")}</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
