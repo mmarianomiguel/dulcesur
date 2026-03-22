@@ -55,12 +55,12 @@ const accountLinks = [
 ];
 
 const infoLinks = [
-  { label: "Medios de pago", href: "/info/medios-de-pago", icon: Banknote },
-  { label: "Envíos", href: "/info/envios", icon: Truck },
-  { label: "Cómo comprar", href: "/info/como-comprar", icon: ShoppingBag },
-  { label: "Cómo registrarse", href: "/info/como-registrarse", icon: UserPlus },
-  { label: "Preguntas frecuentes", href: "/info/faq", icon: HelpCircle },
-  { label: "Términos y condiciones", href: "/info/terminos", icon: FileText },
+  { label: "Medios de pago", href: "/info#medios-de-pago", icon: Banknote },
+  { label: "Envíos", href: "/info#envios", icon: Truck },
+  { label: "Cómo comprar", href: "/info#como-comprar", icon: ShoppingBag },
+  { label: "Cómo registrarse", href: "/info#como-registrarse", icon: UserPlus },
+  { label: "Preguntas frecuentes", href: "/info#faq", icon: HelpCircle },
+  { label: "Términos y condiciones", href: "/info#terminos", icon: FileText },
 ];
 
 export default function TiendaFooter() {
