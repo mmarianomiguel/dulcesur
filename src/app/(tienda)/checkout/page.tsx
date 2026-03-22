@@ -635,7 +635,32 @@ export default function CheckoutPage() {
           p_orden_id: venta.id,
         });
 
-        if (stockError) throw stockError;
+        if (stockError) {
+          // Fallback: if RPC doesn't exist, decrement stock directly
+          for (const si of stockItems) {
+            const { data: p } = await supabase.from("productos").select("stock").eq("id", si.producto_id).single();
+            if (p) {
+              const antes = p.stock;
+              const despues = antes - si.cantidad;
+              if (despues < 0) {
+                // Insufficient stock - rollback
+                await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+                await supabase.from("ventas").delete().eq("id", venta.id);
+                await supabase.from("pedido_tienda_items").delete().eq("pedido_id", pedido.id);
+                await supabase.from("pedidos_tienda").delete().eq("id", pedido.id);
+                setErrors([`Stock insuficiente para ${si.descripcion}. Por favor revisá tu carrito.`]);
+                setSubmitting(false);
+                return;
+              }
+              await supabase.from("productos").update({ stock: despues }).eq("id", si.producto_id);
+              await supabase.from("stock_movimientos").insert({
+                producto_id: si.producto_id, tipo: "Venta", cantidad: -si.cantidad,
+                cantidad_antes: antes, cantidad_despues: despues,
+                referencia: `Pedido Web #${numero}`, descripcion: si.descripcion, usuario: "Tienda Online", orden_id: venta.id,
+              });
+            }
+          }
+        }
 
         if (stockResult && !stockResult.ok) {
           // Stock insufficient - rollback venta AND pedido
@@ -656,8 +681,7 @@ export default function CheckoutPage() {
       window.dispatchEvent(new Event("cart-updated"));
       setOrderNumber(numero);
     } catch (err: any) {
-      console.error(err);
-      const msg = err?.message || err?.details || JSON.stringify(err);
+      const msg = err?.message || err?.details || "Error desconocido";
       setErrors([`Hubo un error al procesar tu pedido: ${msg}`]);
     } finally {
       setSubmitting(false);

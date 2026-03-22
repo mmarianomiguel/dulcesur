@@ -1,10 +1,34 @@
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+async function requireAuth(req: NextRequest) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return req.cookies.getAll(); },
+        setAll() {},
+      },
+    }
+  );
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  // Verify user is admin
+  const { data: usuario } = await supabaseAdmin
+    .from("usuarios")
+    .select("es_admin")
+    .eq("auth_id", user.id)
+    .single();
+  if (!usuario?.es_admin) return null;
+  return user;
+}
 
 const BACKUP_TABLES = [
   "productos",
@@ -34,6 +58,11 @@ const BACKUP_TABLES = [
 
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
+    if (!user) {
+      return NextResponse.json({ error: "No autorizado. Solo administradores pueden exportar backups." }, { status: 401 });
+    }
+
     const backupData: Record<string, unknown[]> = {};
     let totalRegistros = 0;
 
@@ -97,6 +126,11 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const user = await requireAuth(req);
+    if (!user) {
+      return NextResponse.json({ error: "No autorizado. Solo administradores pueden restaurar backups." }, { status: 401 });
+    }
+
     const body = await req.json();
 
     // Validate backup structure

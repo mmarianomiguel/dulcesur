@@ -1297,6 +1297,7 @@ export default function VentasPage() {
           }
         }
 
+        // Atomic stock decrement via RPC (handles race conditions + logging)
         const { data: stockResult, error: stockRpcError } = await supabase.rpc("decrementar_stock_venta", {
           p_items: stockItems,
           p_referencia: `Venta #${numero}`,
@@ -1304,24 +1305,14 @@ export default function VentasPage() {
           p_orden_id: venta.id,
         });
 
-        if (stockRpcError) { setErrorModal({ open: true, message: `Error al actualizar stock: ${stockRpcError.message}` }); setSaving(false); return; }
-
-        if (stockResult && !stockResult.ok) {
-          // Stock insufficient but POS allows selling anyway - manually decrement stock atomically
+        if (stockRpcError) {
+          // Fallback: RPC may not exist yet — decrement stock directly
           for (const item of stockItems) {
             const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
             if (prod) {
               const stockAntes = prod.stock;
               const stockDespues = stockAntes - item.cantidad;
-              await supabase.rpc("decrementar_stock_forzado", {
-                p_producto_id: item.producto_id,
-                p_cantidad: item.cantidad,
-              }).then(async (res) => {
-                // If RPC doesn't exist, fallback to direct update
-                if (res.error) {
-                  await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
-                }
-              });
+              await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
               await supabase.from("stock_movimientos").insert({
                 producto_id: item.producto_id,
                 tipo: "Venta",

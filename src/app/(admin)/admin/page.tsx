@@ -351,13 +351,17 @@ export default function DashboardPage() {
     let gananciaTotal = 0;
     if (ventaIds && ventaIds.length > 0) {
       const ids = ventaIds.map((v) => v.id);
-      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, unidades_por_presentacion, productos(costo)").in("venta_id", ids);
+      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, unidades_por_presentacion, presentacion, productos(costo)").in("venta_id", ids);
       gananciaTotal = (items || []).reduce((acc, item: any) => {
         const costoUnitario = item.productos?.costo || 0;
         const cantidad = Number(item.cantidad) || 0;
         const precioUnitario = Number(item.precio_unitario) || 0;
-        const unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
-        return acc + (precioUnitario - costoUnitario * unidadesPorPres) * cantidad;
+        const descPct = Number(item.descuento) || 0;
+        const precioConDesc = precioUnitario * (1 - descPct / 100);
+        let unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
+        const presTxt = (item.presentacion || "").toLowerCase();
+        if (presTxt.includes("medio") && unidadesPorPres === 1) unidadesPorPres = 0.5;
+        return acc + (precioConDesc - costoUnitario * unidadesPorPres) * cantidad;
       }, 0);
     }
     setGananciaPeriodo(gananciaTotal);
