@@ -790,20 +790,59 @@ export default function ListadoVentasPage() {
     try {
       const originalItems = poSelectedPedido.items;
 
-      // Calculate stock differences per product (in UNITS, accounting for unidades_por_presentacion)
-      const stockDiffs: Record<string, number> = {};
-      for (const orig of originalItems) {
-        const upp = orig.unidades_por_presentacion || 1;
-        stockDiffs[orig.producto_id] = (stockDiffs[orig.producto_id] || 0) + (orig.cantidad * upp);
+      // Identify combo products and fetch their components
+      const allProductIds = [...new Set([
+        ...originalItems.map((i) => i.producto_id),
+        ...poEditItems.map((i) => i.producto_id),
+      ])].filter(Boolean);
+
+      const comboComponentsMap: Record<string, { producto_id: string; cantidad: number; nombre: string }[]> = {};
+      if (allProductIds.length > 0) {
+        const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", allProductIds);
+        const comboIds = (prods || []).filter((p: any) => p.es_combo).map((p: any) => p.id);
+        for (const comboId of comboIds) {
+          const { data: ciData } = await supabase
+            .from("combo_items")
+            .select("producto_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .eq("combo_id", comboId);
+          comboComponentsMap[comboId] = (ciData || []).map((ci: any) => ({
+            producto_id: ci.producto_id,
+            cantidad: ci.cantidad,
+            nombre: ci.productos?.nombre || "",
+          }));
+        }
       }
+
+      // Calculate stock differences per product (in UNITS)
+      // For combos: expand to component products
+      const stockDiffs: Record<string, number> = {};
+      const addStockDiff = (productoId: string, qty: number, upp: number) => {
+        const components = comboComponentsMap[productoId];
+        if (components && components.length > 0) {
+          // Combo: apply to each component
+          for (const comp of components) {
+            stockDiffs[comp.producto_id] = (stockDiffs[comp.producto_id] || 0) + (qty * comp.cantidad);
+          }
+        } else {
+          // Regular product
+          stockDiffs[productoId] = (stockDiffs[productoId] || 0) + (qty * upp);
+        }
+      };
+
+      // Return stock from original items (positive = freed)
+      for (const orig of originalItems) {
+        addStockDiff(orig.producto_id, orig.cantidad, orig.unidades_por_presentacion || 1);
+      }
+      // Deduct stock from new items (negative = consumed)
       for (const item of poEditItems) {
-        const upp = item.unidades_por_presentacion || 1;
-        stockDiffs[item.producto_id] = (stockDiffs[item.producto_id] || 0) - (item.cantidad * upp);
+        addStockDiff(item.producto_id, -item.cantidad, item.unidades_por_presentacion || 1);
       }
       // stockDiffs > 0 means units freed -> return stock
       // stockDiffs < 0 means units consumed -> decrement stock
 
       // Apply stock adjustments
+      const isHistorialRef = poSelectedPedido._source === "historial";
+      const refLabelStock = isHistorialRef ? `Edición Venta #${poSelectedPedido.numero}` : `Edición Pedido Web #${poSelectedPedido.numero}`;
       for (const [productoId, diff] of Object.entries(stockDiffs)) {
         if (Math.abs(diff) < 0.001) continue;
         const { data: prod, error: prodErr } = await supabase.from("productos").select("stock").eq("id", productoId).single();
@@ -818,7 +857,7 @@ export default function ListadoVentasPage() {
           cantidad: diff,
           cantidad_antes: stockAntes,
           cantidad_despues: stockDespues,
-          referencia: `Edición Pedido Web #${poSelectedPedido.numero}`,
+          referencia: refLabelStock,
           descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
           usuario: currentUser?.nombre || "Admin Sistema",
         });
