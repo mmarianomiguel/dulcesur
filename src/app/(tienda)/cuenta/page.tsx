@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { User, Package, MapPin, LogOut, AlertCircle, ChevronRight } from "lucide-react";
+import { User, Package, LogOut, AlertCircle, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 
@@ -473,22 +473,6 @@ export default function CuentaPage() {
               <p className="text-gray-400 text-sm">
                 {orderCount > 0 ? `${orderCount} ${orderCount === 1 ? "pedido" : "pedidos"} realizados` : "Historial de compras"}
               </p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors" />
-        </Link>
-
-        <Link
-          href="/cuenta/direcciones"
-          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-pink-200 hover:shadow-md transition-all duration-200 p-5 group"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
-              <MapPin className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 group-hover:text-pink-600 transition-colors">Mis Direcciones</h2>
-              <p className="text-gray-400 text-sm">Direcciones de envío guardadas</p>
             </div>
           </div>
           <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors" />
