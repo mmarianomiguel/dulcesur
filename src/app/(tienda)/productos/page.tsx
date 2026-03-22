@@ -1222,49 +1222,30 @@ function ProductosContent() {
                     {/* Content */}
                     <div className="flex flex-col flex-1 p-3.5 pt-2.5">
                       <Link href={`/productos/${producto.id}`} className="flex-1">
-                        {(producto.categorias?.nombre || producto.marcas?.nombre || producto.es_combo) && (
-                          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                            {producto.es_combo && (
-                              <span className="text-[10px] bg-pink-100 text-pink-700 font-semibold px-1.5 py-0.5 rounded">
-                                COMBO
-                              </span>
-                            )}
-                            {producto.categorias?.nombre && (
-                              <span className="text-[10px] text-gray-400 font-medium truncate">
-                                {producto.categorias.nombre}
-                              </span>
-                            )}
-                            {producto.marcas?.nombre && (
-                              <span className="text-[10px] bg-gray-100 text-gray-500 font-medium px-1.5 py-0.5 rounded">
-                                {producto.marcas.nombre}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2.5 group-hover:text-pink-700 transition-colors">
+                        <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-pink-700 transition-colors">
                           {producto.nombre}
                         </h3>
                       </Link>
 
                       {/* Price */}
                       <div className="mb-3">
-                        {disc > 0 ? (
-                          <>
-                            <span className="text-lg font-bold text-gray-900">{formatPrice(discountedPrice)}</span>
-                            <span className="text-xs text-gray-400 line-through ml-2">{formatPrice(activePrice)}</span>
-                          </>
-                        ) : (
-                          <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
-                        )}
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-bold text-gray-900">
+                            {disc > 0 ? formatPrice(discountedPrice) : formatPrice(activePrice)}
+                          </span>
+                          {disc > 0 && (
+                            <span className="text-xs text-gray-400 line-through">{formatPrice(activePrice)}</span>
+                          )}
+                        </div>
                         {(() => {
                           const pa = producto.precio_anterior;
                           const dateStr = producto.fecha_actualizacion || producto.updated_at;
                           if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
                           if ((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
                           if (producto.precio > pa) {
-                            return <p className="text-[10px] text-amber-600 font-medium mt-0.5">Precio actualizado</p>;
+                            return <p className="text-[10px] text-amber-600 font-medium">Precio actualizado</p>;
                           }
-                          return <p className="text-[10px] text-green-600 font-medium mt-0.5">Precio rebajado</p>;
+                          return <p className="text-[10px] text-green-600 font-medium">Precio rebajado</p>;
                         })()}
                       </div>
 
