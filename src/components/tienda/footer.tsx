@@ -36,17 +36,17 @@ const DEFAULT_CONFIG: FooterConfig = {
 };
 
 const badgeIcons: Record<string, typeof Truck> = {
-  "Envío a domicilio": Truck,
-  "Compra segura": Shield,
-  "Múltiples medios de pago": CreditCard,
+  "Entrega en el día": Truck,
+  "Envío gratis +$50.000": Shield,
+  "Efectivo y transferencia": CreditCard,
   "Atención personalizada": Headphones,
 };
 
 const categoryLinks = [
   { label: "Todos los productos", href: "/productos" },
-  { label: "Ofertas", href: "/productos?categoria=ofertas" },
-  { label: "Nuevos ingresos", href: "/productos?categoria=nuevos" },
-  { label: "Más vendidos", href: "/productos?categoria=mas-vendidos" },
+  { label: "Kiosco", href: "/productos?categoria=4295d00e-86c8-41d1-bfd0-ac1bcdc97572" },
+  { label: "Almacen", href: "/productos?categoria=61e26068-cc48-42f2-90c2-041faa90bde2" },
+  { label: "Cigarros", href: "/productos?categoria=e8b78851-e4c5-4e3a-95bb-76449e97b4b1" },
 ];
 
 const accountLinks = [
