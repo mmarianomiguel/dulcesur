@@ -1257,11 +1257,7 @@ function ProductosContent() {
                           <>
                             <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
                             {(() => {
-                              const pa = producto.precio_anterior;
-                              const dateStr = producto.fecha_actualizacion || producto.updated_at;
-                              if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
-                              if ((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
-                              return <span className="text-xs text-gray-400 line-through ml-2">{formatPrice(pa)}</span>;
+                              return null;
                             })()}
                           </>
                         )}

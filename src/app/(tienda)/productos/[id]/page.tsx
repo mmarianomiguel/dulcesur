@@ -531,7 +531,7 @@ export default function ProductoDetallePage() {
                 {currentDiscount > 0 ? formatCurrency(discountedPrice) : formatCurrency(currentPrice)}
               </p>
               {currentDiscount > 0 && (
-                <span className="bg-pink-600 text-white text-xs font-bold px-2.5 py-1 rounded-md">
+                <span className="bg-pink-100 text-pink-700 text-xs font-bold px-2.5 py-1 rounded-full">
                   {currentDiscount}% OFF
                 </span>
               )}
@@ -541,8 +541,8 @@ export default function ProductoDetallePage() {
                 const dateStr = producto.fecha_actualizacion || producto.updated_at;
                 if (!dateStr || (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
                 return producto.precio > pa
-                  ? <span className="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">Precio actualizado</span>
-                  : <span className="bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">Precio rebajado</span>;
+                  ? <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full">Precio actualizado</span>
+                  : <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">Precio rebajado</span>;
               })()}
             </div>
             {currentDiscount > 0 && (
@@ -551,25 +551,15 @@ export default function ProductoDetallePage() {
                 <span className="text-sm text-green-600 font-semibold">Ahorrás {formatCurrency(savings)}</span>
               </div>
             )}
-            {(() => {
-              const pa = (producto as any).precio_anterior;
-              if (currentDiscount > 0 || !pa || pa <= 0 || pa === producto.precio) return null;
-              const dateStr = producto.fecha_actualizacion || producto.updated_at;
-              if (!dateStr || (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
-              return <span className="text-sm text-gray-400 line-through mt-1">{formatCurrency(pa)}</span>;
-            })()}
             <p className="text-sm text-gray-500 mt-1">
               {currentPres && currentPres.cantidad > 1
                 ? `Por caja (${currentPres.cantidad} unidades)`
                 : "Precio unitario"}
             </p>
             {boxOnlyDiscount > 0 && currentPresLabel === "Unidad" && (
-              <div className="mt-2 inline-flex items-center gap-2 bg-green-50 rounded-lg px-3 py-1.5">
-                <span className="bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
-                  {boxOnlyDiscount}% OFF
-                </span>
-                <span className="text-sm text-green-700">comprando por caja</span>
-              </div>
+              <p className="text-sm text-green-600 font-medium mt-1.5">
+                {boxOnlyDiscount}% OFF comprando por caja
+              </p>
             )}
             {producto.es_combo && comboComponentes.length > 0 && (() => {
               const totalUnidades = comboComponentes.reduce((acc, c) => acc + c.cantidad, 0);
@@ -607,12 +597,12 @@ export default function ProductoDetallePage() {
                       key={p.id}
                       disabled={disabled}
                       onClick={() => { setSelectedPresIdx(idx); setCantidad((c) => Math.min(c, Math.max(1, presMax))); }}
-                      className={`flex items-center justify-center gap-2 rounded-xl border-2 py-3 px-4 text-sm font-semibold transition-all ${
+                      className={`flex items-center justify-center gap-2 rounded-full border py-2.5 px-5 text-sm font-semibold transition-all ${
                         disabled
                           ? "border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed"
                           : selected
-                          ? "border-pink-600 bg-pink-600 text-white"
-                          : "border-gray-200 text-gray-700 hover:border-pink-300 bg-white"
+                          ? "border-pink-600 bg-pink-50 text-pink-700"
+                          : "border-gray-200 text-gray-600 hover:border-gray-300 bg-white"
                       }`}
                     >
                       {isUnit ? <Layers className="w-4 h-4" /> : <Box className="w-4 h-4" />}
@@ -680,6 +670,16 @@ export default function ProductoDetallePage() {
                     <span className="font-medium text-gray-700 text-xs">
                       {date.toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}
                     </span>
+                  </div>
+                );
+              })()}
+              {(() => {
+                const pa = (producto as any).precio_anterior;
+                if (!pa || pa <= 0 || pa === producto.precio) return null;
+                return (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Precio anterior:</span>
+                    <span className="font-medium text-gray-400 line-through">{formatCurrency(pa)}</span>
                   </div>
                 );
               })()}

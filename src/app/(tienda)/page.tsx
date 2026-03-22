@@ -416,20 +416,7 @@ function ProductosDestacadosBlock({
                           const showChange = pa && pa > 0 && pa !== prod.precio && dateStr &&
                             (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3;
                           return (
-                            <>
-                              <div className="flex items-center gap-2">
-                                <p className="text-xl font-bold text-gray-900">{formatPrice(prod.precio)}</p>
-                                {showChange && prod.precio > (pa || 0) && (
-                                  <span className="bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">Precio actualizado</span>
-                                )}
-                                {showChange && prod.precio < (pa || 0) && (
-                                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">Precio rebajado</span>
-                                )}
-                              </div>
-                              {showChange && (
-                                <span className="text-xs text-gray-400 line-through">{formatPrice(pa!)}</span>
-                              )}
-                            </>
+                            <p className="text-xl font-bold text-gray-900">{formatPrice(prod.precio)}</p>
                           );
                         })()}
                       </div>
