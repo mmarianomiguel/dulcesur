@@ -1179,8 +1179,8 @@ function ProductosContent() {
                       {/* Badges */}
                       <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
                         {disc > 0 && (
-                          <span className="bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            -{disc}%
+                          <span className="bg-pink-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            {disc}% OFF
                           </span>
                         )}
                         {disc === 0 && (() => {
@@ -1190,8 +1190,8 @@ function ProductosContent() {
                           const boxDisc = getProductDiscount(producto, boxLabel);
                           if (boxDisc <= 0) return null;
                           return (
-                            <span className="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                              -{boxDisc}% caja
+                            <span className="bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                              {boxDisc}% OFF comprando por caja
                             </span>
                           );
                         })()}
@@ -1201,10 +1201,10 @@ function ProductosContent() {
                           if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
                           if ((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
                           if (producto.precio > pa) {
-                            return <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↑ Aumentó</span>;
+                            return <span className="bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">Precio actualizado</span>;
                           }
                           if (disc > 0) return null;
-                          return <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↓ Bajó</span>;
+                          return <span className="bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">Precio rebajado</span>;
                         })()}
                       </div>
                       {producto.stock <= 0 && (
@@ -1243,22 +1243,23 @@ function ProductosContent() {
 
                       {/* Price */}
                       <div className="mb-3">
-                        {(() => {
-                          const pa = producto.precio_anterior;
-                          const dateStr = producto.fecha_actualizacion || producto.updated_at;
-                          const showPriceChange = !disc && pa && pa > 0 && pa !== producto.precio && dateStr &&
-                            (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3;
-                          const prevPrice = disc > 0 ? activePrice : showPriceChange ? pa : null;
-                          const currentPrice = disc > 0 ? discountedPrice : activePrice;
-                          return (
-                            <>
-                              <span className="text-lg font-bold text-gray-900">{formatPrice(currentPrice)}</span>
-                              {prevPrice != null && (
-                                <span className="text-xs text-gray-400 line-through ml-2">{formatPrice(prevPrice)}</span>
-                              )}
-                            </>
-                          );
-                        })()}
+                        {disc > 0 ? (
+                          <>
+                            <span className="text-lg font-bold text-gray-900">{formatPrice(discountedPrice)}</span>
+                            <span className="text-xs text-gray-400 line-through ml-2">{formatPrice(activePrice)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
+                            {(() => {
+                              const pa = producto.precio_anterior;
+                              const dateStr = producto.fecha_actualizacion || producto.updated_at;
+                              if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
+                              if ((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
+                              return <span className="text-xs text-gray-400 line-through ml-2">{formatPrice(pa)}</span>;
+                            })()}
+                          </>
+                        )}
                       </div>
 
                       {/* Presentacion pills */}
@@ -1377,13 +1378,13 @@ function ProductosContent() {
                       )}
                       {(() => {
                         const d = getProductDiscount(producto, listPresLabel);
-                        if (d > 0) return <span className="absolute top-2 left-2 bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">-{d}%</span>;
+                        if (d > 0) return <span className="absolute top-2 left-2 bg-pink-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{d}% OFF</span>;
                         const boxPres = pres?.find((p) => p.cantidad > 1);
                         if (!boxPres) return null;
                         const boxLabel = presLabel(boxPres);
                         const boxDisc = getProductDiscount(producto, boxLabel);
                         if (boxDisc <= 0) return null;
-                        return <span className="absolute top-2 left-2 bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">-{boxDisc}% caja</span>;
+                        return <span className="absolute top-2 left-2 bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{boxDisc}% OFF x caja</span>;
                       })()}
                     </Link>
                     <div className="flex-1 py-3.5 pr-4 pl-1 flex items-center justify-between gap-4 min-w-0">

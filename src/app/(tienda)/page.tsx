@@ -420,10 +420,10 @@ function ProductosDestacadosBlock({
                               <div className="flex items-center gap-2">
                                 <p className="text-xl font-bold text-gray-900">{formatPrice(prod.precio)}</p>
                                 {showChange && prod.precio > (pa || 0) && (
-                                  <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↑ Aumentó</span>
+                                  <span className="bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">Precio actualizado</span>
                                 )}
                                 {showChange && prod.precio < (pa || 0) && (
-                                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↓ Bajó</span>
+                                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">Precio rebajado</span>
                                 )}
                               </div>
                               {showChange && (

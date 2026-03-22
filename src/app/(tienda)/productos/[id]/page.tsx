@@ -519,7 +519,7 @@ export default function ProductoDetallePage() {
                     {formatCurrency(discountedPrice)}
                   </p>
                   <span className="bg-pink-600 text-white text-xs font-bold px-2.5 py-1 rounded-md">
-                    -{currentDiscount}%
+                    {currentDiscount}% OFF
                   </span>
                 </div>
                 <p className="text-sm text-gray-400 line-through mt-1">
@@ -543,8 +543,8 @@ export default function ProductoDetallePage() {
             )}
             {boxOnlyDiscount > 0 && currentPresLabel === "Unidad" && (
               <div className="mt-2 inline-flex items-center gap-2 bg-green-50 rounded-lg px-3 py-1.5">
-                <span className="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                  -{boxOnlyDiscount}% caja
+                <span className="bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                  {boxOnlyDiscount}% OFF
                 </span>
                 <span className="text-sm text-green-700">
                   comprando por caja
@@ -650,8 +650,8 @@ export default function ProductoDetallePage() {
                       <span className="text-gray-500">Precio anterior:</span>
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs text-gray-400 line-through">{formatCurrency(precioAnterior)}</span>
-                        <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-md ${isUp ? "bg-amber-500" : "bg-emerald-500"}`}>
-                          {isUp ? "↑ Aumentó" : "↓ Bajó"}
+                        <span className={"text-[10px] font-bold text-white px-2.5 py-1 rounded-md " + (isUp ? "bg-amber-500" : "bg-emerald-500")}>
+                          {isUp ? "Precio actualizado" : "Precio rebajado"}
                         </span>
                       </div>
                     </div>
