@@ -74,8 +74,8 @@ export default function MarcasPage() {
   const [nombre, setNombre] = useState("");
 
   // Categories state
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [subcategorias, setSubcategorias] = useState<Subcategoria[]>([]);
+  const [categorias, setCategorías] = useState<Categoria[]>([]);
+  const [subcategorias, setSubcategorías] = useState<Subcategoria[]>([]);
   const [catLoading, setCatLoading] = useState(true);
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<Categoria | null>(null);
@@ -165,10 +165,10 @@ export default function MarcasPage() {
       refetch();
     } else if (type === "categoria") {
       await supabase.from("categorias").delete().eq("id", id);
-      fetchCategorias();
+      fetchCategorías();
     } else if (type === "subcategoria") {
       await supabase.from("subcategorias").delete().eq("id", id);
-      fetchCategorias();
+      fetchCategorías();
     }
     showAdminToast(`${type === "marca" ? "Marca" : type === "categoria" ? "Categoría" : "Subcategoría"} eliminada`, "success");
     setDeleting(false);
@@ -210,14 +210,14 @@ export default function MarcasPage() {
           await supabase.from("subcategorias").delete().eq("categoria_id", id);
         }
         await supabase.from("categorias").delete().eq("id", id);
-        fetchCategorias();
+        fetchCategorías();
       } else if (type === "subcategoria") {
         await supabase
           .from("productos")
           .update({ subcategoria_id: reassignTo || null })
           .eq("subcategoria_id", id);
         await supabase.from("subcategorias").delete().eq("id", id);
-        fetchCategorias();
+        fetchCategorías();
       }
 
       showAdminToast(
@@ -234,7 +234,7 @@ export default function MarcasPage() {
   };
 
   // ─── Categories fetch ───
-  const fetchCategorias = useCallback(async () => {
+  const fetchCategorías = useCallback(async () => {
     setCatLoading(true);
     const [{ data: cats }, { data: subs }, { data: prods }] = await Promise.all([
       supabase.from("categorias").select("id, nombre").order("nombre"),
@@ -249,12 +249,12 @@ export default function MarcasPage() {
     });
     const catMap: Record<string, string> = {};
     (cats ?? []).forEach((c: any) => { catMap[c.id] = c.nombre; });
-    setCategorias((cats ?? []).map((c: any) => ({ ...c, producto_count: catCount[c.id] || 0 })));
-    setSubcategorias((subs ?? []).map((s: any) => ({ ...s, categoria_nombre: catMap[s.categoria_id] || "—", producto_count: subCount[s.id] || 0 })));
+    setCategorías((cats ?? []).map((c: any) => ({ ...c, producto_count: catCount[c.id] || 0 })));
+    setSubcategorías((subs ?? []).map((s: any) => ({ ...s, categoria_nombre: catMap[s.categoria_id] || "—", producto_count: subCount[s.id] || 0 })));
     setCatLoading(false);
   }, []);
 
-  useEffect(() => { fetchCategorias(); }, [fetchCategorias]);
+  useEffect(() => { fetchCategorías(); }, [fetchCategorías]);
 
   const handleSaveCat = async () => {
     if (!catNombre.trim()) return;
@@ -269,7 +269,7 @@ export default function MarcasPage() {
     setEditingCat(null);
     setCatNombre("");
     showAdminToast(editingCat ? "Categoría actualizada" : "Categoría creada", "success");
-    fetchCategorias();
+    fetchCategorías();
   };
 
   const handleDeleteCat = async (id: string) => {
@@ -306,7 +306,7 @@ export default function MarcasPage() {
     setSubNombre("");
     setSubCatId("");
     showAdminToast(editingSub ? "Subcategoría actualizada" : "Subcategoría creada", "success");
-    fetchCategorias();
+    fetchCategorías();
   };
 
   const handleDeleteSub = async (id: string) => {

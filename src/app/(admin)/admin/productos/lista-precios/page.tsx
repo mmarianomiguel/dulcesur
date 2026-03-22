@@ -828,7 +828,7 @@ export default function ListaPreciosPage() {
                       )}
                     </td>
                     <td className="px-3 py-3 text-center text-xs text-muted-foreground">
-                      {p.fechaActualizacion ? new Date(p.fechaActualizacion + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
+                      {p.fechaActualizacion ? (() => { const d = new Date(p.fechaActualizacion); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }); })() : "—"}
                     </td>
                   </tr>
                 );

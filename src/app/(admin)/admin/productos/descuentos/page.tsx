@@ -140,7 +140,7 @@ export default function DescuentosPage() {
   const [aplicaA, setAplicaA] = useState("todos");
   const [categoriasIds, setCategoriasIds] = useState<string[]>([]);
   const [subcategoriasIds, setSubcategoriasIds] = useState<string[]>([]);
-  const [presentacion, setPresentacion] = useState("todas");
+  const [presentacion, setPresentación] = useState("todas");
   const [productosIds, setProductosIds] = useState<string[]>([]);
   const [marcasIds, setMarcasIds] = useState<string[]>([]);
 
@@ -204,7 +204,7 @@ export default function DescuentosPage() {
     setSubcategoriasIds([]);
     setProductosIds([]);
     setMarcasIds([]);
-    setPresentacion("todas");
+    setPresentación("todas");
     setEditId(null);
     setCatSearch("");
     setExpandedCats([]);
@@ -231,7 +231,7 @@ export default function DescuentosPage() {
     setSubcategoriasIds(d.subcategorias_ids ?? []);
     setProductosIds(d.productos_ids ?? []);
     setMarcasIds(d.marcas_ids ?? []);
-    setPresentacion(d.presentacion);
+    setPresentación(d.presentacion);
     setSaveError(null);
     setDialogOpen(true);
   };
@@ -1050,7 +1050,7 @@ export default function DescuentosPage() {
                   ].map((opt) => (
                     <button
                       key={opt.value}
-                      onClick={() => setPresentacion(opt.value)}
+                      onClick={() => setPresentación(opt.value)}
                       className={`p-3 rounded-lg border-2 text-sm font-medium text-center transition-colors ${
                         presentacion === opt.value
                           ? "border-primary bg-primary/5 text-primary"
