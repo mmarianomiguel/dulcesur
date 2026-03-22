@@ -415,21 +415,19 @@ function ProductosDestacadosBlock({
                           const dateStr = prod.fecha_actualizacion || prod.updated_at;
                           const showChange = pa && pa > 0 && pa !== prod.precio && dateStr &&
                             (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3;
-                          const isUp = showChange && prod.precio > (pa || 0);
-                          const isDown = showChange && prod.precio < (pa || 0);
                           return (
                             <>
                               <div className="flex items-center gap-2">
                                 <p className="text-xl font-bold text-gray-900">{formatPrice(prod.precio)}</p>
-                                {isUp && (
-                                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">↑ Aumentó</span>
+                                {showChange && prod.precio > (pa || 0) && (
+                                  <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↑ Aumentó</span>
                                 )}
-                                {isDown && (
-                                  <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">↓ Bajó</span>
+                                {showChange && prod.precio < (pa || 0) && (
+                                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↓ Bajó</span>
                                 )}
                               </div>
                               {showChange && (
-                                <span className="text-[11px] text-gray-400 line-through">{formatPrice(pa!)}</span>
+                                <span className="text-xs text-gray-400 line-through">{formatPrice(pa!)}</span>
                               )}
                             </>
                           );

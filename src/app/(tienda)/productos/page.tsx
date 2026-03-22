@@ -1179,8 +1179,8 @@ function ProductosContent() {
                       {/* Badges */}
                       <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
                         {disc > 0 && (
-                          <span className="bg-gradient-to-r from-red-500 to-pink-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-lg shadow-red-500/30">
-                            -{disc}% OFF
+                          <span className="bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            -{disc}%
                           </span>
                         )}
                         {disc === 0 && (() => {
@@ -1190,10 +1190,21 @@ function ProductosContent() {
                           const boxDisc = getProductDiscount(producto, boxLabel);
                           if (boxDisc <= 0) return null;
                           return (
-                            <span className="bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-lg shadow-green-500/30">
-                              -{boxDisc}% comprando por caja
+                            <span className="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              -{boxDisc}% caja
                             </span>
                           );
+                        })()}
+                        {(() => {
+                          const pa = producto.precio_anterior;
+                          const dateStr = producto.fecha_actualizacion || producto.updated_at;
+                          if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
+                          if ((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
+                          if (producto.precio > pa) {
+                            return <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↑ Aumentó</span>;
+                          }
+                          if (disc > 0) return null;
+                          return <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">↓ Bajó</span>;
                         })()}
                       </div>
                       {producto.stock <= 0 && (
@@ -1232,37 +1243,20 @@ function ProductosContent() {
 
                       {/* Price */}
                       <div className="mb-3">
-                        {disc > 0 ? (
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-lg font-bold text-gray-900">{formatPrice(discountedPrice)}</span>
-                            <span className="text-xs text-gray-400 line-through">{formatPrice(activePrice)}</span>
-                          </div>
-                        ) : (() => {
+                        {(() => {
                           const pa = producto.precio_anterior;
                           const dateStr = producto.fecha_actualizacion || producto.updated_at;
-                          const showChange = pa && pa > 0 && pa !== producto.precio && dateStr &&
+                          const showPriceChange = !disc && pa && pa > 0 && pa !== producto.precio && dateStr &&
                             (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3;
-                          const isUp = showChange && producto.precio > (pa || 0);
-                          const isDown = showChange && producto.precio < (pa || 0);
+                          const prevPrice = disc > 0 ? activePrice : showPriceChange ? pa : null;
+                          const currentPrice = disc > 0 ? discountedPrice : activePrice;
                           return (
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
-                                {isUp && (
-                                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                                    ↑ Aumentó
-                                  </span>
-                                )}
-                                {isDown && (
-                                  <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
-                                    ↓ Bajó
-                                  </span>
-                                )}
-                              </div>
-                              {showChange && (
-                                <span className="text-[11px] text-gray-400 line-through">{formatPrice(pa!)}</span>
+                            <>
+                              <span className="text-lg font-bold text-gray-900">{formatPrice(currentPrice)}</span>
+                              {prevPrice != null && (
+                                <span className="text-xs text-gray-400 line-through ml-2">{formatPrice(prevPrice)}</span>
                               )}
-                            </div>
+                            </>
                           );
                         })()}
                       </div>
@@ -1383,13 +1377,13 @@ function ProductosContent() {
                       )}
                       {(() => {
                         const d = getProductDiscount(producto, listPresLabel);
-                        if (d > 0) return <span className="absolute top-2 left-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-lg shadow-red-500/30">-{d}% OFF</span>;
+                        if (d > 0) return <span className="absolute top-2 left-2 bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">-{d}%</span>;
                         const boxPres = pres?.find((p) => p.cantidad > 1);
                         if (!boxPres) return null;
                         const boxLabel = presLabel(boxPres);
                         const boxDisc = getProductDiscount(producto, boxLabel);
                         if (boxDisc <= 0) return null;
-                        return <span className="absolute top-2 left-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-lg shadow-green-500/30">-{boxDisc}% en caja</span>;
+                        return <span className="absolute top-2 left-2 bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">-{boxDisc}% caja</span>;
                       })()}
                     </Link>
                     <div className="flex-1 py-3.5 pr-4 pl-1 flex items-center justify-between gap-4 min-w-0">

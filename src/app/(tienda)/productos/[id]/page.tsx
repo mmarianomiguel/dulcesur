@@ -518,12 +518,11 @@ export default function ProductoDetallePage() {
                   <p className="text-3xl font-bold text-gray-900">
                     {formatCurrency(discountedPrice)}
                   </p>
-                  <span className="inline-flex items-center gap-1 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg shadow-red-500/30">
-                    <Tag className="w-3 h-3" />
-                    -{currentDiscount}% OFF
+                  <span className="bg-pink-600 text-white text-xs font-bold px-2.5 py-1 rounded-md">
+                    -{currentDiscount}%
                   </span>
                 </div>
-                <p className="text-base text-gray-400 line-through mt-1">
+                <p className="text-sm text-gray-400 line-through mt-1">
                   {formatCurrency(currentPrice)}
                 </p>
                 <p className="text-sm text-green-600 font-semibold mt-0.5">
@@ -543,10 +542,12 @@ export default function ProductoDetallePage() {
               <p className="text-sm text-gray-500 mt-1">Precio Unitario</p>
             )}
             {boxOnlyDiscount > 0 && currentPresLabel === "Unidad" && (
-              <div className="mt-2 inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
-                <Box className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+              <div className="mt-2 inline-flex items-center gap-2 bg-green-50 rounded-lg px-3 py-1.5">
+                <span className="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
+                  -{boxOnlyDiscount}% caja
+                </span>
                 <span className="text-sm text-green-700">
-                  Comprando por caja ahorrás <span className="font-semibold">{boxOnlyDiscount}%</span>
+                  comprando por caja
                 </span>
               </div>
             )}
@@ -649,8 +650,8 @@ export default function ProductoDetallePage() {
                       <span className="text-gray-500">Precio anterior:</span>
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs text-gray-400 line-through">{formatCurrency(precioAnterior)}</span>
-                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${isUp ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>
-                          {isUp ? "↑ Aumentó" : "↓ Bajó"} {Math.abs(Math.round(((precioActual - precioAnterior) / precioAnterior) * 100))}%
+                        <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-md ${isUp ? "bg-amber-500" : "bg-emerald-500"}`}>
+                          {isUp ? "↑ Aumentó" : "↓ Bajó"}
                         </span>
                       </div>
                     </div>
