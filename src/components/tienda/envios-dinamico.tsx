@@ -54,30 +54,32 @@ export default function EnviosDinamico() {
     <div className="space-y-8">
       {/* Montos */}
       {config && (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-            <p className="text-sm font-medium text-gray-500">Retiro en local</p>
+            <p className="text-sm font-medium text-gray-500">Compra en local / Retiro</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {formatCurrency(config.monto_minimo_pedido)}
             </p>
-            <p className="mt-1 text-sm text-gray-500">Compra mínima para retiro</p>
-          </div>
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
-            <p className="text-sm font-medium text-blue-700">Mínimo para envío</p>
-            <p className="mt-1 text-2xl font-bold text-blue-800">
-              {formatCurrency(config.umbral_envio_gratis)}
-            </p>
-            <p className="mt-1 text-sm text-blue-600">Pedido mínimo con envío a domicilio</p>
+            <p className="mt-1 text-sm text-gray-500">Compra mínima para retiro en el local</p>
           </div>
           <div className="rounded-xl border border-green-200 bg-green-50 p-5">
-            <p className="text-sm font-medium text-green-700">Envío sin cargo</p>
+            <p className="text-sm font-medium text-green-700">Envío a domicilio</p>
             <p className="mt-1 text-2xl font-bold text-green-800">
-              +{formatCurrency(config.umbral_envio_gratis)}
+              {formatCurrency(config.umbral_envio_gratis)}
             </p>
-            <p className="mt-1 text-sm text-green-600">Todos los envíos son gratis</p>
+            <p className="mt-1 text-sm text-green-600">Compra mínima para envío gratis a domicilio</p>
           </div>
         </div>
       )}
+
+      {/* Mínimo mayorista */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <h3 className="text-lg font-semibold text-amber-900">Compra mínima por producto</h3>
+        <p className="mt-2 text-sm text-amber-800">
+          Los productos que se venden por unidad tienen un mínimo de{" "}
+          <strong>3 unidades</strong> para acceder a precios mayoristas.
+        </p>
+      </div>
 
       {/* Entrega en el día */}
       <div>
