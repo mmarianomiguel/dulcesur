@@ -1294,7 +1294,7 @@ function ProductosContent() {
                         </div>
                       ) : producto.stock > 0 && producto.stock <= 5 && (
                         <span className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
-                          ¡Últimas {producto.stock}!
+                          {producto.stock === 1 ? "¡Última unidad!" : `¡Últimas ${producto.stock}!`}
                         </span>
                       )}
                     </Link>

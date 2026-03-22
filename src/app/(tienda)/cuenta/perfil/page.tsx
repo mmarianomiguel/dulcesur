@@ -391,7 +391,7 @@ export default function PerfilPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="bg-pink-600 text-white px-8 py-3 rounded-xl font-semibold text-sm hover:bg-pink-700 transition-colors disabled:opacity-50"
+                className="bg-pink-600 text-white px-8 py-3 rounded-full font-semibold text-sm hover:bg-pink-700 transition-colors disabled:opacity-50"
               >
                 {saving ? "Guardando..." : "Guardar cambios"}
               </button>
