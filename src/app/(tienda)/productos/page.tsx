@@ -965,15 +965,35 @@ function ProductosContent() {
           )}
         </div>
 
+        {/* Mobile search bar */}
+        <div className="md:hidden w-full relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar productos..."
+            defaultValue={searchQuery}
+            onKeyDown={(e) => {
+              if (e.key === "Enter")
+                updateParams({ q: (e.target as HTMLInputElement).value || null });
+            }}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400"
+          />
+        </div>
+
         {/* Controls */}
         <div className="flex items-center gap-3">
           {/* Mobile filter button */}
           <button
             onClick={() => setMobileFilters(true)}
-            className="md:hidden flex items-center gap-2 text-sm font-medium bg-white border border-gray-200 rounded-xl px-4 py-2.5 hover:border-gray-300 transition-colors"
+            className="md:hidden flex items-center gap-2 text-sm font-medium bg-white border border-gray-200 rounded-xl px-4 py-2.5 hover:border-gray-300 transition-colors relative"
           >
             <SlidersHorizontal className="h-4 w-4" />
             Filtros
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-pink-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
           </button>
 
           <select
@@ -1227,28 +1247,31 @@ function ProductosContent() {
                         const maxForPres = Math.floor(availableStock / presUnits);
                         const canBuy = maxForPres > 0;
                         return canBuy ? (
-                        <div className="flex items-center gap-1.5">
-                          <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden shrink-0">
-                            <button
-                              onClick={() => setQty(producto.id, qty - 1)}
-                              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="w-7 text-center text-xs font-semibold tabular-nums text-gray-800">{qty}</span>
-                            <button
-                              onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))}
-                              disabled={qty >= maxForPres}
-                              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-30"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
+                              <button
+                                onClick={() => setQty(producto.id, qty - 1)}
+                                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="w-7 text-center text-xs font-semibold tabular-nums text-gray-800">{qty}</span>
+                              <button
+                                onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))}
+                                disabled={qty >= maxForPres}
+                                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-30"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <span className="text-sm font-bold text-gray-900">{formatPrice(discountedPrice * qty)}</span>
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="flex-1 bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-xs sm:text-sm py-2 rounded-xl font-semibold transition-all shadow-sm shadow-pink-600/20"
+                            className="w-full bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-sm py-2.5 rounded-xl font-semibold transition-all shadow-sm shadow-pink-600/20"
                           >
-                            Agregar {formatPrice(discountedPrice * qty)}
+                            Agregar
                           </button>
                         </div>
                       ) : (
