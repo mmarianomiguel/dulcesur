@@ -78,6 +78,8 @@ export default function ProductoDetallePage() {
   const [loading, setLoading] = useState(true);
   const [cartQtys, setCartQtys] = useState<Record<string, number>>({});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>([]);
+  const [restricted, setRestricted] = useState(false);
+  const { permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
 
   // Sync cart quantities
   useEffect(() => {
@@ -149,6 +151,43 @@ export default function ProductoDetallePage() {
         .single();
 
       if (prod) {
+        // Check if product belongs to a restricted category
+        const { data: cat } = await supabase
+          .from("categorias")
+          .select("restringida")
+          .eq("id", prod.categoria_id)
+          .single();
+        if (cat?.restringida) {
+          // Check if user has permission
+          const raw = localStorage.getItem("cliente_auth");
+          let hasAccess = false;
+          if (raw) {
+            try {
+              const auth = JSON.parse(raw);
+              if (auth?.id) {
+                const { data: authData } = await supabase
+                  .from("clientes_auth")
+                  .select("cliente_id")
+                  .eq("id", auth.id)
+                  .single();
+                if (authData?.cliente_id) {
+                  const { data: cliente } = await supabase
+                    .from("clientes")
+                    .select("categorias_permitidas")
+                    .eq("id", authData.cliente_id)
+                    .single();
+                  hasAccess = (cliente?.categorias_permitidas || []).includes(prod.categoria_id);
+                }
+              }
+            } catch {}
+          }
+          if (!hasAccess) {
+            setRestricted(true);
+            setLoading(false);
+            return;
+          }
+        }
+
         setProducto(prod as Producto);
 
         // Load combo items if es_combo
@@ -407,7 +446,7 @@ export default function ProductoDetallePage() {
     );
   }
 
-  if (!producto) {
+  if (!producto || restricted) {
     return (
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="flex flex-col items-center justify-center py-24 text-center">
