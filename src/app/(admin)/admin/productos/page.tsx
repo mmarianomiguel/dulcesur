@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,13 +56,6 @@ import { ImageUpload } from "@/components/image-upload";
 import { showAdminToast } from "@/components/admin-toast";
 import { APP_NAME } from "@/lib/constants";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 interface Subcategoria {
   id: string;

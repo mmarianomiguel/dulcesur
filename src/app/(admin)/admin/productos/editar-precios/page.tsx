@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/lib/formatters";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -41,13 +42,6 @@ import {
   Filter,
 } from "lucide-react";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 interface Marca {
   id: string;

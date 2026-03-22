@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/lib/formatters";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,9 +54,6 @@ interface ComboItem {
   producto?: Producto;
 }
 
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
-}
 
 function subtotalItem(item: ComboItem) {
   const precio = item.producto?.precio || 0;

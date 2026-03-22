@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,14 +37,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 interface Descuento {
   id: string;
