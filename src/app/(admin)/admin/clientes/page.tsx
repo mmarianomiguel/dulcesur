@@ -756,7 +756,7 @@ export default function ClientesPage() {
   const withBalance = useMemo(() => clients.filter((c) => c.saldo > 0).length, [clients]);
   const withFavor = useMemo(() => clients.filter((c) => c.saldo < 0).length, [clients]);
 
-  const f = (key: keyof typeof form, value: string) => setForm({ ...form, [key]: value });
+  const f = (key: keyof typeof form, value: string | string[]) => setForm({ ...form, [key]: value });
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
