@@ -173,7 +173,18 @@ export function ReceiptPrintView({
           <div style={{ flex: 1 }}>
             <div><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}</div>
             {config.mostrarDireccion && sale.clienteDireccion && <div><span style={{ fontWeight: "bold" }}>Domicilio:</span> {sale.clienteDireccion}</div>}
-            {config.mostrarFormaPago && <div><span style={{ fontWeight: "bold" }}>Forma de pago:</span> {sale.formaPago}</div>}
+            {config.mostrarFormaPago && (
+              <div>
+                <span style={{ fontWeight: "bold" }}>Forma de pago:</span>{" "}
+                {sale.formaPago === "Mixto" ? (() => {
+                  const parts: string[] = [];
+                  if (sale.pagoEfectivo && sale.pagoEfectivo > 0) parts.push(`Ef. ${fmtCur(sale.pagoEfectivo)}`);
+                  if (sale.pagoTransferencia && sale.pagoTransferencia > 0) parts.push(`Transf. ${fmtCur(sale.pagoTransferencia)}`);
+                  if (sale.pagoCuentaCorriente && sale.pagoCuentaCorriente > 0) parts.push(`CC ${fmtCur(sale.pagoCuentaCorriente)}`);
+                  return parts.length > 0 ? `Mixto (${parts.join(" + ")})` : "Mixto";
+                })() : sale.formaPago}
+              </div>
+            )}
           </div>
           <div style={{ flex: 1, textAlign: "center" }}>
             {config.mostrarTelefono && sale.clienteTelefono && <div><span style={{ fontWeight: "bold" }}>Telefono:</span> {sale.clienteTelefono}</div>}
@@ -251,17 +262,6 @@ export function ReceiptPrintView({
               </tr>
             );
           })}
-          {sale.items.length < 20 &&
-            Array.from({ length: 20 - sale.items.length }).map((_, i) => (
-              <tr key={`empty-${i}`}>
-                <td style={{ padding: "3px 4px" }}>&nbsp;</td>
-                <td style={{ padding: "3px 4px" }}></td>
-                <td style={{ padding: "3px 4px" }}></td>
-                <td style={{ padding: "3px 4px" }}></td>
-                {config.mostrarDescuento && <td style={{ padding: "3px 4px" }}></td>}
-                <td style={{ padding: "3px 4px" }}></td>
-              </tr>
-            ))}
         </tbody>
       </table>
 
@@ -292,11 +292,14 @@ export function ReceiptPrintView({
           )}
         </div>
         <div style={{ borderTop: "2px solid #000", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 4px" }}>
-          {sale.descuento > 0 && (
-            <span style={{ fontSize: `${config.fontSize - 2}px`, color: "#059669" }}>
-              Ahorraste {fmtCur(sale.descuento)}
-            </span>
-          )}
+          {(() => {
+            const totalAhorro = sale.descuento > 0 ? sale.descuento : sale.items.filter(i => i.discount > 0).reduce((a, i) => a + (i.price * i.qty * i.discount / 100), 0);
+            return totalAhorro > 0 ? (
+              <span style={{ fontSize: `${config.fontSize - 2}px`, color: "#059669" }}>
+                Ahorraste {fmtCur(Math.round(totalAhorro))}
+              </span>
+            ) : null;
+          })()}
           <div style={{ fontSize: `${fsResumen}px`, fontWeight: "bold", marginLeft: "auto" }}>
             TOTAL: {fmtCur(sale.total)}
           </div>
@@ -331,7 +334,7 @@ export function ReceiptPrintView({
               {showSaldo && (<>
                 <div style={{ borderTop: "1px dotted #ccc", marginTop: "3px", paddingTop: "3px" }} />
                 {row("Saldo anterior:", sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} (a favor)` : fmtCur(sale.saldoAnterior))}
-                {row("Saldo actual:", sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} (a favor)` : fmtCur(sale.saldoNuevo), true, sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#ea580c" : undefined)}
+                {row(`Saldo al ${sale.fecha}:`, sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} (a favor)` : fmtCur(sale.saldoNuevo), true, sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#ea580c" : undefined)}
               </>)}
             </div>
           );
