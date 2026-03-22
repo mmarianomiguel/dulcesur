@@ -305,7 +305,7 @@ export default function ListadoVentasPage() {
     try {
       const stored = localStorage.getItem("receipt_config");
       if (stored) setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
-    } catch {}
+    } catch (err) { console.error("Error generating PDF:", err); }
   }, []);
 
   const openDetail = async (v: VentaRow) => {

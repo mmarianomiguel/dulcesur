@@ -304,7 +304,7 @@ export default function HojaDeRutaPage() {
     try {
       const stored = localStorage.getItem("cuentas_bancarias");
       if (stored) setCuentasBancarias(JSON.parse(stored));
-    } catch {}
+    } catch (err) { console.error("Error in delivery:", err); }
   }, []);
 
   const openPayDialog = (v: VentaRow) => {

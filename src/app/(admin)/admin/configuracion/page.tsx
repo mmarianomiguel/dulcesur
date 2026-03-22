@@ -67,7 +67,7 @@ function loadCuentasBancarias(): CuentaBancaria[] {
   try {
     const stored = localStorage.getItem("cuentas_bancarias");
     if (stored) return JSON.parse(stored);
-  } catch {}
+  } catch (err) { console.error("Config load error:", err); }
   return [];
 }
 
@@ -79,7 +79,7 @@ function loadReceiptConfig(): ReceiptConfig {
   try {
     const stored = localStorage.getItem("receipt_config");
     if (stored) return { ...defaultReceiptConfig, ...JSON.parse(stored) };
-  } catch {}
+  } catch (err) { console.error("Config load error:", err); }
   return defaultReceiptConfig;
 }
 
@@ -158,7 +158,7 @@ export default function ConfiguracionPage() {
         alwaysEnabled.forEach((m) => (merged[m] = true));
         setModulos(merged);
       }
-    } catch {}
+    } catch (err) { showAdminToast("Error al guardar configuración", "error"); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

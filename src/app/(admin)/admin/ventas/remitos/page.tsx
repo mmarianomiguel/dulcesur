@@ -135,7 +135,7 @@ export default function RemitosPage() {
     try {
       const stored = localStorage.getItem("receipt_config");
       if (stored) setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
-    } catch {}
+    } catch (err) { console.error("Error generating remito:", err); }
   }, [fetchRemitos]);
 
   const openDetail = async (r: RemitoRow) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

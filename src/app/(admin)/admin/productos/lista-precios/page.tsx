@@ -204,14 +204,14 @@ export default function ListaPreciosPage() {
       if (savedConfig) setConfig({ ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) });
       const savedLogo = localStorage.getItem("listaPreciosLogo");
       if (savedLogo) setLogoBase64(savedLogo);
-    } catch {}
+    } catch (err) { console.error("Parse error:", err); }
   }, []);
 
   // Save config to localStorage on change
   useEffect(() => {
     try {
       localStorage.setItem("listaPreciosConfig", JSON.stringify(config));
-    } catch {}
+    } catch (err) { console.error("Parse error:", err); }
   }, [config]);
 
   // Save logo to localStorage on change
@@ -222,7 +222,7 @@ export default function ListaPreciosPage() {
       } else {
         localStorage.removeItem("listaPreciosLogo");
       }
-    } catch {}
+    } catch (err) { console.error("Parse error:", err); }
   }, [logoBase64]);
 
   // Fetch products from Supabase

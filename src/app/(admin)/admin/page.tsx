@@ -121,7 +121,7 @@ function loadReceiptConfig(): ReceiptConfig {
   try {
     const stored = localStorage.getItem("receipt_config");
     if (stored) return { ...defaultReceiptConfig, ...JSON.parse(stored) };
-  } catch {}
+  } catch (err) { console.error("Error loading dashboard:", err); }
   return defaultReceiptConfig;
 }
 

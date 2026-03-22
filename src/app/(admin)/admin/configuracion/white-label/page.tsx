@@ -80,7 +80,7 @@ export default function WhiteLabelPage() {
               <Input
                 value={config.system_name}
                 onChange={(e) => update({ system_name: e.target.value })}
-                placeholder="Dulcesur"
+                placeholder="Nombre del sistema"
               />
             </div>
             <div className="space-y-2">
@@ -88,7 +88,7 @@ export default function WhiteLabelPage() {
               <Input
                 value={config.system_subtitle}
                 onChange={(e) => update({ system_subtitle: e.target.value })}
-                placeholder="Gestión Comercial"
+                placeholder="Subtítulo del sistema"
               />
             </div>
           </div>

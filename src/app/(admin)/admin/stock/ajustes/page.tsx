@@ -101,7 +101,7 @@ export default function AjustesStockPage() {
           .eq("auth_id", user.id)
           .single();
         if (usuario?.nombre) setCurrentUserName(usuario.nombre);
-      } catch {}
+      } catch (err) { console.error("Error loading stock:", err); }
     })();
   }, []);
 

@@ -324,7 +324,7 @@ export default function VentasPage() {
       if (stored) {
         setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
       }
-    } catch {}
+    } catch (err) { console.error("Error in POS:", err); }
     const { data: emp } = await supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single();
     if (emp) {
       setReceiptConfig((prev) => ({
@@ -347,7 +347,7 @@ export default function VentasPage() {
     try {
       const stored = localStorage.getItem("cuentas_bancarias");
       if (stored) setCuentasBancarias(JSON.parse(stored));
-    } catch {}
+    } catch (err) { console.error("Error in POS:", err); }
   }, []);
 
   // Auto-print receipt when sale is finalized
