@@ -198,12 +198,16 @@ export default function CajaPage() {
   const movDialog = useDialog<"ingreso" | "egreso">();
   const cierreDialog = useDialog();
   const abrirDialog = useDialog();
-  const [movForm, setMovForm] = useState({ descripcion: "", metodo_pago: "Efectivo", monto: 0 });
+  const [movForm, setMovForm] = useState({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "" });
   const [cierreForm, setCierreForm] = useState({ efectivo_real: 0, notas: "" });
+  const [proveedores, setProveedores] = useState<{ id: string; nombre: string }[]>([]);
 
   // Sellers map for display
   const [sellersMap, setSellersMap] = useState<Record<string, string>>({});
   useEffect(() => {
+    supabase.from("proveedores").select("id, nombre").order("nombre").then(({ data }) => {
+      setProveedores(data || []);
+    });
     supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data }) => {
       const map: Record<string, string> = {};
       (data || []).forEach((u: any) => { map[u.id] = u.nombre; });
@@ -255,41 +259,52 @@ export default function CajaPage() {
 
   const handleAbrirTurno = async () => {
     if (!abrirForm.operador.trim()) return;
-    const t = await abrirTurno(abrirForm.efectivo_inicial, abrirForm.operador.trim());
-    setTurno(t);
-    abrirDialog.onClose();
-    setAbrirForm({ efectivo_inicial: 0, operador: "" });
-    showAdminToast("Turno abierto correctamente");
-    // Refetch so data is filtered by new turno
-    setTimeout(() => { refetchMov(); refetchVentas(); }, 100);
+    try {
+      const t = await abrirTurno(abrirForm.efectivo_inicial, abrirForm.operador.trim());
+      setTurno(t);
+      abrirDialog.onClose();
+      setAbrirForm({ efectivo_inicial: 0, operador: "" });
+      showAdminToast("Turno abierto correctamente");
+      setTimeout(() => { refetchMov(); refetchVentas(); }, 100);
+    } catch (err: any) {
+      showAdminToast(err?.message || "Error al abrir turno", "error");
+    }
   };
 
   const openMovDialog = (type: "ingreso" | "egreso") => {
-    setMovForm({ descripcion: "", metodo_pago: "Efectivo", monto: 0 });
+    setMovForm({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "" });
     movDialog.onOpen(type);
   };
 
   const handleSaveMov = async () => {
+    if (!movForm.descripcion.trim()) { showAdminToast("Ingresá una descripción", "error"); return; }
+    if (movForm.monto <= 0) { showAdminToast("El monto debe ser mayor a 0", "error"); return; }
     const type = movDialog.data || "ingreso";
-    const opts = {
-      descripcion: movForm.descripcion,
-      metodoPago: movForm.metodo_pago,
-      monto: Math.abs(movForm.monto),
-    };
-    if (type === "ingreso") {
-      await cajaService.registrarIngreso(opts);
-    } else {
-      await cajaService.registrarEgreso(opts);
+    try {
+      const provNombre = movForm.proveedor ? proveedores.find(p => p.id === movForm.proveedor)?.nombre : null;
+      const desc = provNombre ? `${movForm.descripcion} — Prov: ${provNombre}` : movForm.descripcion;
+      const opts = {
+        descripcion: desc,
+        metodoPago: movForm.metodo_pago,
+        monto: Math.abs(movForm.monto),
+      };
+      if (type === "ingreso") {
+        await cajaService.registrarIngreso(opts);
+      } else {
+        await cajaService.registrarEgreso(opts);
+      }
+      movDialog.onClose();
+      refetchMov();
+      logAudit({
+        userName: currentUser?.nombre || "Admin Sistema",
+        action: "CREATE",
+        module: "caja",
+        after: { tipo: type, descripcion: desc, monto: movForm.monto, metodo_pago: movForm.metodo_pago, proveedor: provNombre },
+      });
+      showAdminToast(type === "ingreso" ? "Ingreso registrado" : "Egreso registrado");
+    } catch (err: any) {
+      showAdminToast(err?.message || "Error al registrar movimiento", "error");
     }
-    movDialog.onClose();
-    refetchMov();
-    logAudit({
-      userName: currentUser?.nombre || "Admin Sistema",
-      action: "CREATE",
-      module: "caja",
-      after: { tipo: type, descripcion: movForm.descripcion, monto: movForm.monto, metodo_pago: movForm.metodo_pago },
-    });
-    showAdminToast(type === "ingreso" ? "Ingreso registrado" : "Egreso registrado");
   };
 
   const openCierreDialog = () => {
@@ -300,12 +315,20 @@ export default function CajaPage() {
   const handleCerrarTurno = async () => {
     if (!turno) return;
     const diff = cierreForm.efectivo_real - efectivoEsperado;
-    await cerrarTurno(turno.id, cierreForm.efectivo_real, diff, cierreForm.notas);
-    setTurno(null);
-    cierreDialog.onClose();
-    refetchMov();
-    refetchVentas();
-    showAdminToast("Turno cerrado correctamente");
+    if (Math.abs(diff) > 500 && !cierreForm.notas.trim()) {
+      showAdminToast("Hay una diferencia de " + formatCurrency(Math.abs(diff)) + ". Agregá una nota explicativa.", "error");
+      return;
+    }
+    try {
+      await cerrarTurno(turno.id, cierreForm.efectivo_real, diff, cierreForm.notas);
+      setTurno(null);
+      cierreDialog.onClose();
+      refetchMov();
+      refetchVentas();
+      showAdminToast("Turno cerrado correctamente");
+    } catch (err: any) {
+      showAdminToast(err?.message || "Error al cerrar turno", "error");
+    }
   };
 
   const openHistorial = async () => {
@@ -756,10 +779,10 @@ export default function CajaPage() {
 
           {/* Transactions table */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Ventas del dia */}
+            {/* Ventas del día */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Ventas del dia</CardTitle>
+                <CardTitle className="text-base">Ventas del día</CardTitle>
               </CardHeader>
               <CardContent>
                 {ventas.length === 0 ? (
@@ -830,8 +853,8 @@ export default function CajaPage() {
                       <thead>
                         <tr className="border-b text-muted-foreground">
                           <th className="text-left py-3 px-4 font-medium">Hora</th>
-                          <th className="text-left py-3 px-4 font-medium">Descripcion</th>
-                          <th className="text-left py-3 px-4 font-medium">Metodo</th>
+                          <th className="text-left py-3 px-4 font-medium">Descripción</th>
+                          <th className="text-left py-3 px-4 font-medium">Método</th>
                           <th className="text-right py-3 px-4 font-medium">Monto</th>
                         </tr>
                       </thead>
@@ -880,7 +903,7 @@ export default function CajaPage() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-2">
-              <Label>Descripcion</Label>
+              <Label>Descripción</Label>
               <Input
                 value={movForm.descripcion}
                 onChange={(e) => setMovForm({ ...movForm, descripcion: e.target.value })}
@@ -913,6 +936,25 @@ export default function CajaPage() {
                 </Select>
               </div>
             </div>
+            {movDialog.data === "egreso" && proveedores.length > 0 && (
+              <div className="space-y-2">
+                <Label>Proveedor (opcional)</Label>
+                <Select
+                  value={movForm.proveedor || "none"}
+                  onValueChange={(v) => setMovForm({ ...movForm, proveedor: v === "none" ? "" : (v || "") })}
+                >
+                  <SelectTrigger>
+                    {movForm.proveedor ? proveedores.find(p => p.id === movForm.proveedor)?.nombre || "Sin proveedor" : "Sin proveedor"}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin proveedor</SelectItem>
+                    {proveedores.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={movDialog.onClose}>
                 Cancelar
