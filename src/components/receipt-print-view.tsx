@@ -90,6 +90,10 @@ export interface ReceiptSale {
   saldoNuevo: number;
   cashReceived?: number;
   cashChange?: number;
+  pagoEfectivo?: number;
+  pagoTransferencia?: number;
+  pagoCuentaCorriente?: number;
+  cuentaBancaria?: string;
 }
 
 export function ReceiptPrintView({
@@ -292,6 +296,35 @@ export function ReceiptPrintView({
             TOTAL: {fmtCur(sale.total)}
           </div>
         </div>
+        {/* Payment summary */}
+        {config.mostrarFormaPago && (sale.formaPago === "Mixto" || sale.formaPago === "Transferencia" || sale.pagoEfectivo || sale.pagoTransferencia) && (
+          <div style={{ borderTop: "1px solid #ccc", padding: "6px 4px", fontSize: `${config.fontSize - 1}px` }}>
+            <div style={{ fontWeight: "bold", marginBottom: "4px", fontSize: `${config.fontSize - 1}px` }}>Detalle de pago:</div>
+            {(sale.pagoEfectivo != null && sale.pagoEfectivo > 0) && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                <span>Efectivo:</span>
+                <span>{fmtCur(sale.pagoEfectivo)}</span>
+              </div>
+            )}
+            {(sale.pagoTransferencia != null && sale.pagoTransferencia > 0) && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                <span>Transferencia:</span>
+                <span>{fmtCur(sale.pagoTransferencia)}</span>
+              </div>
+            )}
+            {(sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0) && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                <span>Cuenta Corriente:</span>
+                <span>{fmtCur(sale.pagoCuentaCorriente)}</span>
+              </div>
+            )}
+            {sale.cuentaBancaria && (
+              <div style={{ marginTop: "4px", fontSize: `${config.fontSize - 2}px`, color: "#555" }}>
+                Cuenta: {sale.cuentaBancaria}
+              </div>
+            )}
+          </div>
+        )}
         {/* Cash change info */}
         {config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0 && (
           <div style={{ borderTop: "1px solid #ccc", padding: "6px 4px", fontSize: `${config.fontSize - 1}px` }}>
