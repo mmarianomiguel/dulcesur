@@ -864,7 +864,7 @@ export default function ClientesPage() {
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">ZONA DE ENTREGA</span>
                   <Select value={filterZona || "all"} onValueChange={(v) => setFilterZona(v === "all" ? "" : (v || ""))}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Todas las zonas" />
+                      {filterZona ? (zonas.find(z => z.id === filterZona)?.nombre || "Todas las zonas") : "Todas las zonas"}
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas las zonas</SelectItem>
@@ -1265,7 +1265,7 @@ export default function ClientesPage() {
                           className={`border-b last:border-0 hover:bg-muted/50 ${hasItems ? "cursor-pointer" : ""}`}
                           onClick={() => hasItems && setMovExpanded(isExp ? null : key)}
                         >
-                          <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                           <td className="py-2 px-3">
                             <Badge variant={m.badge as any} className="text-xs font-normal">{m.tipo}</Badge>
                           </td>
@@ -1432,7 +1432,7 @@ export default function ClientesPage() {
                 <tbody>
                   {cobranzaMovimientos.map((m) => (
                     <tr key={m.id} className="border-b last:border-0">
-                      <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
+                      <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                       <td className="py-2 px-3 font-mono text-xs">{m.comprobante || "—"}</td>
                       <td className="py-2 px-3 text-right">{m.debe > 0 ? formatCurrency(m.debe) : ""}</td>
                       <td className="py-2 px-3 text-right">{m.haber > 0 ? formatCurrency(m.haber) : ""}</td>

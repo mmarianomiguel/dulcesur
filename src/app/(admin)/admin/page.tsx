@@ -495,7 +495,7 @@ export default function DashboardPage() {
       clienteCondicionIva: cliente?.situacion_iva || null,
       vendedor: "Pedido Online",
       items: saleItems,
-      fecha: new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR"),
+      fecha: new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }),
       saldoAnterior: 0,
       saldoNuevo: 0,
     };

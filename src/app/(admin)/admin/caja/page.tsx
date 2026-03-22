@@ -530,7 +530,7 @@ export default function CajaPage() {
                 <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">← Volver al listado</Button>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                   <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Turno</p><p className="font-bold">#{histDetail.numero}</p></div>
-                  <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR")}</p></div>
+                  <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p></div>
                   <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Operador</p><p className="font-bold">{histDetail.operador}</p></div>
                   <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Horario</p><p className="font-bold">{histDetail.hora_apertura?.substring(0, 5)} - {histDetail.hora_cierre?.substring(0, 5) || "?"}</p></div>
                 </div>
@@ -628,7 +628,7 @@ export default function CajaPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b text-muted-foreground"><th className="text-left py-2 px-3 font-medium">Turno</th><th className="text-left py-2 px-3 font-medium">Fecha</th><th className="text-left py-2 px-3 font-medium">Operador</th><th className="text-left py-2 px-3 font-medium">Horario</th><th className="text-right py-2 px-3 font-medium">Ef. Real</th><th className="text-right py-2 px-3 font-medium">Diferencia</th><th className="w-10"></th></tr></thead>
-                  <tbody>{histTurnos.map((t) => (<tr key={t.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openHistDetail(t)}><td className="py-2 px-3 font-mono text-xs">#{t.numero}</td><td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR")}</td><td className="py-2 px-3">{t.operador}</td><td className="py-2 px-3 text-muted-foreground text-xs">{t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}</td><td className="py-2 px-3 text-right font-semibold">{formatCurrency(t.efectivo_real || 0)}</td><td className={`py-2 px-3 text-right font-semibold ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(t.diferencia || 0)}</td><td className="py-2 px-3"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td></tr>))}</tbody>
+                  <tbody>{histTurnos.map((t) => (<tr key={t.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openHistDetail(t)}><td className="py-2 px-3 font-mono text-xs">#{t.numero}</td><td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td><td className="py-2 px-3">{t.operador}</td><td className="py-2 px-3 text-muted-foreground text-xs">{t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}</td><td className="py-2 px-3 text-right font-semibold">{formatCurrency(t.efectivo_real || 0)}</td><td className={`py-2 px-3 text-right font-semibold ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(t.diferencia || 0)}</td><td className="py-2 px-3"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td></tr>))}</tbody>
                 </table>
               </div>
             )}
@@ -946,7 +946,7 @@ export default function CajaPage() {
                 </div>
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Fecha</p>
-                  <p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR")}</p>
+                  <p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
                 </div>
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Operador</p>
@@ -1119,7 +1119,7 @@ export default function CajaPage() {
                   {histTurnos.map((t) => (
                     <tr key={t.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openHistDetail(t)}>
                       <td className="py-2 px-3 font-mono text-xs">#{t.numero}</td>
-                      <td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR")}</td>
+                      <td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                       <td className="py-2 px-3">{t.operador}</td>
                       <td className="py-2 px-3 text-muted-foreground text-xs">{t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}</td>
                       <td className="py-2 px-3 text-right font-semibold">{formatCurrency(t.efectivo_real || 0)}</td>

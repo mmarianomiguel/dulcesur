@@ -355,7 +355,7 @@ export default function ReportesPage() {
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Reportes</h1>
-            <p className="text-sm text-muted-foreground">Analisis de ventas, compras y stock</p>
+            <p className="text-sm text-muted-foreground">Análisis de ventas, compras y stock</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -538,7 +538,7 @@ export default function ReportesPage() {
                         <td className="py-2 px-2 text-muted-foreground">
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </td>
-                        <td className="py-2 px-3">{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
+                        <td className="py-2 px-3">{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                         <td className="py-2 px-3"><Badge variant="secondary" className="text-xs">{v.tipo_comprobante}</Badge></td>
                         <td className="py-2 px-3 text-muted-foreground">{v.clientes?.nombre || "—"}</td>
                         <td className="py-2 px-3"><Badge variant="outline" className="text-xs">{v.forma_pago}</Badge></td>
@@ -660,7 +660,7 @@ export default function ReportesPage() {
                         <td className="py-2 px-2 text-muted-foreground">
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </td>
-                        <td className="py-2 px-3">{new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
+                        <td className="py-2 px-3">{new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                         <td className="py-2 px-3 font-medium">{c.proveedores?.nombre || <span className="text-muted-foreground">—</span>}</td>
                         <td className="py-2 px-3 text-muted-foreground text-xs">
                           {items.length > 0

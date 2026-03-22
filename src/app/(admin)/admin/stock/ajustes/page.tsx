@@ -76,7 +76,7 @@ function formatCurrency(v: number) {
 }
 
 function formatDate(fecha: string) {
-  return new Date(fecha + "T12:00:00").toLocaleDateString("es-AR");
+  return new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 /* ─── Main component ─── */

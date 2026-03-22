@@ -1745,7 +1745,7 @@ export default function ProductosPage() {
                     <th className="text-center py-3 px-4 font-medium">Stock</th>
                     <th className="text-center py-3 px-4 font-medium">Min / Max</th>
                     <th className="text-right py-3 px-4 font-medium">PVP</th>
-                    <th className="text-left py-3 px-4 font-medium">Ult. actualizacion</th>
+                    <th className="text-left py-3 px-4 font-medium">Últ. actualización</th>
                     <th className="text-right py-3 px-4 font-medium w-32">Acciones</th>
                   </tr>
                 </thead>
@@ -1825,7 +1825,7 @@ export default function ProductosPage() {
                           const d = (product as any).updated_at;
                           if (!d) return "\u2014";
                           const date = new Date(d);
-                          return isNaN(date.getTime()) ? "\u2014" : date.toLocaleDateString("es-AR");
+                          return isNaN(date.getTime()) ? "\u2014" : date.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
                         })()}
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -2735,7 +2735,7 @@ export default function ProductosPage() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Fecha</p>
-                    <p className="font-medium">{new Date(ordenDetail.fecha + "T12:00:00").toLocaleDateString("es-AR")}</p>
+                    <p className="font-medium">{new Date(ordenDetail.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Cliente</p>

@@ -420,7 +420,7 @@ export default function RemitosPage() {
                   {remitos.map((r) => (
                     <tr key={r.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{r.numero}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
+                      <td className="py-3 px-4 text-muted-foreground">{new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                       <td className="py-3 px-4 font-medium">{r.clientes?.nombre || "—"}</td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(r.total)}</td>
                       <td className="py-3 px-4 text-center">

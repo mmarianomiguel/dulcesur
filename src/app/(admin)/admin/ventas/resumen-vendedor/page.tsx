@@ -515,7 +515,7 @@ export default function ResumenVendedorPage() {
                           <tr key={v.id} className="border-b">
                             <td className="py-2">{v.numero}</td>
                             <td className="py-2">
-                              {new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR")}
+                              {new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
                             </td>
                             <td className="py-2">
                               {v.clientes?.nombre || "-"}

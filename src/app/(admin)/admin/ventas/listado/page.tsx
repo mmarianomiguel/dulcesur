@@ -1394,7 +1394,7 @@ export default function ListadoVentasPage() {
                             </div>
                           </td>
                           <td className="py-3 px-4 text-muted-foreground">
-                            <div>{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR")}</div>
+                            <div>{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</div>
                             {v.created_at && (
                               <div className="text-xs text-muted-foreground/70">
                                 {new Date(v.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
@@ -1586,7 +1586,7 @@ export default function ListadoVentasPage() {
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{pedido.email}</span>
                                 {pedido.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{pedido.telefono}</span>}
-                                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(pedido.created_at).toLocaleDateString("es-AR")} {new Date(pedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}</span>
+                                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(pedido.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} {new Date(pedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}</span>
                               </div>
                             </div>
                             <div className="text-right shrink-0">

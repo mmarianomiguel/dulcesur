@@ -1019,7 +1019,7 @@ export default function PedidosProveedorPage() {
             </div>
             <p className="text-muted-foreground text-sm mt-0.5">
               {detailPedido.proveedores?.nombre || "Sin proveedor"} &middot;{" "}
-              {new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR")}
+              {new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
@@ -1069,7 +1069,7 @@ export default function PedidosProveedorPage() {
           </div>
           <div className="rounded-xl border bg-card px-4 py-3">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Fecha</p>
-            <p className="text-sm font-semibold mt-0.5">{new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR")}</p>
+            <p className="text-sm font-semibold mt-0.5">{new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
           </div>
           <div className="rounded-xl border bg-card px-4 py-3">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Items</p>
@@ -1567,7 +1567,7 @@ export default function PedidosProveedorPage() {
                           <span className="font-mono text-xs font-medium">{pedidoDisplayNum(p.id)}</span>
                         </td>
                         <td className="py-3 px-4 text-muted-foreground">
-                          {new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR")}
+                          {new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
                         </td>
                         <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "\u2014"}</td>
                         <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.costo_total_estimado || 0)}</td>
