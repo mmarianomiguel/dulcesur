@@ -9,6 +9,7 @@ interface Zona {
   id: string;
   nombre: string;
   dias: string[];
+  localidades?: string;
 }
 
 interface TiendaConfig {
@@ -25,7 +26,7 @@ export default function EnviosDinamico() {
   useEffect(() => {
     (async () => {
       const [zonasRes, configRes] = await Promise.all([
-        supabase.from("zonas_entrega").select("id, nombre, dias").order("nombre"),
+        supabase.from("zonas_entrega").select("*").order("nombre"),
         supabase
           .from("tienda_config")
           .select("monto_minimo_pedido, umbral_envio_gratis, hora_corte")
@@ -101,6 +102,9 @@ export default function EnviosDinamico() {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="px-4 py-3 font-semibold text-gray-700">Zona</th>
+                  {zonas.some((z) => z.localidades) && (
+                    <th className="px-4 py-3 font-semibold text-gray-700">Localidades</th>
+                  )}
                   <th className="px-4 py-3 font-semibold text-gray-700">Días de entrega</th>
                 </tr>
               </thead>
@@ -108,6 +112,9 @@ export default function EnviosDinamico() {
                 {zonas.map((z) => (
                   <tr key={z.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{z.nombre}</td>
+                    {zonas.some((zo) => zo.localidades) && (
+                      <td className="px-4 py-3 text-gray-600">{z.localidades || "—"}</td>
+                    )}
                     <td className="px-4 py-3 text-gray-600">{z.dias.join(", ")}</td>
                   </tr>
                 ))}

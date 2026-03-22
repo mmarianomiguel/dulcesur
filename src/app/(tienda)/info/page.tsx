@@ -9,6 +9,8 @@ import {
   FileText, MessageCircle,
 } from "lucide-react";
 import EnviosDinamico from "@/components/tienda/envios-dinamico";
+import MediosPagoDinamico from "@/components/tienda/medios-pago-dinamico";
+import ContactoDinamico from "@/components/tienda/contacto-dinamico";
 
 interface Pagina {
   id: string;
@@ -200,6 +202,10 @@ export default function InfoAllPage() {
                   </div>
                   {p.slug === "envios" ? (
                     <EnviosDinamico />
+                  ) : p.slug === "medios-de-pago" ? (
+                    <MediosPagoDinamico />
+                  ) : p.slug === "contacto" ? (
+                    <ContactoDinamico />
                   ) : (
                     <div
                       className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-6 prose-h2:mb-4 prose-h3:text-lg prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"

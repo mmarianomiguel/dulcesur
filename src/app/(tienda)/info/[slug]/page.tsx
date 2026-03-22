@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { ArrowLeft, FileText, Loader2 } from "lucide-react";
 import { sanitizeHtml } from "@/lib/sanitize";
 import EnviosDinamico from "@/components/tienda/envios-dinamico";
+import MediosPagoDinamico from "@/components/tienda/medios-pago-dinamico";
+import ContactoDinamico from "@/components/tienda/contacto-dinamico";
 
 interface Pagina {
   id: string;
@@ -56,6 +58,10 @@ export default function InfoPage() {
       <h1 className="text-3xl font-bold text-gray-900 mb-8">{pagina?.titulo}</h1>
       {slug === "envios" ? (
         <EnviosDinamico />
+      ) : slug === "medios-de-pago" ? (
+        <MediosPagoDinamico />
+      ) : slug === "contacto" ? (
+        <ContactoDinamico />
       ) : (
         <div
           className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
