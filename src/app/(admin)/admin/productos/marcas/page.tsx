@@ -534,7 +534,9 @@ export default function MarcasPage() {
             <div className="space-y-2">
               <Label>Categoría padre *</Label>
               <Select value={subCatId} onValueChange={(v) => setSubCatId(v ?? "")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar categoría" /></SelectTrigger>
+                <SelectTrigger>
+                  {subCatId ? categorias.find(c => c.id === subCatId)?.nombre || "Seleccionar categoría" : "Seleccionar categoría"}
+                </SelectTrigger>
                 <SelectContent>
                   {categorias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
                 </SelectContent>
@@ -621,7 +623,7 @@ export default function MarcasPage() {
                 onValueChange={(v) => setDeleteConfirm((prev) => prev ? { ...prev, reassignTo: v === "__none__" ? "" : (v || "") } : null)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar destino (opcional)" />
+                  {deleteConfirm?.reassignTo ? reassignOptions().find((o: any) => o.id === deleteConfirm.reassignTo)?.nombre || "Seleccionar destino" : "Sin asignar (opcional)"}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Sin asignar (quitar {deleteConfirm?.type === "marca" ? "marca" : deleteConfirm?.type === "categoria" ? "categoría" : "subcategoría"})</SelectItem>

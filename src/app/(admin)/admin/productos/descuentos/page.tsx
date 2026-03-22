@@ -141,6 +141,7 @@ export default function DescuentosPage() {
   const [categoriasIds, setCategoriasIds] = useState<string[]>([]);
   const [subcategoriasIds, setSubcategoriasIds] = useState<string[]>([]);
   const [presentacion, setPresentación] = useState("todas");
+  const [excluirCombos, setExcluirCombos] = useState(true);
   const [productosIds, setProductosIds] = useState<string[]>([]);
   const [marcasIds, setMarcasIds] = useState<string[]>([]);
 
@@ -205,6 +206,7 @@ export default function DescuentosPage() {
     setProductosIds([]);
     setMarcasIds([]);
     setPresentación("todas");
+    setExcluirCombos(true);
     setEditId(null);
     setCatSearch("");
     setExpandedCats([]);
@@ -232,6 +234,7 @@ export default function DescuentosPage() {
     setProductosIds(d.productos_ids ?? []);
     setMarcasIds(d.marcas_ids ?? []);
     setPresentación(d.presentacion);
+    setExcluirCombos((d as any).excluir_combos ?? true);
     setSaveError(null);
     setDialogOpen(true);
   };
@@ -251,6 +254,7 @@ export default function DescuentosPage() {
       productos_ids: aplicaA === "productos" ? productosIds : [],
       marcas_ids: marcasIds,
       presentacion,
+      excluir_combos: excluirCombos,
       updated_at: new Date().toISOString(),
     };
 
@@ -1061,6 +1065,21 @@ export default function DescuentosPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Excluir combos */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                <div>
+                  <p className="text-sm font-medium">Excluir combos</p>
+                  <p className="text-xs text-muted-foreground">No aplicar este descuento a productos tipo combo</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExcluirCombos(!excluirCombos)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${excluirCombos ? "bg-primary" : "bg-muted-foreground/30"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${excluirCombos ? "translate-x-5" : ""}`} />
+                </button>
               </div>
 
               <Separator />
