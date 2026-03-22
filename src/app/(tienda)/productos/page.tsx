@@ -1195,7 +1195,7 @@ function ProductosContent() {
                             </span>
                           );
                         })()}
-                        {(() => {
+                        {disc === 0 && (() => {
                           const pa = producto.precio_anterior;
                           const dateStr = producto.fecha_actualizacion || producto.updated_at;
                           if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
