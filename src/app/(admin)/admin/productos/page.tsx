@@ -2167,7 +2167,7 @@ export default function ProductosPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Stock</Label>
-                  {form.es_combo ? (
+                  {editingProduct && (editingProduct as any).es_combo ? (
                     <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">
                       Automático (combo)
                     </div>
