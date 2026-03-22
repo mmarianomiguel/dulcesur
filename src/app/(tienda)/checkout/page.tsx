@@ -206,7 +206,7 @@ export default function CheckoutPage() {
         umbral_envio_gratis: data.umbral_envio_gratis ?? 0,
         hora_corte: data.hora_corte ?? "12:00",
         monto_minimo_pedido: data.monto_minimo_pedido ?? 0,
-        monto_minimo_envio: 50000,
+        monto_minimo_envio: data.monto_minimo_envio ?? 50000,
         recargo_transferencia: data.recargo_transferencia ?? 0,
         costo_envio: data.costo_envio ?? 0,
       };

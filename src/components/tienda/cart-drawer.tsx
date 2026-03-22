@@ -166,7 +166,7 @@ function CartDrawer() {
   function getMaxQty(item: CartItem) {
     const prodId = item.id.split("_")[0];
     const totalStock = stockMap[prodId];
-    if (totalStock === undefined) return 999;
+    if (totalStock === undefined) return item.cantidad;
     // Get units per presentation from cart key
     const match = item.id.match(/Caja \(x(\d+)\)/);
     const presUnits = match ? Number(match[1]) : 1;

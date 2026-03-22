@@ -614,8 +614,11 @@ export default function TiendaPage() {
     try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
 
     const cartKey = `${producto.id}_Unidad`;
-    const existing = carrito.find((item) => item.id === cartKey);
+    // Also check for legacy cart items without _Unidad suffix
+    const existing = carrito.find((item) => item.id === cartKey || item.id === producto.id);
     const currentInCart = existing ? existing.cantidad : 0;
+    // Normalize legacy key to new format
+    if (existing && existing.id === producto.id) existing.id = cartKey;
     if (currentInCart >= producto.stock) {
       showToast("Ya tenés el máximo disponible en el carrito", "error");
       return;

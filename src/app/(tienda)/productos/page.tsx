@@ -486,7 +486,9 @@ function ProductosContent() {
     const cartKey = presLabel ? `${producto.id}_${presLabel}` : producto.id;
     const stored = localStorage.getItem("carrito");
     let carrito: any[]; try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
-    const existing = carrito.find((item: any) => item.id === cartKey);
+    // Also check for legacy cart items without _Unidad suffix
+    const existing = carrito.find((item: any) => item.id === cartKey || (presLabel === "Unidad" && item.id === producto.id));
+    if (existing && existing.id !== cartKey) existing.id = cartKey;
     // Check stock limit considering what's already in cart
     const currentInCart = existing ? existing.cantidad : 0;
     const pres = presentacionesMap[producto.id];
