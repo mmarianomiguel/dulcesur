@@ -172,6 +172,7 @@ export default function CheckoutPage() {
   // Validation errors
   const [errors, setErrors] = useState<string[]>([]);
   const [stockFixes, setStockFixes] = useState<Record<string, { stock: number }> | null>(null);
+  const [showItemsDetail, setShowItemsDetail] = useState(false);
 
   const adjustCart = () => {
     if (!stockFixes) return;
@@ -828,12 +829,12 @@ export default function CheckoutPage() {
         {/* ===== LEFT COLUMN ===== */}
         <div className="space-y-6">
           {/* 1. Información de Contacto */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <User className="h-4 w-4 text-pink-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
+            <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
+                <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
               </div>
-              <h2 className="text-lg font-bold text-gray-900">Información de Contacto</h2>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Información de Contacto</h2>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -887,12 +888,12 @@ export default function CheckoutPage() {
           </div>
 
           {/* 2. Método de Entrega */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <Truck className="h-4 w-4 text-pink-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
+            <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
+                <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
               </div>
-              <h2 className="text-lg font-bold text-gray-900">Método de entrega</h2>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Método de entrega</h2>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
@@ -1126,12 +1127,12 @@ export default function CheckoutPage() {
           </div>
 
           {/* 3. Instrucciones de entrega */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <MapPin className="h-4 w-4 text-pink-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
+                <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
               </div>
-              <h2 className="text-lg font-bold text-gray-900">Instrucciones de entrega</h2>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Instrucciones de entrega</h2>
               <span className="text-xs text-gray-400">(opcional)</span>
             </div>
             <textarea
@@ -1148,12 +1149,12 @@ export default function CheckoutPage() {
 
           {/* 4. Fecha de entrega - solo para envío a domicilio */}
           {metodoEntrega === "envio" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <Calendar className="h-4 w-4 text-pink-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
+            <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
+                <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
               </div>
-              <h2 className="text-lg font-bold text-gray-900">Fecha de entrega</h2>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Fecha de entrega</h2>
             </div>
 
             {availableDates.length > 0 ? (
@@ -1216,10 +1217,22 @@ export default function CheckoutPage() {
           )}
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sticky top-24">
-            <h2 className="text-lg font-bold text-gray-900 mb-5">Resumen del Pedido</h2>
+            {/* Mobile: collapsible summary header */}
+            <button
+              onClick={() => setShowItemsDetail(!showItemsDetail)}
+              className="w-full flex items-center justify-between lg:hidden mb-3"
+            >
+              <h2 className="text-lg font-bold text-gray-900">Resumen ({items.reduce((s, i) => s + i.cantidad, 0)} productos)</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-gray-900">{formatCurrency(total)}</span>
+                <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${showItemsDetail ? "rotate-90" : ""}`} />
+              </div>
+            </button>
+            {/* Desktop: always visible title */}
+            <h2 className="text-lg font-bold text-gray-900 mb-5 hidden lg:block">Resumen del Pedido</h2>
 
-            {/* Items list */}
-            <div className="space-y-3 mb-5">
+            {/* Items list - always visible on desktop, collapsible on mobile */}
+            <div className={`space-y-3 mb-5 ${showItemsDetail ? "" : "hidden lg:block"}`}>
               {items.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-3">
                   <div className="flex-shrink-0">
