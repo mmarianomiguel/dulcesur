@@ -182,17 +182,57 @@ export default function ProductoDetallePage() {
           setSelectedPresIdx(0);
         }
 
-        // Fetch related products
-        const { data: rel } = await supabase
-          .from("productos")
-          .select("*, categorias(nombre), marcas(nombre)")
-          .eq("categoria_id", prod.categoria_id)
-          .neq("id", id)
-          .limit(8);
+        // Fetch related products: prioritize same brand+category, then same subcategory, then same category
+        const related: Producto[] = [];
+        const usedIds = new Set<string>([id as string]);
+        const MAX_RELATED = 8;
 
-        if (rel && rel.length > 0) {
-          setRelacionados(rel as Producto[]);
-          const ids = rel.map((r: Producto) => r.id);
+        // 1. Same brand + same category (most relevant)
+        if (prod.marca_id) {
+          const { data: sameBrandCat } = await supabase
+            .from("productos")
+            .select("*, categorias(nombre), marcas(nombre)")
+            .eq("categoria_id", prod.categoria_id)
+            .eq("marca_id", prod.marca_id)
+            .eq("activo", true)
+            .neq("id", id)
+            .limit(MAX_RELATED);
+          for (const p of sameBrandCat || []) {
+            if (!usedIds.has(p.id)) { related.push(p as Producto); usedIds.add(p.id); }
+          }
+        }
+
+        // 2. Same subcategory (if not enough yet)
+        if (related.length < MAX_RELATED && prod.subcategoria_id) {
+          const { data: sameSub } = await supabase
+            .from("productos")
+            .select("*, categorias(nombre), marcas(nombre)")
+            .eq("subcategoria_id", prod.subcategoria_id)
+            .eq("activo", true)
+            .neq("id", id)
+            .limit(MAX_RELATED - related.length);
+          for (const p of sameSub || []) {
+            if (!usedIds.has(p.id)) { related.push(p as Producto); usedIds.add(p.id); }
+          }
+        }
+
+        // 3. Same category (fill remaining slots)
+        if (related.length < MAX_RELATED) {
+          const { data: sameCat } = await supabase
+            .from("productos")
+            .select("*, categorias(nombre), marcas(nombre)")
+            .eq("categoria_id", prod.categoria_id)
+            .eq("activo", true)
+            .neq("id", id)
+            .limit(MAX_RELATED - related.length);
+          for (const p of sameCat || []) {
+            if (!usedIds.has(p.id)) { related.push(p as Producto); usedIds.add(p.id); }
+          }
+        }
+
+        if (related.length > 0) {
+          setRelacionados(related);
+          const ids = related.map((r: Producto) => r.id);
           const { data: relPres } = await supabase
             .from("presentaciones")
             .select("*")
