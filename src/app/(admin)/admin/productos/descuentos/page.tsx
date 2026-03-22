@@ -220,7 +220,7 @@ export default function DescuentosPage() {
 
   const openEdit = (d: Descuento) => {
     setEditId(d.id);
-    setStep(0);
+    setStep(3);
     setNombre(d.nombre);
     setDescripcion(d.descripcion ?? "");
     setPorcentaje(Number(d.porcentaje));
