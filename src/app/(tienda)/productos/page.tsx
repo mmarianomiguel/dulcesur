@@ -120,6 +120,7 @@ function ProductosContent() {
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [categoriasShowAll, setCategoriasShowAll] = useState(false);
   const [marcasShowAll, setMarcasShowAll] = useState(false);
+  const [marcaSearch, setMarcaSearch] = useState("");
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
   const [categoriasCollapsed, setCategoriasCollapsed] = useState(false);
   const [marcasCollapsed, setMarcasCollapsed] = useState(false);
@@ -127,6 +128,7 @@ function ProductosContent() {
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>([]);
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({}); // productId -> presentacion index
   const [cartUnits, setCartUnits] = useState<Record<string, number>>({}); // productId -> total units in cart
+  const [diasOcultarSinStock, setDiasOcultarSinStock] = useState(7);
 
   // Sync cart units
   useEffect(() => {
@@ -162,6 +164,7 @@ function ProductosContent() {
   const precioMin = searchParams.get("precio_min") || "";
   const precioMax = searchParams.get("precio_max") || "";
   const disponibilidad = searchParams.get("disponibilidad") || "";
+  const tipoFilter = searchParams.get("tipo") || "";
 
   // Sync local price inputs with URL
   useEffect(() => {
@@ -214,6 +217,13 @@ function ProductosContent() {
       );
     }
     load();
+  }, []);
+
+  // Fetch config for dias_ocultar_sin_stock
+  useEffect(() => {
+    supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single().then(({ data }) => {
+      if (data?.dias_ocultar_sin_stock != null) setDiasOcultarSinStock(data.dias_ocultar_sin_stock);
+    });
   }, []);
 
   // Fetch ALL subcategorias with counts
@@ -372,8 +382,18 @@ function ProductosContent() {
         query = query.ilike("nombre", `%${searchQuery}%`);
       if (precioMin) query = query.gte("precio", Number(precioMin));
       if (precioMax) query = query.lte("precio", Number(precioMax));
+      // Hide out-of-stock products not updated in X days (unless filtering for sin_stock)
+      if (disponibilidad !== "sin_stock" && diasOcultarSinStock > 0) {
+        const cutoff = new Date(Date.now() - diasOcultarSinStock * 24 * 60 * 60 * 1000).toISOString();
+        query = query.or(`stock.gt.0,updated_at.gt.${cutoff}`);
+      }
       if (disponibilidad === "en_stock") query = query.gt("stock", 0);
       if (disponibilidad === "sin_stock") query = query.eq("stock", 0);
+      if (tipoFilter === "combos") query = query.eq("es_combo", true);
+      if (tipoFilter === "precio_actualizado") {
+        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+        query = query.gt("precio_anterior", 0).gt("fecha_actualizacion", threeDaysAgo);
+      }
 
       switch (sort) {
         case "precio_asc":
@@ -424,7 +444,7 @@ function ProductosContent() {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad, permitidas, categorias]);
+  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad, tipoFilter, permitidas, categorias, diasOcultarSinStock]);
 
   // Fetch presentaciones for displayed products
   useEffect(() => {
@@ -561,7 +581,8 @@ function ProductosContent() {
     (precioMin ? 1 : 0) +
     (precioMax ? 1 : 0) +
     (searchQuery ? 1 : 0) +
-    (disponibilidad ? 1 : 0);
+    (disponibilidad ? 1 : 0) +
+    (tipoFilter ? 1 : 0);
 
   const activeSubcategoryName = allSubcategorias.find(
     (s) => s.id === subcategoriaId
@@ -635,6 +656,17 @@ function ProductosContent() {
                 Precio{precioMin ? ` desde ${formatPrice(Number(precioMin))}` : ""}{precioMax ? ` hasta ${formatPrice(Number(precioMax))}` : ""}
                 <button
                   onClick={() => updateParams({ precio_min: null, precio_max: null })}
+                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {tipoFilter && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
+                {tipoFilter === "combos" ? "Combos" : "Precio actualizado"}
+                <button
+                  onClick={() => updateParams({ tipo: null })}
                   className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
@@ -855,9 +887,22 @@ function ProductosContent() {
               />
             </button>
 
-            {!marcasCollapsed && (
-              <div className="space-y-0.5">
-                {/* "Todas las marcas" option */}
+            {!marcasCollapsed && (() => {
+              const filteredMarcas = marcaSearch
+                ? marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase()))
+                : marcas;
+              return (
+              <div className="space-y-1">
+                {marcas.length > 8 && (
+                  <input
+                    type="text"
+                    placeholder="Buscar marca..."
+                    value={marcaSearch}
+                    onChange={(e) => { setMarcaSearch(e.target.value); setMarcasShowAll(true); }}
+                    className="w-full px-3 py-1.5 rounded-lg bg-gray-50 border-0 text-xs focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400 mb-1"
+                  />
+                )}
+                {!marcaSearch && (
                 <button
                   onClick={() => updateParams({ marca: null })}
                   className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
@@ -870,9 +915,10 @@ function ProductosContent() {
                     ({marcas.reduce((sum, m) => sum + (m.count || 0), 0)})
                   </span>
                 </button>
+                )}
 
-                <div className={marcasShowAll ? "max-h-[200px] overflow-y-auto space-y-0.5" : "space-y-0.5"}>
-                {(marcasShowAll ? marcas : marcas.slice(0, 5)).map((marca) => {
+                <div className={(marcasShowAll || marcaSearch) ? "max-h-[200px] overflow-y-auto space-y-0.5" : "space-y-0.5"}>
+                {((marcasShowAll || marcaSearch) ? filteredMarcas : filteredMarcas.slice(0, 5)).map((marca) => {
                   const isSelected = marcaParam === marca.id;
                   return (
                     <button
@@ -896,7 +942,7 @@ function ProductosContent() {
                 })}
                 </div>
 
-                {marcas.length > 5 && (
+                {!marcaSearch && filteredMarcas.length > 5 && (
                   <button
                     onClick={() => setMarcasShowAll(!marcasShowAll)}
                     className="text-sm text-pink-600 hover:text-pink-700 font-medium mt-2 px-2"
@@ -905,11 +951,40 @@ function ProductosContent() {
                   </button>
                 )}
               </div>
-            )}
+              );
+            })()}
           </div>
           <div className="border-t border-gray-100" />
         </>
       )}
+
+      {/* Tipo */}
+      <div>
+        <h4 className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-3">Tipo</h4>
+        <div className="space-y-0.5">
+          {[
+            { value: "", label: "Todos" },
+            { value: "combos", label: "Combos" },
+            { value: "precio_actualizado", label: "Precio actualizado" },
+          ].map((opt) => {
+            const isSelected = tipoFilter === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => updateParams({ tipo: opt.value || null })}
+                className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+              >
+                <RadioCircle selected={isSelected} />
+                <span className={`text-sm ${isSelected ? "font-semibold text-pink-600" : "text-gray-600"}`}>
+                  {opt.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100" />
 
       {/* Disponibilidad */}
       <div>
