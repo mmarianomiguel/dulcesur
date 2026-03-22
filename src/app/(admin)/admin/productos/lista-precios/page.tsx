@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchableSelect } from "@/components/searchable-select";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { jsPDF } from "jspdf";
@@ -723,28 +724,28 @@ export default function ListaPreciosPage() {
 
           {showFilters && (
             <div className="mt-4 pt-4 border-t border-border">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Categoría</label>
-                  <select value={filters.categoria} onChange={(e) => { updateFilter("categoria", e.target.value); updateFilter("subcategoria", ""); }} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="">Todas</option>
-                    {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Subcategoría</label>
-                  <select value={filters.subcategoria} onChange={(e) => updateFilter("subcategoria", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="">Todas</option>
-                    {subcategorias.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Marca</label>
-                  <select value={filters.marca} onChange={(e) => updateFilter("marca", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="">Todas</option>
-                    {marcas.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                <SearchableSelect
+                  label="Categoría"
+                  value={filters.categoria || "all"}
+                  onChange={(v) => { updateFilter("categoria", v === "all" ? "" : v); updateFilter("subcategoria", ""); }}
+                  allLabel="Todas las categorías"
+                  options={categorias.map((c) => ({ value: c, label: c }))}
+                />
+                <SearchableSelect
+                  label="Subcategoría"
+                  value={filters.subcategoria || "all"}
+                  onChange={(v) => updateFilter("subcategoria", v === "all" ? "" : v)}
+                  allLabel="Todas las subcategorías"
+                  options={subcategorias.map((s) => ({ value: s, label: s }))}
+                />
+                <SearchableSelect
+                  label="Marca"
+                  value={filters.marca || "all"}
+                  onChange={(v) => updateFilter("marca", v === "all" ? "" : v)}
+                  allLabel="Todas las marcas"
+                  options={marcas.map((m) => ({ value: m, label: m }))}
+                />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                 <div>

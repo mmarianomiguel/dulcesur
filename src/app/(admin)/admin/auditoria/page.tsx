@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { SearchableSelect } from "@/components/searchable-select";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -202,38 +203,20 @@ export default function AuditoriaPage() {
                 onChange={(e) => setFechaHasta(e.target.value)}
               />
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Módulo</label>
-              <Select value={moduloFilter} onValueChange={(v) => setModuloFilter(v ?? "all")}>
-                <SelectTrigger>
-                  {moduloFilter === "all" ? "Todos" : moduloFilter}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {modulos.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Acción</label>
-              <Select value={accionFilter} onValueChange={(v) => setAccionFilter(v ?? "all")}>
-                <SelectTrigger>
-                  {accionFilter === "all" ? "Todas" : accionFilter}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {acciones.map((a) => (
-                    <SelectItem key={a} value={a}>
-                      {a}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <SearchableSelect
+              label="Módulo"
+              value={moduloFilter}
+              onChange={(v) => setModuloFilter(v)}
+              allLabel="Todos los módulos"
+              options={modulos.map((m) => ({ value: m, label: m }))}
+            />
+            <SearchableSelect
+              label="Acción"
+              value={accionFilter}
+              onChange={(v) => setAccionFilter(v)}
+              allLabel="Todas las acciones"
+              options={acciones.map((a) => ({ value: a, label: a }))}
+            />
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Usuario</label>
               <div className="relative">
