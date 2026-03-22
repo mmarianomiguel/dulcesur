@@ -1254,13 +1254,18 @@ function ProductosContent() {
                             <span className="text-xs text-gray-400 line-through ml-2">{formatPrice(activePrice)}</span>
                           </>
                         ) : (
-                          <>
-                            <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
-                            {(() => {
-                              return null;
-                            })()}
-                          </>
+                          <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
                         )}
+                        {(() => {
+                          const pa = producto.precio_anterior;
+                          const dateStr = producto.fecha_actualizacion || producto.updated_at;
+                          if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
+                          if ((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
+                          if (producto.precio > pa) {
+                            return <p className="text-[10px] text-amber-600 font-medium mt-0.5">Precio actualizado</p>;
+                          }
+                          return <p className="text-[10px] text-green-600 font-medium mt-0.5">Precio rebajado</p>;
+                        })()}
                       </div>
 
                       {/* Presentacion pills */}
