@@ -25,6 +25,7 @@ import {
   PackageMinus,
   FileText,
   X,
+  UserCheck,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -119,6 +120,7 @@ const navigation: NavItem[] = [
       { name: "Percepciones", href: "/admin/ventas/percepciones" },
     ],
   },
+  { name: "Vendedores", href: "/admin/vendedores", icon: UserCheck },
   {
     name: "Auditoría",
     href: "/admin/auditoria",

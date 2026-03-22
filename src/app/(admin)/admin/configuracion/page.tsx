@@ -107,6 +107,7 @@ const MODULE_META: Record<string, { icon: typeof Building2; description: string 
   Proveedores: { icon: Truck, description: "Gestión de proveedores" },
   Compras: { icon: ShoppingBag, description: "Órdenes de compra" },
   Caja: { icon: CreditCard, description: "Movimientos de caja y arqueos" },
+  "Vendedores": { icon: Users, description: "Comisiones y configuración de vendedores" },
   "Auditoría": { icon: FileText, description: "Historial de acciones del sistema" },
   "Tienda Online": { icon: Globe, description: "E-commerce y pedidos online" },
   Configuración: { icon: Settings, description: "Ajustes del sistema" },
@@ -126,7 +127,7 @@ export default function ConfiguracionPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   // ─── Module enable/disable ───
-  const allModulos = ["Dashboard", "Ventas", "Clientes", "Productos", "Proveedores", "Compras", "Caja", "Stock", "Reportes", "Auditoría", "Tienda Online", "Configuración"] as const;
+  const allModulos = ["Dashboard", "Ventas", "Clientes", "Productos", "Proveedores", "Compras", "Caja", "Stock", "Reportes", "Vendedores", "Auditoría", "Tienda Online", "Configuración"] as const;
   const alwaysEnabled = ["Dashboard", "Configuración"];
   const [modulos, setModulos] = useState<Record<string, boolean>>(() => {
     const def: Record<string, boolean> = {};

@@ -82,6 +82,7 @@ const MODULE_STRUCTURE: { modulo: string; submodulos: string[] }[] = [
     modulo: "Reportes",
     submodulos: ["General", "Resumen Mensual", "Resumen por Vendedor", "Percepciones"],
   },
+  { modulo: "Vendedores", submodulos: [] },
   { modulo: "Auditoría", submodulos: [] },
   { modulo: "Tienda Online", submodulos: [] },
   {
