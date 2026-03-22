@@ -16,6 +16,7 @@ import {
   Layers,
   Box,
   Tag,
+  Share2,
 } from "lucide-react";
 import { showToast } from "@/components/tienda/toast";
 
@@ -191,6 +192,9 @@ export default function ProductoDetallePage() {
 
         setProducto(prod as Producto);
         addRecentlyViewed({ id: prod.id, nombre: prod.nombre, precio: prod.precio, imagen_url: prod.imagen_url });
+
+        // Dynamic page title
+        document.title = `${prod.nombre} | Dulcesur`;
 
         // Load combo items if es_combo
         if (prod.es_combo) {
@@ -688,6 +692,19 @@ export default function ProductoDetallePage() {
               })()}
             </div>
           </details>
+
+          {/* Share */}
+          <button
+            onClick={() => {
+              const text = `Mirá este producto en Dulcesur: *${producto.nombre}* - ${formatCurrency(currentDiscount > 0 ? discountedPrice : currentPrice)}`;
+              const url = window.location.href;
+              window.open(`https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`, "_blank");
+            }}
+            className="mt-3 inline-flex items-center gap-2 text-sm text-gray-500 hover:text-green-600 transition"
+          >
+            <Share2 className="w-4 h-4" />
+            Compartir por WhatsApp
+          </button>
 
           {/* Combo contents */}
           {producto.es_combo && comboComponentes.length > 0 && (() => {

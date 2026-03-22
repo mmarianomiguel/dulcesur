@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Package, ChevronDown, ChevronUp, ChevronRight, Calendar, Hash, AlertCircle, ShoppingBag, DollarSign, Globe, Store } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/components/tienda/toast";
 
 interface ComboComponent {
   producto_id: string;
@@ -664,6 +665,39 @@ export default function PedidosPage() {
                     {formatPrice(pedido.total - pedido.venta!.notas_credito.reduce((s, nc) => s + nc.total, 0))}
                   </span>
                 </div>
+              </div>
+            )}
+
+            {/* Volver a pedir */}
+            {pedido.estado === "entregado" && pedido.items && pedido.items.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const stored = localStorage.getItem("carrito");
+                    let carrito: any[];
+                    try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
+                    for (const item of pedido.items) {
+                      const existing = carrito.find((c: any) => c.nombre === item.nombre);
+                      if (!existing) {
+                        carrito.push({
+                          id: `reorder_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                          nombre: item.nombre,
+                          precio: item.precio_unitario,
+                          imagen_url: null,
+                          cantidad: item.cantidad,
+                          presentacion: "Unidad",
+                        });
+                      }
+                    }
+                    localStorage.setItem("carrito", JSON.stringify(carrito));
+                    window.dispatchEvent(new Event("cart-updated"));
+                    showToast("Productos agregados al carrito", { subtitle: `${pedido.items.length} productos del pedido #${pedido.numero}` });
+                  }}
+                  className="w-full text-sm font-medium text-pink-600 hover:bg-pink-50 rounded-xl py-2.5 transition"
+                >
+                  Volver a pedir
+                </button>
               </div>
             )}
           </div>

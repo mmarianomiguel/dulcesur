@@ -233,7 +233,7 @@ export default function TiendaNavbar() {
             >
               <ShoppingCart className="h-5 w-5" />
               {itemCount > 0 && (
-                <span suppressHydrationWarning className="absolute -right-0.5 -top-0.5 flex h-5 w-5 animate-bounce items-center justify-center rounded-full bg-pink-600 text-[10px] font-bold text-white shadow-sm [animation-duration:1s] [animation-iteration-count:1]">
+                <span key={itemCount} suppressHydrationWarning className="absolute -right-0.5 -top-0.5 flex h-5 w-5 animate-bounce items-center justify-center rounded-full bg-pink-600 text-[10px] font-bold text-white shadow-sm [animation-duration:0.6s] [animation-iteration-count:2]">
                   {itemCount > 99 ? "99+" : itemCount}
                 </span>
               )}

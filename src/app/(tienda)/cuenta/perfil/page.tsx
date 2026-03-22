@@ -46,6 +46,10 @@ export default function PerfilPage() {
   const [saldo, setSaldo] = useState(0);
   const [saldoLoaded, setSaldoLoaded] = useState(false);
 
+  // Stats
+  const [totalPedidos, setTotalPedidos] = useState(0);
+  const [miembroDesde, setMiembroDesde] = useState("");
+
   // Delivery zone
   const [zonaNombre, setZonaNombre] = useState("");
   const [diasEntrega, setDiasEntrega] = useState<string[]>([]);
@@ -100,6 +104,17 @@ export default function PerfilPage() {
       }
     };
     fetchProfile();
+
+    // Fetch stats
+    supabase.from("clientes_auth").select("created_at").eq("id", id).single().then(({ data: authData }) => {
+      if (authData?.created_at) {
+        const d = new Date(authData.created_at);
+        setMiembroDesde(d.toLocaleDateString("es-AR", { month: "long", year: "numeric" }));
+      }
+    });
+    supabase.from("pedidos_tienda").select("id", { count: "exact", head: true }).eq("cliente_auth_id", id).then(({ count }) => {
+      if (count != null) setTotalPedidos(count);
+    });
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -253,9 +268,16 @@ export default function PerfilPage() {
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pink-600 to-pink-400 flex items-center justify-center text-white text-2xl font-bold shrink-0">
             {initials}
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="font-bold text-gray-900 text-lg">{nombre || "..."}</h2>
             <p className="text-gray-400 text-sm">{email}</p>
+            {(miembroDesde || totalPedidos > 0) && (
+              <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                {miembroDesde && <span>Cliente desde {miembroDesde}</span>}
+                {miembroDesde && totalPedidos > 0 && <span>·</span>}
+                {totalPedidos > 0 && <span>{totalPedidos} {totalPedidos === 1 ? "pedido" : "pedidos"}</span>}
+              </div>
+            )}
           </div>
         </div>
 
