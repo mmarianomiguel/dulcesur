@@ -487,8 +487,22 @@ function ProductosContent() {
     const stored = localStorage.getItem("carrito");
     let carrito: any[]; try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
     const existing = carrito.find((item: any) => item.id === cartKey);
+    // Check stock limit considering what's already in cart
+    const currentInCart = existing ? existing.cantidad : 0;
+    const pres = presentacionesMap[producto.id];
+    const activePresIdx = selectedPres[producto.id] ?? 0;
+    const presUnits = pres && pres.length > 1 ? Number(pres[activePresIdx]?.cantidad ?? 1) : 1;
+    const maxForPres = Math.floor(producto.stock / presUnits);
+    if (currentInCart >= maxForPres) {
+      showToast("Ya tenés el máximo disponible en el carrito", "error");
+      return;
+    }
+    const canAdd = Math.min(amount, maxForPres - currentInCart);
+    if (canAdd < amount) {
+      showToast(`Se agregaron ${canAdd} (máximo disponible)`, { type: "info", subtitle: producto.nombre });
+    }
     if (existing) {
-      existing.cantidad += amount;
+      existing.cantidad += canAdd;
     } else {
       carrito.push({
         id: cartKey,
@@ -497,7 +511,7 @@ function ProductosContent() {
         precio_original: disc > 0 ? basePrice : undefined,
         descuento: disc > 0 ? disc : undefined,
         imagen_url: producto.imagen_url,
-        cantidad: amount,
+        cantidad: canAdd,
         presentacion: presLabel || undefined,
       });
     }

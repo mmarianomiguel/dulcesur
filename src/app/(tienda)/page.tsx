@@ -615,22 +615,32 @@ export default function TiendaPage() {
 
     const cartKey = `${producto.id}_Unidad`;
     const existing = carrito.find((item) => item.id === cartKey);
+    const currentInCart = existing ? existing.cantidad : 0;
+    if (currentInCart >= producto.stock) {
+      showToast("Ya tenés el máximo disponible en el carrito", "error");
+      return;
+    }
+    const canAdd = Math.min(qty, producto.stock - currentInCart);
     if (existing) {
-      existing.cantidad += qty;
+      existing.cantidad += canAdd;
     } else {
       carrito.push({
         id: cartKey,
         nombre: producto.nombre,
         precio: producto.precio,
         imagen_url: producto.imagen_url,
-        cantidad: qty,
+        cantidad: canAdd,
         presentacion: "Unidad",
       });
     }
 
     localStorage.setItem("carrito", JSON.stringify(carrito));
     window.dispatchEvent(new Event("cart-updated"));
-    showToast(producto.nombre, { subtitle: "Agregado al carrito" });
+    if (canAdd < qty) {
+      showToast(`Se agregaron ${canAdd} (máximo disponible)`, { type: "info", subtitle: producto.nombre });
+    } else {
+      showToast(producto.nombre, { subtitle: "Agregado al carrito" });
+    }
   }
 
   /* ──── render blocks ──── */

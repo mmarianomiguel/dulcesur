@@ -283,8 +283,16 @@ export default function ProductoDetallePage() {
     try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
     const cartKey = `${prod.id}_${presLabel}`;
     const existing = carrito.find((item: any) => item.id === cartKey);
+    const currentInCart = existing ? existing.cantidad : 0;
+    const units = unidadesPres || 1;
+    const maxForPres = Math.floor(prod.stock / units);
+    if (currentInCart >= maxForPres) {
+      showToast("Ya tenés el máximo disponible en el carrito", "error");
+      return;
+    }
+    const canAdd = Math.min(qty, maxForPres - currentInCart);
     if (existing) {
-      existing.cantidad += qty;
+      existing.cantidad += canAdd;
     } else {
       carrito.push({
         id: cartKey,
@@ -293,14 +301,18 @@ export default function ProductoDetallePage() {
         precio_original: precioOriginal,
         descuento: descuento,
         imagen_url: prod.imagen_url,
-        cantidad: qty,
+        cantidad: canAdd,
         presentacion: presLabel,
-        unidades_por_presentacion: unidadesPres || 1,
+        unidades_por_presentacion: units,
       });
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
     window.dispatchEvent(new Event("cart-updated"));
-    showToast(prod.nombre, { subtitle: "Agregado al carrito" });
+    if (canAdd < qty) {
+      showToast(`Se agregaron ${canAdd} (máximo disponible)`, { type: "info", subtitle: prod.nombre });
+    } else {
+      showToast(prod.nombre, { subtitle: "Agregado al carrito" });
+    }
   }
 
   function handleAddToCart() {
