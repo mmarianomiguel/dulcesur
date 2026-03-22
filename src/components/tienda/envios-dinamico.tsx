@@ -52,22 +52,29 @@ export default function EnviosDinamico() {
 
   return (
     <div className="space-y-8">
-      {/* Monto mínimo y envío gratis */}
+      {/* Montos */}
       {config && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-            <p className="text-sm font-medium text-gray-500">Pedido mínimo</p>
+            <p className="text-sm font-medium text-gray-500">Retiro en local</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
               {formatCurrency(config.monto_minimo_pedido)}
             </p>
-            <p className="mt-1 text-sm text-gray-500">Monto mínimo para realizar un pedido</p>
+            <p className="mt-1 text-sm text-gray-500">Compra mínima para retiro</p>
+          </div>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+            <p className="text-sm font-medium text-blue-700">Mínimo para envío</p>
+            <p className="mt-1 text-2xl font-bold text-blue-800">
+              {formatCurrency(config.umbral_envio_gratis)}
+            </p>
+            <p className="mt-1 text-sm text-blue-600">Pedido mínimo con envío a domicilio</p>
           </div>
           <div className="rounded-xl border border-green-200 bg-green-50 p-5">
-            <p className="text-sm font-medium text-green-700">Envío gratis</p>
+            <p className="text-sm font-medium text-green-700">Envío sin cargo</p>
             <p className="mt-1 text-2xl font-bold text-green-800">
               +{formatCurrency(config.umbral_envio_gratis)}
             </p>
-            <p className="mt-1 text-sm text-green-600">En compras superiores a este monto</p>
+            <p className="mt-1 text-sm text-green-600">Todos los envíos son gratis</p>
           </div>
         </div>
       )}
