@@ -222,26 +222,37 @@ export default function EditarPreciosPage() {
   const [massOperation, setMassOperation] = useState<"increase" | "decrease">("increase");
   const [massAmount, setMassAmount] = useState("");
 
-  // Load data
+  // Load data (paginated to avoid 1000 row limit)
   useEffect(() => {
+    async function fetchAll(table: string, selectStr: string, filters?: (q: any) => any) {
+      const PAGE = 1000;
+      let all: any[] = [];
+      let from = 0;
+      while (true) {
+        let q = supabase.from(table).select(selectStr);
+        if (filters) q = filters(q);
+        const { data } = await q.range(from, from + PAGE - 1);
+        const rows = (data as any[]) || [];
+        all = all.concat(rows);
+        if (rows.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    }
     async function load() {
       setLoading(true);
-      const [prodRes, marcaRes, catRes, subcatRes, presRes] = await Promise.all([
-        supabase
-          .from("productos")
-          .select("id, nombre, codigo, stock, precio, costo, activo, categoria_id, subcategoria_id, marca_id")
-          .eq("activo", true)
-          .order("nombre"),
+      const [prods, marcaRes, catRes, subcatRes, presData] = await Promise.all([
+        fetchAll("productos", "id, nombre, codigo, stock, precio, costo, activo, categoria_id, subcategoria_id, marca_id", (q: any) => q.eq("activo", true).order("nombre")),
         supabase.from("marcas").select("*").order("nombre"),
         supabase.from("categorias").select("*").order("nombre"),
         supabase.from("subcategorias").select("*").order("nombre"),
-        supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio"),
+        fetchAll("presentaciones", "id, producto_id, nombre, cantidad, precio"),
       ]);
-      setProductos(prodRes.data ?? []);
+      setProductos(prods);
       setMarcas(marcaRes.data ?? []);
       setCategorias(catRes.data ?? []);
       setSubcategorias(subcatRes.data ?? []);
-      setPresentaciones(presRes.data ?? []);
+      setPresentaciones(presData);
       setLoading(false);
     }
     load();
@@ -270,6 +281,15 @@ export default function EditarPreciosPage() {
       return true;
     });
   }, [productos, searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter]);
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 50;
+  const totalPages = Math.max(1, Math.ceil(filteredProductos.length / itemsPerPage));
+  const paginatedProductos = useMemo(() => filteredProductos.slice((page - 1) * itemsPerPage, page * itemsPerPage), [filteredProductos, page]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter]);
 
   // Get caja price for a product
   const getCajaPrice = useCallback(
@@ -646,7 +666,7 @@ export default function EditarPreciosPage() {
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
-          ) : (
+          ) : (<>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -666,7 +686,7 @@ export default function EditarPreciosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProductos.map((p) => {
+                {paginatedProductos.map((p) => {
                   const isEditing = editingCell === p.id;
                   const currentPrice = priceChanges[p.id] ?? p.precio;
                   const isChanged = priceChanges[p.id] !== undefined;
@@ -760,7 +780,19 @@ export default function EditarPreciosPage() {
                 )}
               </TableBody>
             </Table>
-          )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <span className="text-xs text-muted-foreground">
+                  {(page - 1) * itemsPerPage + 1}–{Math.min(page * itemsPerPage, filteredProductos.length)} de {filteredProductos.length} productos
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</Button>
+                  <span className="text-sm text-muted-foreground px-2">Pág. {page} de {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Siguiente</Button>
+                </div>
+              </div>
+            )}
+          </>)}
         </CardContent>
       </Card>
 
