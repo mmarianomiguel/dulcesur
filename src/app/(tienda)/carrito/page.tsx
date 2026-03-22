@@ -171,10 +171,13 @@ export default function CarritoPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Mi Carrito</h1>
+    <div className="max-w-4xl mx-auto px-4 pt-6 pb-32 sm:pb-8">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-xl sm:text-2xl font-bold">Mi Carrito</h1>
+        <span className="text-sm text-gray-500">{items.reduce((s, i) => s + i.cantidad, 0)} productos</span>
+      </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {items.map((item) => {
           const disponible = getStockDisponible(item);
           const sinStock = disponible !== null && disponible <= 0;
@@ -182,110 +185,110 @@ export default function CarritoPage() {
           return (
           <div
             key={item.id}
-            className={`flex items-center gap-4 bg-white rounded-xl border p-4 ${sinStock ? "opacity-60 border-red-300 bg-red-50/50" : stockBajo ? "border-amber-300 bg-amber-50/50" : ""}`}
+            className={`bg-white rounded-xl border p-3 sm:p-4 ${sinStock ? "opacity-60 border-red-300 bg-red-50/50" : stockBajo ? "border-amber-300 bg-amber-50/50" : "border-gray-100"}`}
           >
-            <div className="relative h-20 w-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
-              {(item.imagen_url || item.imagen) ? (
-                <Image
-                  src={(item.imagen_url || item.imagen)!}
-                  alt={item.nombre}
-                  fill
-                  className="object-contain p-1"
-                />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center text-gray-400">
-                  <ShoppingBag className="h-6 w-6" />
+            <div className="flex gap-3">
+              {/* Image */}
+              <div className="relative h-16 w-16 sm:h-20 sm:w-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50">
+                {(item.imagen_url || item.imagen) ? (
+                  <Image
+                    src={(item.imagen_url || item.imagen)!}
+                    alt={item.nombre}
+                    fill
+                    className="object-contain p-1"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-gray-300">
+                    <ShoppingBag className="h-5 w-5" />
+                  </div>
+                )}
+              </div>
+
+              {/* Info + price */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.nombre}</p>
+                    {item.presentacion && <p className="text-xs text-gray-400 mt-0.5">{item.presentacion}</p>}
+                  </div>
+                  <button
+                    onClick={() => remove(item.id)}
+                    aria-label="Eliminar producto"
+                    className="text-gray-300 hover:text-red-500 transition p-0.5 shrink-0"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-              )}
-            </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{item.nombre}</p>
-              <p className="text-sm text-gray-500">{item.presentacion}</p>
-              {sinStock && (
-                <p className="text-xs text-red-600 font-semibold flex items-center gap-1 mt-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  Producto agotado
-                </p>
-              )}
-              {stockBajo && (
-                <p className="text-xs text-amber-600 font-semibold flex items-center gap-1 mt-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  Solo {disponible} disponible{disponible !== 1 ? "s" : ""}
-                </p>
-              )}
-            </div>
+                {sinStock && (
+                  <p className="text-xs text-red-600 font-semibold flex items-center gap-1 mt-1">
+                    <AlertTriangle className="h-3 w-3" />Producto agotado
+                  </p>
+                )}
+                {stockBajo && (
+                  <p className="text-xs text-amber-600 font-semibold flex items-center gap-1 mt-1">
+                    <AlertTriangle className="h-3 w-3" />Solo {disponible} disponible{disponible !== 1 ? "s" : ""}
+                  </p>
+                )}
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => updateQty(item.id, -1)}
-                aria-label="Disminuir cantidad"
-                className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-gray-50 transition"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className={`w-8 text-center font-medium ${sinStock || stockBajo ? "text-red-600" : ""}`}>
-                {item.cantidad}
-              </span>
-              <button
-                onClick={() => updateQty(item.id, 1)}
-                aria-label="Aumentar cantidad"
-                className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-gray-50 transition"
-                disabled={sinStock}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
+                {/* Qty + Price row */}
+                <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => updateQty(item.id, -1)}
+                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className={`w-8 text-center text-sm font-semibold tabular-nums ${sinStock || stockBajo ? "text-red-600" : "text-gray-800"}`}>
+                      {item.cantidad}
+                    </span>
+                    <button
+                      onClick={() => updateQty(item.id, 1)}
+                      disabled={sinStock}
+                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition disabled:opacity-30"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <p className="text-base font-bold text-gray-900">{formatCurrency(item.precio * item.cantidad)}</p>
+                </div>
+              </div>
             </div>
-
-            <div className="text-right w-24 flex-shrink-0">
-              <p className="text-sm text-gray-500">
-                {formatCurrency(item.precio)}
-              </p>
-              <p className="font-semibold">
-                {formatCurrency(item.precio * item.cantidad)}
-              </p>
-            </div>
-
-            <button
-              onClick={() => remove(item.id)}
-              aria-label="Eliminar producto"
-              className="text-gray-400 hover:text-red-500 transition p-1"
-            >
-              <Trash2 className="h-5 w-5" />
-            </button>
           </div>
           );
         })}
       </div>
 
-      <div className="mt-8 border-t pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="mt-4">
         <Link
           href="/productos"
-          className="inline-flex items-center gap-2 text-pink-600 hover:text-pink-700 font-medium transition"
+          className="inline-flex items-center gap-1.5 text-sm text-pink-600 hover:text-pink-700 font-medium transition"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Continuar comprando
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Seguir comprando
         </Link>
+      </div>
 
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <p className="text-sm text-gray-500">Subtotal</p>
-            <p className="text-xl font-bold">{formatCurrency(subtotal)}</p>
-          </div>
-          {hayStockInsuficiente ? (
-            <span className="bg-gray-300 text-gray-500 px-8 py-2.5 rounded-lg font-medium cursor-not-allowed flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
-              Revisá tu carrito
-            </span>
-          ) : (
-            <Link
-              href="/checkout"
-              className="bg-pink-600 text-white px-8 py-2.5 rounded-xl font-medium hover:bg-pink-700 transition"
-            >
-              Ir al checkout
-            </Link>
-          )}
+      {/* Sticky bottom bar on mobile */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex items-center justify-between gap-4 sm:static sm:border-t-0 sm:mt-6 sm:p-0 sm:pt-6 sm:border-t sm:border-gray-200 z-40">
+        <div>
+          <p className="text-xs text-gray-500">Subtotal</p>
+          <p className="text-lg font-bold">{formatCurrency(subtotal)}</p>
         </div>
+        {hayStockInsuficiente ? (
+          <span className="bg-gray-200 text-gray-500 px-6 py-3 rounded-xl text-sm font-medium cursor-not-allowed flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Revisá tu carrito
+          </span>
+        ) : (
+          <Link
+            href="/checkout"
+            className="bg-pink-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-pink-700 transition shadow-lg shadow-pink-600/20"
+          >
+            Ir al checkout
+          </Link>
+        )}
       </div>
     </div>
   );
