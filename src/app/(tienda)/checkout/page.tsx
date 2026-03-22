@@ -171,6 +171,30 @@ export default function CheckoutPage() {
 
   // Validation errors
   const [errors, setErrors] = useState<string[]>([]);
+  const [stockFixes, setStockFixes] = useState<Record<string, { stock: number }> | null>(null);
+
+  const adjustCart = () => {
+    if (!stockFixes) return;
+    const updated = items.map((item) => {
+      const prodId = item.id.split("_")[0];
+      const prod = stockFixes[prodId];
+      if (!prod) return item;
+      const presUnits = item.unidades_por_presentacion || (() => {
+        const match = item.id.match(/Caja \(x(\d+)\)/);
+        const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+        return isMedio ? 0.5 : match ? Number(match[1]) : 1;
+      })();
+      const maxQty = Math.floor(prod.stock / presUnits);
+      if (item.cantidad > maxQty) return { ...item, cantidad: maxQty };
+      return item;
+    }).filter((item) => item.cantidad > 0);
+    setItems(updated);
+    localStorage.setItem("carrito", JSON.stringify(updated));
+    window.dispatchEvent(new Event("cart-updated"));
+    setErrors([]);
+    setStockFixes(null);
+    showToast("Carrito ajustado al stock disponible", { subtitle: "Los productos sin stock fueron eliminados" });
+  };
 
   const loadConfig = useCallback(async () => {
     const { data } = await supabase.from("tienda_config").select("*").single();
@@ -454,8 +478,9 @@ export default function CheckoutPage() {
       }
     }
     if (stockErrors.length > 0) {
-      setErrors([`Stock insuficiente: ${stockErrors.join(". ")}. Revisá tu carrito.`]);
-      showToast("Algunos productos no tienen stock suficiente", { type: "error", subtitle: "Revisá tu carrito" });
+      setStockFixes(stockMap);
+      setErrors([`Stock insuficiente: ${stockErrors.join(". ")}.`]);
+      showToast("Algunos productos no tienen stock suficiente", { type: "error", subtitle: "Podés ajustar el carrito automáticamente" });
       setSubmitting(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -788,6 +813,14 @@ export default function CheckoutPage() {
           {errors.map((e, i) => (
             <p key={i} className="text-sm text-red-600">{e}</p>
           ))}
+          {stockFixes && (
+            <button
+              onClick={adjustCart}
+              className="mt-3 bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+            >
+              Ajustar carrito automáticamente
+            </button>
+          )}
         </div>
       )}
 
