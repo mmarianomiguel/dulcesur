@@ -1195,27 +1195,6 @@ function ProductosContent() {
                             </span>
                           );
                         })()}
-                        {(() => {
-                          const pa = producto.precio_anterior;
-                          const dateStr = producto.fecha_actualizacion || producto.updated_at;
-                          if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
-                          const daysAgo = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24);
-                          if (daysAgo > 3) return null;
-                          const pct = Math.abs(Math.round(((producto.precio - pa) / pa) * 100));
-                          if (producto.precio > pa) {
-                            return (
-                              <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg">
-                                ↑ +{pct}%
-                              </span>
-                            );
-                          }
-                          if (disc > 0) return null;
-                          return (
-                            <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-lg">
-                              ↓ -{pct}%
-                            </span>
-                          );
-                        })()}
                       </div>
                       {producto.stock <= 0 && (
                         <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center">
@@ -1259,7 +1238,25 @@ function ProductosContent() {
                             <span className="text-xs text-gray-400 line-through">{formatPrice(activePrice)}</span>
                           </div>
                         ) : (
-                          <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
+                          <div>
+                            <span className="text-lg font-bold text-gray-900">{formatPrice(activePrice)}</span>
+                            {(() => {
+                              const pa = producto.precio_anterior;
+                              const dateStr = producto.fecha_actualizacion || producto.updated_at;
+                              if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
+                              const daysAgo = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24);
+                              if (daysAgo > 3) return null;
+                              const isUp = producto.precio > pa;
+                              return (
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[11px] text-gray-400 line-through">{formatPrice(pa)}</span>
+                                  <span className={`text-[10px] font-semibold ${isUp ? "text-amber-600" : "text-green-600"}`}>
+                                    {isUp ? "↑" : "↓"}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
                         )}
                       </div>
 
