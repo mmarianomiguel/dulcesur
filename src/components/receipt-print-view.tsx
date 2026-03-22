@@ -304,12 +304,8 @@ export function ReceiptPrintView({
             TOTAL: {fmtCur(sale.total)}
           </div>
         </div>
-        {/* ── Detalle de pago (unified compact section) ── */}
+        {/* ── Resumen de pago ── */}
         {(() => {
-          const showDesglose = sale.formaPago === "Mixto" || sale.pagoEfectivo || sale.pagoTransferencia || sale.pagoCuentaCorriente;
-          const showVuelto = config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0;
-          const showSaldo = sale.formaPago === "Cuenta Corriente" || (sale.formaPago === "Mixto" && sale.saldoNuevo !== sale.saldoAnterior);
-          if (!showDesglose && !showVuelto && !showSaldo) return null;
           const fs = config.fontSize - 1;
           const row = (label: string, value: string, bold = false, color?: string) => (
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1px", fontWeight: bold ? "bold" : "normal" }}>
@@ -317,22 +313,50 @@ export function ReceiptPrintView({
               <span style={color ? { color } : undefined}>{value}</span>
             </div>
           );
+          const separator = () => <div style={{ borderTop: "1px dotted #ccc", margin: "3px 0" }} />;
+
+          const totalAhorro = sale.descuento > 0 ? sale.descuento : sale.items.filter(i => i.discount > 0).reduce((a, i) => a + (i.price * i.qty * i.discount / 100), 0);
+          const showDesglose = sale.formaPago === "Mixto" || sale.pagoEfectivo || sale.pagoTransferencia || sale.pagoCuentaCorriente;
+          const showVuelto = config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0;
+          const showSaldo = sale.formaPago === "Cuenta Corriente" || (sale.formaPago === "Mixto" && sale.saldoNuevo !== sale.saldoAnterior);
+          const totalPagado = (sale.pagoEfectivo || 0) + (sale.pagoTransferencia || 0);
+          const saldoPendiente = sale.pagoCuentaCorriente || (showSaldo ? sale.saldoNuevo : 0);
+
+          if (!showDesglose && !showVuelto && !showSaldo && totalAhorro <= 0) return null;
+
           return (
-            <div style={{ borderTop: "1px solid #ccc", padding: "5px 4px", fontSize: `${fs}px`, lineHeight: "1.6" }}>
-              {/* Desglose por método */}
-              {showDesglose && (<>
-                {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Efectivo:", fmtCur(sale.pagoEfectivo))}
-                {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && row("Transferencia:", fmtCur(sale.pagoTransferencia))}
-                {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("Cta. Corriente:", fmtCur(sale.pagoCuentaCorriente))}
+            <div style={{ borderTop: "1px solid #000", padding: "5px 4px", fontSize: `${fs}px`, lineHeight: "1.7" }}>
+              <div style={{ fontWeight: "bold", fontSize: `${fs}px`, marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Forma de pago</div>
+
+              {/* Descuentos */}
+              {totalAhorro > 0 && (<>
+                {row("Descuentos aplicados:", `-${fmtCur(Math.round(totalAhorro))}`, false, "#059669")}
               </>)}
+
+              {/* Desglose */}
+              {showDesglose && (<>
+                {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Pagó en efectivo:", fmtCur(sale.pagoEfectivo))}
+                {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && row("Pagó por transferencia:", fmtCur(sale.pagoTransferencia))}
+                {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("A cuenta corriente:", fmtCur(sale.pagoCuentaCorriente))}
+                {separator()}
+                {row("Total pagado:", fmtCur(totalPagado), true)}
+                {saldoPendiente > 0 && row("Saldo pendiente:", fmtCur(saldoPendiente), true, "#ea580c")}
+              </>)}
+
+              {/* Solo efectivo con vuelto */}
+              {!showDesglose && sale.formaPago === "Efectivo" && (<>
+                {row("Pagó en efectivo:", fmtCur(sale.total))}
+              </>)}
+
               {/* Vuelto */}
               {showVuelto && (<>
                 {row("Recibido:", fmtCur(sale.cashReceived!))}
                 {row("Vuelto:", fmtCur(sale.cashChange ?? 0), true)}
               </>)}
-              {/* Saldo cuenta corriente */}
+
+              {/* Saldo CC */}
               {showSaldo && (<>
-                <div style={{ borderTop: "1px dotted #ccc", marginTop: "3px", paddingTop: "3px" }} />
+                {separator()}
                 {row("Saldo anterior:", sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} (a favor)` : fmtCur(sale.saldoAnterior))}
                 {row(`Saldo al ${sale.fecha}:`, sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} (a favor)` : fmtCur(sale.saldoNuevo), true, sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#ea580c" : undefined)}
               </>)}

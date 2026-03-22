@@ -225,6 +225,7 @@ export default function ListadoVentasPage() {
   const [printLineItems, setPrintLineItems] = useState<ReceiptLineItem[]>([]);
   const [printReady, setPrintReady] = useState(false);
   const [printClienteSaldo, setPrintClienteSaldo] = useState(0);
+  const [printPagos, setPrintPagos] = useState<{ efectivo: number; transferencia: number; cuentaCorriente: number; recibido: number; vuelto: number }>({ efectivo: 0, transferencia: 0, cuentaCorriente: 0, recibido: 0, vuelto: 0 });
   const printRef = useRef<HTMLDivElement>(null);
 
   // ══════════════════════════════════════════════════════════════
@@ -607,6 +608,23 @@ export default function ListadoVentasPage() {
       comboItems: comboItemsMap[item.producto_id || ""] || [],
     }));
 
+    // Load payment breakdown from caja_movimientos
+    const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", v.id).eq("referencia_tipo", "venta");
+    let pagoEf = 0, pagoTr = 0, pagoCC = 0;
+    for (const m of movs || []) {
+      if (m.tipo === "ingreso") {
+        if (m.metodo_pago === "Efectivo") pagoEf += m.monto;
+        else if (m.metodo_pago === "Transferencia") pagoTr += m.monto;
+        else if (m.metodo_pago === "Cuenta Corriente") pagoCC += m.monto;
+      }
+    }
+    // If no movimientos found, estimate from forma_pago
+    if ((movs || []).length === 0) {
+      if (v.forma_pago === "Efectivo") pagoEf = v.total;
+      else if (v.forma_pago === "Transferencia") pagoTr = v.total;
+      else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
+    }
+    setPrintPagos({ efectivo: pagoEf, transferencia: pagoTr, cuentaCorriente: pagoCC, recibido: 0, vuelto: 0 });
     setPrintClienteSaldo(saldo);
     setPrintVenta(v);
     setPrintItems(items);
@@ -2131,11 +2149,14 @@ export default function ListadoVentasPage() {
               clienteDireccion: printVenta.clientes?.domicilio || null,
               clienteTelefono: printVenta.clientes?.telefono || null,
               clienteCondicionIva: printVenta.clientes?.situacion_iva || null,
-              vendedor: getVendedorNombre(printVenta.vendedor_id),
+              vendedor: getVendedorNombre(printVenta.vendedor_id) === "—" && (printVenta.origen === "tienda" || printVenta.tipo_comprobante?.toLowerCase().includes("web")) ? "Tienda Online" : getVendedorNombre(printVenta.vendedor_id),
               fecha: formatDatePDF(printVenta.fecha),
-              saldoAnterior: printClienteSaldo,
+              saldoAnterior: printClienteSaldo - (printPagos.cuentaCorriente || 0),
               saldoNuevo: printClienteSaldo,
               items: printLineItems,
+              pagoEfectivo: printPagos.efectivo || undefined,
+              pagoTransferencia: printPagos.transferencia || undefined,
+              pagoCuentaCorriente: printPagos.cuentaCorriente || undefined,
             }}
           />
         </div>
