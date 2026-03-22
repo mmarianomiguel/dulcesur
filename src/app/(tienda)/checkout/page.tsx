@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/components/tienda/toast";
 import {
   User,
   Mail,
@@ -454,6 +455,7 @@ export default function CheckoutPage() {
     }
     if (stockErrors.length > 0) {
       setErrors([`Stock insuficiente: ${stockErrors.join(". ")}. Revisá tu carrito.`]);
+      showToast("Algunos productos no tienen stock suficiente", { type: "error", subtitle: "Revisá tu carrito" });
       setSubmitting(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -684,6 +686,7 @@ export default function CheckoutPage() {
     } catch (err: any) {
       const msg = err?.message || err?.details || "Error desconocido";
       setErrors([`Hubo un error al procesar tu pedido: ${msg}`]);
+      showToast("Error al procesar el pedido", { type: "error", subtitle: "Intentá de nuevo" });
     } finally {
       setSubmitting(false);
     }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Plus, Pencil, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/components/tienda/toast";
 
 interface Direccion {
   id: number;
@@ -98,8 +99,10 @@ export default function DireccionesPage() {
 
     if (editingId) {
       await supabase.from("cliente_direcciones").update(payload).eq("id", editingId);
+      showToast("Dirección actualizada");
     } else {
       await supabase.from("cliente_direcciones").insert(payload);
+      showToast("Dirección guardada");
     }
 
     setShowForm(false);
@@ -128,6 +131,7 @@ export default function DireccionesPage() {
     if (!clienteId) return;
     if (!confirm("¿Eliminar esta dirección?")) return;
     await supabase.from("cliente_direcciones").delete().eq("id", id);
+    showToast("Dirección eliminada", "info");
     fetchDirecciones(clienteId);
   };
 

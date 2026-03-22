@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, AlertTriangle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/components/tienda/toast";
 
 interface CartItem {
   id: string;
@@ -84,6 +85,18 @@ export default function CarritoPage() {
       }
 
       setStockMap(map);
+
+      // Notify user about out-of-stock items
+      const outOfStock = items.filter((item) => {
+        const prodId = item.id.split("_")[0];
+        const stock = map[prodId];
+        return stock !== undefined && stock <= 0;
+      });
+      if (outOfStock.length > 0) {
+        const names = outOfStock.map((i) => i.nombre);
+        const msg = names.length === 1 ? `"${names[0]}" se quedó sin stock` : `${names.length} productos se quedaron sin stock`;
+        showToast(msg, { type: "error", subtitle: "Eliminá los productos agotados para continuar" });
+      }
     })();
   }, [loaded, items]);
 
@@ -129,7 +142,9 @@ export default function CarritoPage() {
   };
 
   const remove = (id: string) => {
+    const removed = items.find((i) => i.id === id);
     persist(items.filter((i) => i.id !== id));
+    if (removed) showToast(removed.nombre, { type: "info", subtitle: "Eliminado del carrito" });
   };
 
   const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);

@@ -300,7 +300,7 @@ export default function ProductoDetallePage() {
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
     window.dispatchEvent(new Event("cart-updated"));
-    showToast(`${prod.nombre} se agregó al carrito`);
+    showToast(prod.nombre, { subtitle: "Agregado al carrito" });
   }
 
   function handleAddToCart() {

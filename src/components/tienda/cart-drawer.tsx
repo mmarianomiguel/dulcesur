@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ShoppingBag, X, Minus, Plus, Trash2, Package } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/components/tienda/toast";
 
 interface CartItem {
   id: string;
@@ -92,8 +93,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const removeItem = useCallback(
     (id: string) => {
       setItems((prev) => {
+        const removed = prev.find((i) => i.id === id);
         const next = prev.filter((i) => i.id !== id);
         localStorage.setItem("carrito", JSON.stringify(next));
+        if (removed) showToast(removed.nombre, { type: "info", subtitle: "Eliminado del carrito" });
         return next;
       });
     },

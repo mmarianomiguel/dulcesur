@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, User, Lock, Check, AlertCircle, MapPin, DollarSign } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/components/tienda/toast";
 
 
 const formatCurrency = (value: number) =>
@@ -159,6 +160,7 @@ export default function PerfilPage() {
 
     if (error) {
       setMsg("Error al guardar los cambios.");
+      showToast("Error al guardar los cambios", "error");
     } else {
       const stored = localStorage.getItem("cliente_auth");
       if (stored) {
@@ -166,6 +168,7 @@ export default function PerfilPage() {
         localStorage.setItem("cliente_auth", JSON.stringify({ ...parsed, nombre, email }));
       }
       setMsg("Perfil actualizado correctamente.");
+      showToast("Perfil actualizado correctamente");
     }
     setSaving(false);
   };
@@ -200,14 +203,17 @@ export default function PerfilPage() {
       const data = await res.json();
       if (!res.ok) {
         setPwMsg(data.error || "Error al cambiar la contraseña.");
+        showToast("Error al cambiar la contraseña", "error");
       } else {
         setPwMsg("Contraseña actualizada correctamente.");
+        showToast("Contraseña actualizada");
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       }
     } catch {
       setPwMsg("Error al cambiar la contraseña.");
+      showToast("Error al cambiar la contraseña", "error");
     }
     setPwSaving(false);
   };

@@ -503,7 +503,7 @@ function ProductosContent() {
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
     window.dispatchEvent(new Event("cart-updated"));
-    showToast(`${producto.nombre} se agregó al carrito`);
+    showToast(producto.nombre, { subtitle: "Agregado al carrito" });
     setQuantities((prev) => ({ ...prev, [producto.id]: 1 }));
   }
 
