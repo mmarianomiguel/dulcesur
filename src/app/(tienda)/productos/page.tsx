@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { showToast } from "@/components/tienda/toast";
 import { supabase } from "@/lib/supabase";
+import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import {
   Search,
   SlidersHorizontal,
@@ -102,6 +103,7 @@ function getPageNumbers(current: number, total: number): (number | "...")[] {
 function ProductosContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { filtrarCategorias, permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -186,7 +188,7 @@ function ProductosContent() {
     async function load() {
       const { data: cats } = await supabase
         .from("categorias")
-        .select("id, nombre");
+        .select("id, nombre, restringida");
       if (!cats) return;
 
       const { data: prods } = await supabase
@@ -339,6 +341,24 @@ function ProductosContent() {
         .select("*, categorias(nombre), marcas(nombre)", { count: "exact" });
 
       query = query.eq("activo", true).eq("visibilidad", "visible");
+
+      // Exclude restricted categories the client can't access
+      const restrictedIds = categorias
+        .filter((c) => c.restringida && !(permitidas || []).includes(c.id))
+        .map((c) => c.id);
+      if (restrictedIds.length > 0 && !categoriaId) {
+        for (const rid of restrictedIds) {
+          query = query.neq("categoria_id", rid);
+        }
+      }
+      // If navigating to a restricted category without permission, show nothing
+      if (categoriaId && restrictedIds.includes(categoriaId)) {
+        setProductos([]);
+        setTotal(0);
+        setLoading(false);
+        return;
+      }
+
       if (categoriaId) query = query.eq("categoria_id", categoriaId);
       if (subcategoriaId)
         query = query.eq("subcategoria_id", subcategoriaId);
@@ -400,7 +420,7 @@ function ProductosContent() {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad]);
+  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad, permitidas, categorias]);
 
   // Fetch presentaciones for displayed products
   useEffect(() => {
@@ -700,7 +720,7 @@ function ProductosContent() {
             </button>
 
             <div className={categoriasShowAll ? "max-h-[200px] overflow-y-auto space-y-0.5" : "space-y-0.5"}>
-            {(categoriasShowAll ? categorias : categorias.slice(0, 5)).map((cat) => {
+            {(categoriasShowAll ? filtrarCategorias(categorias) : filtrarCategorias(categorias).slice(0, 5)).map((cat) => {
               const isSelected = categoriaId === cat.id;
               const isExpanded = expandedCats.has(cat.id);
               const catSubs = allSubcategorias.filter(

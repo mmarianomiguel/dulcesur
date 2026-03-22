@@ -102,6 +102,8 @@ export interface Categoria {
   id: string;
   nombre: string;
   created_at: string;
+  restringida?: boolean;
+  imagen_url?: string | null;
 }
 
 export interface Producto {
@@ -147,6 +149,7 @@ export interface Cliente {
   zona_entrega: string | null;
   dias_entrega: string[] | null;
   activo: boolean;
+  categorias_permitidas: string[];
   created_at: string;
   updated_at: string;
 }

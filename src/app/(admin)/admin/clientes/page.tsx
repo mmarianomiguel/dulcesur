@@ -86,6 +86,7 @@ const emptyForm = {
   barrio: "",
   vendedor_id: "",
   zona_entrega: "",
+  categorias_permitidas: [] as string[],
 };
 
 interface CuentaMovimiento {
@@ -121,6 +122,7 @@ export default function ClientesPage() {
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [authId, setAuthId] = useState<string | null>(null);
   const [zonas, setZonas] = useState<ZonaEntrega[]>([]);
+  const [categoriasRestringidas, setCategoriasRestringidas] = useState<{id:string;nombre:string}[]>([]);
 
   // Zonas management
   const [zonaDialogOpen, setZonaDialogOpen] = useState(false);
@@ -210,6 +212,9 @@ export default function ClientesPage() {
   useEffect(() => {
     fetchClients();
     fetchZonas();
+    supabase.from("categorias").select("id, nombre").eq("restringida", true).then(({ data }) => {
+      if (data) setCategoriasRestringidas(data);
+    });
   }, [fetchClients, fetchZonas]);
 
   useEffect(() => {
@@ -248,6 +253,7 @@ export default function ClientesPage() {
       barrio: (c as any).barrio || "",
       vendedor_id: (c as any).vendedor_id || "",
       zona_entrega: c.zona_entrega || "",
+      categorias_permitidas: (c as any).categorias_permitidas || [],
     });
     setResetPw("");
     setResetMsg("");
@@ -287,6 +293,7 @@ export default function ClientesPage() {
       vendedor_id: form.vendedor_id || null,
       zona_entrega: form.zona_entrega || null,
       dias_entrega: selectedZona ? selectedZona.dias : null,
+      categorias_permitidas: form.categorias_permitidas || [],
     };
     if (editingClient) {
       await supabase.from("clientes").update(payload).eq("id", editingClient.id);
@@ -1640,6 +1647,39 @@ export default function ClientesPage() {
                     );
                   })()}
                 </div>
+                {categoriasRestringidas.length > 0 && (
+                <div className="col-span-2 space-y-2">
+                  <Label>Categorías restringidas permitidas</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {categoriasRestringidas.map((cat) => {
+                      const selected = form.categorias_permitidas?.includes(cat.id) ?? false;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => {
+                            const current = form.categorias_permitidas || [];
+                            const next = selected
+                              ? current.filter((id: string) => id !== cat.id)
+                              : [...current, cat.id];
+                            f("categorias_permitidas", next);
+                          }}
+                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                            selected
+                              ? "bg-violet-100 text-violet-700 ring-1 ring-violet-300"
+                              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                          }`}
+                        >
+                          {cat.nombre}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Estas categorías están ocultas por defecto. Seleccioná las que este cliente puede ver.
+                  </p>
+                </div>
+                )}
                 <div className="col-span-2 space-y-2">
                   <Label>Vendedor</Label>
                   <Select value={form.vendedor_id || "none"} onValueChange={(v) => f("vendedor_id", v === "none" ? "" : (v || ""))}>

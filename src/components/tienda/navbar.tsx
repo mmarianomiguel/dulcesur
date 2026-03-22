@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useCart } from "./cart-drawer";
+import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 
 interface Categoria {
   id: string;
@@ -29,6 +30,7 @@ export default function TiendaNavbar() {
   const [mobileQuery, setMobileQuery] = useState("");
   const { openCart, itemCount, subtotal } = useCart();
   const router = useRouter();
+  const { filtrarCategorias } = useCategoriasPermitidas();
   const categoryBarRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useState<{
     logo_url?: string; nombre?: string; telefono?: string;
@@ -38,7 +40,7 @@ export default function TiendaNavbar() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from("categorias").select("id, nombre").limit(12),
+      supabase.from("categorias").select("id, nombre, restringida").limit(12),
       supabase.from("empresa").select("nombre, telefono").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion").limit(1).single(),
     ]).then(([{ data: cats }, { data: emp }, { data: tc }]) => {
@@ -188,7 +190,7 @@ export default function TiendaNavbar() {
             ref={categoryBarRef}
             className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 scrollbar-none"
           >
-            {categorias.map((cat) => (
+            {filtrarCategorias(categorias).map((cat) => (
               <Link
                 key={cat.id}
                 href={`/productos?categoria=${cat.id}`}
@@ -268,7 +270,7 @@ export default function TiendaNavbar() {
           <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
             Categorías
           </p>
-          {categorias.map((cat) => (
+          {filtrarCategorias(categorias).map((cat) => (
             <Link
               key={cat.id}
               href={`/productos?categoria=${cat.id}`}

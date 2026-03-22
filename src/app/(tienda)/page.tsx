@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 
 /* ──────────────── types ──────────────── */
 
@@ -248,9 +249,10 @@ function CategoriasDestacadasBlock({
   categorias: Categoria[];
   loading: boolean;
 }) {
+  const { filtrarCategorias } = useCategoriasPermitidas();
   const maxItems = config.max_items || 6;
   const titulo = config.titulo_seccion || "Categorías";
-  const cats = categorias.slice(0, maxItems);
+  const cats = filtrarCategorias(categorias).slice(0, maxItems);
 
   return (
     <section className="py-16">

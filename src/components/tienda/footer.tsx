@@ -45,7 +45,7 @@ const categoryLinks = [
   { label: "Todos los productos", href: "/productos" },
   { label: "Kiosco", href: "/productos?categoria=4295d00e-86c8-41d1-bfd0-ac1bcdc97572" },
   { label: "Almacen", href: "/productos?categoria=61e26068-cc48-42f2-90c2-041faa90bde2" },
-  { label: "Cigarros", href: "/productos?categoria=e8b78851-e4c5-4e3a-95bb-76449e97b4b1" },
+  { label: "Libreria", href: "/productos?categoria=libreria" },
 ];
 
 const accountLinks = [
