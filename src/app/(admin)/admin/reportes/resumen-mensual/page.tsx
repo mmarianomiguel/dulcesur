@@ -116,12 +116,42 @@ export default function ResumenMensualPage() {
       setTopProductos([]);
     }
 
-    // Ventas por forma de pago
+    // Ventas por forma de pago — split Mixto into Efectivo+Transferencia
+    const mixtoVentaIds = vList.filter((v: any) => v.forma_pago === "Mixto").map((v: any) => v.id);
+    let mixtoMovs: { referencia_id: string; metodo_pago: string; monto: number }[] = [];
+    if (mixtoVentaIds.length > 0) {
+      const { data: movs } = await supabase.from("caja_movimientos")
+        .select("referencia_id, metodo_pago, monto")
+        .eq("tipo", "ingreso").eq("referencia_tipo", "venta")
+        .in("referencia_id", mixtoVentaIds);
+      mixtoMovs = (movs || []) as any[];
+    }
     const pagoMap: Record<string, { total: number; qty: number }> = {};
     vList.forEach((v: any) => {
-      if (!pagoMap[v.forma_pago]) pagoMap[v.forma_pago] = { total: 0, qty: 0 };
-      pagoMap[v.forma_pago].total += v.total;
-      pagoMap[v.forma_pago].qty += 1;
+      if (v.forma_pago === "Mixto") {
+        const movs = mixtoMovs.filter((m) => m.referencia_id === v.id);
+        if (movs.length > 0) {
+          movs.forEach((m) => {
+            if (!pagoMap[m.metodo_pago]) pagoMap[m.metodo_pago] = { total: 0, qty: 0 };
+            pagoMap[m.metodo_pago].total += m.monto;
+          });
+          // CC portion
+          const movsTotal = movs.reduce((a, m) => a + m.monto, 0);
+          const ccPart = v.total - movsTotal;
+          if (ccPart > 0) {
+            if (!pagoMap["Cuenta Corriente"]) pagoMap["Cuenta Corriente"] = { total: 0, qty: 0 };
+            pagoMap["Cuenta Corriente"].total += ccPart;
+          }
+        } else {
+          if (!pagoMap["Mixto"]) pagoMap["Mixto"] = { total: 0, qty: 0 };
+          pagoMap["Mixto"].total += v.total;
+          pagoMap["Mixto"].qty += 1;
+        }
+      } else {
+        if (!pagoMap[v.forma_pago]) pagoMap[v.forma_pago] = { total: 0, qty: 0 };
+        pagoMap[v.forma_pago].total += v.total;
+        pagoMap[v.forma_pago].qty += 1;
+      }
     });
     setVentasPorPago(Object.entries(pagoMap).map(([metodo, d]) => ({ metodo, ...d })).sort((a, b) => b.total - a.total));
 

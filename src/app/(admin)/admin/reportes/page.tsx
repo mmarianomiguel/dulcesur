@@ -22,7 +22,8 @@ function fc(v: number) {
 }
 
 interface VentaRow { id: string; fecha: string; total: number; forma_pago: string; tipo_comprobante: string; created_at: string; cliente_id: string | null; origen: string | null; clientes: { nombre: string } | null; }
-interface CompraRow { id: string; fecha: string; total: number; forma_pago: string; }
+interface CompraRow { id: string; fecha: string; total: number; forma_pago: string; proveedor_id: string | null; observacion: string | null; proveedores: { nombre: string } | null; }
+interface CompraItemRow { compra_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; }
 interface VentaItemDetail { venta_id: string; producto_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidades_por_presentacion: number; productos: { costo: number; nombre: string } | null; }
 interface ClienteOption { id: string; nombre: string; }
 
@@ -51,8 +52,13 @@ export default function ReportesPage() {
   // Expanded sale rows
   const [expandedVentas, setExpandedVentas] = useState<Set<string>>(new Set());
 
+  // Caja movimientos for Mixto splitting
+  const [cajaMovimientos, setCajaMovimientos] = useState<{ referencia_id: string; referencia_tipo: string; metodo_pago: string; monto: number }[]>([]);
+
   // Compras report
   const [compras, setCompras] = useState<CompraRow[]>([]);
+  const [compraItems, setCompraItems] = useState<CompraItemRow[]>([]);
+  const [expandedCompras, setExpandedCompras] = useState<Set<string>>(new Set());
 
   // Stock report
   const [productos, setProductos] = useState<{ id: string; nombre: string; codigo: string; stock: number; precio: number; costo: number; categoria_id: string | null; subcategoria_id: string | null; marca_id: string | null; }[]>([]);
@@ -95,26 +101,49 @@ export default function ReportesPage() {
         .not("tipo_comprobante", "ilike", "Nota de Crédito%")
         .neq("estado", "anulada")
         .order("fecha", { ascending: false }),
-      supabase.from("compras").select("id, fecha, total, forma_pago")
+      supabase.from("compras").select("id, fecha, total, forma_pago, proveedor_id, observacion, proveedores(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
         .order("fecha", { ascending: false }),
       supabase.from("productos").select("id, nombre, codigo, stock, precio, costo, categoria_id, subcategoria_id, marca_id").eq("activo", true).order("nombre").limit(10000),
     ]);
 
     setVentas((vts || []).map((v: any) => ({ ...v, clientes: Array.isArray(v.clientes) ? v.clientes[0] || null : v.clientes })) as VentaRow[]);
-    setCompras((cmps || []) as CompraRow[]);
+    const comprasList = (cmps || []).map((c: any) => ({ ...c, proveedores: Array.isArray(c.proveedores) ? c.proveedores[0] || null : c.proveedores })) as CompraRow[];
+    setCompras(comprasList);
+
+    // Fetch compra items
+    if (comprasList.length > 0) {
+      const cIds = comprasList.map((c) => c.id);
+      const { data: cItems } = await supabase
+        .from("compra_items")
+        .select("compra_id, descripcion, cantidad, precio_unitario, subtotal")
+        .in("compra_id", cIds);
+      setCompraItems((cItems || []) as CompraItemRow[]);
+    } else {
+      setCompraItems([]);
+    }
     setProductos(prods || []);
 
     // Fetch venta items for profit calc
     if (vts && vts.length > 0) {
       const ids = vts.map((v: any) => v.id);
-      const { data: items } = await supabase
-        .from("venta_items")
-        .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, productos(costo, nombre)")
-        .in("venta_id", ids);
+      const [{ data: items }, { data: movs }] = await Promise.all([
+        supabase
+          .from("venta_items")
+          .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, productos(costo, nombre)")
+          .in("venta_id", ids),
+        supabase
+          .from("caja_movimientos")
+          .select("referencia_id, referencia_tipo, metodo_pago, monto")
+          .eq("tipo", "ingreso")
+          .eq("referencia_tipo", "venta")
+          .in("referencia_id", ids),
+      ]);
       setVentaItems((items || []) as any[]);
+      setCajaMovimientos((movs || []) as any[]);
     } else {
       setVentaItems([]);
+      setCajaMovimientos([]);
     }
 
     setLoading(false);
@@ -189,11 +218,33 @@ export default function ReportesPage() {
     return a + (precioVenta - costoU * unidadesPres) * item.cantidad;
   }, 0), [ventaItems]);
 
+  // Split Mixto into Efectivo + Transferencia using caja_movimientos
   const ventasPorPago = useMemo(() => {
     const map: Record<string, number> = {};
-    ventas.forEach((v) => { map[v.forma_pago] = (map[v.forma_pago] || 0) + v.total; });
+    ventas.forEach((v) => {
+      if (v.forma_pago === "Mixto") {
+        // Mixto movements are already split in caja_movimientos
+        // We'll use the cajaMovimientos data if available, otherwise show as Mixto
+        const movs = cajaMovimientos.filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta");
+        if (movs.length > 0) {
+          movs.forEach((m) => {
+            map[m.metodo_pago] = (map[m.metodo_pago] || 0) + m.monto;
+          });
+          // Check if there's a CC portion not in caja_movimientos
+          const movsTotal = movs.reduce((a, m) => a + m.monto, 0);
+          const ccPart = v.total - movsTotal;
+          if (ccPart > 0) {
+            map["Cuenta Corriente"] = (map["Cuenta Corriente"] || 0) + ccPart;
+          }
+        } else {
+          map["Mixto"] = (map["Mixto"] || 0) + v.total;
+        }
+      } else {
+        map[v.forma_pago] = (map[v.forma_pago] || 0) + v.total;
+      }
+    });
     return map;
-  }, [ventas]);
+  }, [ventas, cajaMovimientos]);
 
   const ventasPorDia = useMemo(() => {
     const map: Record<string, number> = {};
@@ -220,6 +271,35 @@ export default function ReportesPage() {
     });
     return map;
   }, [ventaItems]);
+
+  const compraItemsMap = useMemo(() => {
+    const map: Record<string, CompraItemRow[]> = {};
+    compraItems.forEach((item) => {
+      if (!map[item.compra_id]) map[item.compra_id] = [];
+      map[item.compra_id].push(item);
+    });
+    return map;
+  }, [compraItems]);
+
+  const toggleExpandCompra = (id: string) => {
+    setExpandedCompras((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  // Compras grouped by proveedor for summary
+  const comprasPorProveedor = useMemo(() => {
+    const map: Record<string, { nombre: string; total: number; qty: number }> = {};
+    compras.forEach((c) => {
+      const name = c.proveedores?.nombre || "Sin proveedor";
+      if (!map[name]) map[name] = { nombre: name, total: 0, qty: 0 };
+      map[name].total += c.total;
+      map[name].qty += 1;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [compras]);
 
   // Profit for filtered ventas
   const filteredVentasTotal = useMemo(() => filteredVentas.reduce((a, v) => a + v.total, 0), [filteredVentas]);
@@ -528,29 +608,124 @@ export default function ReportesPage() {
         </TabsContent>
 
         <TabsContent value="compras" className="mt-4 space-y-4">
-          <div className="flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => exportCSV("compras", "Fecha,Forma Pago,Total", compras.map((c) => `${c.fecha},${c.forma_pago},${c.total}`).join("\n"))}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex gap-4 text-sm">
+              <span className="text-muted-foreground">{compras.length} compras</span>
+              <span className="font-semibold">{fc(totalCompras)}</span>
+              <span className="text-muted-foreground">{comprasPorProveedor.length} proveedores</span>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => exportCSV("compras", "Fecha,Proveedor,Forma Pago,Total", compras.map((c) => `${c.fecha},${c.proveedores?.nombre || "S/P"},${c.forma_pago},${c.total}`).join("\n"))}>
               <Download className="w-4 h-4 mr-1.5" />CSV
             </Button>
           </div>
-          <div className="border rounded-lg overflow-hidden max-h-[500px] overflow-y-auto">
+
+          {/* Resumen por proveedor */}
+          {comprasPorProveedor.length > 1 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {comprasPorProveedor.map((p) => (
+                <Card key={p.nombre}>
+                  <CardContent className="py-3 px-4">
+                    <p className="text-xs text-muted-foreground truncate">{p.nombre}</p>
+                    <p className="text-lg font-bold">{fc(p.total)}</p>
+                    <p className="text-xs text-muted-foreground">{p.qty} compra{p.qty !== 1 ? "s" : ""}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <div className="border rounded-lg overflow-hidden max-h-[600px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-background">
+              <thead className="sticky top-0 bg-background z-10">
                 <tr className="border-b bg-muted/50 text-muted-foreground">
+                  <th className="w-8 py-2 px-2"></th>
                   <th className="text-left py-2 px-3 font-medium">Fecha</th>
+                  <th className="text-left py-2 px-3 font-medium">Proveedor</th>
+                  <th className="text-left py-2 px-3 font-medium">Detalle</th>
                   <th className="text-left py-2 px-3 font-medium">Forma Pago</th>
                   <th className="text-right py-2 px-3 font-medium">Total</th>
                 </tr>
               </thead>
               <tbody>
-                {compras.map((c) => (
-                  <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="py-2 px-3">{new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
-                    <td className="py-2 px-3"><Badge variant="outline" className="text-xs">{c.forma_pago}</Badge></td>
-                    <td className="py-2 px-3 text-right font-semibold">{fc(c.total)}</td>
-                  </tr>
-                ))}
+                {compras.map((c) => {
+                  const isExpanded = expandedCompras.has(c.id);
+                  const items = compraItemsMap[c.id] || [];
+                  return (
+                    <React.Fragment key={c.id}>
+                      <tr
+                        className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                        onClick={() => toggleExpandCompra(c.id)}
+                      >
+                        <td className="py-2 px-2 text-muted-foreground">
+                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </td>
+                        <td className="py-2 px-3">{new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR")}</td>
+                        <td className="py-2 px-3 font-medium">{c.proveedores?.nombre || <span className="text-muted-foreground">—</span>}</td>
+                        <td className="py-2 px-3 text-muted-foreground text-xs">
+                          {items.length > 0
+                            ? `${items.length} producto${items.length !== 1 ? "s" : ""}`
+                            : c.observacion || "—"}
+                        </td>
+                        <td className="py-2 px-3"><Badge variant="outline" className="text-xs">{c.forma_pago}</Badge></td>
+                        <td className="py-2 px-3 text-right font-semibold">{fc(c.total)}</td>
+                      </tr>
+                      {isExpanded && items.length > 0 && (
+                        <tr>
+                          <td colSpan={6} className="p-0">
+                            <div className="bg-muted/20 border-b">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-muted-foreground border-b border-muted">
+                                    <th className="text-left py-1.5 px-4 pl-12 font-medium">Producto</th>
+                                    <th className="text-center py-1.5 px-3 font-medium">Cant.</th>
+                                    <th className="text-right py-1.5 px-3 font-medium">Precio Unit.</th>
+                                    <th className="text-right py-1.5 px-3 font-medium">Subtotal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {items.map((item, idx) => (
+                                    <tr key={idx} className="border-b border-muted/50 last:border-0">
+                                      <td className="py-1.5 px-4 pl-12">{item.descripcion}</td>
+                                      <td className="py-1.5 px-3 text-center">{item.cantidad}</td>
+                                      <td className="py-1.5 px-3 text-right">{fc(item.precio_unitario)}</td>
+                                      <td className="py-1.5 px-3 text-right font-medium">{fc(item.subtotal)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="border-t border-muted font-semibold">
+                                    <td colSpan={3} className="py-1.5 px-4 pl-12 text-right">Total:</td>
+                                    <td className="py-1.5 px-3 text-right">{fc(c.total)}</td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {isExpanded && items.length === 0 && c.observacion && (
+                        <tr>
+                          <td colSpan={6} className="p-0">
+                            <div className="bg-muted/20 border-b px-12 py-3 text-xs text-muted-foreground">
+                              <span className="font-medium">Observación:</span> {c.observacion}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
+              {compras.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 bg-muted/50 font-bold">
+                    <td className="py-2 px-2"></td>
+                    <td className="py-2 px-3">TOTAL</td>
+                    <td colSpan={3}></td>
+                    <td className="py-2 px-3 text-right">{fc(totalCompras)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </TabsContent>

@@ -314,13 +314,34 @@ export default function DashboardPage() {
     if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
 
     // Period sales
-    const { data: periodSales } = await supabase.from("ventas").select("total, forma_pago, estado").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
+    const { data: periodSales } = await supabase.from("ventas").select("id, total, forma_pago, estado").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
     const salesTotal = (periodSales || []).reduce((a, v) => a + v.total, 0);
     setVentasPeriodo(salesTotal);
     setTicketsPeriodo((periodSales || []).length);
 
+    // Split Mixto into Efectivo+Transferencia using caja_movimientos
+    const mixtoIds = (periodSales || []).filter((v) => v.forma_pago === "Mixto").map((v) => v.id);
+    let mixtoMovs: { referencia_id: string; metodo_pago: string; monto: number }[] = [];
+    if (mixtoIds.length > 0) {
+      const { data: movs } = await supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds);
+      mixtoMovs = (movs || []) as any[];
+    }
     const paymentMap: Record<string, number> = {};
-    (periodSales || []).forEach((v) => { paymentMap[v.forma_pago] = (paymentMap[v.forma_pago] || 0) + v.total; });
+    (periodSales || []).forEach((v) => {
+      if (v.forma_pago === "Mixto") {
+        const movs = mixtoMovs.filter((m) => m.referencia_id === v.id);
+        if (movs.length > 0) {
+          movs.forEach((m) => { paymentMap[m.metodo_pago] = (paymentMap[m.metodo_pago] || 0) + m.monto; });
+          const movsTotal = movs.reduce((a, m) => a + m.monto, 0);
+          const ccPart = v.total - movsTotal;
+          if (ccPart > 0) paymentMap["Cuenta Corriente"] = (paymentMap["Cuenta Corriente"] || 0) + ccPart;
+        } else {
+          paymentMap["Mixto"] = (paymentMap["Mixto"] || 0) + v.total;
+        }
+      } else {
+        paymentMap[v.forma_pago] = (paymentMap[v.forma_pago] || 0) + v.total;
+      }
+    });
     setPaymentBreakdown(Object.entries(paymentMap).map(([name, value]) => ({ name, value })));
 
     const { data: periodExpenses } = await supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso");
