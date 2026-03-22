@@ -587,7 +587,7 @@ export default function ClientesPage() {
       const zona = zonas.find((z) => z.id === c.zona_entrega);
       const vendedor = vendedores.find((v) => v.id === (c as any).vendedor_id);
       return {
-        "Codigo": (c as any).codigo_cliente || "",
+        "Código": (c as any).codigo_cliente || "",
         "Nombre": c.nombre,
         "CUIT": c.cuit || "",
         "Situacion IVA": c.situacion_iva,

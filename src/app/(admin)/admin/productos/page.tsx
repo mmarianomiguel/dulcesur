@@ -864,10 +864,10 @@ export default function ProductosPage() {
       const box = boxPresMap[p.id];
       const boxMargin = box && box.costo > 0 ? (((box.precio - box.costo) / box.costo) * 100) : 0;
       return {
-        "Codigo de Barras": p.codigo,
+        "Código de Barras": p.codigo,
         "Nombre del Articulo": p.nombre,
         "Stock": p.stock,
-        "Categoria": p.categorias?.nombre || "",
+        "Categoría": p.categorias?.nombre || "",
         "Subcategoria": p.subcategoria_id ? (subcatMap[p.subcategoria_id] || "") : "",
         "Marca": p.marcas?.nombre || "",
         "Proveedor": provMap[p.id] || "",
@@ -1447,7 +1447,7 @@ export default function ProductosPage() {
           </Button>
           <Button onClick={openNew}>
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo articulo
+            Nuevo artículo
           </Button>
         </div>
       </div>
@@ -1917,7 +1917,7 @@ export default function ProductosPage() {
               <div>
                 <DialogHeader className="p-0 space-y-0">
                   <DialogTitle className="text-lg font-semibold">
-                    {editingProduct ? "Editar articulo" : "Nuevo articulo"}
+                    {editingProduct ? "Editar artículo" : "Nuevo artículo"}
                   </DialogTitle>
                 </DialogHeader>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -2019,12 +2019,12 @@ export default function ProductosPage() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Descripcion (opcional)</Label>
+                    <Label className="text-xs text-muted-foreground">Descripción (opcional)</Label>
                     <Textarea
                       rows={2}
                       value={form.descripcion_detallada}
                       onChange={(e) => setForm({ ...form, descripcion_detallada: e.target.value })}
-                      placeholder="Descripcion opcional del producto..."
+                      placeholder="Descripción opcional del producto..."
                       className="resize-none text-sm"
                     />
                   </div>
@@ -2034,7 +2034,7 @@ export default function ProductosPage() {
 
             {/* Section 2: Classification - horizontal row */}
             <div>
-              <h3 className="text-sm font-medium mb-3 text-muted-foreground">Clasificacion</h3>
+              <h3 className="text-sm font-medium mb-3 text-muted-foreground">Clasificación</h3>
               <div className="grid grid-cols-3 gap-3">
                 {/* Categoria searchable */}
                 {(() => {
