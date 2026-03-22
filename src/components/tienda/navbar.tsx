@@ -32,6 +32,11 @@ export default function TiendaNavbar() {
   const router = useRouter();
   const { filtrarCategorias } = useCategoriasPermitidas();
   const categoryBarRef = useRef<HTMLDivElement>(null);
+  const [suggestions, setSuggestions] = useState<{ id: string; nombre: string; precio: number; imagen_url: string | null }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   const [config, setConfig] = useState<{
     logo_url?: string; nombre?: string; telefono?: string;
     umbral_envio_gratis?: number; horario_atencion_inicio?: string;
@@ -56,6 +61,33 @@ export default function TiendaNavbar() {
       document.body.style.overflow = "";
     };
   }, [mobileOpen]);
+
+  // Search suggestions
+  const handleQueryChange = (val: string) => {
+    setQuery(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (val.trim().length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("productos")
+        .select("id, nombre, precio, imagen_url")
+        .eq("activo", true)
+        .eq("visibilidad", "visible")
+        .ilike("nombre", `%${val.trim()}%`)
+        .limit(5);
+      setSuggestions(data || []);
+      setShowSuggestions(true);
+    }, 300);
+  };
+
+  // Close suggestions on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowSuggestions(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -128,14 +160,15 @@ export default function TiendaNavbar() {
 
           {/* Search bar (desktop) */}
           <form
-            onSubmit={handleSearch}
+            onSubmit={(e) => { handleSearch(e); setShowSuggestions(false); }}
             className="mx-4 hidden flex-1 lg:flex"
           >
-            <div className="relative flex w-full max-w-2xl items-center">
+            <div ref={searchRef} className="relative flex w-full max-w-2xl items-center">
               <input
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => handleQueryChange(e.target.value)}
+                onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                 placeholder="¿Qué estás buscando?"
                 className="h-10 w-full rounded-full border border-gray-300 pl-4 pr-12 text-sm text-gray-700 placeholder-gray-400 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
               />
@@ -146,6 +179,38 @@ export default function TiendaNavbar() {
               >
                 <Search className="h-4 w-4" />
               </button>
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden z-50">
+                  {suggestions.map((s) => (
+                    <Link
+                      key={s.id}
+                      href={`/productos/${s.id}`}
+                      onClick={() => { setShowSuggestions(false); setQuery(""); }}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition"
+                    >
+                      {s.imagen_url ? (
+                        <img src={s.imagen_url} alt="" className="w-8 h-8 object-contain rounded" />
+                      ) : (
+                        <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">
+                          <Search className="w-3 h-3 text-gray-300" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800 truncate">{s.nombre}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900 shrink-0">
+                        {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(s.precio)}
+                      </span>
+                    </Link>
+                  ))}
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2 text-xs text-pink-600 font-medium hover:bg-pink-50 transition border-t border-gray-100"
+                  >
+                    Ver todos los resultados →
+                  </button>
+                </div>
+              )}
             </div>
           </form>
 

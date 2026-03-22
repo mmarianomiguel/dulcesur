@@ -1288,10 +1288,14 @@ function ProductosContent() {
                         }
                         return null;
                       })()}
-                      {producto.stock <= 0 && (
+                      {producto.stock <= 0 ? (
                         <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center">
                           <span className="bg-white/90 text-gray-500 text-xs font-medium px-3 py-1.5 rounded-lg shadow-sm">Agotado</span>
                         </div>
+                      ) : producto.stock > 0 && producto.stock <= 5 && (
+                        <span className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
+                          ¡Últimas {producto.stock}!
+                        </span>
                       )}
                     </Link>
 

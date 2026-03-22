@@ -4,6 +4,7 @@ import TiendaFooter from "@/components/tienda/footer";
 import { CartProvider } from "@/components/tienda/cart-drawer";
 import AdminBanner from "@/components/tienda/admin-banner";
 import ToastContainer from "@/components/tienda/toast";
+import WhatsAppFloat from "@/components/tienda/whatsapp-float";
 
 export const metadata: Metadata = {
   title: {
@@ -22,6 +23,7 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
         <main className="flex-1">{children}</main>
         <TiendaFooter />
         <ToastContainer />
+        <WhatsAppFloat />
       </div>
     </CartProvider>
   );

@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
+import { addRecentlyViewed } from "@/hooks/use-recently-viewed";
 import {
   Package,
   Minus,
@@ -189,6 +190,7 @@ export default function ProductoDetallePage() {
         }
 
         setProducto(prod as Producto);
+        addRecentlyViewed({ id: prod.id, nombre: prod.nombre, precio: prod.precio, imagen_url: prod.imagen_url });
 
         // Load combo items if es_combo
         if (prod.es_combo) {

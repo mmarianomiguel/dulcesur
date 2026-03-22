@@ -341,15 +341,58 @@ function CartDrawer() {
 
             {/* Footer */}
             <div className="border-t border-gray-100 p-6 space-y-4">
+              {/* Progress bar */}
+              {(() => {
+                const MINIMO_RETIRO = 15000;
+                const MINIMO_ENVIO = 50000;
+                if (subtotal >= MINIMO_ENVIO) {
+                  return (
+                    <div className="bg-green-50 rounded-lg px-3 py-2">
+                      <p className="text-xs font-semibold text-green-700 text-center">
+                        ¡Pedido habilitado para envío a domicilio!
+                      </p>
+                      <div className="w-full h-1.5 bg-green-200 rounded-full mt-1.5">
+                        <div className="h-full bg-green-500 rounded-full" style={{ width: "100%" }} />
+                      </div>
+                    </div>
+                  );
+                }
+                if (subtotal >= MINIMO_RETIRO) {
+                  const progress = Math.min(((subtotal - MINIMO_RETIRO) / (MINIMO_ENVIO - MINIMO_RETIRO)) * 100, 100);
+                  const falta = MINIMO_ENVIO - subtotal;
+                  return (
+                    <div className="bg-blue-50 rounded-lg px-3 py-2">
+                      <p className="text-xs text-blue-700 text-center">
+                        Agregá <strong>{formatCurrency(falta)}</strong> más para envío a domicilio
+                      </p>
+                      <div className="w-full h-1.5 bg-blue-200 rounded-full mt-1.5">
+                        <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                      </div>
+                      <p className="text-[10px] text-blue-400 text-center mt-1">Retiro en local habilitado</p>
+                    </div>
+                  );
+                }
+                const progress = Math.min((subtotal / MINIMO_RETIRO) * 100, 100);
+                const falta = MINIMO_RETIRO - subtotal;
+                return (
+                  <div className="bg-amber-50 rounded-lg px-3 py-2">
+                    <p className="text-xs text-amber-700 text-center">
+                      Agregá <strong>{formatCurrency(falta)}</strong> más para poder comprar
+                    </p>
+                    <div className="w-full h-1.5 bg-amber-200 rounded-full mt-1.5">
+                      <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                    </div>
+                    <p className="text-[10px] text-amber-400 text-center mt-1">Mínimo ${new Intl.NumberFormat("es-AR").format(MINIMO_RETIRO)} para retiro</p>
+                  </div>
+                );
+              })()}
+
               <div className="flex items-center justify-between">
                 <span className="text-gray-500">Subtotal</span>
                 <span className="text-lg font-bold text-gray-900">
                   {formatCurrency(subtotal)}
                 </span>
               </div>
-              <p className="text-xs text-gray-400">
-                El costo de envío se calcula en el checkout
-              </p>
               <Link
                 href="/checkout"
                 onClick={closeCart}
