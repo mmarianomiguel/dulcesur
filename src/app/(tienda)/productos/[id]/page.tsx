@@ -506,49 +506,69 @@ export default function ProductoDetallePage() {
 
         {/* Right - Info */}
         <div className="flex flex-col">
-          <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">
+          {/* Category & Brand tags */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {producto.categorias?.nombre && (
+              <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2.5 py-1 font-medium">
+                {producto.categorias.nombre}
+              </span>
+            )}
+            {producto.marcas?.nombre && (
+              <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2.5 py-1 font-medium">
+                {producto.marcas.nombre}
+              </span>
+            )}
+          </div>
+
+          <h1 className="text-2xl font-bold text-gray-900 md:text-3xl mt-2">
             {producto.nombre}
           </h1>
 
           {/* Price */}
-          <div className="mt-4 border-b border-gray-100 pb-5">
-            {currentDiscount > 0 ? (
-              <>
-                <div className="flex items-center gap-3">
-                  <p className="text-3xl font-bold text-gray-900">
-                    {formatCurrency(discountedPrice)}
-                  </p>
-                  <span className="bg-pink-600 text-white text-xs font-bold px-2.5 py-1 rounded-md">
-                    {currentDiscount}% OFF
-                  </span>
-                </div>
-                <p className="text-sm text-gray-400 line-through mt-1">
-                  {formatCurrency(currentPrice)}
-                </p>
-                <p className="text-sm text-green-600 font-semibold mt-0.5">
-                  Ahorrás {formatCurrency(savings)}
-                </p>
-              </>
-            ) : (
+          <div className="mt-4">
+            <div className="flex items-center gap-3">
               <p className="text-3xl font-bold text-gray-900">
-                {formatCurrency(currentPrice)}
+                {currentDiscount > 0 ? formatCurrency(discountedPrice) : formatCurrency(currentPrice)}
               </p>
+              {currentDiscount > 0 && (
+                <span className="bg-pink-600 text-white text-xs font-bold px-2.5 py-1 rounded-md">
+                  {currentDiscount}% OFF
+                </span>
+              )}
+              {(() => {
+                const pa = (producto as any).precio_anterior;
+                if (currentDiscount > 0 || !pa || pa <= 0 || pa === producto.precio) return null;
+                const dateStr = producto.fecha_actualizacion || producto.updated_at;
+                if (!dateStr || (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
+                return producto.precio > pa
+                  ? <span className="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">Precio actualizado</span>
+                  : <span className="bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">Precio rebajado</span>;
+              })()}
+            </div>
+            {currentDiscount > 0 && (
+              <div className="flex items-center gap-3 mt-1">
+                <span className="text-sm text-gray-400 line-through">{formatCurrency(currentPrice)}</span>
+                <span className="text-sm text-green-600 font-semibold">Ahorrás {formatCurrency(savings)}</span>
+              </div>
             )}
-            {currentPres && currentPres.cantidad > 1 ? (
-              <p className="text-sm text-gray-500 mt-1">
-                por caja ({currentPres.cantidad} unidades)
-              </p>
-            ) : (
-              <p className="text-sm text-gray-500 mt-1">Precio Unitario</p>
-            )}
+            {(() => {
+              const pa = (producto as any).precio_anterior;
+              if (currentDiscount > 0 || !pa || pa <= 0 || pa === producto.precio) return null;
+              const dateStr = producto.fecha_actualizacion || producto.updated_at;
+              if (!dateStr || (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
+              return <span className="text-sm text-gray-400 line-through mt-1">{formatCurrency(pa)}</span>;
+            })()}
+            <p className="text-sm text-gray-500 mt-1">
+              {currentPres && currentPres.cantidad > 1
+                ? `Por caja (${currentPres.cantidad} unidades)`
+                : "Precio unitario"}
+            </p>
             {boxOnlyDiscount > 0 && currentPresLabel === "Unidad" && (
               <div className="mt-2 inline-flex items-center gap-2 bg-green-50 rounded-lg px-3 py-1.5">
                 <span className="bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
                   {boxOnlyDiscount}% OFF
                 </span>
-                <span className="text-sm text-green-700">
-                  comprando por caja
-                </span>
+                <span className="text-sm text-green-700">comprando por caja</span>
               </div>
             )}
             {producto.es_combo && comboComponentes.length > 0 && (() => {
@@ -559,7 +579,7 @@ export default function ProductoDetallePage() {
                   <Box className="w-3.5 h-3.5 text-pink-500 flex-shrink-0" />
                   <span className="text-sm text-pink-700">
                     <span className="font-semibold">{formatCurrency(precioPorUnidad)}</span>
-                    <span className="text-pink-500"> por unidad · {totalUnidades} unidades totales</span>
+                    <span className="text-pink-500"> por unidad · {totalUnidades} un. totales</span>
                   </span>
                 </div>
               );
@@ -568,13 +588,11 @@ export default function ProductoDetallePage() {
 
           {/* Presentaciones */}
           {presentaciones.length > 0 && (
-            <div className="mt-5">
-              <p className="text-sm font-semibold text-gray-900 mb-3">Presentación</p>
+            <div className="mt-5 pt-5 border-t border-gray-100">
               <div className="grid grid-cols-2 gap-3">
                 {presentaciones
                   .map((p, idx) => ({ p, idx }))
                   .sort((a, b) => {
-                    // Unit (1) first, then Medio Cartón (<1), then boxes
                     if (a.p.cantidad === 1 && b.p.cantidad !== 1) return -1;
                     if (a.p.cantidad !== 1 && b.p.cantidad === 1) return 1;
                     return a.p.cantidad - b.p.cantidad;
@@ -589,11 +607,11 @@ export default function ProductoDetallePage() {
                       key={p.id}
                       disabled={disabled}
                       onClick={() => { setSelectedPresIdx(idx); setCantidad((c) => Math.min(c, Math.max(1, presMax))); }}
-                      className={`flex items-center justify-center gap-2 rounded-xl border-2 py-3.5 px-4 text-sm font-semibold transition-all ${
+                      className={`flex items-center justify-center gap-2 rounded-xl border-2 py-3 px-4 text-sm font-semibold transition-all ${
                         disabled
                           ? "border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed"
                           : selected
-                          ? "border-pink-600 bg-pink-600 text-white shadow-lg shadow-pink-600/20"
+                          ? "border-pink-600 bg-pink-600 text-white"
                           : "border-gray-200 text-gray-700 hover:border-pink-300 bg-white"
                       }`}
                     >
@@ -607,92 +625,66 @@ export default function ProductoDetallePage() {
             </div>
           )}
 
-          {/* Product Info Table */}
-          <div className="mt-6">
-            <p className="text-sm font-semibold text-gray-900 mb-3">Información del producto</p>
-            <div className="space-y-2.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Categoría:</span>
-                <span className="font-medium text-gray-900">{producto.categorias?.nombre ?? "—"}</span>
+          {/* Quantity + Add to Cart */}
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <div className="flex items-center gap-4">
+              <div className="inline-flex items-center rounded-xl border border-gray-200">
+                <button
+                  onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+                  disabled={cantidad <= 1}
+                  className="flex h-12 w-12 items-center justify-center rounded-l-xl text-gray-500 transition hover:bg-gray-50 disabled:opacity-30"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="flex h-12 w-14 items-center justify-center border-x border-gray-200 text-center font-semibold text-gray-800">
+                  {cantidad}
+                </span>
+                <button
+                  onClick={() => setCantidad((c) => Math.min(maxQty, c + 1))}
+                  disabled={cantidad >= maxQty}
+                  className="flex h-12 w-12 items-center justify-center rounded-r-xl text-gray-500 transition hover:bg-gray-50 disabled:opacity-30"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               </div>
-              {producto.marcas?.nombre && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Marca:</span>
-                  <span className="font-medium text-gray-900">{producto.marcas.nombre}</span>
-                </div>
-              )}
+              <button
+                onClick={handleAddToCart}
+                disabled={!canBuy}
+                className="flex-1 rounded-xl bg-pink-600 py-3.5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {canBuy ? `Agregar · ${formatCurrency((currentDiscount > 0 ? discountedPrice : currentPrice) * cantidad)}` : presQty > 1 ? "Stock insuficiente" : "Sin stock"}
+              </button>
+            </div>
+            <p className={"text-xs mt-2 " + stockColor}>
+              {stockLabel} {availableStock > 0 && availableStock <= 10 ? `· ${availableStock} disponibles` : ""}
+            </p>
+          </div>
+
+          {/* More details - collapsible */}
+          <details className="mt-5 border-t border-gray-100 pt-5">
+            <summary className="text-sm font-medium text-gray-500 cursor-pointer hover:text-gray-700 transition">
+              Más detalles
+            </summary>
+            <div className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">SKU:</span>
-                <span className="font-medium text-gray-900">{(currentPres?.sku || producto.codigo) || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Estado:</span>
-                <span className={`font-medium ${stockColor}`}>{stockLabel}</span>
+                <span className="font-medium text-gray-700">{(currentPres?.sku || producto.codigo) || "—"}</span>
               </div>
               {(producto.updated_at || producto.fecha_actualizacion) && (() => {
                 const dateStr = producto.fecha_actualizacion || producto.updated_at || "";
                 const date = new Date(dateStr);
                 if (isNaN(date.getTime())) return null;
-                const precioAnterior = (producto as any).precio_anterior;
-                const precioActual = producto.precio;
-                const hasPriceChange = precioAnterior != null && precioAnterior > 0 && precioAnterior !== precioActual;
-                const isUp = hasPriceChange && precioActual > precioAnterior;
-                const isDown = hasPriceChange && precioActual < precioAnterior;
-                return (<>
-                  <div className="flex justify-between items-center pt-1 border-t border-gray-100 mt-1">
+                return (
+                  <div className="flex justify-between">
                     <span className="text-gray-500">Últ. actualización:</span>
                     <span className="font-medium text-gray-700 text-xs">
                       {date.toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}
                     </span>
                   </div>
-                  {hasPriceChange && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Precio anterior:</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-gray-400 line-through">{formatCurrency(precioAnterior)}</span>
-                        <span className={"text-[10px] font-bold text-white px-2.5 py-1 rounded-md " + (isUp ? "bg-amber-500" : "bg-emerald-500")}>
-                          {isUp ? "Precio actualizado" : "Precio rebajado"}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </>);
+                );
               })()}
             </div>
-          </div>
-
-          {/* Quantity */}
-          <div className="mt-6">
-            <p className="text-sm font-semibold text-gray-900 mb-3">Cantidad</p>
-            <div className="inline-flex items-center rounded-xl border border-gray-200">
-              <button
-                onClick={() => setCantidad((c) => Math.max(1, c - 1))}
-                disabled={cantidad <= 1}
-                className="flex h-11 w-11 items-center justify-center rounded-l-xl text-gray-500 transition hover:bg-gray-50 disabled:opacity-30"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="flex h-11 w-14 items-center justify-center border-x border-gray-200 text-center font-semibold text-gray-800">
-                {cantidad}
-              </span>
-              <button
-                onClick={() => setCantidad((c) => Math.min(maxQty, c + 1))}
-                disabled={cantidad >= maxQty}
-                className="flex h-11 w-11 items-center justify-center rounded-r-xl text-gray-500 transition hover:bg-gray-50 disabled:opacity-30"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Add to Cart */}
-          <button
-            onClick={handleAddToCart}
-            disabled={!canBuy}
-            className="mt-6 w-full rounded-2xl bg-pink-600 py-4 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-pink-700 hover:shadow-xl hover:shadow-pink-600/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {canBuy ? "Añadir al carrito" : presQty > 1 ? "Stock insuficiente para esta presentación" : "Sin stock"}
-          </button>
+          </details>
 
           {/* Combo contents */}
           {producto.es_combo && comboComponentes.length > 0 && (() => {
