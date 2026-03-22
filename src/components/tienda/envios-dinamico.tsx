@@ -16,6 +16,10 @@ interface TiendaConfig {
   monto_minimo_pedido: number;
   umbral_envio_gratis: number;
   hora_corte: string;
+  horario_atencion_inicio: string;
+  horario_atencion_fin: string;
+  dias_atencion: string[];
+  minimo_unidades_mayorista: number;
 }
 
 export default function EnviosDinamico() {
@@ -29,7 +33,7 @@ export default function EnviosDinamico() {
         supabase.from("zonas_entrega").select("*").order("nombre"),
         supabase
           .from("tienda_config")
-          .select("monto_minimo_pedido, umbral_envio_gratis, hora_corte")
+          .select("monto_minimo_pedido, umbral_envio_gratis, hora_corte, horario_atencion_inicio, horario_atencion_fin, dias_atencion, minimo_unidades_mayorista")
           .limit(1)
           .single(),
       ]);
@@ -78,7 +82,7 @@ export default function EnviosDinamico() {
         <h3 className="text-lg font-semibold text-amber-900">Compra mínima por producto</h3>
         <p className="mt-2 text-sm text-amber-800">
           Los productos que se venden por unidad tienen un mínimo de{" "}
-          <strong>3 unidades</strong> para acceder a precios mayoristas.
+          <strong>{config?.minimo_unidades_mayorista || 3} unidades</strong> para acceder a precios mayoristas.
         </p>
       </div>
 
@@ -128,8 +132,16 @@ export default function EnviosDinamico() {
       <div>
         <h3 className="mb-2 text-lg font-semibold text-gray-900">Horario de entrega</h3>
         <p className="text-gray-600">
-          Las entregas se realizan de <strong className="text-gray-900">lunes a sábados</strong> en
-          el horario de <strong className="text-gray-900">13:00 a 15:00 hs</strong>.
+          Las entregas se realizan de{" "}
+          <strong className="text-gray-900">
+            {config?.dias_atencion
+              ? `${config.dias_atencion[0].toLowerCase()} a ${config.dias_atencion[config.dias_atencion.length - 1].toLowerCase()}`
+              : "lunes a sábados"}
+          </strong>{" "}
+          en el horario de{" "}
+          <strong className="text-gray-900">
+            {config?.horario_atencion_inicio?.slice(0, 5) || "08:00"} a {config?.horario_atencion_fin?.slice(0, 5) || "14:00"} hs
+          </strong>.
         </p>
       </div>
 

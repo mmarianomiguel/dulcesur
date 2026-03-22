@@ -30,16 +30,20 @@ export default function TiendaNavbar() {
   const { openCart, itemCount, subtotal } = useCart();
   const router = useRouter();
   const categoryBarRef = useRef<HTMLDivElement>(null);
-  const [config, setConfig] = useState<{ logo_url?: string; nombre?: string; telefono?: string } | null>(null);
+  const [config, setConfig] = useState<{
+    logo_url?: string; nombre?: string; telefono?: string;
+    umbral_envio_gratis?: number; horario_atencion_inicio?: string;
+    horario_atencion_fin?: string; dias_atencion?: string[];
+  } | null>(null);
 
   useEffect(() => {
     Promise.all([
       supabase.from("categorias").select("id, nombre").limit(12),
       supabase.from("empresa").select("nombre, telefono").limit(1).single(),
-      supabase.from("tienda_config").select("logo_url").limit(1).single(),
+      supabase.from("tienda_config").select("logo_url, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion").limit(1).single(),
     ]).then(([{ data: cats }, { data: emp }, { data: tc }]) => {
       if (cats) setCategorias(cats);
-      if (emp || tc) setConfig({ ...emp, logo_url: tc?.logo_url } as any);
+      if (emp || tc) setConfig({ ...emp, ...tc, logo_url: tc?.logo_url } as any);
     });
   }, []);
 
@@ -77,10 +81,10 @@ export default function TiendaNavbar() {
         <div className="mx-auto flex max-w-7xl items-center justify-center md:justify-between px-4 py-1.5 text-[10px] md:text-xs">
           <span className="flex items-center gap-1.5">
             <Truck className="h-3.5 w-3.5" />
-            Envío gratis en compras +$50.000
+            Envío gratis en compras +${config?.umbral_envio_gratis ? new Intl.NumberFormat("es-AR").format(config.umbral_envio_gratis) : "50.000"}
           </span>
           <span className="hidden md:inline text-gray-400">
-            Atención: Lunes a Viernes de 9 a 18hs
+            Atención: {config?.dias_atencion ? `${config.dias_atencion[0]} a ${config.dias_atencion[config.dias_atencion.length - 1]}` : "Lunes a Sábados"} de {config?.horario_atencion_inicio?.slice(0, 5)?.replace(/^0/, "") || "8"} a {config?.horario_atencion_fin?.slice(0, 5)?.replace(/^0/, "") || "14"}hs
           </span>
           <div className="hidden md:flex items-center gap-4">
             <Link href="/cuenta" className="hover:text-pink-400 transition">

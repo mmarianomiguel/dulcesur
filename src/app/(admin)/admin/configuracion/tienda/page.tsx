@@ -56,6 +56,10 @@ interface TiendaConfig {
   max_categorias_destacadas: number;
   pago_mixto_habilitado: boolean;
   recargo_transferencia: number;
+  horario_atencion_inicio: string;
+  horario_atencion_fin: string;
+  dias_atencion: string[];
+  minimo_unidades_mayorista: number;
 }
 
 interface CategoriaDestacada {
@@ -180,6 +184,10 @@ export default function TiendaConfigPage() {
       max_categorias_destacadas: config.max_categorias_destacadas,
       pago_mixto_habilitado: config.pago_mixto_habilitado,
       recargo_transferencia: config.recargo_transferencia,
+      horario_atencion_inicio: config.horario_atencion_inicio,
+      horario_atencion_fin: config.horario_atencion_fin,
+      dias_atencion: config.dias_atencion,
+      minimo_unidades_mayorista: config.minimo_unidades_mayorista,
     }).eq("id", config.id);
 
     // Sync categorias_destacadas: delete all and re-insert
@@ -513,6 +521,94 @@ export default function TiendaConfigPage() {
                           }
                           className="h-9"
                         />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Horarios y Mayorista */}
+                <Card>
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-violet-500" />
+                      Horarios de atención
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Se muestra en la navbar, info de contacto y envíos
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground font-normal">Hora apertura</Label>
+                        <Input
+                          type="time"
+                          value={config?.horario_atencion_inicio ?? "08:00"}
+                          onChange={(e) => update("horario_atencion_inicio", e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground font-normal">Hora cierre</Label>
+                        <Input
+                          type="time"
+                          value={config?.horario_atencion_fin ?? "14:00"}
+                          onChange={(e) => update("horario_atencion_fin", e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground font-normal">Días de atención</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].map((dia) => {
+                          const selected = config?.dias_atencion?.includes(dia) ?? false;
+                          return (
+                            <button
+                              key={dia}
+                              type="button"
+                              onClick={() => {
+                                const current = config?.dias_atencion || [];
+                                const next = selected
+                                  ? current.filter((d) => d !== dia)
+                                  : [...current, dia];
+                                update("dias_atencion", next);
+                              }}
+                              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                                selected
+                                  ? "bg-violet-100 text-violet-700 ring-1 ring-violet-300"
+                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                              }`}
+                            >
+                              {dia.slice(0, 3)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
+                        <Package className="w-5 h-5 text-amber-500" />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-xs text-muted-foreground font-normal">
+                          Mínimo de unidades para precio mayorista
+                        </Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={config?.minimo_unidades_mayorista ?? 3}
+                          onChange={(e) => update("minimo_unidades_mayorista", Number(e.target.value))}
+                          className="h-9 w-32"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Cantidad mínima de unidades sueltas para acceder a precio mayorista
+                        </p>
                       </div>
                     </div>
                   </CardContent>

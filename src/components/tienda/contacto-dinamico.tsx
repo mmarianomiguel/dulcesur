@@ -12,20 +12,32 @@ interface FooterConfig {
   email: string;
 }
 
+interface HorarioConfig {
+  horario_atencion_inicio: string;
+  horario_atencion_fin: string;
+  dias_atencion: string[];
+}
+
 export default function ContactoDinamico() {
   const [config, setConfig] = useState<FooterConfig | null>(null);
+  const [horario, setHorario] = useState<HorarioConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase
         .from("tienda_config")
-        .select("footer_config")
+        .select("footer_config, horario_atencion_inicio, horario_atencion_fin, dias_atencion")
         .limit(1)
         .single();
       if (data) {
         const fc = (data as any).footer_config || {};
         setConfig(fc as FooterConfig);
+        setHorario({
+          horario_atencion_inicio: (data as any).horario_atencion_inicio || "08:00",
+          horario_atencion_fin: (data as any).horario_atencion_fin || "14:00",
+          dias_atencion: (data as any).dias_atencion || ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"],
+        });
       }
       setLoading(false);
     })();
@@ -98,7 +110,9 @@ export default function ContactoDinamico() {
               </div>
               <h3 className="text-lg font-semibold text-gray-900">Instagram</h3>
             </div>
-            <p className="text-sm font-medium text-gray-900">@dulcesurmayorista</p>
+            <p className="text-sm font-medium text-gray-900">
+              {config.instagram_url ? "@" + config.instagram_url.replace(/.*instagram\.com\//, "").replace(/\/$/, "") : "Instagram"}
+            </p>
             <p className="mt-1 text-sm text-gray-500">Seguinos en Instagram</p>
           </a>
         )}
@@ -134,11 +148,17 @@ export default function ContactoDinamico() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <p className="text-sm font-medium text-gray-700">Horario de atención</p>
-            <p className="text-sm text-gray-600">Lunes a Sábados de 8:00 a 14:00 hs</p>
+            <p className="text-sm text-gray-600">
+              {horario?.dias_atencion ? `${horario.dias_atencion[0]} a ${horario.dias_atencion[horario.dias_atencion.length - 1]}` : "Lunes a Sábados"}{" "}
+              de {horario?.horario_atencion_inicio?.slice(0, 5) || "08:00"} a {horario?.horario_atencion_fin?.slice(0, 5) || "14:00"} hs
+            </p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-700">Local abierto</p>
-            <p className="text-sm text-gray-600">Lunes a Sábados de 8:00 a 14:00 hs</p>
+            <p className="text-sm text-gray-600">
+              {horario?.dias_atencion ? `${horario.dias_atencion[0]} a ${horario.dias_atencion[horario.dias_atencion.length - 1]}` : "Lunes a Sábados"}{" "}
+              de {horario?.horario_atencion_inicio?.slice(0, 5) || "08:00"} a {horario?.horario_atencion_fin?.slice(0, 5) || "14:00"} hs
+            </p>
           </div>
         </div>
       </div>
