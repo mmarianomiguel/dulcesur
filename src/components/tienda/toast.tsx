@@ -46,7 +46,7 @@ export default function ToastContainer() {
       const { message, type, subtitle } = (e as CustomEvent).detail;
       const id = ++toastId;
       setToasts((prev) => [...prev, { id, message, type: type || "success", subtitle, exiting: false }]);
-      const duration = type === "error" ? 5000 : 3000;
+      const duration = type === "error" ? 2500 : 1800;
       setTimeout(() => dismiss(id), duration);
     }
     window.addEventListener("show-toast", handler);
@@ -60,7 +60,7 @@ export default function ToastContainer() {
       {toasts.map((t) => {
         const config = TOAST_CONFIG[t.type];
         const Icon = config.icon;
-        const duration = t.type === "error" ? 5 : 3;
+        const duration = t.type === "error" ? 2.5 : 1.8;
 
         return (
           <div
