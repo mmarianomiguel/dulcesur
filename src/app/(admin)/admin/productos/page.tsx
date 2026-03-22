@@ -1357,6 +1357,9 @@ export default function ProductosPage() {
       if (sortBy === "nombre_desc") return b.nombre.localeCompare(a.nombre);
       if (sortBy === "updated_desc") return new Date((b as any).updated_at || 0).getTime() - new Date((a as any).updated_at || 0).getTime();
       if (sortBy === "updated_asc") return new Date((a as any).updated_at || 0).getTime() - new Date((b as any).updated_at || 0).getTime();
+      if (sortBy === "precio_asc") return a.precio - b.precio;
+      if (sortBy === "precio_desc") return b.precio - a.precio;
+      if (sortBy === "stock_asc") return a.stock - b.stock;
       return 0;
     });
     return arr;
@@ -1669,15 +1672,24 @@ export default function ProductosPage() {
                   <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Ordenar por</Label>
                   <Select value={sortBy} onValueChange={(v) => { setSortBy(v ?? "nombre_asc"); setPage(1); }}>
                     <SelectTrigger className="w-full">
-                      <SelectValue>
-                        {sortBy === "nombre_asc" ? "Nombre A→Z" : sortBy === "nombre_desc" ? "Nombre Z→A" : sortBy === "updated_desc" ? "Última actualización (más reciente)" : "Última actualización (más antigua)"}
-                      </SelectValue>
+                      {{
+                        nombre_asc: "Nombre A→Z",
+                        nombre_desc: "Nombre Z→A",
+                        updated_desc: "Últ. modificación (reciente)",
+                        updated_asc: "Últ. modificación (antigua)",
+                        precio_asc: "Precio (menor)",
+                        precio_desc: "Precio (mayor)",
+                        stock_asc: "Stock (menor)",
+                      }[sortBy] || "Nombre A→Z"}
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="nombre_asc">Nombre A→Z</SelectItem>
                       <SelectItem value="nombre_desc">Nombre Z→A</SelectItem>
-                      <SelectItem value="updated_desc">Última actualización (más reciente)</SelectItem>
-                      <SelectItem value="updated_asc">Última actualización (más antigua)</SelectItem>
+                      <SelectItem value="updated_desc">Últ. modificación (reciente)</SelectItem>
+                      <SelectItem value="updated_asc">Últ. modificación (antigua)</SelectItem>
+                      <SelectItem value="precio_asc">Precio (menor)</SelectItem>
+                      <SelectItem value="precio_desc">Precio (mayor)</SelectItem>
+                      <SelectItem value="stock_asc">Stock (menor)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
