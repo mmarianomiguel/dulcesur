@@ -211,9 +211,14 @@ export default function CobranzasPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Seguimiento de Cobranzas</h1>
-          <p className="text-muted-foreground text-sm">Clientes con saldo pendiente</p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <CreditCard className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Seguimiento de Cobranzas</h1>
+            <p className="text-sm text-muted-foreground">Clientes con saldo pendiente</p>
+          </div>
         </div>
         <Button variant="outline" size="sm" onClick={exportCSV}>
           <Download className="w-4 h-4 mr-2" />Exportar

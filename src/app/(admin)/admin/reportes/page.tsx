@@ -268,15 +268,25 @@ export default function ReportesPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Reportes</h1>
-          <p className="text-muted-foreground text-sm">Analisis de ventas, compras y stock</p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <BarChart3 className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Reportes</h1>
+            <p className="text-sm text-muted-foreground">Analisis de ventas, compras y stock</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9 w-36" />
-          <span className="text-muted-foreground text-sm">a</span>
-          <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9 w-36" />
-          <Button size="sm" onClick={fetchReports} disabled={loading}>
+          <div className="flex flex-col gap-0.5">
+            <Label className="text-xs text-muted-foreground">Desde</Label>
+            <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9 w-36" />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <Label className="text-xs text-muted-foreground">Hasta</Label>
+            <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9 w-36" />
+          </div>
+          <Button size="sm" onClick={fetchReports} disabled={loading} className="self-end">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Filter className="w-4 h-4" />}
           </Button>
         </div>

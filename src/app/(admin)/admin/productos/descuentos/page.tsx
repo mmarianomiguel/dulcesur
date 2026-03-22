@@ -407,9 +407,14 @@ export default function DescuentosPage() {
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Descuentos</h1>
-          <p className="text-sm text-muted-foreground">Gestión de descuentos y promociones</p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <Percent className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Descuentos</h1>
+            <p className="text-sm text-muted-foreground">Gestión de descuentos y promociones</p>
+          </div>
         </div>
         <Button onClick={openCreate}>
           <Plus className="w-4 h-4 mr-2" />
@@ -420,25 +425,25 @@ export default function DescuentosPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Total descuentos</div>
             <div className="text-2xl font-bold">{totalDescuentos}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Activos</div>
             <div className="text-2xl font-bold text-green-600">{activos}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Vencidos</div>
             <div className="text-2xl font-bold text-red-600">{vencidos}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Próximos a vencer</div>
             <div className="text-2xl font-bold text-amber-600">{proximosVencer}</div>
           </CardContent>

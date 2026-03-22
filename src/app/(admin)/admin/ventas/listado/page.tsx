@@ -1147,12 +1147,12 @@ export default function ListadoVentasPage() {
       </div>
 
       {/* Main Tabs */}
-      <div className="bg-gray-100 rounded-xl p-1 inline-flex gap-1">
+      <div className="bg-muted rounded-xl p-1 inline-flex gap-1">
         <button
           onClick={() => setActiveTab("historial")}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === "historial"
-              ? "bg-white shadow text-foreground"
+              ? "bg-background shadow text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -1162,7 +1162,7 @@ export default function ListadoVentasPage() {
           onClick={() => setActiveTab("pedidos")}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
             activeTab === "pedidos"
-              ? "bg-white shadow text-foreground"
+              ? "bg-background shadow text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >

@@ -20,6 +20,7 @@ import {
   ChevronsRight,
 } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 // ─── Types ───
 interface DBProducto {
@@ -653,29 +654,28 @@ export default function ListaPreciosPage() {
             <Link href="/admin/productos" className="text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+              <FileText className="w-5 h-5 text-primary" />
+            </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight">Lista de Precios</h1>
-              <p className="text-sm text-muted-foreground">{products.length} productos cargados desde la base de datos</p>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Lista de Precios</h1>
+              <p className="text-sm text-muted-foreground">{products.length} productos cargados</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={fetchProducts} className="border border-border text-muted-foreground px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={fetchProducts}>
+              <RefreshCw className="w-4 h-4 mr-2" />
               Actualizar
-            </button>
-            <button onClick={() => setShowConfig(true)} className="border border-border text-muted-foreground px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2">
-              <Settings className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
+              <Settings className="w-4 h-4 mr-2" />
               Configuración
-            </button>
+            </Button>
             {selected.size > 0 && (
-              <button
-                onClick={handleGenerateClick}
-                disabled={generating}
-                className="bg-primary text-primary-foreground px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              <Button size="sm" onClick={handleGenerateClick} disabled={generating}>
+                {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
                 Generar PDF ({selected.size})
-              </button>
+              </Button>
             )}
           </div>
         </div>

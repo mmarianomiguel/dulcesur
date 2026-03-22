@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import {
   BarChart3, TrendingUp, Users, Package, ShoppingCart, Receipt,
-  Loader2, DollarSign, Crown, Star, ArrowUpRight, ArrowDownRight, Wallet,
+  Loader2, DollarSign, Crown, Star, ArrowUpRight, ArrowDownRight, Wallet, Calendar,
 } from "lucide-react";
 
 function fc(v: number) {
@@ -163,23 +163,34 @@ export default function ResumenMensualPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Resumen Mensual</h1>
-          <p className="text-muted-foreground text-sm">{MESES[Number(mes) - 1]} {anio}</p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <Calendar className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Resumen Mensual</h1>
+            <p className="text-sm text-muted-foreground">{MESES[Number(mes) - 1]} {anio}</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={mes} onValueChange={(v) => setMes(v ?? mes)}>
-            <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
-            <SelectContent>
-              {MESES.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={anio} onValueChange={(v) => setAnio(v ?? anio)}>
-            <SelectTrigger className="w-24 h-9"><SelectValue placeholder="Año" /></SelectTrigger>
-            <SelectContent>
-              {[2024, 2025, 2026, 2027].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">Mes</span>
+            <Select value={mes} onValueChange={(v) => setMes(v ?? mes)}>
+              <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
+              <SelectContent>
+                {MESES.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">Año</span>
+            <Select value={anio} onValueChange={(v) => setAnio(v ?? anio)}>
+              <SelectTrigger className="w-24 h-9"><SelectValue placeholder="Año" /></SelectTrigger>
+              <SelectContent>
+                {[2024, 2025, 2026, 2027].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

@@ -159,17 +159,19 @@ export default function AuditoriaPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <FileText className="w-6 h-6" />
-            Historial de Auditoría
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Registro de todas las acciones realizadas en el sistema
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <FileText className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Historial de Auditoría</h1>
+            <p className="text-sm text-muted-foreground">
+              Registro de todas las acciones realizadas en el sistema
+            </p>
+          </div>
         </div>
         <Badge variant="secondary" className="text-sm">
           {totalCount} registros

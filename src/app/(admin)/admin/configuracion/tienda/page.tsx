@@ -210,53 +210,43 @@ export default function TiendaConfigPage() {
   }
 
   return (
-    <div className="min-h-full">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-6">
       {/* Page Header */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-            <Settings className="w-3.5 h-3.5" />
-            <span>Configuración</span>
-            <span className="text-muted-foreground/50">/</span>
-            <span className="text-foreground font-medium">Tienda</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <Store className="w-5 h-5 text-primary" />
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Store className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold tracking-tight">
-                  Configuración de Tienda
-                </h1>
-                <p className="text-muted-foreground text-sm">
-                  Administra los ajustes de tu tienda online
-                </p>
-              </div>
-            </div>
-            {config && (
-              <Badge
-                variant={config.tienda_activa ? "default" : "secondary"}
-                className={
-                  config.tienda_activa
-                    ? "bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/15"
-                    : "bg-red-500/10 text-red-600 border-red-200 hover:bg-red-500/10"
-                }
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                    config.tienda_activa ? "bg-emerald-500" : "bg-red-500"
-                  }`}
-                />
-                {config.tienda_activa ? "Activa" : "Inactiva"}
-              </Badge>
-            )}
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+              Configuración de Tienda
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Administra los ajustes de tu tienda online
+            </p>
           </div>
         </div>
+        {config && (
+          <Badge
+            variant={config.tienda_activa ? "default" : "secondary"}
+            className={
+              config.tienda_activa
+                ? "bg-emerald-500/15 text-emerald-700 border-emerald-200 hover:bg-emerald-500/15"
+                : "bg-red-500/10 text-red-600 border-red-200 hover:bg-red-500/10"
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                config.tienda_activa ? "bg-emerald-500" : "bg-red-500"
+              }`}
+            />
+            {config.tienda_activa ? "Activa" : "Inactiva"}
+          </Badge>
+        )}
       </div>
 
       {/* Body: Sidebar + Content */}
-      <div className="flex px-6 lg:px-8 py-6 gap-6">
+      <div className="flex gap-6">
         {/* Left Sidebar Nav */}
         <nav className="w-56 shrink-0 hidden md:block">
           <div className="sticky top-6 space-y-1">

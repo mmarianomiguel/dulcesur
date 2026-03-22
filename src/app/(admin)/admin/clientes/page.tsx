@@ -754,9 +754,14 @@ export default function ClientesPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Clientes</h1>
-          <p className="text-muted-foreground text-sm">{clients.length} clientes registrados</p>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <Users className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Clientes</h1>
+            <p className="text-sm text-muted-foreground">{clients.length} clientes registrados</p>
+          </div>
         </div>
         <div className="flex gap-2">
           {activeTab === "cobranzas" && (

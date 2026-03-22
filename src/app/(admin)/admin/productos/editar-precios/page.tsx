@@ -511,17 +511,20 @@ export default function EditarPreciosPage() {
   };
 
   return (
-    <div className="flex-1 p-6 space-y-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => router.push("/admin/productos")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <DollarSign className="w-5 h-5 text-primary" />
+          </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold">Editar Precios</h1>
             <p className="text-sm text-muted-foreground">
-              Edici&oacute;n r&aacute;pida de precios de productos
+              Edición rápida de precios de productos
             </p>
           </div>
         </div>

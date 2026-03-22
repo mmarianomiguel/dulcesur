@@ -858,9 +858,9 @@ export default function PaginaInicioEditor() {
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       {/* ── Top Toolbar ────────────────────────────────────────────────── */}
-      <div className="h-14 border-b bg-white px-4 flex items-center justify-between shrink-0">
+      <div className="h-14 border-b bg-background px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <Link href="/admin/configuracion" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <Link href="/admin/configuracion" className="p-2 hover:bg-muted rounded-lg transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
@@ -868,24 +868,24 @@ export default function PaginaInicioEditor() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
           <button
             onClick={() => setDevice("desktop")}
-            className={`p-1.5 rounded-md transition-colors ${device === "desktop" ? "bg-white shadow-sm" : "hover:bg-gray-200"}`}
+            className={`p-1.5 rounded-md transition-colors ${device === "desktop" ? "bg-background shadow-sm" : "hover:bg-muted-foreground/10"}`}
             title="Escritorio"
           >
             <Monitor className="w-4 h-4" />
           </button>
           <button
             onClick={() => setDevice("tablet")}
-            className={`p-1.5 rounded-md transition-colors ${device === "tablet" ? "bg-white shadow-sm" : "hover:bg-gray-200"}`}
+            className={`p-1.5 rounded-md transition-colors ${device === "tablet" ? "bg-background shadow-sm" : "hover:bg-muted-foreground/10"}`}
             title="Tablet"
           >
             <Tablet className="w-4 h-4" />
           </button>
           <button
             onClick={() => setDevice("mobile")}
-            className={`p-1.5 rounded-md transition-colors ${device === "mobile" ? "bg-white shadow-sm" : "hover:bg-gray-200"}`}
+            className={`p-1.5 rounded-md transition-colors ${device === "mobile" ? "bg-background shadow-sm" : "hover:bg-muted-foreground/10"}`}
             title="Móvil"
           >
             <Smartphone className="w-4 h-4" />
@@ -1046,11 +1046,11 @@ export default function PaginaInicioEditor() {
         </div>
 
         {/* ── Right: Settings Panel ──────────────────────────────────── */}
-        <div ref={settingsPanelRef} className="w-[380px] bg-white border-l overflow-y-auto shrink-0">
+        <div ref={settingsPanelRef} className="w-[380px] bg-background border-l overflow-y-auto shrink-0">
           {selectedBlock ? (
             <div>
               {/* Panel header */}
-              <div className="sticky top-0 bg-white z-10 px-4 py-3 border-b flex items-center justify-between">
+              <div className="sticky top-0 bg-background z-10 px-4 py-3 border-b flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {(() => { const Icon = getBlockIcon(selectedBlock.tipo); return <Icon className="w-4 h-4 text-pink-600" />; })()}
                   <span className="text-sm font-semibold">Editar {getBlockDef(selectedBlock.tipo)?.label ?? selectedBlock.tipo}</span>

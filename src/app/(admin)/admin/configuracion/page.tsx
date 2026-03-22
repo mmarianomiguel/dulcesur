@@ -45,6 +45,8 @@ import {
   Globe,
   LayoutDashboard,
   Lock,
+  Download,
+  Upload,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
@@ -259,7 +261,7 @@ export default function ConfiguracionPage() {
   );
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 max-w-6xl">
+    <div className="p-3 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       {/* Page title */}
       <div className="flex items-center gap-3 mb-8">
         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -951,6 +953,7 @@ export default function ConfiguracionPage() {
                         }
                       }}
                     >
+                      <Download className="w-4 h-4 mr-2" />
                       Descargar Backup
                     </Button>
                   </CardContent>
@@ -961,11 +964,12 @@ export default function ConfiguracionPage() {
                     <CardTitle className="text-base">Restaurar Backup</CardTitle>
                     <CardDescription>Restaura los datos desde un archivo JSON previamente exportado. Esto reemplazará todos los datos actuales.</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-3">
                     <input
+                      id="backup-restore-input"
                       type="file"
                       accept=".json"
-                      className="text-sm"
+                      className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
@@ -991,7 +995,14 @@ export default function ConfiguracionPage() {
                         e.target.value = "";
                       }}
                     />
-                    <p className="text-xs text-destructive mt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => document.getElementById("backup-restore-input")?.click()}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Seleccionar archivo JSON
+                    </Button>
+                    <p className="text-xs text-destructive">
                       Advertencia: La restauración eliminará los datos actuales y los reemplazará con los del backup.
                     </p>
                   </CardContent>

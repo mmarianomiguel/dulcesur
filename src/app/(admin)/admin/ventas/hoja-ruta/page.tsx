@@ -448,15 +448,15 @@ export default function HojaDeRutaPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Nav Tabs */}
-      <div className="bg-gray-100 rounded-xl p-1 inline-flex">
+      <div className="bg-muted rounded-xl p-1 inline-flex">
         {navTabs.map((tab) => (
           <Link
             key={tab.href}
             href={tab.href}
             className={`rounded-lg px-6 py-2.5 text-sm transition-all ${
               tab.href === "/admin/ventas/hoja-ruta"
-                ? "bg-white shadow-sm font-semibold text-gray-900"
-                : "text-gray-500 hover:text-gray-700"
+                ? "bg-background shadow-sm font-semibold text-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab.name}
@@ -467,21 +467,23 @@ export default function HojaDeRutaPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Truck className="w-7 h-7 text-gray-700" />
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+            <Truck className="w-5 h-5 text-primary" />
+          </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Entregas y Hoja de Ruta</h1>
-            <p className="text-sm text-gray-500">Gestiona entregas pendientes, cobros y hoja de ruta</p>
+            <h1 className="text-xl sm:text-2xl font-bold">Entregas y Hoja de Ruta</h1>
+            <p className="text-sm text-muted-foreground">Gestiona entregas pendientes, cobros y hoja de ruta</p>
           </div>
         </div>
       </div>
 
       {/* Pendientes / Historial tabs */}
       <div className="flex items-center justify-between">
-        <div className="bg-gray-100 rounded-lg p-1 inline-flex">
+        <div className="bg-muted rounded-lg p-1 inline-flex">
           <button
             onClick={() => setActiveTab("pendientes")}
             className={`rounded-md px-5 py-2 text-sm transition-all ${
-              activeTab === "pendientes" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+              activeTab === "pendientes" ? "bg-background shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Package className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
@@ -490,7 +492,7 @@ export default function HojaDeRutaPage() {
           <button
             onClick={() => setActiveTab("historial")}
             className={`rounded-md px-5 py-2 text-sm transition-all ${
-              activeTab === "historial" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+              activeTab === "historial" ? "bg-white shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
@@ -499,18 +501,18 @@ export default function HojaDeRutaPage() {
         </div>
         {activeTab === "pendientes" && (
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
               <input
                 type="checkbox"
                 checked={showAllPending}
                 onChange={(e) => setShowAllPending(e.target.checked)}
-                className="rounded border-gray-300"
+                className="rounded border-border"
               />
               Todas las pendientes
             </label>
             {!showAllPending && (
               <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-gray-400" />
+                <Calendar className="w-5 h-5 text-muted-foreground" />
                 <Input
                   type="date"
                   value={selectedDate}
@@ -528,15 +530,15 @@ export default function HojaDeRutaPage() {
           {/* Historial filters */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-500">Desde</span>
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Desde</span>
               <Input
                 type="date"
                 value={historialDateFrom}
                 onChange={(e) => setHistorialDateFrom(e.target.value)}
                 className="w-40 h-9"
               />
-              <span className="text-sm text-gray-500">Hasta</span>
+              <span className="text-sm text-muted-foreground">Hasta</span>
               <Input
                 type="date"
                 value={historialDateTo}
@@ -550,7 +552,7 @@ export default function HojaDeRutaPage() {
                 placeholder="Buscar por N° o cliente..."
                 value={historialSearch}
                 onChange={(e) => setHistorialSearch(e.target.value)}
-                className="w-full h-9 pl-3 pr-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300"
+                className="w-full h-9 pl-3 pr-3 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>
@@ -559,7 +561,7 @@ export default function HojaDeRutaPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <Card>
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                   <CheckCircle className="w-4 h-4" />
                   Entregas Realizadas
                 </div>
@@ -568,7 +570,7 @@ export default function HojaDeRutaPage() {
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                   <DollarSign className="w-4 h-4" />
                   Total Ventas
                 </div>
@@ -588,7 +590,7 @@ export default function HojaDeRutaPage() {
 
           {/* Historial grouped by day */}
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Historial de Entregas</h2>
+            <h2 className="text-lg font-semibold text-foreground">Historial de Entregas</h2>
             <Button variant="outline" size="sm" onClick={fetchHistorial} disabled={historialLoading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${historialLoading ? "animate-spin" : ""}`} />
               Actualizar
@@ -597,12 +599,12 @@ export default function HojaDeRutaPage() {
 
           {historialLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : filteredHistorial.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-muted-foreground">
               <CheckCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
-              <p className="font-medium text-gray-500">No hay entregas en este periodo</p>
+              <p className="font-medium text-muted-foreground">No hay entregas en este periodo</p>
               <p className="text-sm mt-1">Selecciona otro rango de fechas</p>
             </div>
           ) : (
@@ -631,26 +633,26 @@ export default function HojaDeRutaPage() {
                       {/* Day header with summary */}
                       <div className="flex items-center justify-between mb-3 pb-3 border-b">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-                            <Calendar className="w-4 h-4 text-gray-600" />
+                          <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+                            <Calendar className="w-4 h-4 text-muted-foreground" />
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900 capitalize">{dayLabel}</p>
-                            <p className="text-xs text-gray-500">{dayVentas.length} entrega{dayVentas.length !== 1 ? "s" : ""}</p>
+                            <p className="font-semibold text-foreground capitalize">{dayLabel}</p>
+                            <p className="text-xs text-muted-foreground">{dayVentas.length} entrega{dayVentas.length !== 1 ? "s" : ""}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-6 text-sm">
                           <div className="text-right">
-                            <p className="text-xs text-gray-500">Total</p>
-                            <p className="font-bold text-gray-900">{formatCurrency(dayTotal)}</p>
+                            <p className="text-xs text-muted-foreground">Total</p>
+                            <p className="font-bold text-foreground">{formatCurrency(dayTotal)}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs text-gray-500">Cobrado</p>
+                            <p className="text-xs text-muted-foreground">Cobrado</p>
                             <p className="font-bold text-green-600">{formatCurrency(dayCobrado)}</p>
                           </div>
                           {dayPendiente > 0 && (
                             <div className="text-right">
-                              <p className="text-xs text-gray-500">Pendiente</p>
+                              <p className="text-xs text-muted-foreground">Pendiente</p>
                               <p className="font-bold text-orange-600">{formatCurrency(dayPendiente)}</p>
                             </div>
                           )}
@@ -673,7 +675,7 @@ export default function HojaDeRutaPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b text-left text-gray-500">
+                            <tr className="border-b text-left text-muted-foreground">
                               <th className="pb-2 px-3">Nro. Venta</th>
                               <th className="pb-2 px-3">Cliente</th>
                               <th className="pb-2 px-3">Entrega</th>
@@ -691,20 +693,20 @@ export default function HojaDeRutaPage() {
                               const debe = venta.total - totalCobrado;
 
                               return (
-                                <tr key={venta.id} className="border-b last:border-b-0 hover:bg-gray-50 transition-colors">
+                                <tr key={venta.id} className="border-b last:border-b-0 hover:bg-muted/50 transition-colors">
                                   <td className="py-2.5 px-3">
-                                    <div className="font-mono text-xs font-semibold text-gray-700">{venta.numero}</div>
-                                    <span className="text-xs text-gray-400">{venta.tipo_comprobante}</span>
+                                    <div className="font-mono text-xs font-semibold text-foreground">{venta.numero}</div>
+                                    <span className="text-xs text-muted-foreground">{venta.tipo_comprobante}</span>
                                   </td>
-                                  <td className="py-2.5 px-3 font-medium text-gray-900">
+                                  <td className="py-2.5 px-3 font-medium text-foreground">
                                     {venta.clientes?.nombre ?? "Sin cliente"}
                                   </td>
                                   <td className="py-2.5 px-3">
-                                    <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : "bg-gray-100 text-gray-600 hover:bg-gray-100"}`}>
+                                    <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : "bg-muted text-muted-foreground hover:bg-muted"}`}>
                                       {venta.metodo_entrega === "envio" ? "Envio" : "Retiro"}
                                     </Badge>
                                   </td>
-                                  <td className="py-2.5 px-3 text-right font-semibold text-gray-900">
+                                  <td className="py-2.5 px-3 text-right font-semibold text-foreground">
                                     {formatCurrency(venta.total)}
                                   </td>
                                   <td className={`py-2.5 px-3 text-right font-medium ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
@@ -723,7 +725,7 @@ export default function HojaDeRutaPage() {
                                         onClick={() => handleViewDetail(venta)}
                                         title="Ver detalle"
                                       >
-                                        <Eye className="w-4 h-4 text-gray-500" />
+                                        <Eye className="w-4 h-4 text-muted-foreground" />
                                       </Button>
                                     </div>
                                   </td>
@@ -755,7 +757,7 @@ export default function HojaDeRutaPage() {
             placeholder="Buscar por N° o cliente..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-9 pl-3 pr-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300"
+            className="w-full h-9 pl-3 pr-3 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
       </div>
@@ -764,12 +766,12 @@ export default function HojaDeRutaPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <Package className="w-4 h-4" />
               Total Entregas
             </div>
             <div className="text-2xl font-bold">{totalPedidos}</div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               Pendientes de entrega
             </div>
           </CardContent>
@@ -777,14 +779,14 @@ export default function HojaDeRutaPage() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <DollarSign className="w-4 h-4" />
               Valor Total
             </div>
             <div className="text-2xl font-bold">
               {formatCurrency(valorTotal)}
             </div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               Suma de todas las entregas
             </div>
           </CardContent>
@@ -799,7 +801,7 @@ export default function HojaDeRutaPage() {
             <div className="text-2xl font-bold text-orange-600">
               {formatCurrency(totalACobrar)}
             </div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               Saldo pendiente de clientes
             </div>
           </CardContent>
@@ -814,7 +816,7 @@ export default function HojaDeRutaPage() {
             <div className="text-2xl font-bold text-green-600">
               {formatCurrency(totalYaPagado)}
             </div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               Cobrado previamente
             </div>
           </CardContent>
@@ -824,11 +826,11 @@ export default function HojaDeRutaPage() {
       {/* View toggle + Route button */}
       {sortedVentas.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="bg-gray-100 rounded-lg p-1 inline-flex">
+          <div className="bg-muted rounded-lg p-1 inline-flex">
             <button
               onClick={() => setViewMode("list")}
               className={`rounded-md px-4 py-2 text-sm transition-all flex items-center gap-1.5 ${
-                viewMode === "list" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+                viewMode === "list" ? "bg-white shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <List className="w-4 h-4" />
@@ -837,7 +839,7 @@ export default function HojaDeRutaPage() {
             <button
               onClick={() => { setViewMode("ruta"); setCurrentStop(0); }}
               className={`rounded-md px-4 py-2 text-sm transition-all flex items-center gap-1.5 ${
-                viewMode === "ruta" ? "bg-white shadow-sm font-semibold text-gray-900" : "text-gray-500 hover:text-gray-700"
+                viewMode === "ruta" ? "bg-white shadow-sm font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Route className="w-4 h-4" />
@@ -889,22 +891,22 @@ export default function HojaDeRutaPage() {
                   </div>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xl font-bold text-gray-900">{venta.clientes?.nombre ?? "Sin cliente"}</p>
+                      <p className="text-xl font-bold text-foreground">{venta.clientes?.nombre ?? "Sin cliente"}</p>
                       {direccion && (
-                        <p className="flex items-start gap-1.5 text-sm text-gray-600 mt-1">
+                        <p className="flex items-start gap-1.5 text-sm text-muted-foreground mt-1">
                           <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                           {direccion}
                         </p>
                       )}
                       {venta.clientes?.telefono && (
-                        <p className="flex items-center gap-1.5 text-sm text-gray-600 mt-1">
+                        <p className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1">
                           <Phone className="w-4 h-4 shrink-0" />
                           {venta.clientes.telefono}
                         </p>
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-2xl font-bold text-gray-900">{formatCurrency(venta.total)}</p>
+                      <p className="text-2xl font-bold text-foreground">{formatCurrency(venta.total)}</p>
                       <Badge variant="secondary" className={debe > 0 ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"}>
                         {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
                       </Badge>
@@ -924,7 +926,7 @@ export default function HojaDeRutaPage() {
                       </a>
                     )}
                     {venta.clientes?.telefono && (
-                      <a href={`tel:${venta.clientes.telefono}`} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">
+                      <a href={`tel:${venta.clientes.telefono}`} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-muted text-foreground text-sm font-medium hover:bg-muted transition-colors">
                         <Phone className="w-4 h-4" />
                         Llamar
                       </a>
@@ -961,7 +963,7 @@ export default function HojaDeRutaPage() {
           {/* All stops list */}
           <Card>
             <CardContent className="p-4">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 Paradas ({sortedVentas.length})
               </h3>
               <div className="space-y-1">
@@ -976,24 +978,24 @@ export default function HojaDeRutaPage() {
                       key={venta.id}
                       onClick={() => setCurrentStop(idx)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                        isActive ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"
+                        isActive ? "bg-blue-50 border border-blue-200" : "hover:bg-muted/50"
                       }`}
                     >
                       <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 ${
-                        isActive ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
+                        isActive ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"
                       }`}>
                         {idx + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className={`font-medium truncate ${isActive ? "text-blue-900" : "text-gray-900"}`}>
+                        <p className={`font-medium truncate ${isActive ? "text-blue-900" : "text-foreground"}`}>
                           {venta.clientes?.nombre ?? "Sin cliente"}
                         </p>
                         {direccion && (
-                          <p className="text-xs text-gray-500 truncate">{direccion}</p>
+                          <p className="text-xs text-muted-foreground truncate">{direccion}</p>
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-gray-900">{formatCurrency(venta.total)}</p>
+                        <p className="text-sm font-bold text-foreground">{formatCurrency(venta.total)}</p>
                         <span className={`text-xs ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
                           {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
                         </span>
@@ -1013,7 +1015,7 @@ export default function HojaDeRutaPage() {
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 Entregas del Dia
               </h2>
               <span className="inline-block mt-1 text-sm text-green-600 font-medium">
@@ -1036,12 +1038,12 @@ export default function HojaDeRutaPage() {
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : ventas.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-muted-foreground">
               <Truck className="w-10 h-10 mx-auto mb-3 opacity-50" />
-              <p className="font-medium text-gray-500">
+              <p className="font-medium text-muted-foreground">
                 No hay entregas pendientes
               </p>
               <p className="text-sm mt-1">
@@ -1063,14 +1065,14 @@ export default function HojaDeRutaPage() {
                   <Card key={venta.id} className={`overflow-hidden ${estaPago ? "border-green-200" : "border-orange-200"}`}>
                     <CardContent className="p-0">
                       {/* Header row */}
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b">
                         <div className="flex items-center gap-2">
-                          <span className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 text-xs font-bold text-gray-600">
+                          <span className="flex items-center justify-center w-7 h-7 rounded-full bg-muted text-xs font-bold text-muted-foreground">
                             {orden[venta.id] ?? idx + 1}
                           </span>
                           <div>
-                            <span className="font-mono text-xs font-semibold text-gray-700">{venta.numero}</span>
-                            <span className="text-xs text-gray-400 ml-2">{venta.tipo_comprobante}</span>
+                            <span className="font-mono text-xs font-semibold text-foreground">{venta.numero}</span>
+                            <span className="text-xs text-muted-foreground ml-2">{venta.tipo_comprobante}</span>
                           </div>
                           {venta.origen === "tienda" && (
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-pink-300 text-pink-600 bg-pink-50">Web</Badge>
@@ -1082,8 +1084,8 @@ export default function HojaDeRutaPage() {
                           </Badge>
                           {/* Order arrows - desktop */}
                           <div className="hidden sm:flex flex-col">
-                            <button onClick={() => moveOrder(venta.id, "up")} className="text-gray-400 hover:text-gray-700 p-0.5"><ArrowUp className="w-3 h-3" /></button>
-                            <button onClick={() => moveOrder(venta.id, "down")} className="text-gray-400 hover:text-gray-700 p-0.5"><ArrowDown className="w-3 h-3" /></button>
+                            <button onClick={() => moveOrder(venta.id, "up")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowUp className="w-3 h-3" /></button>
+                            <button onClick={() => moveOrder(venta.id, "down")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowDown className="w-3 h-3" /></button>
                           </div>
                         </div>
                       </div>
@@ -1092,24 +1094,24 @@ export default function HojaDeRutaPage() {
                       <div className="px-4 py-3 space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-gray-900 truncate text-base">{venta.clientes?.nombre ?? "Sin cliente"}</p>
+                            <p className="font-semibold text-foreground truncate text-base">{venta.clientes?.nombre ?? "Sin cliente"}</p>
                             {direccion && (
-                              <p className="flex items-start gap-1.5 text-sm text-gray-500 mt-0.5">
+                              <p className="flex items-start gap-1.5 text-sm text-muted-foreground mt-0.5">
                                 <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                                 <span>{direccion}</span>
                               </p>
                             )}
                             {venta.clientes?.telefono && (
-                              <p className="flex items-center gap-1.5 text-sm text-gray-500 mt-0.5">
+                              <p className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
                                 <Phone className="w-3.5 h-3.5 shrink-0" />
                                 {venta.clientes.telefono}
                               </p>
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-lg font-bold text-gray-900">{formatCurrency(venta.total)}</p>
-                            <p className="text-xs text-gray-400">{venta.forma_pago}</p>
-                            <p className="text-xs text-gray-400">{venta.fecha}</p>
+                            <p className="text-lg font-bold text-foreground">{formatCurrency(venta.total)}</p>
+                            <p className="text-xs text-muted-foreground">{venta.forma_pago}</p>
+                            <p className="text-xs text-muted-foreground">{venta.fecha}</p>
                           </div>
                         </div>
 
@@ -1133,7 +1135,7 @@ export default function HojaDeRutaPage() {
                               Cómo llegar
                             </a>
                           )}
-                          <Button variant="ghost" size="sm" className="h-8 text-xs text-gray-500 ml-auto" onClick={() => handleViewDetail(venta)}>
+                          <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground ml-auto" onClick={() => handleViewDetail(venta)}>
                             <Eye className="w-3.5 h-3.5 mr-1" />
                             Ver items
                           </Button>
@@ -1141,7 +1143,7 @@ export default function HojaDeRutaPage() {
                       </div>
 
                       {/* Action bar */}
-                      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-t">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-t">
                         {debe > 0 && (
                           <Button
                             variant="outline"
@@ -1218,7 +1220,7 @@ export default function HojaDeRutaPage() {
             return (
               <div className="space-y-4">
                 {/* Summary */}
-                <div className="text-sm space-y-1 bg-gray-50 rounded-lg p-3">
+                <div className="text-sm space-y-1 bg-muted/50 rounded-lg p-3">
                   <div className="flex justify-between"><span className="text-muted-foreground">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{payVenta.clientes?.nombre || "—"}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatCurrency(payVenta.total)}</span></div>
@@ -1242,7 +1244,7 @@ export default function HojaDeRutaPage() {
                           else { setPayMonto(debe); }
                         }}
                         className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                          payMetodo === m ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                          payMetodo === m ? "bg-foreground text-white border-foreground" : "bg-white text-muted-foreground border-border hover:border-foreground/30"
                         }`}
                       >
                         {m}
@@ -1274,7 +1276,7 @@ export default function HojaDeRutaPage() {
                       </div>
                     )}
                     <div className="text-xs text-right text-muted-foreground">
-                      Total a cobrar: <strong className="text-gray-900">{formatCurrency(payEfectivo + payTransferencia)}</strong>
+                      Total a cobrar: <strong className="text-foreground">{formatCurrency(payEfectivo + payTransferencia)}</strong>
                     </div>
                   </div>
                 ) : (
