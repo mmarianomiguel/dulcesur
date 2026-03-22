@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -16,14 +23,15 @@ import {
 } from "@/components/ui/dialog";
 import {
   UserCheck,
-  Pencil,
   Loader2,
   Percent,
   ShieldX,
   Search,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, todayARG } from "@/lib/formatters";
 
 interface Vendedor {
   id: string;
@@ -42,10 +50,27 @@ interface Exclusion {
   categoria_id: string;
 }
 
+interface VendedorSummary {
+  total: number;
+  comisionable: number;
+  excluidoPorCategoria: Record<string, number>; // categoria_id -> monto excluido
+}
+
 export default function VendedoresPage() {
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Date filter
+  const [filterMode, setFilterMode] = useState<"day" | "month" | "range">("day");
+  const [filterDay, setFilterDay] = useState(todayARG());
+  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1));
+  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
+  const [filterFrom, setFilterFrom] = useState(todayARG());
+  const [filterTo, setFilterTo] = useState(todayARG());
+
+  // Expanded vendedor row (to show category detail)
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Edit commission dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -60,12 +85,32 @@ export default function VendedoresPage() {
   const [savingExcl, setSavingExcl] = useState(false);
   const [catSearch, setCatSearch] = useState("");
 
-  // Sales summary per vendedor (current month)
-  const [ventasSummary, setVentasSummary] = useState<Record<string, { total: number; comisionable: number }>>({});
+  // Sales summary per vendedor
+  const [ventasSummary, setVentasSummary] = useState<Record<string, VendedorSummary>>({});
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  // Compute date range from filter
+  const dateRange = useMemo(() => {
+    if (filterMode === "day") {
+      return { from: filterDay, to: filterDay };
+    }
+    if (filterMode === "month") {
+      const y = parseInt(filterYear);
+      const m = parseInt(filterMonth);
+      const firstDay = `${y}-${String(m).padStart(2, "0")}-01`;
+      const lastDay = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+      return { from: firstDay, to: lastDay };
+    }
+    return { from: filterFrom, to: filterTo };
+  }, [filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo]);
 
+  // Category name map
+  const catMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    categorias.forEach((c) => { m[c.id] = c.nombre; });
+    return m;
+  }, [categorias]);
+
+  const fetchBase = useCallback(async () => {
     // Fetch vendedores
     const { data: vendData } = await supabase
       .from("usuarios")
@@ -81,30 +126,28 @@ export default function VendedoresPage() {
       .select("id, nombre")
       .order("nombre");
     setCategorias(catData || []);
+  }, []);
 
-    // Fetch current month sales summary
-    const now = new Date();
-    const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const lastDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
+  const fetchSales = useCallback(async () => {
+    setLoading(true);
 
     const { data: ventasData } = await supabase
       .from("ventas")
       .select("id, vendedor_id, total")
       .eq("estado", "cerrada")
-      .gte("fecha", firstDay)
-      .lte("fecha", lastDay);
+      .gte("fecha", dateRange.from)
+      .lte("fecha", dateRange.to);
 
-    // Get all exclusions for all vendedores
+    // Get all exclusions
     const { data: allExcl } = await supabase
       .from("vendedor_categorias_excluidas")
       .select("vendedor_id, categoria_id");
 
-    // Get venta_items with product category info for comisionable calculation
+    // Get venta_items
     const ventaIds = (ventasData || []).map((v) => v.id);
-    let itemsByVenta: Record<string, { producto_id: string | null; subtotal: number }[]> = {};
+    const itemsByVenta: Record<string, { producto_id: string | null; subtotal: number }[]> = {};
 
     if (ventaIds.length > 0) {
-      // Fetch in batches
       const batchSize = 200;
       const allItems: { venta_id: string; producto_id: string | null; subtotal: number }[] = [];
       for (let i = 0; i < ventaIds.length; i += batchSize) {
@@ -127,7 +170,7 @@ export default function VendedoresPage() {
       if (i.producto_id) allProductIds.add(i.producto_id);
     });
 
-    let productCategories: Record<string, string | null> = {};
+    const productCategories: Record<string, string | null> = {};
     if (allProductIds.size > 0) {
       const prodIds = Array.from(allProductIds);
       const batchSize = 200;
@@ -145,19 +188,19 @@ export default function VendedoresPage() {
       }
     }
 
-    // Build exclusions map: vendedor_id -> Set<categoria_id>
+    // Build exclusions map
     const exclMap: Record<string, Set<string>> = {};
     (allExcl || []).forEach((e: { vendedor_id: string; categoria_id: string }) => {
       if (!exclMap[e.vendedor_id]) exclMap[e.vendedor_id] = new Set();
       exclMap[e.vendedor_id].add(e.categoria_id);
     });
 
-    // Calculate summary
-    const summary: Record<string, { total: number; comisionable: number }> = {};
+    // Calculate summary with category breakdown
+    const summary: Record<string, VendedorSummary> = {};
     for (const venta of ventasData || []) {
       const vid = venta.vendedor_id;
       if (!vid) continue;
-      if (!summary[vid]) summary[vid] = { total: 0, comisionable: 0 };
+      if (!summary[vid]) summary[vid] = { total: 0, comisionable: 0, excluidoPorCategoria: {} };
       summary[vid].total += venta.total;
 
       const items = itemsByVenta[venta.id] || [];
@@ -165,18 +208,26 @@ export default function VendedoresPage() {
       let comisionable = 0;
       for (const item of items) {
         const catId = item.producto_id ? productCategories[item.producto_id] : null;
-        if (catId && vendExcl.has(catId)) continue; // excluded
+        if (catId && vendExcl.has(catId)) {
+          // Track excluded amount per category
+          summary[vid].excluidoPorCategoria[catId] = (summary[vid].excluidoPorCategoria[catId] || 0) + item.subtotal;
+          continue;
+        }
         comisionable += item.subtotal;
       }
       summary[vid].comisionable += comisionable;
     }
     setVentasSummary(summary);
     setLoading(false);
-  }, []);
+  }, [dateRange]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchBase();
+  }, [fetchBase]);
+
+  useEffect(() => {
+    if (categorias.length > 0) fetchSales();
+  }, [fetchSales, categorias.length]);
 
   // --- Edit commission ---
   const openEditComision = (v: Vendedor) => {
@@ -196,7 +247,7 @@ export default function VendedoresPage() {
     setSaving(false);
     setEditDialogOpen(false);
     showAdminToast(`Comisión de ${editVendedor.nombre} actualizada a ${val}%`);
-    fetchData();
+    fetchBase();
   };
 
   // --- Edit exclusions ---
@@ -225,8 +276,6 @@ export default function VendedoresPage() {
   const handleSaveExclusions = async () => {
     if (!exclVendedor) return;
     setSavingExcl(true);
-
-    // Delete all existing, reinsert
     await supabase
       .from("vendedor_categorias_excluidas")
       .delete()
@@ -243,12 +292,19 @@ export default function VendedoresPage() {
     setSavingExcl(false);
     setExclDialogOpen(false);
     showAdminToast(`Exclusiones de ${exclVendedor.nombre} actualizadas`);
-    fetchData();
+    fetchSales();
   };
 
   const filteredCategorias = categorias.filter((c) =>
     c.nombre.toLowerCase().includes(catSearch.toLowerCase())
   );
+
+  // Period label
+  const periodLabel = filterMode === "day"
+    ? filterDay
+    : filterMode === "month"
+      ? `${String(filterMonth).padStart(2, "0")}/${filterYear}`
+      : `${filterFrom} a ${filterTo}`;
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-4 sm:space-y-6">
@@ -268,6 +324,96 @@ export default function VendedoresPage() {
         <Badge variant="secondary">{vendedores.length} vendedores</Badge>
       </div>
 
+      {/* Date Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Período</Label>
+              <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as "day" | "month" | "range")}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day">Día</SelectItem>
+                  <SelectItem value="month">Mes</SelectItem>
+                  <SelectItem value="range">Rango</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {filterMode === "day" && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Fecha</Label>
+                <Input
+                  type="date"
+                  value={filterDay}
+                  onChange={(e) => setFilterDay(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+            )}
+
+            {filterMode === "month" && (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Mes</Label>
+                  <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+                      ].map((name, i) => (
+                        <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Año</Label>
+                  <Select value={filterYear} onValueChange={(v) => setFilterYear(v ?? String(new Date().getFullYear()))}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[2024, 2025, 2026, 2027].map((y) => (
+                        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
+            {filterMode === "range" && (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Desde</Label>
+                  <Input
+                    type="date"
+                    value={filterFrom}
+                    onChange={(e) => setFilterFrom(e.target.value)}
+                    className="w-40"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Hasta</Label>
+                  <Input
+                    type="date"
+                    value={filterTo}
+                    onChange={(e) => setFilterTo(e.target.value)}
+                    className="w-40"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Table */}
       <Card>
         <CardContent className="p-0">
@@ -286,84 +432,103 @@ export default function VendedoresPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                      Vendedor
-                    </th>
-                    <th className="text-center py-3 px-4 font-medium text-muted-foreground">
-                      Comisión %
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">
-                      Ventas del mes
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">
-                      Comisionable
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">
-                      Comisión estimada
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">
-                      Acciones
-                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Vendedor</th>
+                    <th className="text-center py-3 px-4 font-medium text-muted-foreground">Comisión %</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Ventas totales</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Excluido</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Comisionable</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Comisión</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {vendedores.map((v) => {
-                    const summary = ventasSummary[v.id] || { total: 0, comisionable: 0 };
-                    const comisionEstimada = summary.comisionable * ((v.comision_porcentaje || 0) / 100);
+                    const s = ventasSummary[v.id] || { total: 0, comisionable: 0, excluidoPorCategoria: {} };
+                    const totalExcluido = Object.values(s.excluidoPorCategoria).reduce((a, b) => a + b, 0);
+                    const comisionEstimada = s.comisionable * ((v.comision_porcentaje || 0) / 100);
+                    const isExpanded = expandedId === v.id;
+                    const hasExclusions = totalExcluido > 0;
+
                     return (
-                      <tr
-                        key={v.id}
-                        className="border-b last:border-b-0 hover:bg-muted/30 transition-colors"
-                      >
-                        <td className="py-3 px-4">
-                          <div>
-                            <p className="font-medium">{v.nombre}</p>
-                            {v.email && (
-                              <p className="text-xs text-muted-foreground">{v.email}</p>
+                      <tr key={v.id} className="contents">
+                        {/* Main row */}
+                        <tr className="border-b hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <div>
+                              <p className="font-medium">{v.nombre}</p>
+                              {v.email && <p className="text-xs text-muted-foreground">{v.email}</p>}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <Badge variant={v.comision_porcentaje > 0 ? "default" : "secondary"} className="font-mono">
+                              {v.comision_porcentaje || 0}%
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right font-medium">
+                            {formatCurrency(s.total)}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {totalExcluido > 0 ? (
+                              <button
+                                onClick={() => setExpandedId(isExpanded ? null : v.id)}
+                                className="inline-flex items-center gap-1 text-destructive hover:underline"
+                              >
+                                -{formatCurrency(totalExcluido)}
+                                {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground">$0</span>
                             )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <Badge
-                            variant={v.comision_porcentaje > 0 ? "default" : "secondary"}
-                            className="font-mono"
-                          >
-                            {v.comision_porcentaje || 0}%
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-right font-medium">
-                          {formatCurrency(summary.total)}
-                        </td>
-                        <td className="py-3 px-4 text-right text-muted-foreground">
-                          {formatCurrency(summary.comisionable)}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <span className="font-semibold text-emerald-600">
-                            {formatCurrency(comisionEstimada)}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 gap-1.5"
-                              onClick={() => openEditComision(v)}
-                            >
-                              <Percent className="w-4 h-4" />
-                              Comisión
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 gap-1.5"
-                              onClick={() => openExclusions(v)}
-                            >
-                              <ShieldX className="w-4 h-4" />
-                              Exclusiones
-                            </Button>
-                          </div>
-                        </td>
+                          </td>
+                          <td className="py-3 px-4 text-right font-semibold">
+                            {formatCurrency(s.comisionable)}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span className="font-semibold text-emerald-600">
+                              {formatCurrency(comisionEstimada)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => openEditComision(v)}>
+                                <Percent className="w-4 h-4" />
+                                <span className="hidden sm:inline">Comisión</span>
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => openExclusions(v)}>
+                                <ShieldX className="w-4 h-4" />
+                                <span className="hidden sm:inline">Exclusiones</span>
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Expanded detail: breakdown by excluded category */}
+                        {isExpanded && hasExclusions && (
+                          <tr className="border-b">
+                            <td colSpan={7} className="bg-muted/20 px-4 py-3">
+                              <div className="max-w-lg ml-4">
+                                <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                                  Desglose de categorías excluidas
+                                </p>
+                                <div className="space-y-1.5">
+                                  {Object.entries(s.excluidoPorCategoria)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([catId, monto]) => (
+                                      <div key={catId} className="flex items-center justify-between text-sm">
+                                        <span className="text-muted-foreground">{catMap[catId] || catId}</span>
+                                        <span className="font-medium text-destructive">-{formatCurrency(monto)}</span>
+                                      </div>
+                                    ))}
+                                  <Separator className="my-1.5" />
+                                  <div className="flex items-center justify-between text-sm font-semibold">
+                                    <span>Total excluido</span>
+                                    <span className="text-destructive">-{formatCurrency(totalExcluido)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                       </tr>
                     );
                   })}
@@ -374,15 +539,40 @@ export default function VendedoresPage() {
         </CardContent>
       </Card>
 
-      {/* Info card */}
+      {/* Summary footer */}
       {!loading && vendedores.length > 0 && (
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              La <strong>comisión estimada</strong> se calcula sobre el monto &quot;comisionable&quot; del mes actual
-              (total de ventas menos los items de categorías excluidas para cada vendedor).
-              Los datos se calculan sobre ventas con estado &quot;cerrada&quot;.
-            </p>
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div>
+                <p className="text-muted-foreground">Período</p>
+                <p className="font-semibold">{periodLabel}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Total ventas</p>
+                <p className="font-semibold">
+                  {formatCurrency(Object.values(ventasSummary).reduce((a, s) => a + s.total, 0))}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Total comisionable</p>
+                <p className="font-semibold">
+                  {formatCurrency(Object.values(ventasSummary).reduce((a, s) => a + s.comisionable, 0))}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Total comisiones</p>
+                <p className="font-semibold text-emerald-600">
+                  {formatCurrency(
+                    vendedores.reduce((acc, v) => {
+                      const s = ventasSummary[v.id];
+                      if (!s) return acc;
+                      return acc + s.comisionable * ((v.comision_porcentaje || 0) / 100);
+                    }, 0)
+                  )}
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -413,7 +603,7 @@ export default function VendedoresPage() {
                 <span className="text-lg font-medium text-muted-foreground">%</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Este porcentaje se aplica sobre el monto comisionable (excluyendo categorías configuradas)
+                Se aplica sobre el monto comisionable (excluyendo categorías configuradas)
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
@@ -442,7 +632,6 @@ export default function VendedoresPage() {
             Seleccioná las categorías que <strong>no</strong> deben contar para la comisión de este vendedor.
           </p>
 
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -455,20 +644,11 @@ export default function VendedoresPage() {
 
           <Separator />
 
-          {/* Quick actions */}
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setExclCategorias(new Set(categorias.map((c) => c.id)))}
-            >
+            <Button variant="outline" size="sm" onClick={() => setExclCategorias(new Set(categorias.map((c) => c.id)))}>
               Excluir todas
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setExclCategorias(new Set())}
-            >
+            <Button variant="outline" size="sm" onClick={() => setExclCategorias(new Set())}>
               Limpiar
             </Button>
             <Badge variant="secondary" className="ml-auto self-center">
@@ -476,12 +656,9 @@ export default function VendedoresPage() {
             </Badge>
           </div>
 
-          {/* Categories list */}
           <div className="space-y-1 max-h-[40vh] overflow-y-auto">
             {filteredCategorias.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No se encontraron categorías
-              </p>
+              <p className="text-sm text-muted-foreground text-center py-4">No se encontraron categorías</p>
             ) : (
               filteredCategorias.map((cat) => {
                 const isExcluded = exclCategorias.has(cat.id);
@@ -489,9 +666,7 @@ export default function VendedoresPage() {
                   <label
                     key={cat.id}
                     className={`flex items-center gap-3 py-2.5 px-3 rounded-lg cursor-pointer transition-colors ${
-                      isExcluded
-                        ? "bg-destructive/5 hover:bg-destructive/10"
-                        : "hover:bg-muted/50"
+                      isExcluded ? "bg-destructive/5 hover:bg-destructive/10" : "hover:bg-muted/50"
                     }`}
                   >
                     <input
@@ -502,9 +677,7 @@ export default function VendedoresPage() {
                     />
                     <span className="text-sm flex-1">{cat.nombre}</span>
                     {isExcluded && (
-                      <Badge variant="destructive" className="text-[10px]">
-                        Excluida
-                      </Badge>
+                      <Badge variant="destructive" className="text-[10px]">Excluida</Badge>
                     )}
                   </label>
                 );
