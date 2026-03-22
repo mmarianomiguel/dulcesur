@@ -5,6 +5,7 @@ import { CartProvider } from "@/components/tienda/cart-drawer";
 import AdminBanner from "@/components/tienda/admin-banner";
 import ToastContainer from "@/components/tienda/toast";
 import WhatsAppFloat from "@/components/tienda/whatsapp-float";
+import ScrollToTop from "@/components/tienda/scroll-to-top";
 
 export const metadata: Metadata = {
   title: {
@@ -24,6 +25,7 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
         <TiendaFooter />
         <ToastContainer />
         <WhatsAppFloat />
+        <ScrollToTop />
       </div>
     </CartProvider>
   );
