@@ -5,14 +5,14 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { ArrowLeft, FileText, Loader2 } from "lucide-react";
+import { sanitizeHtml } from "@/lib/sanitize";
+import EnviosDinamico from "@/components/tienda/envios-dinamico";
 
 interface Pagina {
   id: string;
   titulo: string;
   contenido: string;
 }
-
-import { sanitizeHtml } from "@/lib/sanitize";
 
 export default function InfoPage() {
   const { slug } = useParams();
@@ -54,10 +54,14 @@ export default function InfoPage() {
         <ArrowLeft className="w-4 h-4" />Volver al inicio
       </Link>
       <h1 className="text-3xl font-bold text-gray-900 mb-8">{pagina?.titulo}</h1>
-      <div
-        className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
-        dangerouslySetInnerHTML={{ __html: sanitizeHtml(pagina?.contenido || "") }}
-      />
+      {slug === "envios" ? (
+        <EnviosDinamico />
+      ) : (
+        <div
+          className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(pagina?.contenido || "") }}
+        />
+      )}
     </div>
   );
 }

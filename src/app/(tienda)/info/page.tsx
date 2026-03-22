@@ -8,6 +8,7 @@ import {
   ArrowLeft, Loader2, Banknote, Truck, ShoppingBag, UserPlus, HelpCircle,
   FileText, MessageCircle,
 } from "lucide-react";
+import EnviosDinamico from "@/components/tienda/envios-dinamico";
 
 interface Pagina {
   id: string;
@@ -197,10 +198,14 @@ export default function InfoAllPage() {
                     </div>
                     <h2 className="text-2xl font-bold text-gray-900">{p.titulo}</h2>
                   </div>
-                  <div
-                    className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-6 prose-h2:mb-4 prose-h3:text-lg prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(p.contenido || "") }}
-                  />
+                  {p.slug === "envios" ? (
+                    <EnviosDinamico />
+                  ) : (
+                    <div
+                      className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-6 prose-h2:mb-4 prose-h3:text-lg prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(p.contenido || "") }}
+                    />
+                  )}
                 </section>
               );
             })}
