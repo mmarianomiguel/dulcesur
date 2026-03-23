@@ -628,6 +628,7 @@ export default function ProductosPage() {
               costo_anterior: editingProduct.costo,
               costo_nuevo: form.costo,
               usuario: "Admin",
+              created_at: new Date().toISOString(),
             });
           } catch {} // Silent fail if table doesn't exist yet
         }

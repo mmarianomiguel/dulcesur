@@ -164,13 +164,16 @@ export function GlobalSearch() {
     setOpen(false);
     const searchParam = encodeURIComponent(result.type === "venta" ? result.title.replace("Venta ", "") : result.title);
     const url = `${result.url}?buscar=${searchParam}`;
-    setTimeout(() => {
-      if (window.location.pathname === result.url) {
-        window.location.href = url;
-      } else {
-        router.push(url);
-      }
-    }, 100);
+    // Wait for dialog close animation before navigating
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (window.location.pathname === result.url) {
+          window.location.href = url;
+        } else {
+          router.push(url);
+        }
+      }, 50);
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

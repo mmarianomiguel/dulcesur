@@ -256,7 +256,7 @@ export default function DescuentosPage() {
       categorias_ids: aplicaA === "categorias" ? categoriasIds : [],
       subcategorias_ids: aplicaA === "subcategorias" ? subcategoriasIds : [],
       productos_ids: aplicaA === "productos" ? productosIds : [],
-      marcas_ids: marcasIds,
+      marcas_ids: marcasIds.length > 0 ? marcasIds : [],
       presentacion,
       cantidad_minima: cantidadMinima && cantidadMinima > 0 ? cantidadMinima : null,
       excluir_combos: excluirCombos,
@@ -478,7 +478,7 @@ export default function DescuentosPage() {
                     <th className="text-left px-4 py-3 font-medium">Aplica a</th>
                     <th className="text-left px-4 py-3 font-medium">Marcas</th>
                     <th className="text-left px-4 py-3 font-medium">Presentación</th>
-                    <th className="text-center px-4 py-3 font-medium">Cant. Mín.</th>
+                    <th className="text-right px-4 py-3 font-medium">Cant. Mín.</th>
                     <th className="text-left px-4 py-3 font-medium">Estado</th>
                     <th className="text-right px-4 py-3 font-medium">Acciones</th>
                   </tr>
@@ -507,7 +507,7 @@ export default function DescuentosPage() {
                             : "Todas"}
                         </td>
                         <td className="px-4 py-3 capitalize">{presentacionLabel(d.presentacion)}</td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-right">
                           {d.cantidad_minima ? <Badge variant="outline" className="text-xs">{d.cantidad_minima}+ uds</Badge> : <span className="text-muted-foreground">—</span>}
                         </td>
                         <td className="px-4 py-3">{estadoBadge(estado)}</td>
