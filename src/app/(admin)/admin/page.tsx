@@ -567,6 +567,26 @@ export default function DashboardPage() {
         <Badge variant="outline" className="text-xs w-fit">{wl.system_name || "DulceSur"}</Badge>
       </div>
 
+      {/* ─── Accesos Rápidos ─── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Link href="/admin/ventas" className="flex items-center gap-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
+          <ShoppingCart className="w-6 h-6 shrink-0" />
+          <div><p className="font-bold text-sm">Nueva Venta</p><p className="text-[10px] opacity-80">Abrir POS</p></div>
+        </Link>
+        <Link href="/admin/clientes" className="flex items-center gap-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
+          <CreditCard className="w-6 h-6 shrink-0" />
+          <div><p className="font-bold text-sm">Cobrar Deuda</p><p className="text-[10px] opacity-80">Cuenta corriente</p></div>
+        </Link>
+        <Link href="/admin/compras" className="flex items-center gap-3 bg-gradient-to-r from-violet-500 to-violet-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
+          <Truck className="w-6 h-6 shrink-0" />
+          <div><p className="font-bold text-sm">Cargar Compra</p><p className="text-[10px] opacity-80">Proveedor</p></div>
+        </Link>
+        <Link href="/admin/productos" className="flex items-center gap-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
+          <PackageIcon className="w-6 h-6 shrink-0" />
+          <div><p className="font-bold text-sm">Productos</p><p className="text-[10px] opacity-80">Gestionar catálogo</p></div>
+        </Link>
+      </div>
+
       {/* ─── Stock Bajo ─── */}
       {lowStockProducts.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
