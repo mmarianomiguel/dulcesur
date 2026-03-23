@@ -1757,6 +1757,9 @@ export default function VentasPage() {
                   role="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (items.length > 0 && (formaPago === "Cuenta Corriente" || (formaPago === "Mixto" && mixtoCuentaCorriente > 0))) {
+                      if (!confirm("Hay items en el carrito con Cuenta Corriente. ¿Cambiar cliente?")) return;
+                    }
                     setClientId("");
                     if (codigoClienteRef.current) codigoClienteRef.current.value = "";
                   }}

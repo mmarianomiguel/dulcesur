@@ -219,6 +219,11 @@ export default function ClientesPage() {
     fetchZonas();
   };
   const handleDeleteZona = async (id: string) => {
+    const { count } = await supabase.from("clientes").select("id", { count: "exact", head: true }).eq("zona_entrega_id", id);
+    if (count && count > 0) {
+      alert(`No se puede eliminar: ${count} cliente(s) usan esta zona. Reasignalos primero.`);
+      return;
+    }
     if (!confirm("Eliminar esta zona de entrega?")) return;
     await supabase.from("zonas_entrega").delete().eq("id", id);
     fetchZonas();

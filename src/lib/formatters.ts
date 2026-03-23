@@ -49,23 +49,23 @@ export function formatDateShort(dateStr: string): string {
   });
 }
 
-/** Formats date for PDF: "05/01/2026" (padded) */
+/** Formats date for PDF: "05/01/2026" (padded) - uses Argentina timezone */
 export function formatDatePDF(dateStr: string): string {
   if (!dateStr) return "";
   const d = new Date(dateStr + (dateStr.includes("T") ? "" : "T12:00:00"));
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  return `${day}/${month}/${d.getFullYear()}`;
+  const parts = d.toLocaleDateString("en-GB", { timeZone: TIMEZONE, day: "2-digit", month: "2-digit", year: "numeric" }).split("/");
+  return `${parts[0]}/${parts[1]}/${parts[2]}`;
 }
 
-/** Returns current month padded: "03" */
+/** Returns current month padded: "03" - Argentina timezone */
 export function currentMonthPadded(): string {
-  return String(new Date().getMonth() + 1).padStart(2, "0");
+  const m = new Date().toLocaleDateString("en-CA", { timeZone: TIMEZONE, month: "2-digit" });
+  return m;
 }
 
-/** Returns current year: "2026" */
+/** Returns current year: "2026" - Argentina timezone */
 export function currentYear(): string {
-  return String(new Date().getFullYear());
+  return new Date().toLocaleDateString("en-CA", { timeZone: TIMEZONE, year: "numeric" });
 }
 
 // ─── Text ───
