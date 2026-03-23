@@ -36,11 +36,11 @@ export const defaultReceiptConfig: ReceiptConfig = {
   empresaInicioAct: "",
   empresaIngrBrutos: "",
   footerTexto: "Gracias por su compra",
-  fontSize: 12,
-  fontSizeEmpresa: 12,
-  fontSizeCliente: 11,
-  fontSizeProductos: 11,
-  fontSizeResumen: 14,
+  fontSize: 13,
+  fontSizeEmpresa: 13,
+  fontSizeCliente: 12,
+  fontSizeProductos: 12,
+  fontSizeResumen: 15,
   logoHeight: 60,
   mostrarLogo: true,
   mostrarVendedor: true,
@@ -173,12 +173,11 @@ export function ReceiptPrintView({
           <div style={{ fontSize: `${fsEmpresa + 2}px`, fontWeight: "bold", marginBottom: "4px" }}>
             N° {sale.numero}
           </div>
-          <div style={{ fontSize: `${fsEmpresa - 2}px`, lineHeight: "1.6" }}>
+          <div style={{ fontSize: `${fsEmpresa - 2}px`, lineHeight: "1.5" }}>
             <div>Fecha: {sale.fecha}</div>
-            <div>CUIT: {config.empresaCuit}</div>
-            <div>Ing.Brutos: {config.empresaIngrBrutos}</div>
+            <div>CUIT: {config.empresaCuit} · IIBB: {config.empresaIngrBrutos}</div>
             <div>Cond.IVA: {config.empresaIva}</div>
-            <div>Inicio de Actividad: {config.empresaInicioAct}</div>
+            <div>Inicio Act.: {config.empresaInicioAct}</div>
           </div>
         </div>
       </div>
@@ -194,28 +193,18 @@ export function ReceiptPrintView({
 
   // Client info (only on first page)
   const ClientInfo = () => (
-    <div style={{ border: "1px solid #ccc", padding: "4px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.7" }}>
+    <div style={{ border: "1px solid #ccc", padding: "3px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.4" }}>
       <div style={{ display: "flex", gap: "10px" }}>
         <div style={{ flex: 1 }}>
           <div><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}</div>
           {config.mostrarDireccion && sale.clienteDireccion && <div><span style={{ fontWeight: "bold" }}>Domicilio:</span> {sale.clienteDireccion}</div>}
           {config.mostrarFormaPago && (
-            <div>
-              <span style={{ fontWeight: "bold" }}>Forma de pago:</span>{" "}
-              {sale.formaPago === "Mixto" ? (() => {
-                const parts: string[] = [];
-                if (sale.pagoEfectivo && sale.pagoEfectivo > 0) parts.push(`Ef. ${fmtCur(sale.pagoEfectivo)}`);
-                if (sale.pagoTransferencia && sale.pagoTransferencia > 0) parts.push(`Transf. ${fmtCur(sale.pagoTransferencia)}`);
-                if (sale.pagoCuentaCorriente && sale.pagoCuentaCorriente > 0) parts.push(`CC ${fmtCur(sale.pagoCuentaCorriente)}`);
-                return parts.length > 0 ? `Mixto (${parts.join(" + ")})` : "Mixto";
-              })() : sale.formaPago}
-            </div>
+            <div><span style={{ fontWeight: "bold" }}>Forma de pago:</span> {sale.formaPago}</div>
           )}
         </div>
         <div style={{ flex: 1, textAlign: "center" }}>
-          {config.mostrarTelefono && sale.clienteTelefono && <div><span style={{ fontWeight: "bold" }}>Telefono:</span> {sale.clienteTelefono}</div>}
-          {config.mostrarMoneda && <div><span style={{ fontWeight: "bold" }}>Moneda:</span> {sale.moneda || "ARS"}</div>}
-          {sale.clienteCondicionIva && <div><span style={{ fontWeight: "bold" }}>Cond. IVA:</span> {sale.clienteCondicionIva}</div>}
+          {config.mostrarTelefono && sale.clienteTelefono && <div><span style={{ fontWeight: "bold" }}>Tel:</span> {sale.clienteTelefono}{sale.clienteCondicionIva && <span> · <span style={{ fontWeight: "bold" }}>IVA:</span> {sale.clienteCondicionIva}</span>}</div>}
+          {!sale.clienteTelefono && sale.clienteCondicionIva && <div><span style={{ fontWeight: "bold" }}>Cond. IVA:</span> {sale.clienteCondicionIva}</div>}
         </div>
         <div style={{ flex: 1, textAlign: "right" }}>
           {config.mostrarVendedor && (
@@ -256,8 +245,8 @@ export function ReceiptPrintView({
                 : item.price;
           return (
             <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>
+              <td style={{ padding: "2px 4px", textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
+              <td style={{ padding: "2px 4px", textAlign: "left" }}>
                 {item.es_combo && (
                   <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 2px", borderRadius: "2px", marginRight: "3px", letterSpacing: "0.5px" }}>COMBO</span>
                 )}
@@ -268,14 +257,14 @@ export function ReceiptPrintView({
                   </div>
                 )}
               </td>
-              <td style={{ padding: "3px 4px", textAlign: "center" }}>
+              <td style={{ padding: "2px 4px", textAlign: "center" }}>
                 {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : isBox ? `x${item.unidades_por_presentacion} un` : (item.unit === "Unidad" ? "Un" : item.unit) || "Un"}
               </td>
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
+              <td style={{ padding: "2px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
               {config.mostrarDescuento && (
-                <td style={{ padding: "3px 4px", textAlign: "right" }}>{item.discount ? `(-${item.discount}%)` : "0"}</td>
+                <td style={{ padding: "2px 4px", textAlign: "right" }}>{item.discount ? `(-${item.discount}%)` : "0"}</td>
               )}
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
+              <td style={{ padding: "2px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
             </tr>
           );
         })}
