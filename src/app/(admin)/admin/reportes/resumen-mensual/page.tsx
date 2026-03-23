@@ -39,6 +39,8 @@ export default function ResumenMensualPage() {
   const [egresosDetalle, setEgresosDetalle] = useState<{ descripcion: string; metodo: string; monto: number }[]>([]);
   const [transferPorCuenta, setTransferPorCuenta] = useState<{ cuenta: string; total: number }[]>([]);
   const [totalNC, setTotalNC] = useState(0);
+  const [rentabilidadProductos, setRentabilidadProductos] = useState<{ nombre: string; vendido: number; costo: number; ganancia: number; margen: number }[]>([]);
+  const [comparativa, setComparativa] = useState<{ label: string; actual: number; anterior: number; diff: number } | null>(null);
 
   const fetchResumen = useCallback(async () => {
     setLoading(true);
@@ -196,6 +198,52 @@ export default function ResumenMensualPage() {
       cuentaMap[cuenta] = (cuentaMap[cuenta] || 0) + Math.abs(t.monto);
     });
     setTransferPorCuenta(Object.entries(cuentaMap).map(([cuenta, total]) => ({ cuenta, total })).sort((a, b) => b.total - a.total));
+
+    // Rentabilidad por producto (top 10 by ganancia)
+    if (vList.length > 0) {
+      const ids = vList.map((v: any) => v.id);
+      const { data: rentItems } = await supabase.from("venta_items")
+        .select("descripcion, cantidad, precio_unitario, descuento, subtotal, productos(costo)")
+        .in("venta_id", ids);
+      const prodRent: Record<string, { nombre: string; vendido: number; costo: number }> = {};
+      for (const item of rentItems || []) {
+        const nombre = (item as any).descripcion || "Sin nombre";
+        const costoU = (item as any).productos?.costo ?? 0;
+        const qty = (item as any).cantidad || 0;
+        const venta = (item as any).subtotal || 0;
+        const costoTotal = costoU * qty;
+        if (!prodRent[nombre]) prodRent[nombre] = { nombre, vendido: 0, costo: 0 };
+        prodRent[nombre].vendido += venta;
+        prodRent[nombre].costo += costoTotal;
+      }
+      setRentabilidadProductos(
+        Object.values(prodRent)
+          .map((p) => ({ ...p, ganancia: p.vendido - p.costo, margen: p.costo > 0 ? ((p.vendido - p.costo) / p.costo) * 100 : 0 }))
+          .sort((a, b) => b.ganancia - a.ganancia)
+          .slice(0, 10)
+      );
+    } else {
+      setRentabilidadProductos([]);
+    }
+
+    // Comparativa con mes anterior
+    const prevM = m === 1 ? 12 : m - 1;
+    const prevY = m === 1 ? y - 1 : y;
+    const prevStart = `${prevY}-${String(prevM).padStart(2, "0")}-01`;
+    const prevEnd = prevM === 12 ? `${prevY + 1}-01-01` : `${prevY}-${String(prevM + 1).padStart(2, "0")}-01`;
+    const { data: prevVentas } = await supabase.from("ventas").select("total")
+      .gte("fecha", prevStart).lt("fecha", prevEnd)
+      .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+      .neq("estado", "anulada");
+    const prevTotal = (prevVentas || []).reduce((a: number, v: any) => a + v.total, 0);
+    const actualTotal = vList.reduce((a: number, v: any) => a + v.total, 0);
+    const diff = prevTotal > 0 ? ((actualTotal - prevTotal) / prevTotal) * 100 : 0;
+    setComparativa({
+      label: `${MESES[prevM - 1]} ${prevY}`,
+      actual: actualTotal,
+      anterior: prevTotal,
+      diff,
+    });
 
     setLoading(false);
   }, [mes, anio]);
@@ -405,6 +453,64 @@ export default function ResumenMensualPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Comparativa Mensual */}
+          {comparativa && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="w-4 h-4" />Comparativa vs {comparativa.label}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Mes anterior</p>
+                    <p className="text-lg font-bold">{fc(comparativa.anterior)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Mes actual</p>
+                    <p className="text-lg font-bold">{fc(comparativa.actual)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Variación</p>
+                    <div className={`flex items-center justify-center gap-1 text-lg font-bold ${comparativa.diff >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                      {comparativa.diff >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                      {comparativa.anterior > 0 ? `${comparativa.diff >= 0 ? "+" : ""}${comparativa.diff.toFixed(1)}%` : "—"}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Rentabilidad por Producto */}
+          {rentabilidadProductos.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2"><TrendingUp className="w-4 h-4" />Rentabilidad por Producto (Top 10)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {rentabilidadProductos.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm border-b pb-1.5 last:border-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-xs text-muted-foreground w-5">{i + 1}.</span>
+                        <span className="truncate">{p.nombre}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-xs text-muted-foreground">Vendido {fc(Math.round(p.vendido))}</span>
+                        <span className={`font-semibold ${p.ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                          {fc(Math.round(p.ganancia))}
+                        </span>
+                        <Badge variant={p.margen >= 0 ? "default" : "destructive"} className="text-[10px] px-1.5">
+                          {p.costo > 0 ? `${p.margen >= 0 ? "+" : ""}${p.margen.toFixed(0)}%` : "—"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

@@ -129,6 +129,7 @@ export default function ProductosPage() {
   const [category, setCategory] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductoWithRelations | null>(null);
+  const [priceHistory, setPriceHistory] = useState<{ id: string; precio_anterior: number; precio_nuevo: number; costo_anterior: number; costo_nuevo: number; usuario: string; created_at: string }[]>([]);
   const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -498,6 +499,15 @@ export default function ProductosPage() {
       setIsCombo(false);
       setComboItems([]);
     }
+
+    // Load price history
+    const { data: phData } = await supabase
+      .from("precio_historial")
+      .select("*")
+      .eq("producto_id", p.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setPriceHistory((phData || []) as any);
 
     setDialogOpen(true);
   };
@@ -2184,6 +2194,34 @@ export default function ProductosPage() {
                     );
                   })()}
                 </div>
+                {/* Price History */}
+                {editingProduct && priceHistory.length > 0 && (
+                  <div className="col-span-4 border rounded-lg p-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Historial de precios ({priceHistory.length})</p>
+                    <div className="max-h-24 overflow-y-auto">
+                      <table className="w-full text-[11px]">
+                        <thead><tr className="text-muted-foreground border-b">
+                          <th className="text-left py-0.5 px-1">Fecha</th>
+                          <th className="text-right py-0.5 px-1">Precio ant.</th>
+                          <th className="text-right py-0.5 px-1">Precio nuevo</th>
+                          <th className="text-right py-0.5 px-1">Costo ant.</th>
+                          <th className="text-right py-0.5 px-1">Costo nuevo</th>
+                        </tr></thead>
+                        <tbody>
+                          {priceHistory.map((h) => (
+                            <tr key={h.id} className="border-b last:border-0">
+                              <td className="py-0.5 px-1 text-muted-foreground">{new Date(h.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" })}</td>
+                              <td className="py-0.5 px-1 text-right">{formatCurrency(h.precio_anterior)}</td>
+                              <td className="py-0.5 px-1 text-right font-medium">{formatCurrency(h.precio_nuevo)}</td>
+                              <td className="py-0.5 px-1 text-right">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "—"}</td>
+                              <td className="py-0.5 px-1 text-right">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Stock</Label>
                   {editingProduct && (editingProduct as any).es_combo ? (

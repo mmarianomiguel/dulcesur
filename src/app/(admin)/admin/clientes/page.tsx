@@ -49,6 +49,7 @@ import {
   MapPin,
   Upload,
   FileSpreadsheet,
+  Printer,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -168,6 +169,7 @@ export default function ClientesPage() {
   const [cobranzaFilterFrom, setCobranzaFilterFrom] = useState("");
   const [cobranzaFilterTo, setCobranzaFilterTo] = useState("");
   const [cobroOpen, setCobroOpen] = useState(false);
+  const [cobroReceipt, setCobroReceipt] = useState<{ open: boolean; cliente: string; monto: number; formaPago: string; fecha: string; saldoAnterior: number; saldoNuevo: number } | null>(null);
   const [cobroClient, setCobroClient] = useState<Cliente | null>(null);
   const [cobroMonto, setCobroMonto] = useState(0);
   const [cobroFormaPago, setCobroFormaPago] = useState("Efectivo");
@@ -558,6 +560,16 @@ export default function ClientesPage() {
       descripcion: `Cobro a ${cobroClient.nombre}`,
       metodo_pago: cobroFormaPago,
       monto: cobroMonto,
+    });
+
+    setCobroReceipt({
+      open: true,
+      cliente: cobroClient.nombre,
+      monto: cobroMonto,
+      formaPago: cobroFormaPago,
+      fecha: hoy,
+      saldoAnterior: saldoActual,
+      saldoNuevo: currentSaldo,
     });
 
     setSaving(false);
@@ -1518,6 +1530,52 @@ export default function ClientesPage() {
                 <Button size="sm" onClick={handlePayMov} disabled={payMovSaving || payMovMonto <= 0}>
                   {payMovSaving && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
                   Confirmar — {formatCurrency(payMovMonto)}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cobro Receipt Dialog */}
+      <Dialog open={!!cobroReceipt?.open} onOpenChange={(open) => { if (!open) setCobroReceipt(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Recibo de Cobro</DialogTitle>
+          </DialogHeader>
+          {cobroReceipt && (
+            <div className="space-y-3">
+              <div id="cobro-receipt-print" className="border rounded-lg p-4 space-y-3 bg-white text-sm">
+                <div className="text-center border-b pb-2">
+                  <p className="font-bold text-base">RECIBO DE COBRO</p>
+                  <p className="text-xs text-muted-foreground">{new Date(cobroReceipt.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{cobroReceipt.cliente}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Forma de pago</span><span>{cobroReceipt.formaPago}</span></div>
+                </div>
+                <div className="border-t border-b py-2 text-center">
+                  <p className="text-xs text-muted-foreground">Monto recibido</p>
+                  <p className="text-2xl font-bold">{formatCurrency(cobroReceipt.monto)}</p>
+                </div>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Saldo anterior</span><span>{formatCurrency(cobroReceipt.saldoAnterior)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Cobro</span><span>-{formatCurrency(cobroReceipt.monto)}</span></div>
+                  <div className="flex justify-between font-bold border-t pt-1"><span>Saldo actual</span><span>{formatCurrency(Math.max(0, cobroReceipt.saldoNuevo))}</span></div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setCobroReceipt(null)}>Cerrar</Button>
+                <Button className="flex-1" onClick={() => {
+                  const el = document.getElementById("cobro-receipt-print");
+                  if (!el) return;
+                  const win = window.open("", "_blank", "width=400,height=500");
+                  if (!win) return;
+                  win.document.write(`<!DOCTYPE html><html><head><title>Recibo de Cobro</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:350px;margin:0 auto}@media print{body{padding:10px}}</style></head><body>${el.innerHTML}</body></html>`);
+                  win.document.close();
+                  win.onload = () => { win.print(); win.close(); };
+                }}>
+                  <Printer className="w-4 h-4 mr-2" />Imprimir
                 </Button>
               </div>
             </div>
