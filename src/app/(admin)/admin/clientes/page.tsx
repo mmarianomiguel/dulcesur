@@ -134,11 +134,14 @@ export default function ClientesPage() {
   const [movClient, setMovClient] = useState<Cliente | null>(null);
   const [movOpen, setMovOpen] = useState(false);
   const [movimientos, setMovimientos] = useState<any[]>([]);
+  const [movCCRows, setMovCCRows] = useState<any[]>([]);
   const [movLoading, setMovLoading] = useState(false);
   const [movDesde, setMovDesde] = useState("");
   const [movHasta, setMovHasta] = useState("");
-  const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, cobros: 0, totalGastado: 0 });
+  const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, totalComprado: 0 });
+  const [movCCTotals, setMovCCTotals] = useState({ debe: 0, haber: 0, saldo: 0 });
   const [movExpanded, setMovExpanded] = useState<string | null>(null);
+  const [movTab, setMovTab] = useState<"compras" | "cc">("compras");
   // Payment from movimientos
   const [payMovOpen, setPayMovOpen] = useState(false);
   const [payMovVenta, setPayMovVenta] = useState<any>(null);
@@ -343,6 +346,8 @@ export default function ClientesPage() {
 
   const fetchMovimientos = async (clienteId: string, desde: string, hasta: string) => {
     setMovLoading(true);
+
+    // Tab Compras: all sales
     const { data: ventas } = await supabase
       .from("ventas")
       .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
@@ -351,92 +356,56 @@ export default function ClientesPage() {
       .lte("fecha", hasta)
       .order("created_at", { ascending: false });
 
-    const { data: cobros } = await supabase
-      .from("cobros")
-      .select("id, fecha, created_at, monto, metodo_pago, observacion")
-      .eq("cliente_id", clienteId)
-      .gte("fecha", desde)
-      .lte("fecha", hasta)
-      .order("created_at", { ascending: false });
-
-    const { data: cc } = await supabase
-      .from("cuenta_corriente")
-      .select("id, fecha, comprobante, descripcion, debe, haber, saldo, forma_pago, venta_id")
-      .eq("cliente_id", clienteId)
-      .gte("fecha", desde)
-      .lte("fecha", hasta)
-      .order("fecha", { ascending: false });
-
-    const ventaIds = (ventas || []).map((v: any) => v.id);
-    const saldoPorVenta: Record<string, number> = {};
-    if (ventaIds.length > 0) {
-      const { data: ccAll } = await supabase
-        .from("cuenta_corriente")
-        .select("venta_id, debe, haber")
-        .in("venta_id", ventaIds);
-      for (const row of ccAll || []) {
-        saldoPorVenta[row.venta_id] = (saldoPorVenta[row.venta_id] || 0) + (row.debe || 0) - (row.haber || 0);
-      }
-    }
-
-    const pagadoPorVenta: Record<string, number> = {};
-    if (ventaIds.length > 0) {
-      const { data: cajaMovs } = await supabase
-        .from("caja_movimientos")
-        .select("referencia_id, monto")
-        .eq("tipo", "ingreso")
-        .eq("referencia_tipo", "venta")
-        .in("referencia_id", ventaIds);
-      for (const m of cajaMovs || []) {
-        pagadoPorVenta[m.referencia_id] = (pagadoPorVenta[m.referencia_id] || 0) + m.monto;
-      }
-    }
-
-    const all: any[] = [];
+    const compras: any[] = [];
     for (const v of ventas || []) {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
-      const vitems = (v as any).venta_items || [];
-      const saldoPendiente = Math.max(0, saldoPorVenta[v.id] || 0);
-      const pagado = pagadoPorVenta[v.id] || 0;
-      all.push({
+      compras.push({
         id: v.id,
         fecha: v.fecha,
         created_at: v.created_at || v.fecha,
         tipo: isNC ? "Nota de Crédito" : "Venta",
         descripcion: `${v.tipo_comprobante} ${v.numero}`,
-        numero: v.numero,
-        items: vitems,
+        items: (v as any).venta_items || [],
         forma_pago: v.forma_pago,
         monto: isNC ? -v.total : v.total,
-        total: v.total,
-        saldo_pendiente: saldoPendiente,
-        pagado: pagado,
-        color: isNC ? "text-emerald-600" : "text-foreground",
         badge: isNC ? "destructive" : "default",
-        cliente_id: clienteId,
       });
     }
-    for (const c of cobros || []) {
-      all.push({
-        id: c.id,
-        fecha: c.fecha,
-        created_at: c.created_at || c.fecha,
-        tipo: "Cobro",
-        descripcion: c.observacion || "Cobro",
-        forma_pago: c.metodo_pago,
-        monto: -(c.monto || 0),
-        color: "text-blue-600",
-        badge: "secondary",
-      });
-    }
-
-    all.sort((a, b) => (b.created_at || b.fecha).localeCompare(a.created_at || a.fecha));
-    setMovimientos(all);
+    setMovimientos(compras);
 
     const totalVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
     const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
-    const totalCobros = (cobros || []).reduce((s: number, c: any) => s + (c.monto || 0), 0);
-    setMovTotals({ ventas: totalVentas, nc: totalNC, cobros: totalCobros, totalGastado: totalVentas - totalNC });
+    setMovTotals({ ventas: totalVentas, nc: totalNC, totalComprado: totalVentas - totalNC });
+
+    // Tab Cuenta Corriente: extracto from cuenta_corriente table
+    const { data: ccData } = await supabase
+      .from("cuenta_corriente")
+      .select("*")
+      .eq("cliente_id", clienteId)
+      .gte("fecha", desde)
+      .lte("fecha", hasta)
+      .order("fecha", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    const ccRows = (ccData || []).map((row: any) => ({
+      id: row.id,
+      fecha: row.fecha,
+      comprobante: row.comprobante || "—",
+      descripcion: row.descripcion || "",
+      debe: row.debe || 0,
+      haber: row.haber || 0,
+      saldo: row.saldo || 0,
+      forma_pago: row.forma_pago,
+      venta_id: row.venta_id,
+    }));
+    setMovCCRows(ccRows);
+
+    const totalDebe = ccRows.reduce((s: number, r: any) => s + r.debe, 0);
+    const totalHaber = ccRows.reduce((s: number, r: any) => s + r.haber, 0);
+    // Get fresh saldo from client
+    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+    setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0 });
+
     setMovLoading(false);
   };
 
@@ -1216,138 +1185,196 @@ export default function ClientesPage() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Ventas</p>
-              <p className="text-lg font-bold">{formatCurrency(movTotals.ventas)}</p>
-            </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Notas de Crédito</p>
-              <p className="text-lg font-bold text-red-500">-{formatCurrency(movTotals.nc)}</p>
-            </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Cobros</p>
-              <p className="text-lg font-bold text-blue-600">{formatCurrency(movTotals.cobros)}</p>
-            </div>
-            <div className="rounded-lg border p-3 bg-primary/5">
-              <p className="text-xs text-muted-foreground">Total gastado</p>
-              <p className="text-lg font-bold text-primary">{formatCurrency(movTotals.totalGastado)}</p>
-            </div>
-          </div>
+          <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "compras" | "cc")} className="mt-3">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="compras">Compras</TabsTrigger>
+              <TabsTrigger value="cc">Cuenta Corriente</TabsTrigger>
+            </TabsList>
 
-          {movLoading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-          ) : movimientos.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">Sin movimientos en el período seleccionado</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto mt-2">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 px-3 font-medium">Fecha</th>
-                    <th className="text-left py-2 px-3 font-medium">Tipo</th>
-                    <th className="text-left py-2 px-3 font-medium">Descripción</th>
-                    <th className="text-left py-2 px-3 font-medium">Forma pago</th>
-                    <th className="text-right py-2 px-3 font-medium">Monto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movimientos.map((m, i) => {
-                    const key = `${m.tipo}-${m.id}-${i}`;
-                    const isExp = movExpanded === key;
-                    const hasItems = m.items && m.items.length > 0;
-                    return (
-                      <React.Fragment key={key}>
-                        <tr
-                          className={`border-b last:border-0 hover:bg-muted/50 ${hasItems ? "cursor-pointer" : ""}`}
-                          onClick={() => hasItems && setMovExpanded(isExp ? null : key)}
-                        >
-                          <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                          <td className="py-2 px-3">
-                            <Badge variant={m.badge as any} className="text-xs font-normal">{m.tipo}</Badge>
-                          </td>
-                          <td className="py-2 px-3 text-xs">
-                            <div className="flex items-center gap-1">
-                              <span>{m.descripcion}</span>
-                              {hasItems && (
-                                <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isExp ? "rotate-180" : ""}`} />
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2 px-3">
-                            <Badge variant="outline" className="text-xs font-normal">{m.forma_pago || "—"}</Badge>
-                          </td>
-                          <td className={`py-2 px-3 text-right font-semibold ${m.monto < 0 ? "text-emerald-600" : ""}`}>
-                            <div>{m.monto < 0 ? `-${formatCurrency(Math.abs(m.monto))}` : formatCurrency(m.monto)}</div>
-                            {m.saldo_pendiente > 0 && (
-                              <div className="flex items-center justify-end gap-1.5 mt-1">
-                                <span className="text-[10px] text-orange-600 font-medium">Debe: {formatCurrency(m.saldo_pendiente)}</span>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); openPayMov(m); }}
-                                  className="text-[10px] bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-2 py-0.5 rounded-full font-medium transition-colors"
-                                >
-                                  Cobrar
-                                </button>
-                              </div>
+            {/* ══════ TAB COMPRAS ══════ */}
+            <TabsContent value="compras" className="mt-3">
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Ventas</p>
+                  <p className="text-lg font-bold">{formatCurrency(movTotals.ventas)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Notas de Crédito</p>
+                  <p className="text-lg font-bold text-red-500">{movTotals.nc > 0 ? `-${formatCurrency(movTotals.nc)}` : formatCurrency(0)}</p>
+                </div>
+                <div className="rounded-lg border p-3 bg-primary/5">
+                  <p className="text-xs text-muted-foreground">Total comprado</p>
+                  <p className="text-lg font-bold text-primary">{formatCurrency(movTotals.totalComprado)}</p>
+                </div>
+              </div>
+
+              {movLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+              ) : movimientos.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Sin compras en el período seleccionado</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-2 px-3 font-medium">Fecha</th>
+                        <th className="text-left py-2 px-3 font-medium">Tipo</th>
+                        <th className="text-left py-2 px-3 font-medium">Comprobante</th>
+                        <th className="text-left py-2 px-3 font-medium">Forma pago</th>
+                        <th className="text-right py-2 px-3 font-medium">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {movimientos.map((m, i) => {
+                        const key = `compra-${m.id}-${i}`;
+                        const isExp = movExpanded === key;
+                        const hasItems = m.items && m.items.length > 0;
+                        return (
+                          <React.Fragment key={key}>
+                            <tr
+                              className={`border-b last:border-0 hover:bg-muted/50 ${hasItems ? "cursor-pointer" : ""}`}
+                              onClick={() => hasItems && setMovExpanded(isExp ? null : key)}
+                            >
+                              <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                              <td className="py-2 px-3">
+                                <Badge variant={m.badge as any} className="text-xs font-normal">{m.tipo}</Badge>
+                              </td>
+                              <td className="py-2 px-3 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <span>{m.descripcion}</span>
+                                  {hasItems && (
+                                    <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isExp ? "rotate-180" : ""}`} />
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2 px-3">
+                                <Badge variant="outline" className="text-xs font-normal">{m.forma_pago || "—"}</Badge>
+                              </td>
+                              <td className={`py-2 px-3 text-right font-semibold ${m.monto < 0 ? "text-emerald-600" : ""}`}>
+                                {m.monto < 0 ? `-${formatCurrency(Math.abs(m.monto))}` : formatCurrency(m.monto)}
+                              </td>
+                            </tr>
+                            {isExp && hasItems && (
+                              <tr>
+                                <td colSpan={5} className="px-3 pb-3 pt-0">
+                                  <div className="bg-muted/30 rounded-lg p-3 mt-1">
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="text-muted-foreground">
+                                          <th className="text-left py-1 font-medium">Producto</th>
+                                          <th className="text-center py-1 font-medium">Cant.</th>
+                                          <th className="text-right py-1 font-medium">Precio</th>
+                                          <th className="text-right py-1 font-medium">Subtotal</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {m.items.map((it: any, idx: number) => {
+                                          const isBox = it.presentacion && it.presentacion !== "Unidad" && (it.unidades_por_presentacion || 1) > 1;
+                                          const unitPrice = isBox ? it.precio_unitario / (it.unidades_por_presentacion || 1) : it.precio_unitario;
+                                          let displayName = (it.descripcion || "")
+                                            .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+                                            .replace(/\s*\(Unidad\)$/, "")
+                                            .replace(/(\([^)]+\))\s*\1/gi, "$1")
+                                            .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
+                                            .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
+                                          return (
+                                            <tr key={idx} className="border-t border-muted">
+                                              <td className="py-1">{displayName}</td>
+                                              <td className="py-1 text-center">{(it.unidades_por_presentacion || 1) > 0 && (it.unidades_por_presentacion || 1) < 1 ? it.cantidad * (it.unidades_por_presentacion || 1) : it.cantidad}{isBox ? ` ${it.presentacion}` : ""}</td>
+                                              <td className="py-1 text-right">
+                                                {formatCurrency(unitPrice)}
+                                                {isBox && <span className="text-[10px] text-muted-foreground block">c/u</span>}
+                                              </td>
+                                              <td className="py-1 text-right font-medium">{formatCurrency(it.subtotal || it.precio_unitario * it.cantidad)}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
                             )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="text-xs text-muted-foreground mt-2 text-right">{movimientos.length} compra(s)</div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ══════ TAB CUENTA CORRIENTE ══════ */}
+            <TabsContent value="cc" className="mt-3">
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total Debe</p>
+                  <p className="text-lg font-bold">{formatCurrency(movCCTotals.debe)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total Haber</p>
+                  <p className="text-lg font-bold text-emerald-600">{formatCurrency(movCCTotals.haber)}</p>
+                </div>
+                <div className={`rounded-lg border p-3 ${movCCTotals.saldo > 0 ? "bg-orange-50 border-orange-200" : "bg-emerald-50 border-emerald-200"}`}>
+                  <p className="text-xs text-muted-foreground">Saldo actual</p>
+                  <p className={`text-lg font-bold ${movCCTotals.saldo > 0 ? "text-orange-600" : "text-emerald-600"}`}>
+                    {movCCTotals.saldo > 0 ? formatCurrency(movCCTotals.saldo) : movCCTotals.saldo < 0 ? `${formatCurrency(Math.abs(movCCTotals.saldo))} a favor` : "$0"}
+                  </p>
+                </div>
+              </div>
+
+              {movCCTotals.saldo > 0 && movClient && (
+                <div className="flex justify-end mb-2">
+                  <Button size="sm" variant="outline" onClick={() => openPayMov({ id: movClient.id, descripcion: "Saldo total", saldo_pendiente: movCCTotals.saldo, total: movCCTotals.saldo, pagado: 0 })}>
+                    <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar saldo ({formatCurrency(movCCTotals.saldo)})
+                  </Button>
+                </div>
+              )}
+
+              {movLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+              ) : movCCRows.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Sin movimientos en cuenta corriente</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-2 px-2 font-medium">Fecha</th>
+                        <th className="text-left py-2 px-2 font-medium">Comprobante</th>
+                        <th className="text-left py-2 px-2 font-medium">Descripción</th>
+                        <th className="text-right py-2 px-2 font-medium">Debe</th>
+                        <th className="text-right py-2 px-2 font-medium">Haber</th>
+                        <th className="text-right py-2 px-2 font-medium">Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {movCCRows.map((row, i) => (
+                        <tr key={row.id || i} className="border-b last:border-0 hover:bg-muted/50">
+                          <td className="py-2 px-2 text-muted-foreground">{new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                          <td className="py-2 px-2 text-xs font-mono">{row.comprobante}</td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">{row.descripcion}</td>
+                          <td className="py-2 px-2 text-right font-medium">{row.debe > 0 ? formatCurrency(row.debe) : ""}</td>
+                          <td className="py-2 px-2 text-right font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(row.haber) : ""}</td>
+                          <td className={`py-2 px-2 text-right font-bold ${row.saldo > 0 ? "text-orange-600" : row.saldo < 0 ? "text-emerald-600" : ""}`}>
+                            {row.saldo > 0 ? formatCurrency(row.saldo) : row.saldo < 0 ? `${formatCurrency(Math.abs(row.saldo))} a favor` : "$0"}
                           </td>
                         </tr>
-                        {isExp && hasItems && (
-                          <tr>
-                            <td colSpan={5} className="px-3 pb-3 pt-0">
-                              <div className="bg-muted/30 rounded-lg p-3 mt-1">
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="text-muted-foreground">
-                                      <th className="text-left py-1 font-medium">Producto</th>
-                                      <th className="text-center py-1 font-medium">Cant.</th>
-                                      <th className="text-right py-1 font-medium">Precio</th>
-                                      <th className="text-right py-1 font-medium">Subtotal</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {m.items.map((it: any, idx: number) => {
-                                      const isBox = it.presentacion && it.presentacion !== "Unidad" && (it.unidades_por_presentacion || 1) > 1;
-                                      const unitPrice = isBox ? it.precio_unitario / (it.unidades_por_presentacion || 1) : it.precio_unitario;
-                                      let displayName = (it.descripcion || "")
-                                        .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
-                                        .replace(/\s*\(Unidad\)$/, "")
-                                        .replace(/(\([^)]+\))\s*\1/gi, "$1")
-                                        .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
-                                        .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
-                                      return (
-                                        <tr key={idx} className="border-t border-muted">
-                                          <td className="py-1">
-                                            {displayName}
-                                          </td>
-                                          <td className="py-1 text-center">{(it.unidades_por_presentacion || 1) > 0 && (it.unidades_por_presentacion || 1) < 1 ? it.cantidad * (it.unidades_por_presentacion || 1) : it.cantidad}{isBox ? ` ${it.presentacion}` : ""}</td>
-                                          <td className="py-1 text-right">
-                                            {formatCurrency(unitPrice)}
-                                            {isBox && <span className="text-[10px] text-muted-foreground block">c/u</span>}
-                                          </td>
-                                          <td className="py-1 text-right font-medium">{formatCurrency(it.subtotal || it.precio_unitario * it.cantidad)}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <div className="text-xs text-muted-foreground mt-2 text-right">
-                {movimientos.length} movimiento(s)
-              </div>
-            </div>
-          )}
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="text-xs text-muted-foreground mt-2 text-right">{movCCRows.length} movimiento(s)</div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
