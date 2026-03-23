@@ -225,6 +225,7 @@ export default function ListadoVentasPage() {
   const [printLineItems, setPrintLineItems] = useState<ReceiptLineItem[]>([]);
   const [printReady, setPrintReady] = useState(false);
   const [printClienteSaldo, setPrintClienteSaldo] = useState(0);
+  const [printSaldoAnteriorCC, setPrintSaldoAnteriorCC] = useState(0);
   const [printPagos, setPrintPagos] = useState<{ efectivo: number; transferencia: number; cuentaCorriente: number; recibido: number; vuelto: number }>({ efectivo: 0, transferencia: 0, cuentaCorriente: 0, recibido: 0, vuelto: 0 });
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -572,9 +573,25 @@ export default function ListadoVentasPage() {
     const { data } = await supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at");
     const items = (data as VentaItemRow[]) || [];
     let saldo = 0;
+    let saldoAnteriorCC = 0;
     if (v.cliente_id) {
-      const { data: cd } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
-      saldo = cd?.saldo || 0;
+      // Get saldo at the time of this sale from cuenta_corriente (not current client saldo)
+      const { data: ccRow } = await supabase
+        .from("cuenta_corriente")
+        .select("saldo, debe")
+        .eq("venta_id", v.id)
+        .eq("cliente_id", v.cliente_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (ccRow) {
+        saldo = ccRow.saldo;
+        saldoAnteriorCC = ccRow.saldo - ccRow.debe;
+      } else {
+        // No CC entry for this sale — use current client saldo as fallback
+        const { data: cd } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
+        saldo = cd?.saldo || 0;
+      }
     }
 
     // Load combo data for combo products
@@ -630,6 +647,7 @@ export default function ListadoVentasPage() {
     }
     setPrintPagos({ efectivo: pagoEf, transferencia: pagoTr, cuentaCorriente: pagoCC, recibido: 0, vuelto: 0 });
     setPrintClienteSaldo(saldo);
+    setPrintSaldoAnteriorCC(saldoAnteriorCC);
     setPrintVenta(v);
     setPrintItems(items);
     setPrintLineItems(lineItems);
@@ -2155,7 +2173,7 @@ export default function ListadoVentasPage() {
               clienteCondicionIva: printVenta.clientes?.situacion_iva || null,
               vendedor: getVendedorNombre(printVenta.vendedor_id) === "—" && (printVenta.origen === "tienda" || printVenta.tipo_comprobante?.toLowerCase().includes("web")) ? "Tienda Online" : getVendedorNombre(printVenta.vendedor_id),
               fecha: formatDatePDF(printVenta.fecha),
-              saldoAnterior: printClienteSaldo - (printPagos.cuentaCorriente || 0),
+              saldoAnterior: printSaldoAnteriorCC || (printClienteSaldo - (printPagos.cuentaCorriente || 0)),
               saldoNuevo: printClienteSaldo,
               items: printLineItems,
               pagoEfectivo: printPagos.efectivo || undefined,
