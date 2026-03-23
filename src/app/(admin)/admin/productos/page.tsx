@@ -134,6 +134,9 @@ export default function ProductosPage() {
   const [editingProduct, setEditingProduct] = useState<ProductoWithRelations | null>(null);
   const [priceHistory, setPriceHistory] = useState<{ id: string; precio_anterior: number; precio_nuevo: number; costo_anterior: number; costo_nuevo: number; usuario: string; created_at: string }[]>([]);
   const [productDiscounts, setProductDiscounts] = useState<any[]>([]);
+  const [showDiscountForm, setShowDiscountForm] = useState(false);
+  const [discountForm, setDiscountForm] = useState({ nombre: "", porcentaje: 5, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
+  const [savingDiscount, setSavingDiscount] = useState(false);
   const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -442,6 +445,65 @@ export default function ProductosPage() {
       { nombre: "Unidad", cantidad: 1, sku: form.codigo || "", costo: 0, precio: 0, precio_oferta: null },
     ]);
     setDialogOpen(true);
+  };
+
+  // ── Product Discount CRUD ──
+  const refreshProductDiscounts = async (productId: string, catId?: string, subId?: string) => {
+    try {
+      const { data: allDesc } = await supabase.from("descuentos").select("*").eq("activo", true);
+      const today = new Date().toISOString().split("T")[0];
+      const applicable = (allDesc || []).filter((d: any) => {
+        if (d.fecha_fin && d.fecha_fin < today) return false;
+        if (d.aplica_a === "todos") return true;
+        if (d.aplica_a === "productos" && (d.productos_ids || []).includes(productId)) return true;
+        if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(catId)) return true;
+        if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(subId)) return true;
+        return false;
+      });
+      setProductDiscounts(applicable);
+    } catch { setProductDiscounts([]); }
+  };
+
+  const saveProductDiscount = async () => {
+    if (!editingProduct || !discountForm.nombre || discountForm.porcentaje <= 0) return;
+    setSavingDiscount(true);
+    const today = new Date().toISOString().split("T")[0];
+    const payload: Record<string, any> = {
+      nombre: discountForm.nombre,
+      porcentaje: discountForm.porcentaje,
+      aplica_a: "productos",
+      productos_ids: [editingProduct.id],
+      categorias_ids: [],
+      subcategorias_ids: [],
+      marcas_ids: [],
+      presentacion: discountForm.tipo === "solo_caja" ? "caja" : discountForm.tipo === "solo_unidad" ? "unidad" : "todas",
+      cantidad_minima: discountForm.tipo === "por_cantidad" && discountForm.cantidad_minima > 0 ? discountForm.cantidad_minima : null,
+      fecha_inicio: discountForm.fecha_inicio || today,
+      fecha_fin: discountForm.fecha_fin || null,
+      activo: true,
+      excluir_combos: false,
+    };
+    const { error } = await supabase.from("descuentos").insert(payload);
+    if (error) { showAdminToast("Error al crear descuento: " + error.message, "error"); }
+    else {
+      showAdminToast("Descuento creado", "success");
+      setShowDiscountForm(false);
+      setDiscountForm({ nombre: "", porcentaje: 5, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
+      await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
+    }
+    setSavingDiscount(false);
+  };
+
+  const toggleProductDiscount = async (id: string, currentActive: boolean) => {
+    await supabase.from("descuentos").update({ activo: !currentActive, updated_at: new Date().toISOString() }).eq("id", id);
+    if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
+  };
+
+  const deleteProductDiscount = async (id: string) => {
+    if (!confirm("¿Eliminar este descuento?")) return;
+    await supabase.from("descuentos").delete().eq("id", id);
+    if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
+    showAdminToast("Descuento eliminado", "success");
   };
 
   const openEdit = async (p: ProductoWithRelations) => {
@@ -2355,45 +2417,152 @@ export default function ProductosPage() {
                 </details>
               )}
 
-              {/* Active Discounts for this product */}
+              {/* Descuentos del producto - CRUD interactivo */}
               {editingProduct && (
-                <details className="group border rounded-lg" open={productDiscounts.length > 0}>
-                  <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 transition rounded-lg">
-                    <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">Descuentos activos</span>
-                    {productDiscounts.length > 0 && (
-                      <Badge className="text-[10px] h-4 px-1.5 bg-green-100 text-green-700 hover:bg-green-100">{productDiscounts.length}</Badge>
-                    )}
-                    <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto transition group-open:rotate-180" />
-                  </summary>
-                  <div className="px-3 pb-3">
-                    {productDiscounts.length > 0 ? (
-                      <div className="space-y-2">
-                        {productDiscounts.map((d) => (
-                          <div key={d.id} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <Badge className="bg-green-600 text-white text-[10px] h-5 px-2">{d.porcentaje}%</Badge>
-                              <span className="text-xs font-medium">{d.nombre}</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                              <span>{d.presentacion === "todas" ? "Todas las pres." : d.presentacion === "caja_cerrada" ? "Solo cajas" : "Solo unidad"}</span>
-                              {d.cantidad_minima && <span className="text-orange-600">Min: {d.cantidad_minima} un.</span>}
-                              <span>Hasta {new Date(d.fecha_fin).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}</span>
-                              <a href="/admin/productos/descuentos" target="_blank" className="text-primary hover:underline text-[10px]">Editar</a>
-                            </div>
-                          </div>
-                        ))}
+                <div className="border rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-orange-50 to-amber-50 border-b">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-orange-600" />
+                      <span className="text-sm font-semibold text-orange-800">Descuentos</span>
+                      {productDiscounts.length > 0 && (
+                        <Badge className="text-[10px] h-4 px-1.5 bg-orange-200 text-orange-800 hover:bg-orange-200">{productDiscounts.length}</Badge>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] gap-1 border-orange-300 text-orange-700 hover:bg-orange-100"
+                      onClick={() => setShowDiscountForm(!showDiscountForm)}
+                    >
+                      <Plus className="w-3 h-3" /> {showDiscountForm ? "Cancelar" : "Agregar"}
+                    </Button>
+                  </div>
+
+                  {/* Formulario inline para crear descuento */}
+                  {showDiscountForm && (
+                    <div className="p-3 bg-orange-50/50 border-b space-y-3">
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="col-span-2">
+                          <Label className="text-[10px] text-muted-foreground">Nombre</Label>
+                          <Input
+                            placeholder="Ej: Promo x10 unidades"
+                            value={discountForm.nombre}
+                            onChange={(e) => setDiscountForm({ ...discountForm, nombre: e.target.value })}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Descuento %</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={discountForm.porcentaje}
+                            onChange={(e) => setDiscountForm({ ...discountForm, porcentaje: Math.max(1, Math.min(100, Number(e.target.value))) })}
+                            className="h-8 text-xs text-center"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Tipo</Label>
+                          <select
+                            value={discountForm.tipo}
+                            onChange={(e) => setDiscountForm({ ...discountForm, tipo: e.target.value })}
+                            className="w-full h-8 text-xs border rounded-md px-2 bg-background"
+                          >
+                            <option value="general">General</option>
+                            <option value="por_cantidad">Por cantidad mín.</option>
+                            <option value="solo_caja">Solo cajas</option>
+                            <option value="solo_unidad">Solo unidad</option>
+                          </select>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 py-3">
-                        <p className="text-xs text-muted-foreground">No hay descuentos activos para este producto</p>
-                        <a href="/admin/productos/descuentos" target="_blank" className="text-xs text-primary hover:underline flex items-center gap-1">
-                          <Plus className="w-3 h-3" /> Crear descuento
-                        </a>
+                      {discountForm.tipo === "por_cantidad" && (
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Cantidad mínima:</Label>
+                          <Input
+                            type="number"
+                            min="2"
+                            value={discountForm.cantidad_minima}
+                            onChange={(e) => setDiscountForm({ ...discountForm, cantidad_minima: Math.max(2, Number(e.target.value)) })}
+                            className="h-7 text-xs w-20"
+                          />
+                          <span className="text-[10px] text-muted-foreground">unidades para que aplique</span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-3 gap-2 items-end">
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Desde</Label>
+                          <Input
+                            type="date"
+                            value={discountForm.fecha_inicio}
+                            onChange={(e) => setDiscountForm({ ...discountForm, fecha_inicio: e.target.value })}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Hasta (opcional)</Label>
+                          <Input
+                            type="date"
+                            value={discountForm.fecha_fin}
+                            onChange={(e) => setDiscountForm({ ...discountForm, fecha_fin: e.target.value })}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 text-xs bg-orange-600 hover:bg-orange-700"
+                          onClick={saveProductDiscount}
+                          disabled={savingDiscount || !discountForm.nombre || discountForm.porcentaje <= 0}
+                        >
+                          {savingDiscount ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                          Crear descuento
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de descuentos */}
+                  <div className="divide-y">
+                    {productDiscounts.length > 0 ? productDiscounts.map((d) => (
+                      <div key={d.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge className={`shrink-0 text-[10px] h-5 px-2 ${d.activo ? "bg-green-600 text-white" : "bg-gray-300 text-gray-600"}`}>
+                            {d.porcentaje}%
+                          </Badge>
+                          <span className={`text-xs font-medium truncate ${!d.activo ? "line-through text-muted-foreground" : ""}`}>{d.nombre}</span>
+                          {d.presentacion === "caja" && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">Cajas</Badge>}
+                          {d.presentacion === "unidad" && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">Unidad</Badge>}
+                          {d.cantidad_minima && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0 text-orange-600 border-orange-300">≥{d.cantidad_minima} un.</Badge>}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] text-muted-foreground">
+                            {d.fecha_fin ? `Hasta ${new Date(d.fecha_fin).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}` : "Sin venc."}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleProductDiscount(d.id, d.activo)}
+                            className={`w-8 h-4 rounded-full transition relative ${d.activo ? "bg-green-500" : "bg-gray-300"}`}
+                          >
+                            <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${d.activo ? "left-4" : "left-0.5"}`} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteProductDiscount(d.id)}
+                            className="text-red-400 hover:text-red-600 transition p-0.5"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )) : !showDiscountForm && (
+                      <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+                        Sin descuentos activos
                       </div>
                     )}
                   </div>
-                </details>
+                </div>
               )}
 
               {/* Box summary */}
