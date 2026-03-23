@@ -520,19 +520,23 @@ export default function ProductosPage() {
     setPriceHistory((phData || []) as any);
 
     // Load active discounts that apply to this product
-    const { data: allDesc } = await supabase
-      .from("descuentos")
-      .select("*")
-      .eq("activo", true)
-      .gte("fecha_fin", new Date().toISOString().split("T")[0]);
-    const applicableDiscounts = (allDesc || []).filter((d: any) => {
-      if (d.aplica_a === "todos") return true;
-      if (d.aplica_a === "productos" && (d.productos_ids || []).includes(p.id)) return true;
-      if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(p.categoria_id)) return true;
-      if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(p.subcategoria_id)) return true;
-      return false;
-    });
-    setProductDiscounts(applicableDiscounts);
+    try {
+      const { data: allDesc } = await supabase
+        .from("descuentos")
+        .select("*")
+        .eq("activo", true);
+      const today = new Date().toISOString().split("T")[0];
+      const applicableDiscounts = (allDesc || []).filter((d: any) => {
+        // Skip expired discounts (allow null fecha_fin = no expiry)
+        if (d.fecha_fin && d.fecha_fin < today) return false;
+        if (d.aplica_a === "todos") return true;
+        if (d.aplica_a === "productos" && (d.productos_ids || []).includes(p.id)) return true;
+        if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(p.categoria_id)) return true;
+        if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(p.subcategoria_id)) return true;
+        return false;
+      });
+      setProductDiscounts(applicableDiscounts);
+    } catch { setProductDiscounts([]); }
 
     setDialogOpen(true);
   };
