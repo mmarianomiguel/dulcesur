@@ -415,9 +415,9 @@ export default function VentasPage() {
 
   const total = baseTotal + transferSurcharge;
 
-  const mixtoSum = mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente;
-  const mixtoRemaining = formaPago === "Mixto" ? baseTotal - mixtoSum : 0;
-  const mixtoValid = formaPago !== "Mixto" || Math.abs(mixtoRemaining) < 0.01;
+  const mixtoSum = Math.round((mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente) * 100) / 100;
+  const mixtoRemaining = formaPago === "Mixto" ? Math.round((baseTotal - mixtoSum) * 100) / 100 : 0;
+  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 1 && mixtoSum > 0);
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
   const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
@@ -1301,16 +1301,18 @@ export default function VentasPage() {
       setErrorModal({ open: true, message: "Los montos del pago mixto no suman el total." });
       return;
     }
-    // Credit limit check - refresh client data to avoid stale state
-    if (selectedClient && (selectedClient as any).limite_credito > 0) {
+    // Credit limit check - always refresh from DB to avoid stale state
+    if (selectedClient) {
       const ccAmount = formaPago === "Cuenta Corriente" ? total : formaPago === "Mixto" ? mixtoCuentaCorriente : 0;
       if (ccAmount > 0) {
         const { data: freshClient } = await supabase.from("clientes").select("saldo, limite_credito").eq("id", selectedClient.id).single();
-        const currentSaldo = freshClient?.saldo ?? selectedClient.saldo ?? 0;
-        const limit = freshClient?.limite_credito ?? (selectedClient as any).limite_credito;
-        const newDebt = currentSaldo + ccAmount;
-        if (newDebt > limit) {
-          if (!confirm(`El cliente superará su límite de crédito (${formatCurrency(limit)}). Deuda resultante: ${formatCurrency(newDebt)}. ¿Continuar?`)) return;
+        const limit = freshClient?.limite_credito ?? (selectedClient as any).limite_credito ?? 0;
+        if (limit > 0) {
+          const currentSaldo = freshClient?.saldo ?? selectedClient.saldo ?? 0;
+          const newDebt = currentSaldo + ccAmount;
+          if (newDebt > limit) {
+            if (!confirm(`El cliente superará su límite de crédito (${formatCurrency(limit)}). Deuda resultante: ${formatCurrency(newDebt)}. ¿Continuar?`)) return;
+          }
         }
       }
     }
@@ -1409,12 +1411,17 @@ export default function VentasPage() {
 
         if (stockRpcError) {
           // Fallback: RPC may not exist yet — decrement stock directly
+          const stockErrors: string[] = [];
           for (const item of stockItems) {
             const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
             if (prod) {
               const stockAntes = prod.stock;
               const stockDespues = stockAntes - item.cantidad;
-              await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+              const { error: updErr } = await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+              if (updErr) {
+                stockErrors.push(`Stock ${item.descripcion}: ${updErr.message}`);
+                continue;
+              }
               await supabase.from("stock_movimientos").insert({
                 producto_id: item.producto_id,
                 tipo: "Venta",
@@ -1427,6 +1434,9 @@ export default function VentasPage() {
                 orden_id: venta.id,
               });
             }
+          }
+          if (stockErrors.length > 0) {
+            console.error("Stock decrement errors:", stockErrors);
           }
         }
 

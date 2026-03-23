@@ -528,7 +528,12 @@ export default function ListadoVentasPage() {
         }
       }
 
-      // 5. Mark venta as anulada
+      // 5. If critical stock errors occurred, abort anulación
+      if (errores.length > 0) {
+        throw new Error(`No se pudo restaurar stock: ${errores.join(". ")}. Venta NO anulada.`);
+      }
+
+      // 6. Mark venta as anulada (only if stock was fully restored)
       const { error: anularErr } = await supabase.from("ventas").update({
         estado: "anulada",
         observacion: v.observacion
@@ -549,10 +554,7 @@ export default function ListadoVentasPage() {
         after: { estado: "anulada", motivo: anularMotivo },
       });
 
-      if (errores.length > 0) {
-        showAdminToast(`Venta anulada con advertencias: ${errores.join(". ")}`, "info");
-      }
-
+      showAdminToast("Venta anulada correctamente", "success");
       setAnularVenta(null);
       setAnularMotivo("");
       await fetchVentas();

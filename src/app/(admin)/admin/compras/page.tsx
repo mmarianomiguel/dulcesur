@@ -370,27 +370,41 @@ export default function ComprasPage() {
         return;
       }
 
-      // Update stock and costs for each product
+      // Update stock and costs for each product (atomic read+write to prevent race conditions)
       for (const item of items) {
+        // Read current stock
         const { data: prodData } = await supabase
           .from("productos")
           .select("stock")
           .eq("id", item.producto_id)
           .single();
         const stockAntes = prodData?.stock ?? 0;
-
         const newStock = stockAntes + item.cantidad;
-        await supabase
+
+        // Atomic update: only update if stock hasn't changed since we read it
+        const { error: updErr, count } = await supabase
           .from("productos")
           .update({ stock: newStock })
-          .eq("id", item.producto_id);
+          .eq("id", item.producto_id)
+          .eq("stock", stockAntes);
+
+        if (updErr || count === 0) {
+          // Retry once with fresh read if concurrent update detected
+          const { data: freshProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+          const freshStock = freshProd?.stock ?? 0;
+          await supabase.from("productos").update({ stock: freshStock + item.cantidad }).eq("id", item.producto_id);
+        }
+
+        // Re-read for accurate log
+        const { data: afterProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        const stockDespues = afterProd?.stock ?? newStock;
 
         // Log stock movement
         await supabase.from("stock_movimientos").insert({
           producto_id: item.producto_id,
           tipo: "compra",
           cantidad_antes: stockAntes,
-          cantidad_despues: stockAntes + item.cantidad,
+          cantidad_despues: stockDespues,
           cantidad: item.cantidad,
           referencia: `Compra #${numero}`,
           descripcion: `Compra - ${item.nombre}`,
