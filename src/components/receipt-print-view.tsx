@@ -109,7 +109,7 @@ export function ReceiptPrintView({
 }) {
   const fsEmpresa = config.fontSizeEmpresa || config.fontSize;
   const fsCliente = config.fontSizeCliente || config.fontSize - 1;
-  const fsProductos = config.fontSizeProductos || config.fontSize - 1;
+  const fsProductos = (config.fontSizeProductos || config.fontSize - 1) + 2;
   const fsResumen = config.fontSizeResumen || config.fontSize + 6;
   const fmtCur = (v: number) =>
     new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
@@ -351,6 +351,8 @@ export function ReceiptPrintView({
         {/* Payment summary */}
         {showPaymentSection ? (
           <div style={{ borderTop: "2px solid #000", padding: "8px 4px" }}>
+            <div style={{ fontSize: `${fs - 1}px`, fontWeight: "bold", textAlign: "right", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px", color: "#333" }}>Detalle de pago</div>
+
             {totalAhorro > 0 && (<>
               {row("Ahorro en esta compra:", `-${fmtCur(Math.round(totalAhorro))}`, false, "#059669")}
               {separator()}
@@ -358,8 +360,14 @@ export function ReceiptPrintView({
 
             {showDesglose && (<>
               {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Efectivo:", fmtCur(Math.round(sale.pagoEfectivo)))}
-              {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && row("Transferencia:", fmtCur(Math.round(sale.pagoTransferencia)))}
-              {sale.transferSurcharge > 0 && row("(Rec. transferencia incluido)", `+${fmtCur(Math.round(sale.transferSurcharge))}`, false, "#888")}
+              {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "2px", fontSize: `${fs}px` }}>
+                  <span style={{ color: "#555" }}>
+                    Transferencia:{sale.transferSurcharge > 0 && <span style={{ fontSize: `${fs - 3}px`, color: "#888" }}> (inc. rec. +{fmtCur(Math.round(sale.transferSurcharge))})</span>}
+                  </span>
+                  <span style={{ minWidth: "100px", textAlign: "right" }}>{fmtCur(Math.round(sale.pagoTransferencia))}</span>
+                </div>
+              )}
               {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("Cta. Corriente:", fmtCur(Math.round(sale.pagoCuentaCorriente)))}
               {separator()}
               {totalPagado > 0 && row("Abonado:", fmtCur(Math.round(totalPagado)), true)}
@@ -367,7 +375,14 @@ export function ReceiptPrintView({
             </>)}
 
             {!showDesglose && sale.formaPago === "Efectivo" && row("Efectivo:", fmtCur(sale.total))}
-            {!showDesglose && sale.formaPago === "Transferencia" && row("Transferencia:", fmtCur(sale.total))}
+            {!showDesglose && sale.formaPago === "Transferencia" && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "2px", fontSize: `${fs}px` }}>
+                <span style={{ color: "#555" }}>
+                  Transferencia:{sale.transferSurcharge > 0 && <span style={{ fontSize: `${fs - 3}px`, color: "#888" }}> (inc. rec. +{fmtCur(Math.round(sale.transferSurcharge))})</span>}
+                </span>
+                <span style={{ minWidth: "100px", textAlign: "right" }}>{fmtCur(sale.total)}</span>
+              </div>
+            )}
             {!showDesglose && sale.formaPago === "Cuenta Corriente" && row("Cta. Corriente:", fmtCur(sale.total), false, "#dc2626")}
 
             {showVuelto && (<>
