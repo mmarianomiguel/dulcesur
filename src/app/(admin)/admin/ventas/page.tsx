@@ -437,8 +437,9 @@ export default function VentasPage() {
     for (const d of activeDiscounts) {
       // Skip if discount excludes combos and product is combo
       if (d.excluir_combos && isCombo) continue;
-      // Presentation filter: in POS, apply discounts to all presentations
-      // (the filter is for tienda online display, POS always shows the discount as editable)
+      // Check presentation filter
+      if (d.presentacion === "unidad" && presName !== "Unidad") continue;
+      if (d.presentacion === "caja" && presName === "Unidad") continue;
       // Check scope
       if (d.aplica_a === "todos") {
         bestDiscount = Math.max(bestDiscount, Number(d.porcentaje));
@@ -587,6 +588,7 @@ export default function VentasPage() {
           const medioPres = pres.find((p) => Number(p.cantidad) <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio")));
           if (medioPres) {
             const prod = products.find((p) => p.id === i.producto_id);
+            const newDiscount = prod ? getProductDiscount(prod, medioPres.nombre || "Medio Carton") : i.discount;
             return {
               ...i,
               qty: 1,
@@ -595,7 +597,8 @@ export default function VentasPage() {
               description: prod ? `${prod.nombre} (${medioPres.nombre || "Medio Cartón"})` : i.description,
               presentacion: medioPres.nombre || "Medio Carton",
               unidades_por_presentacion: Number(medioPres.cantidad) || 0.5,
-              subtotal: medioPres.precio * (1 - i.discount / 100),
+              discount: newDiscount,
+              subtotal: medioPres.precio * (1 - newDiscount / 100),
             };
           }
         }
@@ -610,6 +613,7 @@ export default function VentasPage() {
           const unitCode = unitPres?.codigo || prod?.codigo || i.code;
           if (unitPres || prod) {
             const newQty = i.unidades_por_presentacion - 1;
+            const newDiscount = prod ? getProductDiscount(prod, "Unidad") : i.discount;
             return {
               ...i,
               qty: newQty,
@@ -618,7 +622,8 @@ export default function VentasPage() {
               description: prod?.nombre || i.description.replace(/\s*\(.*\)$/, ""),
               presentacion: "Unidad",
               unidades_por_presentacion: 1,
-              subtotal: unitPrice * newQty * (1 - i.discount / 100),
+              discount: newDiscount,
+              subtotal: unitPrice * newQty * (1 - newDiscount / 100),
             };
           }
           // No unit presentation or product found: don't go below 1
@@ -634,6 +639,7 @@ export default function VentasPage() {
           const unitPrice = unitPres?.precio ?? prod?.precio ?? i.price;
           const unitCode = unitPres?.codigo || prod?.codigo || i.code;
           if (unitPres || prod) {
+            const newDiscount = prod ? getProductDiscount(prod, "Unidad") : i.discount;
             return {
               ...i,
               qty: 1,
@@ -642,7 +648,8 @@ export default function VentasPage() {
               description: prod?.nombre || i.description.replace(/\s*\(.*\)$/, ""),
               presentacion: "Unidad",
               unidades_por_presentacion: 1,
-              subtotal: unitPrice * (1 - i.discount / 100),
+              discount: newDiscount,
+              subtotal: unitPrice * (1 - newDiscount / 100),
             };
           }
         }
@@ -653,6 +660,7 @@ export default function VentasPage() {
           const match = pres.find((p) => Number(p.cantidad) === qty && p.nombre !== "Unidad" && Number(p.cantidad) > 1);
           if (match) {
             const prod = products.find((p) => p.id === i.producto_id);
+            const newDiscount = prod ? getProductDiscount(prod, match.nombre) : i.discount;
             return {
               ...i,
               qty: 1,
@@ -661,7 +669,8 @@ export default function VentasPage() {
               description: prod ? `${prod.nombre} (${match.nombre})` : i.description,
               presentacion: match.nombre,
               unidades_por_presentacion: Number(match.cantidad),
-              subtotal: match.precio * (1 - i.discount / 100),
+              discount: newDiscount,
+              subtotal: match.precio * (1 - newDiscount / 100),
             };
           }
         }
