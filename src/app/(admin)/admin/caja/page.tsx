@@ -260,6 +260,7 @@ export default function CajaPage() {
 
   const handleAbrirTurno = async () => {
     if (!abrirForm.operador.trim()) return;
+    if (turno) { showAdminToast("Ya hay un turno abierto", "error"); return; }
     try {
       const t = await abrirTurno(abrirForm.efectivo_inicial, abrirForm.operador.trim());
       setTurno(t);
@@ -278,6 +279,7 @@ export default function CajaPage() {
   };
 
   const handleSaveMov = async () => {
+    if (!turno) { showAdminToast("Debe abrir un turno antes de registrar movimientos", "error"); return; }
     if (!movForm.descripcion.trim()) { showAdminToast("Ingresá una descripción", "error"); return; }
     if (movForm.monto <= 0) { showAdminToast("El monto debe ser mayor a 0", "error"); return; }
     const type = movDialog.data || "ingreso";

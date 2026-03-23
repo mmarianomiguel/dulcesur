@@ -195,6 +195,7 @@ export default function ClientesPage() {
   };
   const handleSaveZona = async () => {
     if (!zonaForm.nombre.trim()) return;
+    if (!zonaForm.dias || zonaForm.dias.length === 0) { alert("Seleccioná al menos un día de entrega"); return; }
     setZonaSaving(true);
     if (editingZona) {
       await supabase.from("zonas_entrega").update({ nombre: zonaForm.nombre, dias: zonaForm.dias }).eq("id", editingZona.id);
@@ -329,6 +330,8 @@ export default function ClientesPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const c = clients.find((cl) => cl.id === id);
+    if (!confirm(`¿Eliminar a "${c?.nombre || "este cliente"}"?`)) return;
     await supabase.from("clientes").update({ activo: false }).eq("id", id);
     fetchClients();
   };
@@ -506,6 +509,9 @@ export default function ClientesPage() {
 
   const handleCobro = async () => {
     if (!cobroClient || cobroMonto <= 0) return;
+    if (cobroMonto > cobroClient.saldo && cobroClient.saldo > 0) {
+      if (!confirm(`El monto ($${cobroMonto.toLocaleString()}) supera la deuda ($${cobroClient.saldo.toLocaleString()}). ¿Continuar?`)) return;
+    }
     setSaving(true);
 
     await supabase.from("cobros").insert({

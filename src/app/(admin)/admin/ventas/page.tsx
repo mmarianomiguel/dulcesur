@@ -1267,7 +1267,11 @@ export default function VentasPage() {
   // ---------- sale finalization (all business logic preserved) ----------
   const handleCerrarComprobante = async () => {
     if (items.length === 0) return;
-    if (formaPago === "Cuenta Corriente" && !clientId) {
+    if (total <= 0) {
+      setErrorModal({ open: true, message: "El total debe ser mayor a $0. Revisá descuentos y recargos." });
+      return;
+    }
+    if ((formaPago === "Cuenta Corriente" && !clientId) || (formaPago === "Mixto" && mixtoCuentaCorriente > 0 && !clientId)) {
       setErrorModal({ open: true, message: "Debes seleccionar un cliente para usar Cuenta Corriente." });
       return;
     }
@@ -2250,7 +2254,7 @@ export default function VentasPage() {
                   <Input
                     type="number"
                     value={descuento}
-                    onChange={(e) => setDescuento(Number(e.target.value))}
+                    onChange={(e) => setDescuento(Math.max(0, Math.min(100, Number(e.target.value))))}
                     className="w-14 h-6 text-right text-xs"
                     min={0}
                     max={100}
@@ -2264,7 +2268,7 @@ export default function VentasPage() {
                   <Input
                     type="number"
                     value={recargo}
-                    onChange={(e) => setRecargo(Number(e.target.value))}
+                    onChange={(e) => setRecargo(Math.max(0, Math.min(100, Number(e.target.value))))}
                     className="w-14 h-6 text-right text-xs"
                     min={0}
                     max={100}
@@ -2350,7 +2354,7 @@ export default function VentasPage() {
             <Button
               className="w-full h-10 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={initiateFinalize}
-              disabled={items.length === 0 || saving || !mixtoValid}
+              disabled={items.length === 0 || saving || !mixtoValid || total <= 0 || ((formaPago === "Cuenta Corriente" || (formaPago === "Mixto" && mixtoCuentaCorriente > 0)) && !clientId)}
             >
               {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : null}
               FINALIZAR VENTA

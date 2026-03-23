@@ -881,7 +881,7 @@ export default function ReportesPage() {
                       <p className="text-xs text-muted-foreground">{metodo}</p>
                       <p className="text-xl font-bold">{fc(monto)}</p>
                     </div>
-                    <Badge variant="secondary">{((monto / totalVentas) * 100).toFixed(1)}%</Badge>
+                    <Badge variant="secondary">{totalVentas > 0 ? ((monto / totalVentas) * 100).toFixed(1) : "0"}%</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">{ventas.filter((v) => v.forma_pago === metodo).length} operaciones</p>
                 </CardContent>

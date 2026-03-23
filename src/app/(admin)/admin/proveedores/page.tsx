@@ -98,8 +98,9 @@ export default function ProveedoresPage() {
   };
 
   const handleSave = async () => {
+    if (!form.nombre.trim()) { showAdminToast("El nombre es obligatorio", "error"); return; }
     const payload = {
-      nombre: form.nombre,
+      nombre: form.nombre.trim(),
       cuit: form.cuit || null,
       telefono: form.telefono || null,
       email: form.email || null,
@@ -117,6 +118,8 @@ export default function ProveedoresPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const p = proveedores.find((pr) => pr.id === id);
+    if (!confirm(`¿Eliminar a "${p?.nombre || "este proveedor"}"?`)) return;
     await proveedorService.update(id, { activo: false } as Partial<Proveedor>);
     refetch();
   };
@@ -256,6 +259,9 @@ export default function ProveedoresPage() {
     if (!pagoDialog.data) return;
     const monto = parseFloat(pagoForm.monto);
     if (!monto || monto <= 0) return;
+    if (monto > pagoDialog.data.saldo && pagoDialog.data.saldo > 0) {
+      if (!confirm(`El monto ($${monto.toLocaleString()}) supera la deuda ($${pagoDialog.data.saldo.toLocaleString()}). ¿Continuar?`)) return;
+    }
 
     setSaving(true);
     try {

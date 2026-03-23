@@ -345,9 +345,9 @@ export default function ResumenMensualPage() {
                         <span className="text-sm font-bold">{fc(v.total)}</span>
                       </div>
                       <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full" style={{ width: `${(v.total / totalVentas) * 100}%` }} />
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${totalVentas > 0 ? (v.total / totalVentas) * 100 : 0}%` }} />
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{v.qty} operaciones · {((v.total / totalVentas) * 100).toFixed(1)}%</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{v.qty} operaciones · {totalVentas > 0 ? ((v.total / totalVentas) * 100).toFixed(1) : "0"}%</p>
                       {v.metodo === "Transferencia" && transferPorCuenta.length > 0 && (
                         <div className="mt-1.5 pl-3 space-y-0.5 border-l-2 border-primary/20">
                           {transferPorCuenta.map((tc) => (
