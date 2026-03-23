@@ -413,7 +413,7 @@ export default function ListadoVentasPage() {
 
   const handleAnular = async () => {
     if (!anularVenta) return;
-    if (anularVenta.estado === "anulada") { showAdminToast("Esta venta ya fue anulada", "error"); setAnularOpen(false); return; }
+    if (anularVenta.estado === "anulada") { showAdminToast("Esta venta ya fue anulada", "error"); setAnularVenta(null); return; }
     setAnulando(true);
     const v = anularVenta;
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
