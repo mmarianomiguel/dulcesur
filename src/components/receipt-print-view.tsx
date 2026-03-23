@@ -88,6 +88,7 @@ export interface ReceiptSale {
   fecha: string;
   saldoAnterior: number;
   saldoNuevo: number;
+  cobroSaldoMonto?: number;
   cashReceived?: number;
   cashChange?: number;
   pagoEfectivo?: number;
@@ -354,20 +355,48 @@ export function ReceiptPrintView({
               </div>
             )}
 
-            {/* Cuenta Corriente — single line */}
-            {showSaldo && (
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "4px", marginBottom: "2px" }}>
-                <span style={{ fontWeight: "bold" }}>Cta.Cte.:</span>
-                <span>
-                  Anterior {sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} a favor` : sale.saldoAnterior === 0 ? "$0" : fmtCur(sale.saldoAnterior)}
-                  {(sale.pagoCuentaCorriente ?? 0) > 0 && <span> + Esta venta {fmtCur(Math.round(sale.pagoCuentaCorriente || 0))}</span>}
-                  <span style={{ margin: "0 4px" }}>→</span>
-                  <span style={{ fontWeight: "bold", textDecoration: sale.saldoNuevo > 0 ? "underline" : "none" }}>
-                    Saldo {sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} a favor` : sale.saldoNuevo === 0 ? "$0" : fmtCur(sale.saldoNuevo)}
-                  </span>
-                </span>
-              </div>
-            )}
+            {/* Cuenta Corriente — desglose claro */}
+            {showSaldo && (() => {
+              const anterior = Math.round(sale.saldoAnterior);
+              const ccVenta = Math.round(sale.pagoCuentaCorriente || 0);
+              const totalAdeudado = anterior + ccVenta;
+              const cobro = Math.round(sale.cobroSaldoMonto || 0);
+              const saldoFinal = Math.round(sale.saldoNuevo);
+              const rowStyle = { display: "flex", justifyContent: "space-between", fontSize: `${fs - 1}px`, marginBottom: "1px" };
+              return (
+                <div style={{ borderTop: "1px solid #000", padding: "3px 4px 0", marginTop: "2px" }}>
+                  <div style={{ fontWeight: "bold", fontSize: `${fs - 1}px`, marginBottom: "3px" }}>CUENTA CORRIENTE</div>
+                  <div style={rowStyle}>
+                    <span>Saldo anterior</span>
+                    <span>{anterior > 0 ? fmtCur(anterior) : anterior < 0 ? `${fmtCur(Math.abs(anterior))} a favor` : "$0"}</span>
+                  </div>
+                  {ccVenta > 0 && (
+                    <div style={rowStyle}>
+                      <span>+ Esta venta (CC)</span>
+                      <span>{fmtCur(ccVenta)}</span>
+                    </div>
+                  )}
+                  {(anterior > 0 || ccVenta > 0) && (cobro > 0 || ccVenta > 0) && (
+                    <div style={{ ...rowStyle, fontWeight: "bold" }}>
+                      <span>Total adeudado</span>
+                      <span>{fmtCur(totalAdeudado)}</span>
+                    </div>
+                  )}
+                  {cobro > 0 && (
+                    <div style={rowStyle}>
+                      <span>Cobro en esta venta</span>
+                      <span>-{fmtCur(cobro)}</span>
+                    </div>
+                  )}
+                  <div style={{ borderTop: "1px solid #000", marginTop: "2px", paddingTop: "2px", display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: `${fs}px` }}>
+                    <span>SALDO</span>
+                    <span style={{ textDecoration: saldoFinal > 0 ? "underline" : "none" }}>
+                      {saldoFinal > 0 ? fmtCur(saldoFinal) : saldoFinal < 0 ? `${fmtCur(Math.abs(saldoFinal))} a favor` : "$0"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 

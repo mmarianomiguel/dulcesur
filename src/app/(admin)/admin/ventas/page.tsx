@@ -1483,14 +1483,22 @@ export default function VentasPage() {
           }
         }
 
-        // saldoRealAntesDeTodo = saldo from DB before any insert/update
-        // After CC insert and cobrarSaldo, re-read the final saldo from DB
+        // Calculate CC amounts for receipt
+        const ccEnEstaVenta = formaPago === "Cuenta Corriente" ? total
+          : formaPago === "Mixto" && mixtoCuentaCorriente > 0 ? mixtoCuentaCorriente
+          : 0;
+        const saldoAnterior = saldoRealAntesDeTodo;
+        const totalAdeudado = saldoAnterior + ccEnEstaVenta;
+        // cobrarSaldo amount (captured from the block above)
+        const montoCobroSaldo = cobrarSaldo && clientId && saldoRealAntesDeTodo > 0
+          ? totalAdeudado  // cobrarSaldo collected everything (old + new CC)
+          : 0;
+        // Re-read final saldo from DB
         let saldoFinal = saldoRealAntesDeTodo;
         if (clientId) {
           const { data: postData } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
           saldoFinal = postData?.saldo ?? saldoFinal;
         }
-        const saldoAnterior = saldoRealAntesDeTodo;
         const saldoNuevo = saldoFinal;
         const saleData = {
           numero,
@@ -1511,6 +1519,7 @@ export default function VentasPage() {
           fecha: new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Argentina/Buenos_Aires" }),
           saldoAnterior,
           saldoNuevo,
+          cobroSaldoMonto: montoCobroSaldo > 0 ? montoCobroSaldo : undefined,
           cashReceived: formaPago === "Efectivo" ? cashReceivedNum : undefined,
           cashChange: formaPago === "Efectivo" ? (cashReceivedNum - totalACobrar) : undefined,
           pagoEfectivo: formaPago === "Mixto" ? mixtoEfectivo : formaPago === "Efectivo" ? total : undefined,
