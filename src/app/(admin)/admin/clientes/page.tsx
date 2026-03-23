@@ -441,6 +441,7 @@ export default function ClientesPage() {
   };
 
   const handlePayMov = async () => {
+    if (payMovSaving) return; // Guard against double-click
     if (!payMovVenta || payMovMonto <= 0 || !movClient?.id) return;
     setPayMovSaving(true);
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -519,6 +520,7 @@ export default function ClientesPage() {
   };
 
   const handleCobro = async () => {
+    if (saving) return; // Guard against double-click
     if (!cobroClient || cobroMonto <= 0) return;
     if (cobroMonto > cobroClient.saldo && cobroClient.saldo > 0) {
       if (!confirm(`El monto ($${cobroMonto.toLocaleString()}) supera la deuda ($${cobroClient.saldo.toLocaleString()}). ¿Continuar?`)) return;

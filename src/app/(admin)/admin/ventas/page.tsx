@@ -1093,7 +1093,20 @@ export default function VentasPage() {
             }
           }
         }
-        // If no comboItems loaded, skip stock check for this combo (allow sale)
+        // If no comboItems loaded, warn but allow sale (components unknown)
+        if (!item.comboItems || item.comboItems.length === 0) {
+          // Try to load combo items on the fly
+          const cData = comboItemsMap[item.producto_id];
+          if (cData && cData.length > 0) {
+            for (const ci of cData) {
+              const needed = item.qty * ci.cantidad;
+              if (needed > ci.stock) {
+                issues.push({ item, stockDisponible: Math.floor(ci.stock / ci.cantidad), unidadesFacturadas: item.qty });
+                break;
+              }
+            }
+          }
+        }
         continue;
       }
       const prod = products.find((p) => p.id === item.producto_id);

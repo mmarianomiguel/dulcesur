@@ -256,6 +256,7 @@ export default function ProveedoresPage() {
   };
 
   const handlePago = async () => {
+    if (saving) return; // Guard against double-click
     if (!pagoDialog.data) return;
     const monto = parseFloat(pagoForm.monto);
     if (!monto || monto <= 0) return;
