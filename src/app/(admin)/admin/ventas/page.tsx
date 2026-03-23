@@ -679,7 +679,10 @@ export default function VentasPage() {
             };
           }
         }
-        return { ...i, qty, subtotal: i.price * qty * (1 - i.discount / 100) };
+        // Recalculate discount for volume-based discounts
+        const prod = products.find((p) => p.id === i.producto_id);
+        const newDiscount = prod ? getProductDiscount(prod, i.presentacion, qty) : i.discount;
+        return { ...i, qty, discount: newDiscount, subtotal: i.price * qty * (1 - newDiscount / 100) };
       });
     });
   };

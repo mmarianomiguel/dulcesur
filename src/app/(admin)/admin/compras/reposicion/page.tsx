@@ -230,7 +230,7 @@ export default function ReposicionPage() {
           precio_proveedor: pp?.precio_proveedor || null,
           cantidad_minima_pedido: pp?.cantidad_minima_pedido || 1,
           velDiaria: Math.round(((velMap[p.id] || 0) / 30) * 10) / 10,
-          diasStock: (velMap[p.id] || 0) > 0 ? Math.round(stock / ((velMap[p.id] || 1) / 30)) : null,
+          diasStock: (velMap[p.id] || 0) > 0 && stock > 0 ? Math.round(stock / ((velMap[p.id] || 1) / 30)) : (velMap[p.id] || 0) > 0 ? 0 : null,
           nivel,
           faltante,
         };

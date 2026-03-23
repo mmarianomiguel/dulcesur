@@ -2169,13 +2169,21 @@ export default function ProductosPage() {
                     value={form.costo}
                     onChange={(e) => {
                       const newCosto = Math.max(0, Number(e.target.value));
-                      setForm({ ...form, costo: newCosto });
-                      // Sync presentaciones: update unit row + recalc boxes
+                      const oldCosto = form.costo || 0;
+                      // Recalculate precio maintaining margin
+                      let newPrecio = form.precio;
+                      if (oldCosto > 0) {
+                        const margin = (form.precio - oldCosto) / oldCosto;
+                        newPrecio = Math.round(newCosto * (1 + margin));
+                      }
+                      setForm({ ...form, costo: newCosto, precio: newPrecio });
+                      // Sync presentaciones: update costo + recalc precios proportionally
+                      const priceRatio = form.precio > 0 ? newPrecio / form.precio : 1;
                       setPresentaciones((prev) =>
                         prev.map((p) => {
                           if (p._deleted) return p;
-                          if (p.cantidad === 1) return { ...p, costo: newCosto };
-                          return { ...p, costo: newCosto * p.cantidad };
+                          if (p.cantidad === 1) return { ...p, costo: newCosto, precio: newPrecio };
+                          return { ...p, costo: newCosto * p.cantidad, precio: Math.round(p.precio * priceRatio) };
                         })
                       );
                     }}
@@ -2204,21 +2212,29 @@ export default function ProductosPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  {(() => {
-                    const margen = form.costo > 0 ? ((form.precio - form.costo) / form.costo) * 100 : 0;
-                    const ganancia = form.precio - form.costo;
-                    const isPositive = ganancia >= 0;
-                    return (
-                      <div className={`flex flex-col items-center justify-center h-9 rounded-md text-xs ${isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
-                        <span className="font-semibold leading-none">
-                          {form.costo > 0 ? `${margen >= 0 ? "+" : ""}${margen.toFixed(1)}%` : "---"}
-                        </span>
-                        <span className="text-[10px] opacity-70 leading-none mt-0.5">
-                          {formatCurrency(ganancia)}
-                        </span>
-                      </div>
-                    );
-                  })()}
+                  <Label className="text-xs text-muted-foreground">Margen %</Label>
+                  {form.costo > 0 ? (
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={Math.round(((form.precio - form.costo) / form.costo) * 1000) / 10}
+                      onChange={(e) => {
+                        const newMargen = Number(e.target.value);
+                        const newPrecio = Math.round(form.costo * (1 + newMargen / 100));
+                        setForm({ ...form, precio: newPrecio });
+                        setPresentaciones((prev) =>
+                          prev.map((p) => {
+                            if (p._deleted) return p;
+                            if (p.cantidad === 1) return { ...p, precio: newPrecio };
+                            return { ...p, precio: newPrecio * p.cantidad };
+                          })
+                        );
+                      }}
+                      className="h-9 text-center"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-9 rounded-md text-xs bg-muted text-muted-foreground">---</div>
+                  )}
                 </div>
                 {/* Price History */}
                 {editingProduct && priceHistory.length > 0 && (
