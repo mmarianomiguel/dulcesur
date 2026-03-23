@@ -437,9 +437,8 @@ export default function VentasPage() {
     for (const d of activeDiscounts) {
       // Skip if discount excludes combos and product is combo
       if (d.excluir_combos && isCombo) continue;
-      // Check presentation filter
-      if (d.presentacion === "unidad" && presName !== "Unidad") continue;
-      if (d.presentacion === "caja" && presName === "Unidad") continue;
+      // Presentation filter: in POS, apply discounts to all presentations
+      // (the filter is for tienda online display, POS always shows the discount as editable)
       // Check scope
       if (d.aplica_a === "todos") {
         bestDiscount = Math.max(bestDiscount, Number(d.porcentaje));
