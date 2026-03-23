@@ -35,6 +35,7 @@ export function GlobalSearch() {
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const searchIdRef = useRef(0);
   const router = useRouter();
 
   // Ctrl+K global shortcut
@@ -62,6 +63,7 @@ export function GlobalSearch() {
   const search = useCallback(async (q: string) => {
     if (q.length < 2) { setResults([]); setLoading(false); return; }
     setLoading(true);
+    const thisSearchId = ++searchIdRef.current;
 
     const term = `%${q}%`;
     const [{ data: productos }, { data: clientes }, { data: ventasNum }, { data: ventasCliente }] = await Promise.all([
@@ -107,6 +109,8 @@ export function GlobalSearch() {
       });
     }
 
+    // Discard if a newer search was started
+    if (thisSearchId !== searchIdRef.current) return;
     setResults(all);
     setSelected(0);
     setLoading(false);
@@ -114,6 +118,7 @@ export function GlobalSearch() {
 
   const handleInputChange = (value: string) => {
     setQuery(value);
+    if (value.length < 2) { setResults([]); setLoading(false); }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => search(value), 300);
   };
