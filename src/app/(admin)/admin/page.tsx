@@ -397,6 +397,23 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // ─── Realtime: new online orders notification ───
+  const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
+  useEffect(() => {
+    const channel = supabase
+      .channel("new-online-orders")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "ventas", filter: "origen=eq.tienda" }, (payload) => {
+        const v = payload.new as any;
+        setNewOrderAlert(`Nuevo pedido online #${v.numero} — $${Math.round(v.total).toLocaleString()}`);
+        fetchPedidosOnline();
+        setTimeout(() => setNewOrderAlert(null), 8000);
+        // Play notification sound
+        try { new Audio("/notification.mp3").play().catch(() => {}); } catch {}
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchPedidosOnline]);
+
   // ─── Print effect ───
   useEffect(() => {
     if (printSale && printRef.current) {
@@ -916,6 +933,16 @@ export default function DashboardPage() {
       <div ref={printRef} className="hidden">
         {printSale && <ReceiptPrintView sale={printSale} config={receiptConfig} />}
       </div>
+
+      {/* New order notification toast */}
+      {newOrderAlert && (
+        <div className="fixed top-4 right-4 z-[100] animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="flex items-center gap-3 bg-emerald-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-2xl">
+            <ShoppingCart className="w-5 h-5 shrink-0" />
+            {newOrderAlert}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

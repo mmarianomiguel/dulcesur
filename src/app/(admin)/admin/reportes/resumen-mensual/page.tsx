@@ -342,7 +342,7 @@ export default function ResumenMensualPage() {
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{c.nombre}</p>
-                          <p className="text-[11px] text-muted-foreground">{c.qty} compras</p>
+                          <p className="text-[11px] text-muted-foreground">{c.qty} compras · Ticket prom. {fc(Math.round(c.total / c.qty))}</p>
                         </div>
                         <span className="text-sm font-bold">{fc(c.total)}</span>
                       </div>

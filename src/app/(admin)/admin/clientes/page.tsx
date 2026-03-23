@@ -1045,12 +1045,31 @@ export default function ClientesPage() {
 
           <Card>
             <CardContent className="pt-6">
-              <div className="space-y-1.5">
-                <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
-                <div className="relative max-w-md">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Filtrar cliente..." value={cobranzasSearch} onChange={(e) => setCobranzasSearch(e.target.value)} className="pl-9" />
+              <div className="flex items-end justify-between gap-4">
+                <div className="space-y-1.5 flex-1">
+                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
+                  <div className="relative max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Filtrar cliente..." value={cobranzasSearch} onChange={(e) => setCobranzasSearch(e.target.value)} className="pl-9" />
+                  </div>
                 </div>
+                <Button variant="outline" size="sm" onClick={async () => {
+                  const { data: allClients } = await supabase.from("clientes").select("id, nombre, saldo").eq("activo", true);
+                  const issues: string[] = [];
+                  for (const c of allClients || []) {
+                    const { data: ccRows } = await supabase.from("cuenta_corriente").select("debe, haber").eq("cliente_id", c.id);
+                    const ccSaldo = (ccRows || []).reduce((a: number, r: any) => a + (r.debe || 0) - (r.haber || 0), 0);
+                    const diff = Math.abs(Math.round(c.saldo) - Math.round(ccSaldo));
+                    if (diff > 1) issues.push(`${c.nombre}: saldo ${formatCurrency(c.saldo)} vs CC ${formatCurrency(ccSaldo)} (dif: ${formatCurrency(diff)})`);
+                  }
+                  if (issues.length === 0) {
+                    alert("Todos los saldos coinciden con la cuenta corriente.");
+                  } else {
+                    alert(`Inconsistencias encontradas (${issues.length}):\n\n${issues.slice(0, 10).join("\n")}${issues.length > 10 ? `\n...y ${issues.length - 10} más` : ""}`);
+                  }
+                }}>
+                  Conciliar CC
+                </Button>
               </div>
             </CardContent>
           </Card>
