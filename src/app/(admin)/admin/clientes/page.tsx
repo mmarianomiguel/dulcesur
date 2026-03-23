@@ -107,10 +107,13 @@ export default function ClientesPage() {
   const [activeTab, setActiveTab] = useState<"listado" | "cobranzas" | "zonas">("listado");
   const [clients, setClients] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState(() => {
-    if (typeof window !== "undefined") return new URLSearchParams(window.location.search).get("buscar") || "";
-    return "";
-  });
+  const [search, setSearch] = useState("");
+
+  // Read ?buscar= from URL on mount
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("buscar");
+    if (q) setSearch(q);
+  }, []);
   const [filterDomicilio, setFilterDomicilio] = useState("");
   const [filterZona, setFilterZona] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);

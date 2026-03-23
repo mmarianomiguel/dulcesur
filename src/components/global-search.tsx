@@ -64,11 +64,16 @@ export function GlobalSearch() {
     setLoading(true);
 
     const term = `%${q}%`;
-    const [{ data: productos }, { data: clientes }, { data: ventas }] = await Promise.all([
+    const [{ data: productos }, { data: clientes }, { data: ventasNum }, { data: ventasCliente }] = await Promise.all([
       supabase.from("productos").select("id, nombre, codigo, precio, stock").eq("activo", true).ilike("nombre", term).limit(5),
       supabase.from("clientes").select("id, nombre, cuit, telefono").eq("activo", true).ilike("nombre", term).limit(5),
-      supabase.from("ventas").select("id, numero, fecha, total, clientes(nombre)").ilike("numero", term).order("created_at", { ascending: false }).limit(5),
+      supabase.from("ventas").select("id, numero, fecha, total, clientes(nombre)").ilike("numero", term).order("created_at", { ascending: false }).limit(3),
+      supabase.from("ventas").select("id, numero, fecha, total, clientes!inner(nombre)").ilike("clientes.nombre", term).order("created_at", { ascending: false }).limit(3),
     ]);
+    // Merge ventas, deduplicate by id
+    const ventasMap = new Map<string, any>();
+    for (const v of [...(ventasNum || []), ...(ventasCliente || [])]) ventasMap.set(v.id, v);
+    const ventas = Array.from(ventasMap.values()).slice(0, 5);
 
     const all: SearchResult[] = [];
 
