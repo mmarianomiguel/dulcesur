@@ -118,7 +118,7 @@ export default function ProveedoresPage() {
   };
 
   const handleDelete = async (id: string) => {
-    const p = proveedores.find((pr) => pr.id === id);
+    const p = providers.find((pr) => pr.id === id);
     if (!confirm(`¿Eliminar a "${p?.nombre || "este proveedor"}"?`)) return;
     await proveedorService.update(id, { activo: false } as Partial<Proveedor>);
     refetch();
