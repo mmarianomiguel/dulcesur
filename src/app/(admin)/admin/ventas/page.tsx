@@ -547,8 +547,8 @@ export default function VentasPage() {
     });
   };
 
-  const [stockWarning, setStockWarning] = useState<string | null>(null);
-  const stockWarningTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [stockToast, setStockToast] = useState<string | null>(null);
+  const stockToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateQty = (id: string, qty: number, checkSwitch = false) => {
     // Warn if qty exceeds stock (before setItems to avoid side effects in callback)
@@ -557,9 +557,9 @@ export default function VentasPage() {
       const unitsNeeded = target.presentacion !== "Unidad" && target.unidades_por_presentacion > 1
         ? qty * target.unidades_por_presentacion : qty;
       if (unitsNeeded > target.stock && qty > (target.qty || 0)) {
-        setStockWarning(`Stock insuficiente de ${target.description}: ${target.stock} disponible`);
-        if (stockWarningTimer.current) clearTimeout(stockWarningTimer.current);
-        stockWarningTimer.current = setTimeout(() => setStockWarning(null), 3000);
+        setStockToast(`Stock insuficiente de ${target.description}: ${target.stock} disponible`);
+        if (stockToastTimer.current) clearTimeout(stockToastTimer.current);
+        stockToastTimer.current = setTimeout(() => setStockToast(null), 3000);
       }
     }
 
@@ -3464,11 +3464,11 @@ export default function VentasPage() {
       )}
 
       {/* Stock warning toast */}
-      {stockWarning && (
+      {stockToast && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-200">
           <div className="flex items-center gap-2 bg-amber-500 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
             <AlertTriangle className="w-4 h-4 shrink-0" />
-            {stockWarning}
+            {stockToast}
           </div>
         </div>
       )}
