@@ -202,9 +202,11 @@ export default function EditarPreciosPage() {
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Inline editing: track changes { [productoId]: newPrecio }
+  // Inline editing: track changes { [productoId]: { precio?, costo?, margen? } }
   const [priceChanges, setPriceChanges] = useState<Record<string, number>>({});
+  const [costoChanges, setCostoChanges] = useState<Record<string, number>>({});
   const [editingCell, setEditingCell] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<"precio" | "costo" | "margen">("precio");
   const [editingValue, setEditingValue] = useState("");
 
   // Dialogs
@@ -217,7 +219,7 @@ export default function EditarPreciosPage() {
   // (search state is now internal to SearchableSelect)
 
   // Mass edit state
-  const [massTarget, setMassTarget] = useState<"venta" | "costo">("costo");
+  const [massTarget, setMassTarget] = useState<"venta" | "costo" | "margen">("costo");
   const [massType, setMassType] = useState<"percentage" | "fixed">("percentage");
   const [massOperation, setMassOperation] = useState<"increase" | "decrease">("increase");
   const [massAmount, setMassAmount] = useState("");
@@ -325,16 +327,41 @@ export default function EditarPreciosPage() {
   };
 
   // Inline edit handlers
-  const startEditing = (id: string, currentPrice: number) => {
+  const startEditing = (id: string, field: "precio" | "costo" | "margen", currentValue: number) => {
     setEditingCell(id);
-    const changedPrice = priceChanges[id];
-    setEditingValue(String(changedPrice ?? currentPrice));
+    setEditingField(field);
+    if (field === "precio") {
+      setEditingValue(String(priceChanges[id] ?? currentValue));
+    } else if (field === "costo") {
+      setEditingValue(String(costoChanges[id] ?? currentValue));
+    } else {
+      setEditingValue(String(Math.round(currentValue * 10) / 10));
+    }
   };
 
   const confirmEdit = (id: string) => {
     const val = parseFloat(editingValue);
-    if (!isNaN(val) && val >= 0) {
-      setPriceChanges((prev) => ({ ...prev, [id]: val }));
+    if (isNaN(val) || val < 0) { setEditingCell(null); return; }
+    const prod = productos.find((p) => p.id === id);
+    if (!prod) { setEditingCell(null); return; }
+
+    if (editingField === "precio") {
+      setPriceChanges((prev) => ({ ...prev, [id]: Math.round(val) }));
+    } else if (editingField === "costo") {
+      // Update costo and recalculate precio maintaining current margin
+      const currentCosto = costoChanges[id] ?? prod.costo ?? 0;
+      const currentPrecio = priceChanges[id] ?? prod.precio;
+      const margin = currentCosto > 0 ? (currentPrecio - currentCosto) / currentCosto : 0;
+      const newPrecio = Math.round(val * (1 + margin));
+      setCostoChanges((prev) => ({ ...prev, [id]: Math.round(val) }));
+      setPriceChanges((prev) => ({ ...prev, [id]: newPrecio }));
+    } else if (editingField === "margen") {
+      // Set margin and recalculate precio from costo
+      const costo = costoChanges[id] ?? prod.costo ?? 0;
+      if (costo > 0) {
+        const newPrecio = Math.round(costo * (1 + val / 100));
+        setPriceChanges((prev) => ({ ...prev, [id]: newPrecio }));
+      }
     }
     setEditingCell(null);
   };
@@ -344,22 +371,63 @@ export default function EditarPreciosPage() {
   };
 
   // Save changes
-  const hasChanges = Object.keys(priceChanges).length > 0;
+  const hasChanges = Object.keys(priceChanges).length > 0 || Object.keys(costoChanges).length > 0;
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updates = Object.entries(priceChanges).map(([id, precio]) =>
-        supabase.from("productos").update({ precio }).eq("id", id)
-      );
+      const allIds = new Set([...Object.keys(priceChanges), ...Object.keys(costoChanges)]);
+      const updates: PromiseLike<any>[] = [];
+
+      for (const id of allIds) {
+        const updateData: Record<string, number> = {};
+        if (priceChanges[id] !== undefined) updateData.precio = priceChanges[id];
+        if (costoChanges[id] !== undefined) updateData.costo = costoChanges[id];
+        updates.push(supabase.from("productos").update(updateData).eq("id", id).then());
+
+        // Update presentation prices proportionally when precio changes
+        if (priceChanges[id] !== undefined) {
+          const prod = productos.find((p) => p.id === id);
+          const oldPrecio = prod?.precio || 0;
+          const newPrecio = priceChanges[id];
+          if (oldPrecio > 0 && newPrecio !== oldPrecio) {
+            const ratio = newPrecio / oldPrecio;
+            const prodPres = presentaciones.filter((p) => p.producto_id === id);
+            for (const pres of prodPres) {
+              const newPresPrecio = Math.round(pres.precio * ratio);
+              updates.push(supabase.from("presentaciones").update({ precio: newPresPrecio }).eq("id", pres.id).then());
+            }
+          }
+        }
+      }
+
       await Promise.all(updates);
+
       // Update local state
       setProductos((prev) =>
-        prev.map((p) =>
-          priceChanges[p.id] !== undefined ? { ...p, precio: priceChanges[p.id] } : p
-        )
+        prev.map((p) => {
+          const newP = { ...p };
+          if (priceChanges[p.id] !== undefined) newP.precio = priceChanges[p.id];
+          if (costoChanges[p.id] !== undefined) newP.costo = costoChanges[p.id];
+          return newP;
+        })
+      );
+      // Update presentaciones local state
+      setPresentaciones((prev) =>
+        prev.map((pres) => {
+          const prod = productos.find((p) => p.id === pres.producto_id);
+          if (prod && priceChanges[prod.id] !== undefined) {
+            const oldPrecio = prod.precio || 0;
+            const newPrecio = priceChanges[prod.id];
+            if (oldPrecio > 0 && newPrecio !== oldPrecio) {
+              return { ...pres, precio: Math.round(pres.precio * (newPrecio / oldPrecio)) };
+            }
+          }
+          return pres;
+        })
       );
       setPriceChanges({});
+      setCostoChanges({});
     } catch (err) {
       console.error("Error saving prices:", err);
     } finally {
@@ -375,11 +443,24 @@ export default function EditarPreciosPage() {
 
   const massEditPreview = useMemo(() => {
     const amount = parseFloat(massAmount);
-    if (isNaN(amount) || amount <= 0) return [];
+    if (isNaN(amount) || amount < 0) return [];
+    if (amount === 0 && massTarget !== "margen") return [];
 
     return selectedProducts.map((p) => {
-      const currentCosto = p.costo || 0;
+      const currentCosto = costoChanges[p.id] ?? (p.costo || 0);
       const currentPrecio = priceChanges[p.id] ?? p.precio;
+
+      if (massTarget === "margen") {
+        // Set fixed margin: precio = costo * (1 + amount/100)
+        const newPrecio = currentCosto > 0 ? Math.round(currentCosto * (1 + amount / 100)) : currentPrecio;
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return {
+          id: p.id, nombre: p.nombre,
+          currentCosto, newCosto: currentCosto,
+          currentPrecio, newPrecio, diff, diffPercent,
+        };
+      }
 
       if (massTarget === "venta") {
         // Modify precio directly, keep costo unchanged
@@ -457,20 +538,21 @@ export default function EditarPreciosPage() {
     setSaving(true);
     try {
       const updates: PromiseLike<unknown>[] = [];
-      const newPriceChanges = { ...priceChanges };
 
       for (const item of massEditPreview) {
-        const updateData = massTarget === "costo"
-          ? { costo: item.newCosto, precio: item.newPrecio }
-          : { precio: item.newPrecio };
-        updates.push(
-          supabase
-            .from("productos")
-            .update(updateData)
-            .eq("id", item.id)
-            .then()
-        );
-        newPriceChanges[item.id] = item.newPrecio;
+        const updateData: Record<string, number> = { precio: item.newPrecio };
+        if (massTarget === "costo") updateData.costo = item.newCosto;
+        updates.push(supabase.from("productos").update(updateData).eq("id", item.id).then());
+
+        // Update presentation prices proportionally
+        const prod = productos.find((p) => p.id === item.id);
+        if (prod && prod.precio > 0 && item.newPrecio !== prod.precio) {
+          const ratio = item.newPrecio / prod.precio;
+          const prodPres = presentaciones.filter((pr) => pr.producto_id === item.id);
+          for (const pres of prodPres) {
+            updates.push(supabase.from("presentaciones").update({ precio: Math.round(pres.precio * ratio) }).eq("id", pres.id).then());
+          }
+        }
       }
 
       await Promise.all(updates);
@@ -487,13 +569,26 @@ export default function EditarPreciosPage() {
           return p;
         })
       );
+      setPresentaciones((prev) =>
+        prev.map((pres) => {
+          const prod = productos.find((p) => p.id === pres.producto_id);
+          const preview = massEditPreview.find((i) => i.id === pres.producto_id);
+          if (prod && preview && prod.precio > 0 && preview.newPrecio !== prod.precio) {
+            return { ...pres, precio: Math.round(pres.precio * (preview.newPrecio / prod.precio)) };
+          }
+          return pres;
+        })
+      );
 
-      // Remove applied changes from priceChanges since they're saved
-      const cleaned = { ...priceChanges };
+      // Remove applied changes
+      const cleanedP = { ...priceChanges };
+      const cleanedC = { ...costoChanges };
       for (const item of massEditPreview) {
-        delete cleaned[item.id];
+        delete cleanedP[item.id];
+        delete cleanedC[item.id];
       }
-      setPriceChanges(cleaned);
+      setPriceChanges(cleanedP);
+      setCostoChanges(cleanedC);
 
       setMassEditOpen(false);
       setMassAmount("");
@@ -646,7 +741,7 @@ export default function EditarPreciosPage() {
                 onClick={() => {
                   setMassEditOpen(true);
                   setMassAmount("");
-                  setMassTarget("costo");
+                  setMassTarget("costo" as any);
                   setMassType("percentage");
                   setMassOperation("increase");
                 }}
@@ -680,17 +775,59 @@ export default function EditarPreciosPage() {
                   </TableHead>
                   <TableHead>Producto</TableHead>
                   <TableHead className="text-right">Stock</TableHead>
+                  <TableHead className="text-right">Costo</TableHead>
+                  <TableHead className="text-right">Margen %</TableHead>
                   <TableHead className="text-right">Precio Unidad</TableHead>
                   <TableHead className="text-right">Precio Caja</TableHead>
-                  <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedProductos.map((p) => {
-                  const isEditing = editingCell === p.id;
+                  const isEditingThis = editingCell === p.id;
                   const currentPrice = priceChanges[p.id] ?? p.precio;
-                  const isChanged = priceChanges[p.id] !== undefined;
+                  const currentCosto = costoChanges[p.id] ?? p.costo ?? 0;
+                  const isChanged = priceChanges[p.id] !== undefined || costoChanges[p.id] !== undefined;
                   const cajaPrice = getCajaPrice(p.id);
+                  const margen = currentCosto > 0 ? ((currentPrice - currentCosto) / currentCosto) * 100 : 0;
+
+                  const renderEditableCell = (field: "precio" | "costo" | "margen", value: number, displayValue: string) => {
+                    if (isEditingThis && editingField === field) {
+                      return (
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-muted-foreground text-sm">{field === "margen" ? "%" : "$"}</span>
+                          <Input
+                            autoFocus
+                            type="number"
+                            step={field === "margen" ? "0.1" : "1"}
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") confirmEdit(p.id);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                            className="w-24 h-8 text-right"
+                          />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => confirmEdit(p.id)}>
+                            <Check className="w-3.5 h-3.5 text-green-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelEdit}>
+                            <X className="w-3.5 h-3.5 text-red-500" />
+                          </Button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        onClick={() => startEditing(p.id, field, value)}
+                        className="inline-flex items-center gap-1 tabular-nums hover:bg-muted px-2 py-1 rounded cursor-pointer transition-colors"
+                      >
+                        {displayValue}
+                        {isChanged && field !== "margen" && priceChanges[p.id] !== undefined && (
+                          <span className="text-orange-500 text-xs ml-0.5">*</span>
+                        )}
+                      </button>
+                    );
+                  };
 
                   return (
                     <TableRow key={p.id} className={isChanged ? "bg-orange-50 dark:bg-orange-950/20" : ""}>
@@ -710,69 +847,23 @@ export default function EditarPreciosPage() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{p.stock}</TableCell>
                       <TableCell className="text-right">
-                        {isEditing ? (
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="text-muted-foreground text-sm">$</span>
-                            <Input
-                              autoFocus
-                              type="number"
-                              value={editingValue}
-                              onChange={(e) => setEditingValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") confirmEdit(p.id);
-                                if (e.key === "Escape") cancelEdit();
-                              }}
-                              className="w-28 h-8 text-right"
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => confirmEdit(p.id)}
-                            >
-                              <Check className="w-3.5 h-3.5 text-green-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={cancelEdit}
-                            >
-                              <X className="w-3.5 h-3.5 text-red-500" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => startEditing(p.id, p.precio)}
-                            className="inline-flex items-center gap-1 tabular-nums hover:bg-muted px-2 py-1 rounded cursor-pointer transition-colors"
-                          >
-                            {formatCurrency(currentPrice)}
-                            {isChanged && (
-                              <span className="text-orange-500 text-xs ml-1">*</span>
-                            )}
-                          </button>
-                        )}
+                        {renderEditableCell("costo", currentCosto, currentCosto > 0 ? formatCurrency(currentCosto) : "—")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {currentCosto > 0 ? renderEditableCell("margen", margen, `${margen.toFixed(1)}%`) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {renderEditableCell("precio", currentPrice, formatCurrency(currentPrice))}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {cajaPrice !== null ? formatCurrency(cajaPrice) : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {p.stock > 0 ? (
-                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                            En stock
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                            Sin stock
-                          </Badge>
-                        )}
                       </TableCell>
                     </TableRow>
                   );
                 })}
                 {filteredProductos.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                       <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       No se encontraron productos
                     </TableCell>
@@ -831,11 +922,21 @@ export default function EditarPreciosPage() {
                   />
                   <span className="text-sm">Precio de Venta</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="massTarget"
+                    checked={massTarget === "margen"}
+                    onChange={() => setMassTarget("margen")}
+                    className="accent-primary"
+                  />
+                  <span className="text-sm">Setear Margen %</span>
+                </label>
               </div>
             </div>
 
             {/* Tipo de cambio */}
-            <div>
+            {massTarget !== "margen" && <div>
               <Label className="text-sm font-medium mb-2 block">Tipo de cambio</Label>
               <div className="flex gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -861,8 +962,9 @@ export default function EditarPreciosPage() {
               </div>
             </div>
 
+            }
             {/* Operacion */}
-            <div>
+            {massTarget !== "margen" && <div>
               <Label className="text-sm font-medium mb-2 block">Operaci&oacute;n</Label>
               <div className="flex gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -888,16 +990,16 @@ export default function EditarPreciosPage() {
                   <span className="text-sm">Disminuir</span>
                 </label>
               </div>
-            </div>
+            </div>}
 
             {/* Amount input */}
             <div>
               <Label className="text-sm font-medium mb-2 block">
-                {massType === "percentage" ? "Porcentaje" : "Monto"}
+                {massTarget === "margen" ? "Margen %" : massType === "percentage" ? "Porcentaje" : "Monto"}
               </Label>
               <div className="relative w-48">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                  {massType === "percentage" ? "%" : "$"}
+                  {massTarget === "margen" ? "%" : massType === "percentage" ? "%" : "$"}
                 </span>
                 <Input
                   type="number"
