@@ -265,7 +265,7 @@ export function ReceiptPrintView({
         </tbody>
       </table>
 
-      {/* ── Footer totals ── */}
+      {/* ── Totals line ── */}
       <div style={{ borderTop: "2px solid #000", marginTop: "8px" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${fsResumen - 2}px`, gap: "30px" }}>
           <div>
@@ -275,7 +275,7 @@ export function ReceiptPrintView({
           {sale.descuento > 0 && (
             <div>
               <span>Descuento: </span>
-              <span style={{ fontWeight: "bold" }}>-{fmtCur(Math.round(sale.descuento))}</span>
+              <span style={{ fontWeight: "bold", color: "#059669" }}>-{fmtCur(Math.round(sale.descuento))}</span>
             </div>
           )}
           {sale.recargo > 0 && (
@@ -296,71 +296,93 @@ export function ReceiptPrintView({
             TOTAL: {fmtCur(Math.round(sale.total))}
           </div>
         </div>
-        {/* ── Resumen de pago ── */}
-        {(() => {
-          const fs = config.fontSize - 1;
-          const row = (label: string, value: string, bold = false, color?: string) => (
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1px", fontWeight: bold ? "bold" : "normal" }}>
-              <span>{label}</span>
-              <span style={color ? { color } : undefined}>{value}</span>
-            </div>
-          );
-          const separator = () => <div style={{ borderTop: "1px dotted #ccc", margin: "3px 0" }} />;
-
-          const totalAhorro = sale.descuento > 0 ? sale.descuento : sale.items.filter(i => i.discount > 0).reduce((a, i) => a + (i.price * i.qty * i.discount / 100), 0);
-          const showDesglose = sale.formaPago === "Mixto" || sale.pagoEfectivo || sale.pagoTransferencia || sale.pagoCuentaCorriente;
-          const showVuelto = config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0;
-          const showSaldo = sale.formaPago === "Cuenta Corriente" || (sale.formaPago === "Mixto" && sale.saldoNuevo !== sale.saldoAnterior);
-          const totalPagado = (sale.pagoEfectivo || 0) + (sale.pagoTransferencia || 0);
-          const saldoPendiente = sale.pagoCuentaCorriente || (showSaldo ? sale.saldoNuevo : 0);
-
-          if (!showDesglose && !showVuelto && !showSaldo && totalAhorro <= 0) return null;
-
-          return (
-            <div style={{ borderTop: "1px solid #000", padding: "5px 4px", fontSize: `${fs}px`, lineHeight: "1.7" }}>
-              <div style={{ fontWeight: "bold", fontSize: `${fs}px`, marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Forma de pago</div>
-
-              {/* Descuentos */}
-              {totalAhorro > 0 && (<>
-                {row("Descuentos aplicados:", `-${fmtCur(Math.round(totalAhorro))}`, false, "#059669")}
-              </>)}
-
-              {/* Desglose */}
-              {showDesglose && (<>
-                {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Pagó en efectivo:", fmtCur(Math.round(sale.pagoEfectivo)))}
-                {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && row("Pagó por transferencia:", fmtCur(Math.round(sale.pagoTransferencia)))}
-                {sale.transferSurcharge > 0 && row("(Rec. transferencia incluido):", `+${fmtCur(Math.round(sale.transferSurcharge))}`, false, "#888")}
-                {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("A cuenta corriente:", fmtCur(Math.round(sale.pagoCuentaCorriente)))}
-                {separator()}
-                {row("Total pagado:", fmtCur(Math.round(totalPagado)), true)}
-                {saldoPendiente > 0 && row("Saldo pendiente:", fmtCur(Math.round(saldoPendiente)), true, "#ea580c")}
-              </>)}
-
-              {/* Solo efectivo con vuelto */}
-              {!showDesglose && sale.formaPago === "Efectivo" && (<>
-                {row("Pagó en efectivo:", fmtCur(sale.total))}
-              </>)}
-
-              {/* Vuelto */}
-              {showVuelto && (<>
-                {row("Recibido:", fmtCur(sale.cashReceived!))}
-                {row("Vuelto:", fmtCur(sale.cashChange ?? 0), true)}
-              </>)}
-
-              {/* Saldo CC */}
-              {showSaldo && (<>
-                {separator()}
-                {row("Saldo anterior:", sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} (a favor)` : fmtCur(sale.saldoAnterior))}
-                {row(`Saldo al ${sale.fecha}:`, sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} (a favor)` : fmtCur(sale.saldoNuevo), true, sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#ea580c" : undefined)}
-              </>)}
-            </div>
-          );
-        })()}
-        <div style={{ textAlign: "center", padding: "8px 0", fontSize: `${config.fontSize - 2}px`, borderTop: "1px solid #ccc" }}>
-          <div>{config.footerTexto}</div>
-          <div style={{ marginTop: "2px" }}>{sale.items.length} articulo{sale.items.length !== 1 ? "s" : ""}</div>
-        </div>
       </div>
+
+      {/* ── Spacer to push payment to bottom ── */}
+      <div style={{ flex: 1 }} />
+
+      {/* ── Resumen de pago (al pie de la página) ── */}
+      {(() => {
+        const fs = config.fontSize;
+        const row = (label: string, value: string, bold = false, color?: string) => (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "2px", fontWeight: bold ? "bold" : "normal", fontSize: `${fs}px` }}>
+            <span style={{ color: "#555" }}>{label}</span>
+            <span style={{ minWidth: "100px", textAlign: "right", color: color || "#000" }}>{value}</span>
+          </div>
+        );
+        const separator = () => <div style={{ borderTop: "1px solid #ccc", margin: "4px 0", marginLeft: "auto", width: "320px" }} />;
+
+        const totalAhorro = sale.descuento > 0 ? sale.descuento : sale.items.filter(i => i.discount > 0).reduce((a, i) => a + (i.price * i.qty * i.discount / 100), 0);
+        const showDesglose = sale.formaPago === "Mixto" || sale.pagoEfectivo || sale.pagoTransferencia || sale.pagoCuentaCorriente;
+        const showVuelto = config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0;
+        const showSaldo = sale.formaPago === "Cuenta Corriente" || (sale.formaPago === "Mixto" && (sale.pagoCuentaCorriente ?? 0) > 0) || sale.saldoNuevo !== sale.saldoAnterior;
+        const totalPagado = (sale.pagoEfectivo || 0) + (sale.pagoTransferencia || 0);
+
+        if (!showDesglose && !showVuelto && !showSaldo && totalAhorro <= 0) {
+          return (
+            <div style={{ textAlign: "center", padding: "8px 0", fontSize: `${config.fontSize - 2}px`, borderTop: "1px solid #ccc" }}>
+              <div>{config.footerTexto}</div>
+              <div style={{ marginTop: "2px" }}>{sale.items.length} artículo{sale.items.length !== 1 ? "s" : ""}</div>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ borderTop: "2px solid #000", padding: "8px 4px" }}>
+            {/* Descuentos */}
+            {totalAhorro > 0 && (<>
+              {row("Ahorro en esta compra:", `-${fmtCur(Math.round(totalAhorro))}`, false, "#059669")}
+              {separator()}
+            </>)}
+
+            {/* Desglose de pago */}
+            {showDesglose && (<>
+              {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Efectivo:", fmtCur(Math.round(sale.pagoEfectivo)))}
+              {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && row("Transferencia:", fmtCur(Math.round(sale.pagoTransferencia)))}
+              {sale.transferSurcharge > 0 && row("(Rec. transferencia incluido)", `+${fmtCur(Math.round(sale.transferSurcharge))}`, false, "#888")}
+              {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("Cta. Corriente:", fmtCur(Math.round(sale.pagoCuentaCorriente)))}
+              {separator()}
+              {totalPagado > 0 && row("Abonado:", fmtCur(Math.round(totalPagado)), true)}
+              {(sale.pagoCuentaCorriente ?? 0) > 0 && row("Adeuda:", fmtCur(Math.round(sale.pagoCuentaCorriente || 0)), true, "#dc2626")}
+            </>)}
+
+            {/* Solo efectivo sin desglose */}
+            {!showDesglose && sale.formaPago === "Efectivo" && (<>
+              {row("Efectivo:", fmtCur(sale.total))}
+            </>)}
+
+            {/* Solo transferencia sin desglose */}
+            {!showDesglose && sale.formaPago === "Transferencia" && (<>
+              {row("Transferencia:", fmtCur(sale.total))}
+            </>)}
+
+            {/* Vuelto */}
+            {showVuelto && (<>
+              {separator()}
+              {row("Recibido:", fmtCur(sale.cashReceived!))}
+              {row("Vuelto:", fmtCur(sale.cashChange ?? 0), true, "#059669")}
+            </>)}
+
+            {/* Saldo CC */}
+            {showSaldo && (<>
+              {separator()}
+              {row("Saldo anterior:", sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} a favor` : sale.saldoAnterior === 0 ? "$0" : fmtCur(sale.saldoAnterior))}
+              {row(
+                `Saldo al ${sale.fecha}:`,
+                sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} a favor` : sale.saldoNuevo === 0 ? "$0" : fmtCur(sale.saldoNuevo),
+                true,
+                sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#dc2626" : undefined
+              )}
+            </>)}
+
+            {/* Footer */}
+            <div style={{ textAlign: "center", padding: "10px 0 4px", marginTop: "8px", borderTop: "1px solid #ccc", fontSize: `${config.fontSize - 2}px` }}>
+              <div>{config.footerTexto}</div>
+              <div style={{ marginTop: "2px" }}>{sale.items.length} artículo{sale.items.length !== 1 ? "s" : ""}</div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
