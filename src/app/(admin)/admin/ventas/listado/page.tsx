@@ -1898,10 +1898,10 @@ export default function ListadoVentasPage() {
                   </div>
                 )}
 
-                {/* Estado selector */}
+                {/* Estado de preparación / entrega */}
                 {!isCancelled && (
                   <div className="flex items-center gap-3">
-                    <Label className="text-sm font-medium">Estado:</Label>
+                    <Label className="text-sm font-medium">Estado de entrega:</Label>
                     <Select
                       value={poSelectedPedido.estado}
                       onValueChange={(v) => {
@@ -1910,15 +1910,16 @@ export default function ListadoVentasPage() {
                         setPoSelectedPedido({ ...poSelectedPedido, estado: v });
                       }}
                     >
-                      <SelectTrigger className="w-44 h-9">
+                      <SelectTrigger className="w-52 h-9">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pendiente">Pendiente</SelectItem>
-                        <SelectItem value="armado">Armado</SelectItem>
-                        <SelectItem value="confirmado">Confirmado</SelectItem>
-                        <SelectItem value="entregado">Entregado</SelectItem>
-                        <SelectItem value="cancelado">Cancelado</SelectItem>
+                        <SelectItem value="cerrada">✅ Completada (POS)</SelectItem>
+                        <SelectItem value="pendiente">⏳ Pendiente de preparar</SelectItem>
+                        <SelectItem value="armado">📦 Armado / Preparado</SelectItem>
+                        <SelectItem value="confirmado">✔️ Confirmado para entrega</SelectItem>
+                        <SelectItem value="entregado">🚚 Entregado al cliente</SelectItem>
+                        <SelectItem value="cancelado">❌ Cancelado</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

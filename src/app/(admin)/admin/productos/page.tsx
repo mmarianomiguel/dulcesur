@@ -2940,20 +2940,38 @@ export default function ProductosPage() {
       {/* History Dialog */}
       {/* Price History Dialog */}
       <Dialog open={phDialogOpen} onOpenChange={setPhDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
-          <div className="px-6 py-4 border-b bg-muted/30">
+        <DialogContent className="max-w-xl max-h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
+          <div className="px-6 py-4 border-b bg-gradient-to-r from-violet-50 to-purple-50">
             <DialogHeader className="p-0 space-y-0">
               <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-muted-foreground" />
+                <TrendingUp className="w-5 h-5 text-violet-600" />
                 Historial de Precios
               </DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground mt-1">
-              Producto: {phProduct?.nombre || "---"}
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">{phProduct?.nombre || "---"}</p>
+            {phData.length > 0 && (
+              <div className="flex gap-4 mt-3">
+                <div className="bg-white rounded-lg px-3 py-1.5 border">
+                  <p className="text-[10px] text-muted-foreground">Precio actual</p>
+                  <p className="text-sm font-bold">{formatCurrency(phData[0]?.precio_nuevo || 0)}</p>
+                </div>
+                <div className="bg-white rounded-lg px-3 py-1.5 border">
+                  <p className="text-[10px] text-muted-foreground">Costo actual</p>
+                  <p className="text-sm font-bold">{formatCurrency(phData[0]?.costo_nuevo || 0)}</p>
+                </div>
+                <div className="bg-white rounded-lg px-3 py-1.5 border">
+                  <p className="text-[10px] text-muted-foreground">Margen actual</p>
+                  <p className="text-sm font-bold">{phData[0]?.costo_nuevo > 0 ? `${(((phData[0]?.precio_nuevo - phData[0]?.costo_nuevo) / phData[0]?.costo_nuevo) * 100).toFixed(1)}%` : "—"}</p>
+                </div>
+                <div className="bg-white rounded-lg px-3 py-1.5 border">
+                  <p className="text-[10px] text-muted-foreground">Cambios</p>
+                  <p className="text-sm font-bold">{phData.length}</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-6 py-4">
             {phLoading ? (
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -2963,46 +2981,75 @@ export default function ProductosPage() {
                 No hay cambios de precio registrados
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-2.5 font-medium">Fecha</th>
-                    <th className="text-right px-4 py-2.5 font-medium">Precio Ant.</th>
-                    <th className="text-right px-4 py-2.5 font-medium">Precio Nuevo</th>
-                    <th className="text-center px-4 py-2.5 font-medium">Var.</th>
-                    <th className="text-right px-4 py-2.5 font-medium">Costo Ant.</th>
-                    <th className="text-right px-4 py-2.5 font-medium">Costo Nuevo</th>
-                    <th className="text-left px-4 py-2.5 font-medium">Usuario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {phData.map((h) => {
+              <div className="relative">
+                {/* Timeline line */}
+                <div className="absolute left-[18px] top-4 bottom-4 w-px bg-gray-200" />
+
+                <div className="space-y-0">
+                  {phData.map((h, idx) => {
                     const priceDiff = h.precio_anterior > 0 ? ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior) * 100 : 0;
+                    const costDiff = h.costo_anterior > 0 ? ((h.costo_nuevo - h.costo_anterior) / h.costo_anterior) * 100 : 0;
                     const isUp = priceDiff > 0;
-                    const isDown = priceDiff < 0;
+                    const fecha = new Date(h.created_at);
                     return (
-                      <tr key={h.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="px-4 py-2.5 text-muted-foreground">
-                          {new Date(h.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-muted-foreground">{formatCurrency(h.precio_anterior)}</td>
-                        <td className="px-4 py-2.5 text-right font-semibold">{formatCurrency(h.precio_nuevo)}</td>
-                        <td className="px-4 py-2.5 text-center">
-                          {priceDiff !== 0 && (
-                            <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isUp ? "text-red-600" : "text-green-600"}`}>
-                              {isUp ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                              {Math.abs(priceDiff).toFixed(1)}%
+                      <div key={h.id} className="relative flex gap-4 pb-5 last:pb-0">
+                        {/* Timeline dot */}
+                        <div className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isUp ? "bg-red-100" : priceDiff < 0 ? "bg-green-100" : "bg-gray-100"}`}>
+                          {isUp ? <ArrowUp className="w-4 h-4 text-red-600" /> : priceDiff < 0 ? <ArrowDown className="w-4 h-4 text-green-600" /> : <span className="w-2 h-2 rounded-full bg-gray-400" />}
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="text-xs text-muted-foreground">
+                              {fecha.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
+                              {" · "}
+                              {fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
                             </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-muted-foreground">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "—"}</td>
-                        <td className="px-4 py-2.5 text-right">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "—"}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{h.usuario || "—"}</td>
-                      </tr>
+                            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{h.usuario || "Admin"}</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            {/* Precio */}
+                            <div className={`rounded-lg p-2.5 border ${isUp ? "bg-red-50 border-red-200" : priceDiff < 0 ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-medium text-muted-foreground uppercase">Precio</span>
+                                {priceDiff !== 0 && (
+                                  <span className={`text-[11px] font-bold ${isUp ? "text-red-600" : "text-green-600"}`}>
+                                    {isUp ? "+" : ""}{priceDiff.toFixed(1)}%
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-muted-foreground line-through">{formatCurrency(h.precio_anterior)}</span>
+                                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                                <span className="text-sm font-bold">{formatCurrency(h.precio_nuevo)}</span>
+                              </div>
+                            </div>
+
+                            {/* Costo */}
+                            <div className="rounded-lg p-2.5 border bg-blue-50/50 border-blue-200/50">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-medium text-muted-foreground uppercase">Costo</span>
+                                {costDiff !== 0 && (
+                                  <span className={`text-[11px] font-bold ${costDiff > 0 ? "text-orange-600" : "text-blue-600"}`}>
+                                    {costDiff > 0 ? "+" : ""}{costDiff.toFixed(1)}%
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-muted-foreground line-through">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "—"}</span>
+                                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                                <span className="text-sm font-bold">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "—"}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
+                </div>
+              </div>
             )}
           </div>
         </DialogContent>
