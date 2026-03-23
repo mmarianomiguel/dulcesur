@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { todayARG ,  nowTimeARG } from "@/lib/formatters";
+import { logAudit } from "@/lib/audit";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { Cliente, ZonaEntrega } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -105,6 +107,7 @@ interface CuentaMovimiento {
 
 export default function ClientesPage() {
   const router = useRouter();
+  const currentUser = useCurrentUser();
   const [activeTab, setActiveTab] = useState<"listado" | "cobranzas" | "zonas">("listado");
   const [clients, setClients] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -311,8 +314,10 @@ export default function ClientesPage() {
     };
     if (editingClient) {
       await supabase.from("clientes").update(payload).eq("id", editingClient.id);
+      logAudit({ userName: currentUser?.nombre || "Admin", action: "UPDATE", module: "clientes", entityId: editingClient.id, after: { nombre: payload.nombre } });
     } else {
-      await supabase.from("clientes").insert(payload);
+      const { data: newC } = await supabase.from("clientes").insert(payload).select("id").single();
+      logAudit({ userName: currentUser?.nombre || "Admin", action: "CREATE", module: "clientes", entityId: newC?.id, after: { nombre: payload.nombre } });
     }
     setDialogOpen(false);
     resetForm();
@@ -344,6 +349,7 @@ export default function ClientesPage() {
     const c = clients.find((cl) => cl.id === id);
     if (!confirm(`¿Eliminar a "${c?.nombre || "este cliente"}"?`)) return;
     await supabase.from("clientes").update({ activo: false }).eq("id", id);
+    logAudit({ userName: currentUser?.nombre || "Admin", action: "DELETE", module: "clientes", entityId: id, before: { nombre: c?.nombre } });
     fetchClients();
   };
 

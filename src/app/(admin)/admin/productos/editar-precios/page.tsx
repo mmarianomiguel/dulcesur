@@ -403,6 +403,28 @@ export default function EditarPreciosPage() {
 
       await Promise.all(updates);
 
+      // Log to precio_historial
+      const historyInserts = [];
+      for (const id of allIds) {
+        const prod = productos.find((p) => p.id === id);
+        if (!prod) continue;
+        const newPrecio = priceChanges[id] ?? prod.precio;
+        const newCosto = costoChanges[id] ?? prod.costo;
+        if (newPrecio !== prod.precio || newCosto !== prod.costo) {
+          historyInserts.push({
+            producto_id: id,
+            precio_anterior: prod.precio,
+            precio_nuevo: newPrecio,
+            costo_anterior: prod.costo,
+            costo_nuevo: newCosto,
+            usuario: "Admin",
+          });
+        }
+      }
+      if (historyInserts.length > 0) {
+        try { await supabase.from("precio_historial").insert(historyInserts); } catch {}
+      }
+
       // Update local state
       setProductos((prev) =>
         prev.map((p) => {
@@ -556,6 +578,27 @@ export default function EditarPreciosPage() {
       }
 
       await Promise.all(updates);
+
+      // Log to precio_historial
+      const historyInserts = massEditPreview
+        .filter((item) => {
+          const prod = productos.find((p) => p.id === item.id);
+          return prod && (item.newPrecio !== prod.precio || item.newCosto !== prod.costo);
+        })
+        .map((item) => {
+          const prod = productos.find((p) => p.id === item.id)!;
+          return {
+            producto_id: item.id,
+            precio_anterior: prod.precio,
+            precio_nuevo: item.newPrecio,
+            costo_anterior: prod.costo,
+            costo_nuevo: item.newCosto,
+            usuario: "Admin",
+          };
+        });
+      if (historyInserts.length > 0) {
+        try { await supabase.from("precio_historial").insert(historyInserts); } catch {}
+      }
 
       // Update local state
       setProductos((prev) =>
