@@ -284,7 +284,7 @@ export default function CajaPage() {
   const handleSaveMov = async () => {
     if (!turno) { showAdminToast("Debe abrir un turno antes de registrar movimientos", "error"); return; }
     if (!movForm.descripcion.trim()) { showAdminToast("Ingresá una descripción", "error"); return; }
-    if (movForm.monto <= 0) { showAdminToast("El monto debe ser mayor a 0", "error"); return; }
+    if (movForm.monto < 1) { showAdminToast("El monto debe ser al menos $1", "error"); return; }
     const type = movDialog.data || "ingreso";
     try {
       const provNombre = movForm.proveedor ? proveedores.find(p => p.id === movForm.proveedor)?.nombre : null;

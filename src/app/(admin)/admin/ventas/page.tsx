@@ -556,7 +556,7 @@ export default function VentasPage() {
   const updateQty = (id: string, qty: number, checkSwitch = false) => {
     // Warn if qty exceeds stock (before setItems to avoid side effects in callback)
     const target = items.find((i) => i.id === id);
-    if (target && qty > 0 && target.stock > 0) {
+    if (target && qty > 0 && target.stock >= 0) {
       const unitsNeeded = target.presentacion !== "Unidad" && target.unidades_por_presentacion > 1
         ? qty * target.unidades_por_presentacion : qty;
       if (unitsNeeded > target.stock && qty > (target.qty || 0)) {
@@ -1269,6 +1269,7 @@ export default function VentasPage() {
 
   // ---------- sale finalization (all business logic preserved) ----------
   const handleCerrarComprobante = async () => {
+    if (saving) return; // Guard against double-click
     if (items.length === 0) return;
     if (total <= 0) {
       setErrorModal({ open: true, message: "El total debe ser mayor a $0. Revisá descuentos y recargos." });
