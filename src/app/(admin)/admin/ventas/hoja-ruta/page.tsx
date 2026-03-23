@@ -278,7 +278,8 @@ export default function HojaDeRutaPage() {
     }
     // Sync estado to linked pedido_tienda (so client sees "entregado")
     if (venta?.numero) {
-      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
+      const { error: syncErr } = await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
+      if (syncErr) console.error("Error syncing pedido_tienda:", syncErr);
     }
     setVentas((prev) => prev.filter((v) => v.id !== id));
   };

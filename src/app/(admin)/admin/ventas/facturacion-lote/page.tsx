@@ -126,6 +126,8 @@ export default function FacturacionLotePage() {
     setProcessing(true);
     setProgress({ current: 0, total: seleccionados.length });
 
+    const errores: string[] = [];
+    let facturados = 0;
     for (let i = 0; i < seleccionados.length; i++) {
       const r = seleccionados[i];
       try {
@@ -176,8 +178,9 @@ export default function FacturacionLotePage() {
         }
 
         await supabase.from("ventas").update({ facturado: true }).eq("id", r.id);
-      } catch (e) {
-        console.error(`Error facturando remito ${r.numero}:`, e);
+        facturados++;
+      } catch (e: any) {
+        errores.push(`${r.numero}: ${e?.message || "Error desconocido"}`);
       }
       setProgress({ current: i + 1, total: seleccionados.length });
     }
@@ -185,6 +188,9 @@ export default function FacturacionLotePage() {
     setSelected(new Set());
     setProcessing(false);
     await fetchRemitos();
+    if (errores.length > 0) {
+      alert(`Facturados: ${facturados}. Errores (${errores.length}):\n${errores.join("\n")}`);
+    }
   };
 
   const selectedRemitos = remitos.filter((r) => selected.has(r.id));

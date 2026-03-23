@@ -102,7 +102,7 @@ export default function CarritoPage() {
 
   const getPresUnits = (item: CartItem) => {
     return item.unidades_por_presentacion || (() => {
-      const match = item.id.match(/Caja \(x(\d+)\)/);
+      const match = item.id.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
       const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
       return isMedio ? 0.5 : match ? Number(match[1]) : 1;
     })();
