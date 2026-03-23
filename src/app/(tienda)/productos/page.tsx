@@ -529,7 +529,7 @@ function ProductosContent() {
     if (producto.es_combo) {
       presLabel = "Combo";
     }
-    const disc = getProductDiscount(producto, presLabel);
+    const disc = getProductDiscount(producto, presLabel, amount);
     const price = disc > 0 ? Math.round(basePrice * (1 - disc / 100)) : basePrice;
     const cartKey = presLabel ? `${producto.id}_${presLabel}` : producto.id;
     const stored = localStorage.getItem("carrito");
@@ -1231,8 +1231,18 @@ function ProductosContent() {
                 const activePrice = pres && pres.length > 1 ? (pres[selectedPres[producto.id] ?? 0]?.precio ?? producto.precio) : producto.precio;
                 const availableStock = Math.max(0, producto.stock - (cartUnits[producto.id] || 0));
                 const currentPresLabel = pres && pres.length > 1 ? presLabel(pres[selectedPres[producto.id] ?? 0]) : null;
-                const disc = getProductDiscount(producto, currentPresLabel);
+                const disc = getProductDiscount(producto, currentPresLabel, qty);
                 const discountedPrice = disc > 0 ? Math.round(activePrice * (1 - disc / 100)) : activePrice;
+                // Volume discount hint
+                const volHint = (() => {
+                  for (const d of activeDiscounts) {
+                    if (!d.cantidad_minima || d.cantidad_minima <= 0 || qty >= d.cantidad_minima) continue;
+                    const applies = d.aplica_a === "todos" || (d.aplica_a === "productos" && (d.productos_ids || []).includes(producto.id)) || (d.aplica_a === "categorias" && ((d.categorias_ids || []).includes(producto.categoria_id)));
+                    if (!applies) continue;
+                    return { minQty: d.cantidad_minima, pct: d.porcentaje };
+                  }
+                  return null;
+                })();
                 return (
                   <div
                     key={producto.id}
@@ -1331,6 +1341,9 @@ function ProductosContent() {
                           }
                           return <p className="text-[10px] text-green-600 font-medium">Precio rebajado</p>;
                         })()}
+                        {volHint && disc === 0 && (
+                          <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF comprando {volHint.minQty}+</p>
+                        )}
                       </div>
 
                       {/* Presentacion pills */}
@@ -1448,12 +1461,12 @@ function ProductosContent() {
                         </div>
                       )}
                       {(() => {
-                        const d = getProductDiscount(producto, listPresLabel);
+                        const d = getProductDiscount(producto, listPresLabel, qty);
                         if (d > 0) return <span className="absolute top-2 left-2 bg-pink-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{d}% OFF</span>;
                         const boxPres = pres?.find((p) => p.cantidad > 1);
                         if (!boxPres) return null;
                         const boxLabel = presLabel(boxPres);
-                        const boxDisc = getProductDiscount(producto, boxLabel);
+                        const boxDisc = getProductDiscount(producto, boxLabel, qty);
                         if (boxDisc <= 0) return null;
                         return <span className="absolute top-2 left-2 bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{boxDisc}% OFF x caja</span>;
                       })()}
@@ -1485,7 +1498,7 @@ function ProductosContent() {
                           </h3>
                         </Link>
                         {(() => {
-                          const d = getProductDiscount(producto, listPresLabel);
+                          const d = getProductDiscount(producto, listPresLabel, qty);
                           const dp = d > 0 ? Math.round(activePrice * (1 - d / 100)) : activePrice;
                           return d > 0 ? (
                             <div className="flex items-baseline gap-2 mt-1.5">
@@ -1547,7 +1560,7 @@ function ProductosContent() {
                             onClick={() => addToCart(producto, qty)}
                             className="bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-sm py-2.5 px-5 rounded-xl font-semibold transition-all shadow-sm shadow-pink-600/20"
                           >
-                            Agregar {formatPrice((() => { const d2 = getProductDiscount(producto, listPresLabel); return d2 > 0 ? Math.round(activePrice * (1 - d2 / 100)) : activePrice; })() * qty)}
+                            Agregar {formatPrice((() => { const d2 = getProductDiscount(producto, listPresLabel, qty); return d2 > 0 ? Math.round(activePrice * (1 - d2 / 100)) : activePrice; })() * qty)}
                           </button>
                         </div>
                       ) : (

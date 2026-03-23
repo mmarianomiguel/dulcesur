@@ -319,17 +319,36 @@ export default function ProductoDetallePage() {
   const currentLabel = currentPres ? presLabelLong(currentPres) : "Unidad";
 
   const currentPresLabel = currentPres ? presLabelFn(currentPres) : "Unidad";
-  const currentDiscount = producto ? getProductDiscount(producto, currentPresLabel) : 0;
+  const currentDiscount = producto ? getProductDiscount(producto, currentPresLabel, cantidad) : 0;
   const discountedPrice = currentDiscount > 0 ? Math.round(currentPrice * (1 - currentDiscount / 100)) : currentPrice;
   const savings = currentPrice - discountedPrice;
 
-  // Check if there's a box-only discount (discount on box but not unit)
+  // Check if there's a volume discount available that requires more qty
+  const volumeDiscountHint = producto ? (() => {
+    for (const d of activeDiscounts) {
+      if (!d.cantidad_minima || d.cantidad_minima <= 0) continue;
+      if (cantidad >= d.cantidad_minima) continue; // Already getting it
+      // Check if this discount applies to this product
+      const applies = d.aplica_a === "todos" ||
+        (d.aplica_a === "productos" && (d.productos_ids || []).includes(producto.id)) ||
+        (d.aplica_a === "categorias" && ((d.categorias_ids || []).includes(producto.categoria_id) || (d.categorias_ids || []).includes(producto.subcategoria_id))) ||
+        (d.aplica_a === "subcategorias" && producto.subcategoria_id && (d.subcategorias_ids || []).includes(producto.subcategoria_id));
+      if (!applies) continue;
+      // Check presentation
+      if (d.presentacion === "unidad" && currentPresLabel !== "Unidad") continue;
+      if (d.presentacion === "caja" && currentPresLabel === "Unidad") continue;
+      return { minQty: d.cantidad_minima, porcentaje: d.porcentaje, nombre: d.nombre };
+    }
+    return null;
+  })() : null;
+
+  // Check if there's a box-only or volume discount hint
   const boxOnlyDiscount = producto ? (() => {
-    const unitDisc = getProductDiscount(producto, "Unidad");
+    const unitDisc = getProductDiscount(producto, "Unidad", cantidad);
     const boxPres = presentaciones.find((p) => p.cantidad > 1);
     if (!boxPres) return 0;
     const boxLabel = presLabelFn(boxPres);
-    const boxDisc = getProductDiscount(producto, boxLabel);
+    const boxDisc = getProductDiscount(producto, boxLabel, cantidad);
     return boxDisc > 0 && unitDisc === 0 ? boxDisc : 0;
   })() : 0;
 
@@ -416,7 +435,7 @@ export default function ProductoDetallePage() {
       const totalUnits = comboComponentes.reduce((acc, c) => acc + c.cantidad, 0);
       presLabel = totalUnits > 0 ? `Combo x${totalUnits}` : "Combo";
     }
-    const disc = getProductDiscount(producto, presLabel);
+    const disc = getProductDiscount(producto, presLabel, cantidad);
     const price = disc > 0 ? Math.round(currentPrice * (1 - disc / 100)) : currentPrice;
     addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined, presQty);
     setCantidad(1);
@@ -560,6 +579,15 @@ export default function ProductoDetallePage() {
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-sm text-gray-400 line-through">{formatCurrency(currentPrice)}</span>
                 <span className="text-sm text-green-600 font-semibold">Ahorrás {formatCurrency(savings)}</span>
+              </div>
+            )}
+            {volumeDiscountHint && currentDiscount === 0 && (
+              <div className="mt-2 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                <span className="text-lg">🏷️</span>
+                <p className="text-xs text-orange-800">
+                  <span className="font-bold">¡{volumeDiscountHint.porcentaje}% OFF</span> comprando {volumeDiscountHint.minQty} o más!
+                  {` Sumá ${volumeDiscountHint.minQty - cantidad} más al carrito`}
+                </p>
               </div>
             )}
             <p className="text-sm text-gray-500 mt-1">
