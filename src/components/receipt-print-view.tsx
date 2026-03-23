@@ -175,9 +175,8 @@ export function ReceiptPrintView({
           </div>
           <div style={{ fontSize: `${fsEmpresa - 2}px`, lineHeight: "1.5" }}>
             <div>Fecha: {sale.fecha}</div>
-            <div>CUIT: {config.empresaCuit} · IIBB: {config.empresaIngrBrutos}</div>
-            <div>Cond.IVA: {config.empresaIva}</div>
-            <div>Inicio Act.: {config.empresaInicioAct}</div>
+            <div>CUIT: {config.empresaCuit}</div>
+            {config.empresaIngrBrutos && <div>IIBB: {config.empresaIngrBrutos}</div>}
           </div>
         </div>
       </div>
@@ -193,25 +192,22 @@ export function ReceiptPrintView({
 
   // Client info (only on first page)
   const ClientInfo = () => (
-    <div style={{ border: "1px solid #ccc", padding: "3px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.4" }}>
-      <div style={{ display: "flex", gap: "10px" }}>
-        <div style={{ flex: 1 }}>
-          <div><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}</div>
-          {config.mostrarDireccion && sale.clienteDireccion && <div><span style={{ fontWeight: "bold" }}>Domicilio:</span> {sale.clienteDireccion}</div>}
-          {config.mostrarFormaPago && (
-            <div><span style={{ fontWeight: "bold" }}>Forma de pago:</span> {sale.formaPago}</div>
-          )}
-        </div>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          {config.mostrarTelefono && sale.clienteTelefono && <div><span style={{ fontWeight: "bold" }}>Tel:</span> {sale.clienteTelefono}{sale.clienteCondicionIva && <span> · <span style={{ fontWeight: "bold" }}>IVA:</span> {sale.clienteCondicionIva}</span>}</div>}
-          {!sale.clienteTelefono && sale.clienteCondicionIva && <div><span style={{ fontWeight: "bold" }}>Cond. IVA:</span> {sale.clienteCondicionIva}</div>}
-        </div>
-        <div style={{ flex: 1, textAlign: "right" }}>
-          {config.mostrarVendedor && (
-            <div><span style={{ fontWeight: "bold" }}>Vendedor:</span> {sale.vendedor || (sale.tipoComprobante?.toLowerCase().includes("pedido web") || sale.tipoComprobante?.toLowerCase().includes("web") ? "Tienda Online" : "—")}</div>
-          )}
-        </div>
+    <div style={{ border: "1px solid #ccc", padding: "3px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.3" }}>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}{config.mostrarTelefono && sale.clienteTelefono && <span> · <span style={{ fontWeight: "bold" }}>Tel:</span> {sale.clienteTelefono}</span>}</span>
+        {config.mostrarVendedor && (
+          <span><span style={{ fontWeight: "bold" }}>Vendedor:</span> {sale.vendedor || (sale.tipoComprobante?.toLowerCase().includes("pedido web") || sale.tipoComprobante?.toLowerCase().includes("web") ? "Tienda Online" : "—")}</span>
+        )}
       </div>
+      {config.mostrarDireccion && sale.clienteDireccion && (
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span><span style={{ fontWeight: "bold" }}>Domicilio:</span> {sale.clienteDireccion}</span>
+          {config.mostrarFormaPago && <span><span style={{ fontWeight: "bold" }}>Pago:</span> {sale.formaPago}</span>}
+        </div>
+      )}
+      {!sale.clienteDireccion && config.mostrarFormaPago && (
+        <div><span style={{ fontWeight: "bold" }}>Pago:</span> {sale.formaPago}</div>
+      )}
     </div>
   );
 
