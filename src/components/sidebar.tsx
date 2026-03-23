@@ -311,7 +311,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 h-16 shrink-0 relative">
-          {wl.logo_url ? (
+          {wl.logo_url && (wl.logo_url.startsWith("http://") || wl.logo_url.startsWith("https://") || wl.logo_url.startsWith("/")) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={wl.logo_url} alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
           ) : (

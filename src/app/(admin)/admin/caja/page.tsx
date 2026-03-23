@@ -537,21 +537,14 @@ export default function CajaPage() {
 
     const ventasEfectivo = movPorMetodo("Efectivo");
     const ventasTransferencia = movPorMetodo("Transferencia");
-    // Cuenta corriente doesn't go through caja_movimientos, sum from ventas
+    // CC: pure CC ventas + mixto CC portion (total - caja_movimientos for that sale)
     const ventasCuentaCorriente = ventasPorMetodo("Cuenta Corriente")
       + ventas.filter((v) => v.forma_pago === "Mixto").reduce((acc, v) => {
-        const ccMov = movements.find(
-          (m) => m.referencia_id === v.id && m.metodo_pago === "Cuenta Corriente"
-        );
-        // If no caja_movimiento for CC (it goes to cuenta_corriente table), estimate from total - other movs
-        if (!ccMov) {
-          const otherMovs = movements
-            .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta")
-            .reduce((a, m) => a + m.monto, 0);
-          const ccPart = v.total - otherMovs;
-          return acc + (ccPart > 0 ? ccPart : 0);
-        }
-        return acc;
+        const otherMovs = movements
+          .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso")
+          .reduce((a, m) => a + m.monto, 0);
+        const ccPart = v.total - otherMovs;
+        return acc + (ccPart > 0 ? Math.round(ccPart) : 0);
       }, 0);
     const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
 

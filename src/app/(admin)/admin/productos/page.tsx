@@ -615,6 +615,8 @@ export default function ProductosPage() {
 
       // Upsert remaining
       for (const p of toKeep) {
+        // Skip presentations with invalid cantidad
+        if (!p.cantidad || p.cantidad <= 0) continue;
         const presPayload = {
           producto_id: productId,
           nombre: p.nombre,
@@ -1147,8 +1149,12 @@ export default function ProductosPage() {
             }
           }
 
-          // NEW product - insert (never fallback costo as precio)
-          const finalPrecio = precio > 0 ? precio : 0;
+          // NEW product - skip if no precio
+          if (precio <= 0) {
+            skipped++;
+            continue;
+          }
+          const finalPrecio = precio;
           const payload: Record<string, unknown> = {
             codigo: codigo || `AUTO-${Date.now()}-${i}`,
             nombre: nombre || codigo,
@@ -1779,9 +1785,9 @@ export default function ProductosPage() {
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
                         {product.codigo}
                       </td>
-                      <td className="py-3 px-4 font-medium">
+                      <td className="py-3 px-4 font-medium max-w-xs">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span>{product.nombre}</span>
+                          <span className="truncate max-w-[250px]" title={product.nombre}>{product.nombre}</span>
                           {(product as any).es_combo && (
                             <Badge className="text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700 border border-emerald-300">COMBO</Badge>
                           )}
@@ -2149,7 +2155,7 @@ export default function ProductosPage() {
                     return (
                       <div className={`flex flex-col items-center justify-center h-9 rounded-md text-xs ${isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
                         <span className="font-semibold leading-none">
-                          {form.costo > 0 ? `${margen.toFixed(1)}%` : "---"}
+                          {form.costo > 0 ? `${margen >= 0 ? "+" : ""}${margen.toFixed(1)}%` : "---"}
                         </span>
                         <span className="text-[10px] opacity-70 leading-none mt-0.5">
                           {formatCurrency(ganancia)}

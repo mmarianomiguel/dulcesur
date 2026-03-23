@@ -413,8 +413,7 @@ export default function VentasPage() {
   const total = baseTotal + transferSurcharge;
 
   const mixtoSum = mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente;
-  const mixtoTotalWithSurcharge = mixtoSum + (mixtoTransferencia * (porcentajeTransferencia / 100));
-  const mixtoRemaining = formaPago === "Mixto" ? total - mixtoTotalWithSurcharge : 0;
+  const mixtoRemaining = formaPago === "Mixto" ? baseTotal - mixtoSum : 0;
   const mixtoValid = formaPago !== "Mixto" || Math.abs(mixtoRemaining) < 0.01;
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
@@ -540,7 +539,22 @@ export default function VentasPage() {
     });
   };
 
+  const [stockWarning, setStockWarning] = useState<string | null>(null);
+  const stockWarningTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const updateQty = (id: string, qty: number, checkSwitch = false) => {
+    // Warn if qty exceeds stock (before setItems to avoid side effects in callback)
+    const target = items.find((i) => i.id === id);
+    if (target && qty > 0 && target.stock > 0) {
+      const unitsNeeded = target.presentacion !== "Unidad" && target.unidades_por_presentacion > 1
+        ? qty * target.unidades_por_presentacion : qty;
+      if (unitsNeeded > target.stock && qty > (target.qty || 0)) {
+        setStockWarning(`Stock insuficiente de ${target.description}: ${target.stock} disponible`);
+        if (stockWarningTimer.current) clearTimeout(stockWarningTimer.current);
+        stockWarningTimer.current = setTimeout(() => setStockWarning(null), 3000);
+      }
+    }
+
     setItems((prev) => {
       const target = prev.find((i) => i.id === id);
 
@@ -3423,6 +3437,16 @@ export default function VentasPage() {
           <div className="flex items-center gap-2 bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             Código no encontrado: <span className="font-mono">{scanNotFound}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Stock warning toast */}
+      {stockWarning && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center gap-2 bg-amber-500 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {stockWarning}
           </div>
         </div>
       )}

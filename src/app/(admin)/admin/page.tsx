@@ -59,10 +59,7 @@ import {
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
 import { useWhiteLabel } from "@/hooks/use-white-label";
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
-}
+import { formatCurrency } from "@/lib/formatters";
 
 function todayARG() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -355,7 +352,7 @@ export default function DashboardPage() {
       const ids = ventaIds.map((v) => v.id);
       const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, unidades_por_presentacion, presentacion, productos(costo)").in("venta_id", ids);
       gananciaTotal = (items || []).reduce((acc, item: any) => {
-        const costoUnitario = item.productos?.costo || 0;
+        const costoUnitario = item.productos?.costo ?? 0;
         const cantidad = Number(item.cantidad) || 0;
         const precioUnitario = Number(item.precio_unitario) || 0;
         const descPct = Number(item.descuento) || 0;
@@ -387,7 +384,7 @@ export default function DashboardPage() {
     }
     setMonthlyData(months);
 
-    const { data: ventasCat } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre))").gte("created_at", start + "T00:00:00").lt("created_at", end + "T00:00:00");
+    const { data: ventasCat } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha)").gte("ventas.fecha", start).lt("ventas.fecha", end);
     const catMap: Record<string, number> = {};
     (ventasCat || []).forEach((vi: any) => { catMap[vi.productos?.categorias?.nombre || "Sin categoria"] = (catMap[vi.productos?.categorias?.nombre || "Sin categoria"] || 0) + (vi.subtotal || 0); });
     setVentasPorCategoria(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
