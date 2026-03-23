@@ -26,6 +26,8 @@ type ClienteRank = {
   qty: number;
   ticketPromedio: number;
   ultimaCompra: string;
+  productoTop?: string;
+  productoTopQty?: number;
 };
 
 type SortKey = "total" | "qty" | "ticketPromedio" | "nombre";
@@ -45,7 +47,7 @@ export default function RankingClientesPage() {
     setLoading(true);
 
     let query = supabase.from("ventas")
-      .select("total, fecha, cliente_id, clientes(nombre)")
+      .select("id, total, fecha, cliente_id, clientes(nombre)")
       .not("tipo_comprobante", "ilike", "Nota de Crédito%")
       .not("tipo_comprobante", "ilike", "Nota de Débito%")
       .neq("estado", "anulada");
@@ -81,6 +83,53 @@ export default function RankingClientesPage() {
     Object.values(clientMap).forEach((c) => {
       c.ticketPromedio = c.qty > 0 ? Math.round(c.total / c.qty) : 0;
     });
+
+    // Get top product per client from venta_items
+    const ventasByClient: Record<string, string[]> = {};
+    vList.forEach((v: any) => {
+      const cid = v.cliente_id || "sin-cliente";
+      if (!ventasByClient[cid]) ventasByClient[cid] = [];
+      ventasByClient[cid].push(v.id);
+    });
+
+    const allVentaIds = vList.map((v: any) => v.id);
+    if (allVentaIds.length > 0) {
+      // Batch in chunks of 200 to avoid URL length limits
+      const chunks: string[][] = [];
+      for (let i = 0; i < allVentaIds.length; i += 200) {
+        chunks.push(allVentaIds.slice(i, i + 200));
+      }
+      const allItems: { venta_id: string; descripcion: string; cantidad: number }[] = [];
+      for (const chunk of chunks) {
+        const { data } = await supabase.from("venta_items").select("venta_id, descripcion, cantidad").in("venta_id", chunk);
+        if (data) allItems.push(...(data as any));
+      }
+
+      // Group items by client, then by product
+      const ventaToClient: Record<string, string> = {};
+      vList.forEach((v: any) => { ventaToClient[v.id] = v.cliente_id || "sin-cliente"; });
+
+      const clientProducts: Record<string, Record<string, number>> = {};
+      allItems.forEach((item) => {
+        const cid = ventaToClient[item.venta_id];
+        if (!cid) return;
+        if (!clientProducts[cid]) clientProducts[cid] = {};
+        clientProducts[cid][item.descripcion] = (clientProducts[cid][item.descripcion] || 0) + Number(item.cantidad);
+      });
+
+      Object.entries(clientProducts).forEach(([cid, prods]) => {
+        if (!clientMap[cid]) return;
+        let topName = "";
+        let topQty = 0;
+        Object.entries(prods).forEach(([name, qty]) => {
+          if (qty > topQty) { topName = name; topQty = qty; }
+        });
+        if (topName) {
+          clientMap[cid].productoTop = topName;
+          clientMap[cid].productoTopQty = topQty;
+        }
+      });
+    }
 
     setClientes(Object.values(clientMap));
     setLoading(false);
@@ -214,6 +263,7 @@ export default function RankingClientesPage() {
                       </button>
                     </th>
                     <th className="text-right px-4 py-3 font-medium hidden lg:table-cell">% del Total</th>
+                    <th className="text-left px-4 py-3 font-medium hidden xl:table-cell">Prod. Top</th>
                     <th className="text-right px-4 py-3 font-medium hidden lg:table-cell">Última Compra</th>
                   </tr>
                 </thead>
@@ -245,6 +295,14 @@ export default function RankingClientesPage() {
                             </div>
                             <span className="text-xs text-muted-foreground w-12 text-right">{pct.toFixed(1)}%</span>
                           </div>
+                        </td>
+                        <td className="px-4 py-3 hidden xl:table-cell">
+                          {c.productoTop ? (
+                            <div>
+                              <p className="text-xs truncate max-w-[180px]">{c.productoTop}</p>
+                              <p className="text-[10px] text-muted-foreground">{c.productoTopQty} uds</p>
+                            </div>
+                          ) : <span className="text-muted-foreground">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right text-muted-foreground hidden lg:table-cell">{formatFecha(c.ultimaCompra)}</td>
                       </tr>

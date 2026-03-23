@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Search, Package, Users, FileText, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Search, Package, Users, FileText, Loader2, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 
 interface SearchResult {
   id: string;
@@ -13,6 +14,27 @@ interface SearchResult {
   subtitle: string;
   type: "producto" | "cliente" | "venta";
   url: string;
+  meta?: {
+    // Producto
+    codigo?: string;
+    stock?: number;
+    stockMinimo?: number;
+    precio?: number;
+    // Cliente
+    saldo?: number;
+    email?: string;
+    zonaEntrega?: string;
+    telefono?: string;
+    cuit?: string;
+    // Venta
+    estado?: string;
+    tipoComprobante?: string;
+    formaPago?: string;
+    entregado?: boolean;
+    fecha?: string;
+    total?: number;
+    clienteNombre?: string;
+  };
 }
 
 const ICONS = {
@@ -25,6 +47,17 @@ const LABELS = {
   producto: "Productos",
   cliente: "Clientes",
   venta: "Ventas",
+};
+
+function fc(v: number) {
+  return `$${Math.round(v).toLocaleString("es-AR")}`;
+}
+
+const estadoColors: Record<string, { bg: string; text: string; label: string }> = {
+  pendiente: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", label: "Pendiente" },
+  entregado: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", label: "Entregado" },
+  anulada: { bg: "bg-red-50 border-red-200", text: "text-red-700", label: "Anulada" },
+  cancelado: { bg: "bg-red-50 border-red-200", text: "text-red-700", label: "Cancelado" },
 };
 
 export function GlobalSearch() {
@@ -67,10 +100,10 @@ export function GlobalSearch() {
 
     const term = `%${q}%`;
     const [{ data: productos }, { data: clientes }, { data: ventasNum }, { data: ventasCliente }] = await Promise.all([
-      supabase.from("productos").select("id, nombre, codigo, precio, stock").eq("activo", true).ilike("nombre", term).limit(5),
-      supabase.from("clientes").select("id, nombre, cuit, telefono").eq("activo", true).ilike("nombre", term).limit(5),
-      supabase.from("ventas").select("id, numero, fecha, total, clientes(nombre)").ilike("numero", term).order("created_at", { ascending: false }).limit(3),
-      supabase.from("ventas").select("id, numero, fecha, total, clientes!inner(nombre)").ilike("clientes.nombre", term).order("created_at", { ascending: false }).limit(3),
+      supabase.from("productos").select("id, nombre, codigo, precio, stock, stock_minimo").eq("activo", true).ilike("nombre", term).limit(5),
+      supabase.from("clientes").select("id, nombre, cuit, telefono, email, saldo, zona_entrega").eq("activo", true).ilike("nombre", term).limit(5),
+      supabase.from("ventas").select("id, numero, fecha, total, estado, tipo_comprobante, forma_pago, entregado, clientes(nombre)").ilike("numero", term).order("created_at", { ascending: false }).limit(3),
+      supabase.from("ventas").select("id, numero, fecha, total, estado, tipo_comprobante, forma_pago, entregado, clientes!inner(nombre)").ilike("clientes.nombre", term).order("created_at", { ascending: false }).limit(3),
     ]);
     // Merge ventas, deduplicate by id
     const ventasMap = new Map<string, any>();
@@ -83,9 +116,10 @@ export function GlobalSearch() {
       all.push({
         id: p.id,
         title: p.nombre,
-        subtitle: `${p.codigo || "Sin código"} · Stock: ${p.stock} · $${Math.round(p.precio).toLocaleString()}`,
+        subtitle: `${p.codigo || "Sin código"} · Stock: ${p.stock} · ${fc(p.precio)}`,
         type: "producto",
         url: "/admin/productos",
+        meta: { codigo: p.codigo, stock: p.stock, stockMinimo: p.stock_minimo, precio: p.precio },
       });
     }
 
@@ -96,16 +130,19 @@ export function GlobalSearch() {
         subtitle: [c.cuit, c.telefono].filter(Boolean).join(" · ") || "Sin datos",
         type: "cliente",
         url: "/admin/clientes",
+        meta: { cuit: c.cuit, telefono: c.telefono, email: c.email, saldo: c.saldo, zonaEntrega: c.zona_entrega },
       });
     }
 
     for (const v of ventas || []) {
+      const cNombre = (v as any).clientes?.nombre || "S/C";
       all.push({
         id: v.id,
         title: `Venta ${v.numero}`,
-        subtitle: `${v.fecha} · $${Math.round(v.total).toLocaleString()} · ${(v as any).clientes?.nombre || "S/C"}`,
+        subtitle: `${v.fecha} · ${fc(v.total)} · ${cNombre}`,
         type: "venta",
         url: "/admin/ventas/listado",
+        meta: { estado: v.estado, tipoComprobante: v.tipo_comprobante, formaPago: v.forma_pago, entregado: v.entregado, fecha: v.fecha, total: v.total, clienteNombre: cNombre },
       });
     }
 
@@ -152,9 +189,96 @@ export function GlobalSearch() {
 
   let globalIdx = 0;
 
+  const renderProducto = (r: SearchResult) => {
+    const m = r.meta;
+    if (!m) return <div className="text-xs text-muted-foreground truncate">{r.subtitle}</div>;
+    const stockLow = m.stockMinimo != null && m.stock != null && m.stock <= m.stockMinimo;
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-muted-foreground truncate">
+            <span className="font-mono">{m.codigo || "Sin código"}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`text-xs font-medium flex items-center gap-1 ${stockLow ? "text-red-600" : "text-muted-foreground"}`}>
+            {stockLow && <AlertTriangle className="w-3 h-3" />}
+            {m.stock}
+          </span>
+          <span className="text-xs font-bold">{fc(m.precio || 0)}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCliente = (r: SearchResult) => {
+    const m = r.meta;
+    if (!m) return <div className="text-xs text-muted-foreground truncate">{r.subtitle}</div>;
+    const hasDebt = m.saldo != null && m.saldo > 0;
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-muted-foreground truncate">
+            {[m.cuit, m.telefono].filter(Boolean).join(" · ") || m.email || "Sin datos"}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {m.zonaEntrega && (
+            <Badge variant="outline" className="text-[10px] py-0 h-4 shrink-0">{m.zonaEntrega}</Badge>
+          )}
+          {m.saldo != null && m.saldo !== 0 && (
+            <span className={`text-xs font-bold ${hasDebt ? "text-red-600" : "text-green-600"}`}>
+              {hasDebt ? `Debe ${fc(m.saldo)}` : fc(m.saldo)}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderVenta = (r: SearchResult) => {
+    const m = r.meta;
+    if (!m) return <div className="text-xs text-muted-foreground truncate">{r.subtitle}</div>;
+    const est = m.estado === "anulada" ? "anulada" : m.entregado ? "entregado" : m.estado || "pendiente";
+    const badge = estadoColors[est] || estadoColors.pendiente;
+    const isAnulada = m.estado === "anulada";
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-muted-foreground truncate flex items-center gap-1.5">
+            <span>{m.fecha}</span>
+            <span>·</span>
+            <span>{m.clienteNombre}</span>
+            {m.formaPago && (
+              <>
+                <span>·</span>
+                <span>{m.formaPago}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant="outline" className={`text-[10px] py-0 h-4 border ${badge.bg} ${badge.text}`}>
+            {badge.label}
+          </Badge>
+          <span className={`text-xs font-bold ${isAnulada ? "line-through text-muted-foreground" : ""}`}>
+            {fc(m.total || 0)}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMeta = (r: SearchResult) => {
+    if (r.type === "producto") return renderProducto(r);
+    if (r.type === "cliente") return renderCliente(r);
+    if (r.type === "venta") return renderVenta(r);
+    return <div className="text-xs text-muted-foreground truncate">{r.subtitle}</div>;
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden">
         <div className="flex items-center border-b px-3">
           <Search className="w-4 h-4 text-muted-foreground shrink-0" />
           <Input
@@ -196,12 +320,12 @@ export function GlobalSearch() {
                         key={r.id}
                         onClick={() => navigate(r)}
                         onMouseEnter={() => setSelected(idx)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left text-sm transition-colors ${isSelected ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left text-sm transition-colors ${isSelected ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}
                       >
                         <Icon className="w-4 h-4 shrink-0 text-muted-foreground" />
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate">{r.title}</div>
-                          <div className="text-xs text-muted-foreground truncate">{r.subtitle}</div>
+                          {renderMeta(r)}
                         </div>
                       </button>
                     );
@@ -221,4 +345,3 @@ export function GlobalSearch() {
     </Dialog>
   );
 }
-

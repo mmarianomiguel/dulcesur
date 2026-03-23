@@ -993,15 +993,20 @@ export default function ClientesPage() {
                               </div>
                             </td>
                             <td className="py-3 px-4 text-right">
-                              {client.saldo > 0 ? (
-                                <span className="font-semibold text-orange-500">{formatCurrency(client.saldo)}</span>
-                              ) : client.saldo < 0 ? (
-                                <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                                  A favor: {formatCurrency(Math.abs(client.saldo))}
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
+                              <div>
+                                {client.saldo > 0 ? (
+                                  <span className="font-semibold text-orange-500">{formatCurrency(client.saldo)}</span>
+                                ) : client.saldo < 0 ? (
+                                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                                    A favor: {formatCurrency(Math.abs(client.saldo))}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                                {(client as any).limite_credito > 0 && (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">Lím: {formatCurrency((client as any).limite_credito)}</p>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3 px-4 text-right">
                               <div className="flex justify-end gap-1">

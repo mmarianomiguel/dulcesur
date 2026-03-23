@@ -50,6 +50,9 @@ import {
   ChevronDown,
   Copy,
   Check,
+  TrendingUp,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ImageUpload } from "@/components/image-upload";
@@ -159,6 +162,12 @@ export default function ProductosPage() {
   const [historyProduct, setHistoryProduct] = useState<ProductoWithRelations | null>(null);
   const [historyItems, setHistoryItems] = useState<MovimientoItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Price history dialog state
+  const [phDialogOpen, setPhDialogOpen] = useState(false);
+  const [phProduct, setPhProduct] = useState<ProductoWithRelations | null>(null);
+  const [phData, setPhData] = useState<{ id: string; precio_anterior: number; precio_nuevo: number; costo_anterior: number; costo_nuevo: number; usuario: string; created_at: string }[]>([]);
+  const [phLoading, setPhLoading] = useState(false);
 
   // Order detail dialog state
   const [ordenDetailOpen, setOrdenDetailOpen] = useState(false);
@@ -510,6 +519,20 @@ export default function ProductosPage() {
     setPriceHistory((phData || []) as any);
 
     setDialogOpen(true);
+  };
+
+  const openPriceHistory = async (p: ProductoWithRelations) => {
+    setPhProduct(p);
+    setPhLoading(true);
+    setPhDialogOpen(true);
+    const { data } = await supabase
+      .from("precio_historial")
+      .select("*")
+      .eq("producto_id", p.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setPhData((data || []) as any);
+    setPhLoading(false);
   };
 
   const handleSave = async () => {
@@ -1861,8 +1884,11 @@ export default function ProductosPage() {
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(product)} title="Editar">
                             <Edit className="w-3.5 h-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openHistory(product)} title="Historial">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openHistory(product)} title="Historial stock">
                             <Clock className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openPriceHistory(product)} title="Historial precios">
+                            <TrendingUp className="w-3.5 h-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => handleDuplicate(product)} title="Duplicar">
                             <Copy className="w-3.5 h-3.5" />
@@ -2649,6 +2675,76 @@ export default function ProductosPage() {
       </Dialog>
 
       {/* History Dialog */}
+      {/* Price History Dialog */}
+      <Dialog open={phDialogOpen} onOpenChange={setPhDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
+          <div className="px-6 py-4 border-b bg-muted/30">
+            <DialogHeader className="p-0 space-y-0">
+              <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-muted-foreground" />
+                Historial de Precios
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground mt-1">
+              Producto: {phProduct?.nombre || "---"}
+            </p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {phLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : phData.length === 0 ? (
+              <div className="text-center py-12 text-sm text-muted-foreground">
+                No hay cambios de precio registrados
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-4 py-2.5 font-medium">Fecha</th>
+                    <th className="text-right px-4 py-2.5 font-medium">Precio Ant.</th>
+                    <th className="text-right px-4 py-2.5 font-medium">Precio Nuevo</th>
+                    <th className="text-center px-4 py-2.5 font-medium">Var.</th>
+                    <th className="text-right px-4 py-2.5 font-medium">Costo Ant.</th>
+                    <th className="text-right px-4 py-2.5 font-medium">Costo Nuevo</th>
+                    <th className="text-left px-4 py-2.5 font-medium">Usuario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {phData.map((h) => {
+                    const priceDiff = h.precio_anterior > 0 ? ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior) * 100 : 0;
+                    const isUp = priceDiff > 0;
+                    const isDown = priceDiff < 0;
+                    return (
+                      <tr key={h.id} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {new Date(h.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{formatCurrency(h.precio_anterior)}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold">{formatCurrency(h.precio_nuevo)}</td>
+                        <td className="px-4 py-2.5 text-center">
+                          {priceDiff !== 0 && (
+                            <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isUp ? "text-red-600" : "text-green-600"}`}>
+                              {isUp ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                              {Math.abs(priceDiff).toFixed(1)}%
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "—"}</td>
+                        <td className="px-4 py-2.5 text-right">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "—"}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{h.usuario || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
           <div className="px-6 py-4 border-b bg-muted/30">
