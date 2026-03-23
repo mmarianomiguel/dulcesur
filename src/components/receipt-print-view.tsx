@@ -215,15 +215,15 @@ export function ReceiptPrintView({
   const ItemsTable = ({ items, showContinue }: { items: ReceiptLineItem[]; showContinue?: boolean }) => (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fsProductos}px` }}>
       <thead>
-        <tr style={{ borderBottom: "1px solid #000", borderTop: "1px solid #000" }}>
-          <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Cant.</th>
-          <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Producto</th>
-          <th style={{ textAlign: "center", padding: "4px 4px", fontWeight: "bold" }}>U/Med</th>
-          <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold", whiteSpace: "nowrap" }}>P.Unit.</th>
+        <tr style={{ borderBottom: "2px solid #000", borderTop: "2px solid #000", background: "#f5f5f5" }}>
+          <th style={{ textAlign: "left", padding: "5px 4px", fontWeight: "bold" }}>Cant.</th>
+          <th style={{ textAlign: "left", padding: "5px 4px", fontWeight: "bold" }}>Producto</th>
+          <th style={{ textAlign: "center", padding: "5px 4px", fontWeight: "bold" }}>U/Med</th>
+          <th style={{ textAlign: "right", padding: "5px 4px", fontWeight: "bold", whiteSpace: "nowrap" }}>P.Unit.</th>
           {config.mostrarDescuento && (
-            <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Desc.%</th>
+            <th style={{ textAlign: "right", padding: "5px 4px", fontWeight: "bold" }}>Dto.%</th>
           )}
-          <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Importe</th>
+          <th style={{ textAlign: "right", padding: "5px 4px", fontWeight: "bold" }}>Importe</th>
         </tr>
       </thead>
       <tbody>
@@ -240,27 +240,27 @@ export function ReceiptPrintView({
                 ? item.price / item.unidades_por_presentacion
                 : item.price;
           return (
-            <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: "2px 4px", textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
-              <td style={{ padding: "2px 4px", textAlign: "left" }}>
+            <tr key={i} style={{ borderBottom: "1px solid #ddd", background: i % 2 === 1 ? "#fafafa" : "transparent" }}>
+              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
+              <td style={{ padding: "3px 4px", textAlign: "left" }}>
                 {item.es_combo && (
-                  <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "0px 2px", borderRadius: "2px", marginRight: "3px", letterSpacing: "0.5px" }}>COMBO</span>
+                  <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "1px 3px", borderRadius: "2px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
                 )}
                 {cleanDesc(item)}
                 {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
-                  <div style={{ fontSize: `${fsProductos - 3}px`, color: "#777", marginTop: "0px", lineHeight: "1.1" }}>
+                  <div style={{ fontSize: `${fsProductos - 3}px`, color: "#777", marginTop: "1px", lineHeight: "1.2" }}>
                     {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
                   </div>
                 )}
               </td>
-              <td style={{ padding: "2px 4px", textAlign: "center" }}>
+              <td style={{ padding: "3px 4px", textAlign: "center", color: "#555" }}>
                 {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : isBox ? `x${item.unidades_por_presentacion} un` : (item.unit === "Unidad" ? "Un" : item.unit) || "Un"}
               </td>
-              <td style={{ padding: "2px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
+              <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
               {config.mostrarDescuento && (
-                <td style={{ padding: "2px 4px", textAlign: "right" }}>{item.discount ? `(-${item.discount}%)` : "0"}</td>
+                <td style={{ padding: "3px 4px", textAlign: "right", color: item.discount ? "#059669" : "#ccc" }}>{item.discount ? `−${item.discount}%` : "—"}</td>
               )}
-              <td style={{ padding: "2px 4px", textAlign: "right" }}>{fmtCur(item.subtotal)}</td>
+              <td style={{ padding: "3px 4px", textAlign: "right", fontWeight: "600" }}>{fmtCur(item.subtotal)}</td>
             </tr>
           );
         })}
@@ -268,7 +268,7 @@ export function ReceiptPrintView({
       {showContinue && (
         <tfoot>
           <tr>
-            <td colSpan={config.mostrarDescuento ? 6 : 5} style={{ textAlign: "center", padding: "6px", fontSize: `${fsProductos - 1}px`, color: "#888", fontStyle: "italic" }}>
+            <td colSpan={config.mostrarDescuento ? 6 : 5} style={{ textAlign: "center", padding: "8px", fontSize: `${fsProductos - 1}px`, color: "#888", fontStyle: "italic", borderTop: "1px solid #ddd" }}>
               Continúa en la siguiente página...
             </td>
           </tr>
