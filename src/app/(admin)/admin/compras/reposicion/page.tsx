@@ -64,6 +64,8 @@ interface ReposicionItem {
   cantidad_minima_pedido: number;
   nivel: "critico" | "bajo" | "ok";
   faltante: number;
+  velDiaria: number;
+  diasStock: number | null;
 }
 
 interface Categoria {
@@ -156,6 +158,26 @@ export default function ReposicionPage() {
     setMarcas((mrs as Marca[]) || []);
     setProveedores((provs as Proveedor[]) || []);
 
+    // Fetch sales velocity (last 30 days)
+    const hace30 = new Date();
+    hace30.setDate(hace30.getDate() - 30);
+    const desde30 = hace30.toISOString().slice(0, 10);
+    const { data: ventaIds30 } = await supabase.from("ventas").select("id").gte("fecha", desde30).neq("estado", "anulada");
+    const velMap: Record<string, number> = {};
+    if (ventaIds30 && ventaIds30.length > 0) {
+      const ids = ventaIds30.map((v: any) => v.id);
+      // Batch in chunks of 200
+      for (let i = 0; i < ids.length; i += 200) {
+        const chunk = ids.slice(i, i + 200);
+        const { data: vitems } = await supabase.from("venta_items").select("producto_id, cantidad").in("venta_id", chunk);
+        if (vitems) {
+          for (const item of vitems as any[]) {
+            velMap[item.producto_id] = (velMap[item.producto_id] || 0) + Number(item.cantidad);
+          }
+        }
+      }
+    }
+
     if (productos) {
       const mapped: ReposicionItem[] = (productos as any[]).map((p) => {
         const stock = p.stock ?? 0;
@@ -207,6 +229,8 @@ export default function ReposicionPage() {
           proveedor_nombre: pp?.proveedores?.nombre || null,
           precio_proveedor: pp?.precio_proveedor || null,
           cantidad_minima_pedido: pp?.cantidad_minima_pedido || 1,
+          velDiaria: Math.round(((velMap[p.id] || 0) / 30) * 10) / 10,
+          diasStock: (velMap[p.id] || 0) > 0 ? Math.round(stock / ((velMap[p.id] || 1) / 30)) : null,
           nivel,
           faltante,
         };
@@ -642,6 +666,8 @@ export default function ReposicionPage() {
                     <th className="text-center py-3 px-4 font-medium">Min</th>
                     <th className="text-center py-3 px-4 font-medium">Max</th>
                     <th className="text-center py-3 px-4 font-medium">A pedir</th>
+                    <th className="text-center py-3 px-4 font-medium hidden xl:table-cell">Vel/día</th>
+                    <th className="text-center py-3 px-4 font-medium hidden xl:table-cell">Días Stock</th>
                     <th className="text-left py-3 px-4 font-medium">Proveedor</th>
                     <th className="text-right py-3 px-4 font-medium">Costo unit.</th>
                     <th className="text-right py-3 px-4 font-medium">Subtotal</th>
@@ -676,6 +702,12 @@ export default function ReposicionPage() {
                         <td className="py-2.5 px-4 text-center text-muted-foreground">{item.stock_minimo}</td>
                         <td className="py-2.5 px-4 text-center text-muted-foreground">{item.stock_maximo}</td>
                         <td className="py-2.5 px-4 text-center font-semibold">{item.faltante}</td>
+                        <td className="py-2.5 px-4 text-center hidden xl:table-cell text-muted-foreground">
+                          {item.velDiaria > 0 ? item.velDiaria : "—"}
+                        </td>
+                        <td className={`py-2.5 px-4 text-center hidden xl:table-cell font-medium ${item.diasStock !== null && item.diasStock <= 7 ? "text-red-600" : "text-muted-foreground"}`}>
+                          {item.diasStock !== null ? `${item.diasStock}d` : "—"}
+                        </td>
                         <td className="py-2.5 px-4">
                           {item.proveedor_nombre ? (
                             <span className="text-sm">{item.proveedor_nombre}</span>

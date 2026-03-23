@@ -51,6 +51,7 @@ interface Descuento {
   productos_ids: string[];
   marcas_ids: string[];
   presentacion: string;
+  cantidad_minima: number | null;
   activo: boolean;
   created_at: string;
   updated_at: string;
@@ -141,6 +142,7 @@ export default function DescuentosPage() {
   const [categoriasIds, setCategoriasIds] = useState<string[]>([]);
   const [subcategoriasIds, setSubcategoriasIds] = useState<string[]>([]);
   const [presentacion, setPresentación] = useState("todas");
+  const [cantidadMinima, setCantidadMinima] = useState<number | null>(null);
   const [excluirCombos, setExcluirCombos] = useState(true);
   const [productosIds, setProductosIds] = useState<string[]>([]);
   const [marcasIds, setMarcasIds] = useState<string[]>([]);
@@ -206,6 +208,7 @@ export default function DescuentosPage() {
     setProductosIds([]);
     setMarcasIds([]);
     setPresentación("todas");
+    setCantidadMinima(null);
     setExcluirCombos(true);
     setEditId(null);
     setCatSearch("");
@@ -234,6 +237,7 @@ export default function DescuentosPage() {
     setProductosIds(d.productos_ids ?? []);
     setMarcasIds(d.marcas_ids ?? []);
     setPresentación(d.presentacion);
+    setCantidadMinima(d.cantidad_minima ?? null);
     setExcluirCombos((d as any).excluir_combos ?? true);
     setSaveError(null);
     setDialogOpen(true);
@@ -254,6 +258,7 @@ export default function DescuentosPage() {
       productos_ids: aplicaA === "productos" ? productosIds : [],
       marcas_ids: marcasIds,
       presentacion,
+      cantidad_minima: cantidadMinima && cantidadMinima > 0 ? cantidadMinima : null,
       excluir_combos: excluirCombos,
       updated_at: new Date().toISOString(),
     };
@@ -473,6 +478,7 @@ export default function DescuentosPage() {
                     <th className="text-left px-4 py-3 font-medium">Aplica a</th>
                     <th className="text-left px-4 py-3 font-medium">Marcas</th>
                     <th className="text-left px-4 py-3 font-medium">Presentación</th>
+                    <th className="text-center px-4 py-3 font-medium">Cant. Mín.</th>
                     <th className="text-left px-4 py-3 font-medium">Estado</th>
                     <th className="text-right px-4 py-3 font-medium">Acciones</th>
                   </tr>
@@ -501,6 +507,9 @@ export default function DescuentosPage() {
                             : "Todas"}
                         </td>
                         <td className="px-4 py-3 capitalize">{presentacionLabel(d.presentacion)}</td>
+                        <td className="px-4 py-3 text-center">
+                          {d.cantidad_minima ? <Badge variant="outline" className="text-xs">{d.cantidad_minima}+ uds</Badge> : <span className="text-muted-foreground">—</span>}
+                        </td>
                         <td className="px-4 py-3">{estadoBadge(estado)}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
@@ -1065,6 +1074,20 @@ export default function DescuentosPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Cantidad mínima (descuento por volumen) */}
+              <div className="space-y-2">
+                <Label>Cantidad mínima (opcional)</Label>
+                <p className="text-xs text-muted-foreground">Si se define, el descuento solo aplica cuando el cliente compra al menos esta cantidad de unidades del producto.</p>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Sin mínimo"
+                  value={cantidadMinima ?? ""}
+                  onChange={(e) => setCantidadMinima(e.target.value ? Number(e.target.value) : null)}
+                  className="w-48"
+                />
               </div>
 
               {/* Excluir combos */}

@@ -100,8 +100,8 @@ export function GlobalSearch() {
 
     const term = `%${q}%`;
     const [{ data: productos }, { data: clientes }, { data: ventasNum }, { data: ventasCliente }] = await Promise.all([
-      supabase.from("productos").select("id, nombre, codigo, precio, stock, stock_minimo").eq("activo", true).ilike("nombre", term).limit(5),
-      supabase.from("clientes").select("id, nombre, cuit, telefono, email, saldo, zona_entrega").eq("activo", true).ilike("nombre", term).limit(5),
+      supabase.from("productos").select("id, nombre, codigo, precio, stock, stock_minimo").eq("activo", true).or(`nombre.ilike.${term},codigo.ilike.${term}`).limit(5),
+      supabase.from("clientes").select("id, nombre, cuit, telefono, email, saldo, zona_entrega").eq("activo", true).or(`nombre.ilike.${term},cuit.ilike.${term}`).limit(5),
       supabase.from("ventas").select("id, numero, fecha, total, estado, tipo_comprobante, forma_pago, entregado, clientes(nombre)").ilike("numero", term).order("created_at", { ascending: false }).limit(3),
       supabase.from("ventas").select("id, numero, fecha, total, estado, tipo_comprobante, forma_pago, entregado, clientes!inner(nombre)").ilike("clientes.nombre", term).order("created_at", { ascending: false }).limit(3),
     ]);

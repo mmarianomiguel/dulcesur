@@ -434,12 +434,14 @@ export default function VentasPage() {
   };
 
   // ---------- discount helper ----------
-  const getProductDiscount = (product: Producto, presName: string): number => {
+  const getProductDiscount = (product: Producto, presName: string, qty?: number): number => {
     let bestDiscount = 0;
     const isCombo = !!(product as any).es_combo;
     for (const d of activeDiscounts) {
       // Skip if discount excludes combos and product is combo
       if (d.excluir_combos && isCombo) continue;
+      // Check minimum quantity for volume discounts
+      if (d.cantidad_minima && qty != null && qty < d.cantidad_minima) continue;
       // Check presentation filter
       if (d.presentacion === "unidad" && presName !== "Unidad") continue;
       if (d.presentacion === "caja" && presName === "Unidad") continue;

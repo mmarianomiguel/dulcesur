@@ -151,7 +151,7 @@ export default function ClientesPage() {
   const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, totalComprado: 0 });
   const [movCCTotals, setMovCCTotals] = useState({ debe: 0, haber: 0, saldo: 0, saldoInicial: 0 });
   const [movExpanded, setMovExpanded] = useState<string | null>(null);
-  const [movTab, setMovTab] = useState<"compras" | "cc">("compras");
+  const [movTab, setMovTab] = useState<"compras" | "cc" | "resumen">("compras");
   // Payment from movimientos
   const [payMovOpen, setPayMovOpen] = useState(false);
   const [payMovVenta, setPayMovVenta] = useState<any>(null);
@@ -1254,10 +1254,11 @@ export default function ClientesPage() {
             </Button>
           </div>
 
-          <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "compras" | "cc")} className="mt-3">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "compras" | "cc" | "resumen")} className="mt-3">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="compras">Compras</TabsTrigger>
               <TabsTrigger value="cc">Cuenta Corriente</TabsTrigger>
+              <TabsTrigger value="resumen">Resumen</TabsTrigger>
             </TabsList>
 
             {/* ══════ TAB COMPRAS ══════ */}
@@ -1521,6 +1522,63 @@ export default function ClientesPage() {
                   </>
                 );
               })()}
+            </TabsContent>
+
+            {/* ══════ TAB RESUMEN ══════ */}
+            <TabsContent value="resumen" className="mt-3">
+              {movLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+              ) : (
+                <div className="space-y-3">
+                  {/* KPIs */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="rounded-lg border p-2.5 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Compras</p>
+                      <p className="text-sm font-bold">{formatCurrency(Math.round(movCCTotals.debe))}</p>
+                    </div>
+                    <div className="rounded-lg border p-2.5 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Pagos</p>
+                      <p className="text-sm font-bold text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</p>
+                    </div>
+                    <div className="rounded-lg border p-2.5 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Operaciones</p>
+                      <p className="text-sm font-bold">{movCCRows.length}</p>
+                    </div>
+                    <div className="rounded-lg border p-2.5 text-center bg-primary/5">
+                      <p className="text-[10px] text-muted-foreground uppercase">Saldo</p>
+                      <p className={`text-sm font-bold ${movCCTotals.saldo > 0 ? "text-orange-500" : movCCTotals.saldo < 0 ? "text-emerald-600" : ""}`}>
+                        {formatCurrency(Math.round(Math.abs(movCCTotals.saldo)))}
+                        {movCCTotals.saldo < 0 && <span className="text-[10px] ml-0.5">a favor</span>}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Timeline */}
+                  {movCCRows.length === 0 ? (
+                    <p className="text-center py-8 text-sm text-muted-foreground">Sin movimientos en el período</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+                      {movCCRows.map((r: any) => {
+                        const isVenta = r.debe > 0;
+                        return (
+                          <div key={r.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border hover:bg-muted/30">
+                            <div className={`w-2 h-2 rounded-full shrink-0 ${isVenta ? "bg-orange-400" : "bg-emerald-400"}`} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{r.comprobante}</p>
+                              <p className="text-[11px] text-muted-foreground">{r.fecha}{r.forma_pago ? ` · ${r.forma_pago}` : ""}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className={`text-sm font-semibold ${isVenta ? "text-orange-500" : "text-emerald-600"}`}>
+                                {isVenta ? `+${formatCurrency(r.debe)}` : `-${formatCurrency(r.haber)}`}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">Saldo: {formatCurrency(r.saldo)}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </DialogContent>
