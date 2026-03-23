@@ -1459,6 +1459,14 @@ export default function VentasPage() {
             const newSaldo = saldoActual + total;
             const saldoAFavorAplicado = saldoActual < 0 ? Math.min(Math.abs(saldoActual), total) : 0;
             const deudaReal = total - saldoAFavorAplicado;
+            // Optimistic lock: only update if saldo hasn't changed since read
+            const { data: updResult } = await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clientId).eq("saldo", saldoActual).select("id");
+            if (!updResult || updResult.length === 0) {
+              // Retry with fresh read
+              const { data: retry } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+              const retrySaldo = (retry?.saldo ?? 0) + total;
+              await supabase.from("clientes").update({ saldo: retrySaldo }).eq("id", clientId);
+            }
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
@@ -1472,7 +1480,6 @@ export default function VentasPage() {
               forma_pago: "Cuenta Corriente",
               venta_id: venta.id,
             });
-            await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clientId);
           }
         } else if (formaPago === "Mixto") {
           const mixtoEntries: { metodo: string; monto: number }[] = [];
@@ -1490,6 +1497,12 @@ export default function VentasPage() {
                 const saldoActualMixto = freshCCMixto?.saldo ?? selectedClient?.saldo ?? 0;
                 const newSaldoMixto = saldoActualMixto + entry.monto;
                 const favorAplicadoMixto = saldoActualMixto < 0 ? Math.min(Math.abs(saldoActualMixto), entry.monto) : 0;
+                // Optimistic lock on saldo update
+                const { data: mixtoUpd } = await supabase.from("clientes").update({ saldo: newSaldoMixto }).eq("id", clientId).eq("saldo", saldoActualMixto).select("id");
+                if (!mixtoUpd || mixtoUpd.length === 0) {
+                  const { data: retryM } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+                  await supabase.from("clientes").update({ saldo: (retryM?.saldo ?? 0) + entry.monto }).eq("id", clientId);
+                }
                 await supabase.from("cuenta_corriente").insert({
                   cliente_id: clientId,
                   fecha: hoy,
@@ -1503,7 +1516,6 @@ export default function VentasPage() {
                   forma_pago: "Cuenta Corriente",
                   venta_id: venta.id,
                 });
-                await supabase.from("clientes").update({ saldo: newSaldoMixto }).eq("id", clientId);
               }
             } else {
               const mixCuenta = entry.metodo === "Transferencia" && cuentaBancariaId

@@ -246,6 +246,7 @@ export default function AjustesStockPage() {
 
     if (ajuste) {
       for (const row of rows) {
+        if (row.cantidad <= 0) continue; // Skip invalid quantities
         const prod = productos.find((p) => p.id === row.producto_id);
         if (!prod) continue;
         const stockAntes = prod.stock;

@@ -221,6 +221,9 @@ async function handleResetPassword({
   if (!clienteAuthId || !newPassword) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
   }
+  if (newPassword.length < 6) {
+    return NextResponse.json({ error: "La contraseña debe tener al menos 6 caracteres" }, { status: 400 });
+  }
 
   const bcryptHash = await bcrypt.hash(newPassword, 10);
   const { error } = await supabase
