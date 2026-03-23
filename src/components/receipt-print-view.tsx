@@ -200,13 +200,13 @@ export function ReceiptPrintView({
       </div>
 
       {/* ── Items table ── */}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fsProductos}px`, flex: 1 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fsProductos}px` }}>
         <thead>
           <tr style={{ borderBottom: "1px solid #000", borderTop: "1px solid #000" }}>
             <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Cant.</th>
             <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>Producto</th>
             <th style={{ textAlign: "center", padding: "4px 4px", fontWeight: "bold" }}>U/Med</th>
-            <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Precio Un.</th>
+            <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold", whiteSpace: "nowrap" }}>P.Unit.</th>
             {config.mostrarDescuento && (
               <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold" }}>Desc.%</th>
             )}
@@ -266,42 +266,34 @@ export function ReceiptPrintView({
       </table>
 
       {/* ── Footer totals ── */}
-      <div style={{ borderTop: "2px solid #000", marginTop: "auto" }}>
+      <div style={{ borderTop: "2px solid #000", marginTop: "8px" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${fsResumen - 2}px`, gap: "30px" }}>
           <div>
             <span>Subtotal: </span>
-            <span style={{ fontWeight: "bold" }}>{fmtCur(sale.subtotal)}</span>
+            <span style={{ fontWeight: "bold" }}>{fmtCur(Math.round(sale.subtotal))}</span>
           </div>
           {sale.descuento > 0 && (
             <div>
               <span>Descuento: </span>
-              <span style={{ fontWeight: "bold" }}>-{fmtCur(sale.descuento)}</span>
+              <span style={{ fontWeight: "bold" }}>-{fmtCur(Math.round(sale.descuento))}</span>
             </div>
           )}
           {sale.recargo > 0 && (
             <div>
               <span>Recargo: </span>
-              <span style={{ fontWeight: "bold" }}>+{fmtCur(sale.recargo)}</span>
+              <span style={{ fontWeight: "bold" }}>+{fmtCur(Math.round(sale.recargo))}</span>
             </div>
           )}
           {sale.transferSurcharge > 0 && (
             <div>
-              <span>Rec. Transferencia: </span>
-              <span style={{ fontWeight: "bold" }}>+{fmtCur(sale.transferSurcharge)}</span>
+              <span>Rec. Transf.: </span>
+              <span style={{ fontWeight: "bold" }}>+{fmtCur(Math.round(sale.transferSurcharge))}</span>
             </div>
           )}
         </div>
-        <div style={{ borderTop: "2px solid #000", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 4px" }}>
-          {(() => {
-            const totalAhorro = sale.descuento > 0 ? sale.descuento : sale.items.filter(i => i.discount > 0).reduce((a, i) => a + (i.price * i.qty * i.discount / 100), 0);
-            return totalAhorro > 0 ? (
-              <span style={{ fontSize: `${config.fontSize - 2}px`, color: "#059669" }}>
-                Ahorraste {fmtCur(Math.round(totalAhorro))}
-              </span>
-            ) : null;
-          })()}
-          <div style={{ fontSize: `${fsResumen}px`, fontWeight: "bold", marginLeft: "auto" }}>
-            TOTAL: {fmtCur(sale.total)}
+        <div style={{ borderTop: "2px solid #000", display: "flex", justifyContent: "flex-end", padding: "8px 4px" }}>
+          <div style={{ fontSize: `${fsResumen}px`, fontWeight: "bold" }}>
+            TOTAL: {fmtCur(Math.round(sale.total))}
           </div>
         </div>
         {/* ── Resumen de pago ── */}
@@ -335,12 +327,13 @@ export function ReceiptPrintView({
 
               {/* Desglose */}
               {showDesglose && (<>
-                {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Pagó en efectivo:", fmtCur(sale.pagoEfectivo))}
-                {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && row("Pagó por transferencia:", fmtCur(sale.pagoTransferencia))}
-                {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("A cuenta corriente:", fmtCur(sale.pagoCuentaCorriente))}
+                {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Pagó en efectivo:", fmtCur(Math.round(sale.pagoEfectivo)))}
+                {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && row("Pagó por transferencia:", fmtCur(Math.round(sale.pagoTransferencia)))}
+                {sale.transferSurcharge > 0 && row("(Rec. transferencia incluido):", `+${fmtCur(Math.round(sale.transferSurcharge))}`, false, "#888")}
+                {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("A cuenta corriente:", fmtCur(Math.round(sale.pagoCuentaCorriente)))}
                 {separator()}
-                {row("Total pagado:", fmtCur(totalPagado), true)}
-                {saldoPendiente > 0 && row("Saldo pendiente:", fmtCur(saldoPendiente), true, "#ea580c")}
+                {row("Total pagado:", fmtCur(Math.round(totalPagado)), true)}
+                {saldoPendiente > 0 && row("Saldo pendiente:", fmtCur(Math.round(saldoPendiente)), true, "#ea580c")}
               </>)}
 
               {/* Solo efectivo con vuelto */}
