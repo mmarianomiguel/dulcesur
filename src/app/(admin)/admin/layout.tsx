@@ -2,6 +2,7 @@
 
 import { Sidebar } from "@/components/sidebar";
 import AdminToastContainer from "@/components/admin-toast";
+import { GlobalSearch } from "@/components/global-search";
 import { useState } from "react";
 import { Menu } from "lucide-react";
 
@@ -31,6 +32,7 @@ export default function AdminLayout({
       {/* Main content - add top padding on mobile for the header */}
       <main className="flex-1 overflow-y-auto pt-12 lg:pt-0">{children}</main>
       <AdminToastContainer />
+      <GlobalSearch />
     </div>
   );
 }

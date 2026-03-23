@@ -159,6 +159,7 @@ export default function DashboardPage() {
   const [paymentBreakdown, setPaymentBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [monthlyData, setMonthlyData] = useState<{ name: string; ventas: number; egresos: number }[]>([]);
   const [ventasPorCategoria, setVentasPorCategoria] = useState<{ name: string; value: number }[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<{ id: string; nombre: string; codigo: string; stock: number; stock_minimo: number }[]>([]);
 
   // ─── Pedidos Online state ───
   const [pedidosOnline, setPedidosOnline] = useState<PedidoVenta[]>([]);
@@ -365,8 +366,9 @@ export default function DashboardPage() {
     }
     setGananciaPeriodo(gananciaTotal);
 
-    const { data: prods } = await supabase.from("productos").select("stock, precio, costo").eq("activo", true).limit(10000);
-    setCapitalMercaderia((prods || []).reduce((a, p) => a + p.stock * (p.costo || p.precio), 0));
+    const { data: prods } = await supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).limit(10000);
+    setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo || p.precio), 0));
+    setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
     const { data: cls } = await supabase.from("clientes").select("saldo").eq("activo", true);
     setCuentasCobrar((cls || []).reduce((a, c) => a + (c.saldo > 0 ? c.saldo : 0), 0));
     const { data: provs } = await supabase.from("proveedores").select("saldo").eq("activo", true);
@@ -547,6 +549,28 @@ export default function DashboardPage() {
         </div>
         <Badge variant="outline" className="text-xs w-fit">{wl.system_name || "DulceSur"}</Badge>
       </div>
+
+      {/* ─── Stock Bajo ─── */}
+      {lowStockProducts.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <span className="text-sm font-semibold text-amber-800">Stock bajo ({lowStockProducts.length} producto{lowStockProducts.length !== 1 ? "s" : ""})</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {lowStockProducts.slice(0, 10).map((p) => (
+              <div key={p.id} className="flex items-center gap-1.5 bg-white rounded-md border border-amber-200 px-2.5 py-1 text-xs">
+                <span className="font-medium text-amber-900 truncate max-w-[180px]">{p.nombre}</span>
+                <span className={`font-bold ${p.stock <= 0 ? "text-red-600" : "text-amber-600"}`}>{p.stock} un.</span>
+                <span className="text-amber-500">/ mín. {p.stock_minimo}</span>
+              </div>
+            ))}
+            {lowStockProducts.length > 10 && (
+              <span className="text-xs text-amber-600 self-center">+{lowStockProducts.length - 10} más</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── Pedidos Online ─── */}
       <Card>

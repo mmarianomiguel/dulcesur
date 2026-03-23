@@ -215,6 +215,9 @@ export default function VentasPage() {
   const [stockExceedDialog, setStockExceedDialog] = useState<{ open: boolean; issues: { item: LineItem; stockDisponible: number; unidadesFacturadas: number }[]; adjustSet: Set<string> }>({ open: false, issues: [], adjustSet: new Set() });
   const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [lastPrintData, setLastPrintData] = useState<typeof successModal | null>(null);
+  const [reprintOpen, setReprintOpen] = useState(false);
+  const reprintRef = useRef<HTMLDivElement>(null);
 
   // out of stock confirmation
   const [stockWarning, setStockWarning] = useState<{ open: boolean; product: Producto | null; presentacion?: Presentacion }>({ open: false, product: null });
@@ -2383,6 +2386,12 @@ export default function VentasPage() {
         <span className="shrink-0"><kbd className="px-1 py-0.5 bg-muted rounded font-mono text-[10px]">F12</kbd> Finalizar</span>
         <span className="shrink-0 hidden md:inline"><kbd className="px-1 py-0.5 bg-muted rounded font-mono text-[10px]">↑↓</kbd> Navegar</span>
         <span className="shrink-0 hidden md:inline"><kbd className="px-1 py-0.5 bg-muted rounded font-mono text-[10px]">←→</kbd> Cantidad</span>
+        {lastPrintData && lastPrintData.numero && (
+          <button onClick={() => setReprintOpen(true)} className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
+            <Printer className="w-3 h-3" />
+            <span className="text-[10px] font-medium">Reimprimir #{lastPrintData.numero.split("-").pop()}</span>
+          </button>
+        )}
         <button
           onClick={toggleScanner}
           className={`ml-auto flex items-center gap-1 lg:gap-1.5 shrink-0 px-2 py-0.5 rounded-full transition-colors ${
@@ -3309,7 +3318,7 @@ export default function VentasPage() {
 
       {/* Success Modal with PDF Preview */}
       <Dialog open={successModal.open} onOpenChange={(open) => {
-        if (!open) setSuccessModal((prev) => ({ ...prev, open: false, pdfUrl: null }));
+        if (!open) { setLastPrintData({ ...successModal }); setSuccessModal((prev) => ({ ...prev, open: false, pdfUrl: null })); }
       }}>
         <DialogContent className="max-w-3xl max-h-[92vh] p-0 overflow-hidden flex flex-col">
           {/* Header */}
@@ -3484,6 +3493,78 @@ export default function VentasPage() {
           </div>
         </div>
       )}
+
+      {/* Reprint Last Receipt Dialog */}
+      <Dialog open={reprintOpen} onOpenChange={setReprintOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="w-5 h-5" />
+              Reimprimir — {lastPrintData?.tipoComprobante} N° {lastPrintData?.numero}
+            </DialogTitle>
+          </DialogHeader>
+          {lastPrintData && (
+            <div className="space-y-4">
+              <div className="border rounded-lg overflow-hidden bg-white" style={{ maxHeight: "55vh", overflow: "auto" }}>
+                <div ref={reprintRef} style={{ transform: "scale(0.52)", transformOrigin: "top left", width: "192%", pointerEvents: "none" }}>
+                  <ReceiptPrintView
+                    sale={{
+                      numero: lastPrintData.numero,
+                      total: lastPrintData.total,
+                      subtotal: lastPrintData.subtotal,
+                      descuento: lastPrintData.descuento,
+                      recargo: lastPrintData.recargo,
+                      transferSurcharge: lastPrintData.transferSurcharge,
+                      tipoComprobante: lastPrintData.tipoComprobante,
+                      formaPago: lastPrintData.formaPago,
+                      moneda: lastPrintData.moneda,
+                      cliente: lastPrintData.cliente,
+                      clienteDireccion: lastPrintData.clienteDireccion,
+                      clienteTelefono: lastPrintData.clienteTelefono,
+                      clienteCondicionIva: lastPrintData.clienteCondicionIva,
+                      vendedor: lastPrintData.vendedor,
+                      items: lastPrintData.items.map((i) => ({
+                        id: i.id,
+                        producto_id: i.producto_id,
+                        code: i.code,
+                        description: i.description,
+                        qty: i.qty,
+                        unit: i.unit,
+                        price: i.price,
+                        discount: i.discount,
+                        subtotal: i.subtotal,
+                        presentacion: i.presentacion,
+                        unidades_por_presentacion: i.unidades_por_presentacion,
+                        stock: i.stock,
+                        es_combo: i.es_combo,
+                        comboItems: i.comboItems,
+                      })),
+                      fecha: lastPrintData.fecha,
+                      saldoAnterior: lastPrintData.saldoAnterior,
+                      saldoNuevo: lastPrintData.saldoNuevo,
+                    }}
+                    config={receiptConfig}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReprintOpen(false)}>Cerrar</Button>
+                <Button onClick={() => {
+                  if (!reprintRef.current) return;
+                  const html = reprintRef.current.innerHTML;
+                  const win = window.open("", "_blank", "width=800,height=600");
+                  if (!win) return;
+                  win.document.write(`<!DOCTYPE html><html><head><title>Comprobante ${lastPrintData.numero}</title><style>@page{size:A4;margin:0}body{margin:0;padding:0}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${html}</body></html>`);
+                  win.document.close();
+                  win.onload = () => { win.print(); win.close(); };
+                }}>
+                  <Printer className="w-4 h-4 mr-2" />Imprimir
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
