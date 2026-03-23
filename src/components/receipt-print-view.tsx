@@ -312,8 +312,11 @@ export function ReceiptPrintView({
 
     return (
       <>
+        {/* Spacer - pushes everything below to the bottom */}
+        <div style={{ flex: 1 }} />
+
         {/* Totals */}
-        <div style={{ borderTop: "2px solid #000", marginTop: "8px" }}>
+        <div style={{ borderTop: "2px solid #000" }}>
           <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${fsResumen - 2}px`, gap: "30px" }}>
             <div>
               <span>Subtotal: </span>
@@ -344,9 +347,6 @@ export function ReceiptPrintView({
             </div>
           </div>
         </div>
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
 
         {/* Payment summary */}
         {showPaymentSection ? (
