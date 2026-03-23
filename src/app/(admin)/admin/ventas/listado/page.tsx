@@ -320,10 +320,14 @@ export default function ListadoVentasPage() {
         }));
       }
     });
-    // Load logo from tienda_config if not in receipt_config
-    supabase.from("tienda_config").select("logo_url").limit(1).single().then(({ data: tc }) => {
-      if (tc?.logo_url) {
-        setReceiptConfig((prev) => ({ ...prev, logoUrl: prev.logoUrl || tc.logo_url }));
+    // Load logo and web URL from tienda_config if not in receipt_config
+    supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single().then(({ data: tc }) => {
+      if (tc) {
+        setReceiptConfig((prev) => ({
+          ...prev,
+          logoUrl: prev.logoUrl || tc.logo_url || "",
+          empresaWeb: prev.empresaWeb || tc.url_tienda || "",
+        }));
       }
     });
   }, []);

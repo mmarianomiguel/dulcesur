@@ -336,6 +336,15 @@ export default function VentasPage() {
         empresaIva: emp.situacion_iva || prev.empresaIva,
       }));
     }
+    // Load logo and web URL from tienda_config
+    const { data: tc } = await supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single();
+    if (tc) {
+      setReceiptConfig((prev) => ({
+        ...prev,
+        logoUrl: prev.logoUrl || tc.logo_url || "",
+        empresaWeb: prev.empresaWeb || tc.url_tienda || "",
+      }));
+    }
   }, []);
 
   useEffect(() => {
