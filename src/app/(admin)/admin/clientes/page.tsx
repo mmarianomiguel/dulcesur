@@ -1311,17 +1311,17 @@ export default function ClientesPage() {
             <TabsContent value="cc" className="mt-3">
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Total Debe</p>
-                  <p className="text-lg font-bold">{formatCurrency(movCCTotals.debe)}</p>
+                  <p className="text-xs text-muted-foreground">Cargos</p>
+                  <p className="text-lg font-bold">{formatCurrency(Math.round(movCCTotals.debe))}</p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Total Haber</p>
-                  <p className="text-lg font-bold text-emerald-600">{formatCurrency(movCCTotals.haber)}</p>
+                  <p className="text-xs text-muted-foreground">Pagos</p>
+                  <p className="text-lg font-bold text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</p>
                 </div>
-                <div className={`rounded-lg border p-3 ${movCCTotals.saldo > 0 ? "bg-orange-50 border-orange-200" : "bg-emerald-50 border-emerald-200"}`}>
-                  <p className="text-xs text-muted-foreground">Saldo actual</p>
-                  <p className={`text-lg font-bold ${movCCTotals.saldo > 0 ? "text-orange-600" : "text-emerald-600"}`}>
-                    {movCCTotals.saldo > 0 ? formatCurrency(movCCTotals.saldo) : movCCTotals.saldo < 0 ? `${formatCurrency(Math.abs(movCCTotals.saldo))} a favor` : "$0"}
+                <div className={`rounded-lg border p-3 ${movCCTotals.saldo > 0 ? "bg-orange-50 border-orange-200" : movCCTotals.saldo < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
+                  <p className="text-xs text-muted-foreground">Saldo</p>
+                  <p className={`text-lg font-bold ${movCCTotals.saldo > 0 ? "text-orange-600" : movCCTotals.saldo < 0 ? "text-emerald-600" : ""}`}>
+                    {movCCTotals.saldo > 0 ? formatCurrency(Math.round(movCCTotals.saldo)) : movCCTotals.saldo < 0 ? `${formatCurrency(Math.round(Math.abs(movCCTotals.saldo)))} a favor` : "$0"}
                   </p>
                 </div>
               </div>
@@ -1329,7 +1329,7 @@ export default function ClientesPage() {
               {movCCTotals.saldo > 0 && movClient && (
                 <div className="flex justify-end mb-2">
                   <Button size="sm" variant="outline" onClick={() => openPayMov({ id: movClient.id, descripcion: "Saldo total", saldo_pendiente: movCCTotals.saldo, total: movCCTotals.saldo, pagado: 0 })}>
-                    <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar saldo ({formatCurrency(movCCTotals.saldo)})
+                    <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar ({formatCurrency(Math.round(movCCTotals.saldo))})
                   </Button>
                 </div>
               )}
@@ -1341,37 +1341,72 @@ export default function ClientesPage() {
                   <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">Sin movimientos en cuenta corriente</p>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2 px-2 font-medium">Fecha</th>
-                        <th className="text-left py-2 px-2 font-medium">Comprobante</th>
-                        <th className="text-left py-2 px-2 font-medium">Descripción</th>
-                        <th className="text-right py-2 px-2 font-medium">Debe</th>
-                        <th className="text-right py-2 px-2 font-medium">Haber</th>
-                        <th className="text-right py-2 px-2 font-medium">Saldo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {movCCRows.map((row, i) => (
-                        <tr key={row.id || i} className="border-b last:border-0 hover:bg-muted/50">
-                          <td className="py-2 px-2 text-muted-foreground">{new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                          <td className="py-2 px-2 text-xs font-mono">{row.comprobante}</td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{row.descripcion}</td>
-                          <td className="py-2 px-2 text-right font-medium">{row.debe > 0 ? formatCurrency(row.debe) : ""}</td>
-                          <td className="py-2 px-2 text-right font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(row.haber) : ""}</td>
-                          <td className={`py-2 px-2 text-right font-bold ${row.saldo > 0 ? "text-orange-600" : row.saldo < 0 ? "text-emerald-600" : ""}`}>
-                            {row.saldo > 0 ? formatCurrency(row.saldo) : row.saldo < 0 ? `${formatCurrency(Math.abs(row.saldo))} a favor` : "$0"}
+              ) : (() => {
+                // Clean up comprobante and descripcion for display
+                const cleanComprobante = (c: string) => {
+                  return c
+                    .replace(/#(\d{5})-(\d{8})/, (_, a, b) => `#${parseInt(b)}`)
+                    .replace(/^Cobro (saldo|deuda)\s*[-–]\s*/i, "Cobro ")
+                    .replace(/^RE\s+\d{4}-\d{2}-\d{2}$/, "Recibo");
+                };
+                const cleanDescripcion = (d: string) => {
+                  return d
+                    .replace(/\s*—\s*desde\s*(Punto de Venta|Clientes)/gi, "")
+                    .replace(/\s*\(Cuenta Corriente\)/gi, "")
+                    .replace(/Cobro saldo pendiente\s*/i, "Cobro saldo")
+                    .replace(/Venta\s*-\s*Cuenta Corriente\s*(\(parcial\))?/i, (_, p) => p ? "Venta CC (parcial)" : "Venta CC")
+                    .replace(/Ajuste por edición\s*\((aumento|reducción)\)/i, (_, t) => t === "aumento" ? "Ajuste (+)" : "Ajuste (-)");
+                };
+
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b-2 border-foreground/20">
+                          <th className="text-left py-2 px-2 font-semibold text-xs uppercase tracking-wider">Fecha</th>
+                          <th className="text-left py-2 px-2 font-semibold text-xs uppercase tracking-wider">Detalle</th>
+                          <th className="text-right py-2 px-2 font-semibold text-xs uppercase tracking-wider">Debe</th>
+                          <th className="text-right py-2 px-2 font-semibold text-xs uppercase tracking-wider">Haber</th>
+                          <th className="text-right py-2 px-2 font-semibold text-xs uppercase tracking-wider">Saldo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {movCCRows.map((row, i) => {
+                          const prevDate = i > 0 ? movCCRows[i - 1].fecha : null;
+                          const isNewDate = row.fecha !== prevDate;
+                          const saldoRounded = Math.round(row.saldo);
+                          return (
+                            <tr key={row.id || i} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t-2 border-t-muted" : ""}`}>
+                              <td className="py-2.5 px-2 text-muted-foreground text-xs tabular-nums">
+                                {isNewDate ? new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
+                              </td>
+                              <td className="py-2.5 px-2">
+                                <div className="text-xs font-medium">{cleanComprobante(row.comprobante)}</div>
+                                <div className="text-[11px] text-muted-foreground">{cleanDescripcion(row.descripcion)}</div>
+                              </td>
+                              <td className="py-2.5 px-2 text-right tabular-nums font-medium">{row.debe > 0 ? formatCurrency(Math.round(row.debe)) : ""}</td>
+                              <td className="py-2.5 px-2 text-right tabular-nums font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(Math.round(row.haber)) : ""}</td>
+                              <td className={`py-2.5 px-2 text-right tabular-nums font-bold ${saldoRounded > 0 ? "text-orange-600" : saldoRounded < 0 ? "text-emerald-600" : ""}`}>
+                                {saldoRounded > 0 ? formatCurrency(saldoRounded) : saldoRounded < 0 ? `${formatCurrency(Math.abs(saldoRounded))} a favor` : "$0"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-foreground/20 font-bold text-xs">
+                          <td className="py-2 px-2" colSpan={2}>TOTALES</td>
+                          <td className="py-2 px-2 text-right tabular-nums">{formatCurrency(Math.round(movCCTotals.debe))}</td>
+                          <td className="py-2 px-2 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</td>
+                          <td className={`py-2 px-2 text-right tabular-nums ${movCCTotals.saldo > 0 ? "text-orange-600" : movCCTotals.saldo < 0 ? "text-emerald-600" : ""}`}>
+                            {movCCTotals.saldo > 0 ? formatCurrency(Math.round(movCCTotals.saldo)) : movCCTotals.saldo < 0 ? `${formatCurrency(Math.round(Math.abs(movCCTotals.saldo)))} a favor` : "$0"}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="text-xs text-muted-foreground mt-2 text-right">{movCCRows.length} movimiento(s)</div>
-                </div>
-              )}
+                      </tfoot>
+                    </table>
+                  </div>
+                );
+              })()}
             </TabsContent>
           </Tabs>
         </DialogContent>
