@@ -1442,6 +1442,9 @@ export default function VentasPage() {
           });
         }
 
+        // Capture saldo BEFORE cobrarSaldo modifies it (for the receipt)
+        const saldoAntesDeVenta = selectedClient?.saldo || 0;
+
         // Collect pending balance if toggled
         // Re-read saldo from DB to avoid stale state after Mixto CC update
         if (cobrarSaldo && clientId && selectedClient) {
@@ -1476,13 +1479,14 @@ export default function VentasPage() {
           }
         }
 
-        // Capture sale data before reset (selectedClient.saldo is already updated by cobrarSaldo above)
-        const saldoAnterior = selectedClient?.saldo || 0;
+        // Use saldo captured BEFORE cobrarSaldo ran
+        const saldoAnterior = saldoAntesDeVenta;
+        const saldoDespuesCobro = selectedClient?.saldo || 0;
         const saldoNuevo = formaPago === "Cuenta Corriente"
-          ? saldoAnterior + total
+          ? saldoDespuesCobro + total
           : formaPago === "Mixto" && mixtoCuentaCorriente > 0
-          ? saldoAnterior + mixtoCuentaCorriente
-          : saldoAnterior;
+          ? saldoDespuesCobro + mixtoCuentaCorriente
+          : saldoDespuesCobro;
         const saleData = {
           numero,
           total,
