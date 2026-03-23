@@ -133,6 +133,7 @@ export default function ProductosPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductoWithRelations | null>(null);
   const [priceHistory, setPriceHistory] = useState<{ id: string; precio_anterior: number; precio_nuevo: number; costo_anterior: number; costo_nuevo: number; usuario: string; created_at: string }[]>([]);
+  const [productDiscounts, setProductDiscounts] = useState<any[]>([]);
   const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -517,6 +518,21 @@ export default function ProductosPage() {
       .order("created_at", { ascending: false })
       .limit(20);
     setPriceHistory((phData || []) as any);
+
+    // Load active discounts that apply to this product
+    const { data: allDesc } = await supabase
+      .from("descuentos")
+      .select("*")
+      .eq("activo", true)
+      .gte("fecha_fin", new Date().toISOString().split("T")[0]);
+    const applicableDiscounts = (allDesc || []).filter((d: any) => {
+      if (d.aplica_a === "todos") return true;
+      if (d.aplica_a === "productos" && (d.productos_ids || []).includes(p.id)) return true;
+      if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(p.categoria_id)) return true;
+      if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(p.subcategoria_id)) return true;
+      return false;
+    });
+    setProductDiscounts(applicableDiscounts);
 
     setDialogOpen(true);
   };
@@ -2157,70 +2173,63 @@ export default function ProductosPage() {
               </div>
             </div>
 
-            {/* Section 3: Pricing & Stock - one row */}
-            <div>
-              <h3 className="text-sm font-medium mb-3 text-muted-foreground">Precios e Inventario</h3>
-              <div className="grid grid-cols-7 gap-3 items-end">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Costo</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={form.costo}
-                    onChange={(e) => {
-                      const newCosto = Math.max(0, Number(e.target.value));
-                      const oldCosto = form.costo || 0;
-                      // Recalculate precio maintaining margin
-                      let newPrecio = form.precio;
-                      if (oldCosto > 0) {
-                        const margin = (form.precio - oldCosto) / oldCosto;
-                        newPrecio = Math.round(newCosto * (1 + margin));
-                      }
-                      setForm({ ...form, costo: newCosto, precio: newPrecio });
-                      // Sync presentaciones: update costo + recalc precios proportionally
-                      const priceRatio = form.precio > 0 ? newPrecio / form.precio : 1;
-                      setPresentaciones((prev) =>
-                        prev.map((p) => {
-                          if (p._deleted) return p;
-                          if (p.cantidad === 1) return { ...p, costo: newCosto, precio: newPrecio };
-                          return { ...p, costo: newCosto * p.cantidad, precio: Math.round(p.precio * priceRatio) };
-                        })
-                      );
-                    }}
-                    className="h-9"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Precio</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={form.precio}
-                    onChange={(e) => {
-                      const newPrecio = Math.max(0, Number(e.target.value));
-                      setForm({ ...form, precio: newPrecio });
-                      // Sync presentaciones: update unit row + recalc boxes
-                      setPresentaciones((prev) =>
-                        prev.map((p) => {
-                          if (p._deleted) return p;
-                          if (p.cantidad === 1) return { ...p, precio: newPrecio };
-                          return { ...p, precio: newPrecio * p.cantidad };
-                        })
-                      );
-                    }}
-                    className="h-9"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Margen %</Label>
-                  {form.costo > 0 ? (
+            {/* Section 3: Pricing & Stock - redesigned */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-muted-foreground">Precios e Inventario</h3>
+
+              {/* Pricing row with visual cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="relative rounded-xl border-2 border-blue-100 bg-gradient-to-b from-blue-50/80 to-white p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-blue-600">C</span>
+                    </div>
+                    <Label className="text-xs font-semibold text-blue-700">Costo</Label>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                     <Input
                       type="number"
-                      step="0.1"
-                      value={Math.round(((form.precio - form.costo) / form.costo) * 1000) / 10}
+                      min="0"
+                      value={form.costo}
                       onChange={(e) => {
-                        const newMargen = Number(e.target.value);
-                        const newPrecio = Math.round(form.costo * (1 + newMargen / 100));
+                        const newCosto = Math.max(0, Number(e.target.value));
+                        const oldCosto = form.costo || 0;
+                        let newPrecio = form.precio;
+                        if (oldCosto > 0) {
+                          const margin = (form.precio - oldCosto) / oldCosto;
+                          newPrecio = Math.round(newCosto * (1 + margin));
+                        }
+                        setForm({ ...form, costo: newCosto, precio: newPrecio });
+                        const priceRatio = form.precio > 0 ? newPrecio / form.precio : 1;
+                        setPresentaciones((prev) =>
+                          prev.map((p) => {
+                            if (p._deleted) return p;
+                            if (p.cantidad === 1) return { ...p, costo: newCosto, precio: newPrecio };
+                            return { ...p, costo: newCosto * p.cantidad, precio: Math.round(p.precio * priceRatio) };
+                          })
+                        );
+                      }}
+                      className="h-10 pl-7 text-lg font-semibold bg-white/80"
+                    />
+                  </div>
+                </div>
+
+                <div className="relative rounded-xl border-2 border-emerald-100 bg-gradient-to-b from-emerald-50/80 to-white p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-emerald-600">$</span>
+                    </div>
+                    <Label className="text-xs font-semibold text-emerald-700">Precio venta</Label>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={form.precio}
+                      onChange={(e) => {
+                        const newPrecio = Math.max(0, Number(e.target.value));
                         setForm({ ...form, precio: newPrecio });
                         setPresentaciones((prev) =>
                           prev.map((p) => {
@@ -2230,85 +2239,157 @@ export default function ProductosPage() {
                           })
                         );
                       }}
-                      className="h-9 text-center"
+                      className="h-10 pl-7 text-lg font-semibold bg-white/80"
                     />
+                  </div>
+                </div>
+
+                <div className="relative rounded-xl border-2 border-violet-100 bg-gradient-to-b from-violet-50/80 to-white p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-violet-600">%</span>
+                    </div>
+                    <Label className="text-xs font-semibold text-violet-700">Margen</Label>
+                  </div>
+                  {form.costo > 0 ? (
+                    <>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={Math.round(((form.precio - form.costo) / form.costo) * 1000) / 10}
+                          onChange={(e) => {
+                            const newMargen = Number(e.target.value);
+                            const newPrecio = Math.round(form.costo * (1 + newMargen / 100));
+                            setForm({ ...form, precio: newPrecio });
+                            setPresentaciones((prev) =>
+                              prev.map((p) => {
+                                if (p._deleted) return p;
+                                if (p.cantidad === 1) return { ...p, precio: newPrecio };
+                                return { ...p, precio: newPrecio * p.cantidad };
+                              })
+                            );
+                          }}
+                          className="h-10 pr-7 text-lg font-semibold text-center bg-white/80"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                      </div>
+                      <p className={`text-[11px] text-center font-medium ${(form.precio - form.costo) >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                        Ganancia: {formatCurrency(form.precio - form.costo)}
+                      </p>
+                    </>
                   ) : (
-                    <div className="flex items-center justify-center h-9 rounded-md text-xs bg-muted text-muted-foreground">---</div>
+                    <div className="flex items-center justify-center h-10 rounded-md text-sm bg-white/50 text-muted-foreground border">
+                      Ingresá costo
+                    </div>
                   )}
                 </div>
-                {/* Price History */}
-                {editingProduct && priceHistory.length > 0 && (
-                  <div className="col-span-4 border rounded-lg p-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Historial de precios ({priceHistory.length})</p>
-                    <div className="max-h-24 overflow-y-auto">
+              </div>
+
+              {/* Stock row */}
+              <div className="grid grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Stock actual</Label>
+                  {editingProduct && (editingProduct as any).es_combo ? (
+                    <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">Auto (combo)</div>
+                  ) : (
+                    <Input type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: Math.max(0, Number(e.target.value)) })} className="h-9" />
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Mínimo</Label>
+                  <Input type="number" min="0" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: Math.max(0, Number(e.target.value)) })} className="h-9" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Máximo</Label>
+                  <Input type="number" min="0" value={form.stock_maximo} onChange={(e) => setForm({ ...form, stock_maximo: Math.max(0, Number(e.target.value)) })} className="h-9" />
+                </div>
+                <div className="flex items-end">
+                  {form.stock > 0 && form.stock <= form.stock_minimo && (
+                    <div className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 w-full">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Stock bajo
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Price History - collapsible */}
+              {editingProduct && priceHistory.length > 0 && (
+                <details className="group border rounded-lg">
+                  <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 transition rounded-lg">
+                    <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">Historial de precios</span>
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{priceHistory.length}</Badge>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto transition group-open:rotate-180" />
+                  </summary>
+                  <div className="px-3 pb-2">
+                    <div className="max-h-28 overflow-y-auto">
                       <table className="w-full text-[11px]">
                         <thead><tr className="text-muted-foreground border-b">
-                          <th className="text-left py-0.5 px-1">Fecha</th>
-                          <th className="text-right py-0.5 px-1">Precio ant.</th>
-                          <th className="text-right py-0.5 px-1">Precio nuevo</th>
-                          <th className="text-right py-0.5 px-1">Costo ant.</th>
-                          <th className="text-right py-0.5 px-1">Costo nuevo</th>
+                          <th className="text-left py-1 px-1">Fecha</th>
+                          <th className="text-right py-1 px-1">Precio ant.</th>
+                          <th className="text-right py-1 px-1">Precio nuevo</th>
+                          <th className="text-right py-1 px-1">Costo ant.</th>
+                          <th className="text-right py-1 px-1">Costo nuevo</th>
                         </tr></thead>
                         <tbody>
                           {priceHistory.map((h) => (
-                            <tr key={h.id} className="border-b last:border-0">
-                              <td className="py-0.5 px-1 text-muted-foreground">{new Date(h.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" })}</td>
-                              <td className="py-0.5 px-1 text-right">{formatCurrency(h.precio_anterior)}</td>
-                              <td className="py-0.5 px-1 text-right font-medium">{formatCurrency(h.precio_nuevo)}</td>
-                              <td className="py-0.5 px-1 text-right">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "—"}</td>
-                              <td className="py-0.5 px-1 text-right">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "—"}</td>
+                            <tr key={h.id} className="border-b last:border-0 hover:bg-muted/30">
+                              <td className="py-1 px-1 text-muted-foreground">{new Date(h.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" })}</td>
+                              <td className="py-1 px-1 text-right">{formatCurrency(h.precio_anterior)}</td>
+                              <td className="py-1 px-1 text-right font-medium">{formatCurrency(h.precio_nuevo)}</td>
+                              <td className="py-1 px-1 text-right">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "—"}</td>
+                              <td className="py-1 px-1 text-right">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "—"}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Stock</Label>
-                  {editingProduct && (editingProduct as any).es_combo ? (
-                    <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">
-                      Automático (combo)
-                    </div>
-                  ) : (
-                    <Input
-                      type="number"
-                      min="0"
-                      value={form.stock}
-                      onChange={(e) => setForm({ ...form, stock: Math.max(0, Number(e.target.value)) })}
-                      className="h-9"
-                    />
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Min</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={form.stock_minimo}
-                    onChange={(e) => setForm({ ...form, stock_minimo: Math.max(0, Number(e.target.value)) })}
-                    className="h-9"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Max</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={form.stock_maximo}
-                    onChange={(e) => setForm({ ...form, stock_maximo: Math.max(0, Number(e.target.value)) })}
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  {form.stock > 0 && form.stock <= form.stock_minimo && (
-                    <div className="flex items-center gap-1 text-[10px] text-orange-600 bg-orange-50 rounded-md px-2 py-1.5 h-9">
-                      <AlertTriangle className="w-3 h-3 shrink-0" />
-                      Stock bajo
-                    </div>
-                  )}
-                </div>
-              </div>
+                </details>
+              )}
+
+              {/* Active Discounts for this product */}
+              {editingProduct && (
+                <details className="group border rounded-lg" open={productDiscounts.length > 0}>
+                  <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 transition rounded-lg">
+                    <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">Descuentos activos</span>
+                    {productDiscounts.length > 0 && (
+                      <Badge className="text-[10px] h-4 px-1.5 bg-green-100 text-green-700 hover:bg-green-100">{productDiscounts.length}</Badge>
+                    )}
+                    <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto transition group-open:rotate-180" />
+                  </summary>
+                  <div className="px-3 pb-3">
+                    {productDiscounts.length > 0 ? (
+                      <div className="space-y-2">
+                        {productDiscounts.map((d) => (
+                          <div key={d.id} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-green-600 text-white text-[10px] h-5 px-2">{d.porcentaje}%</Badge>
+                              <span className="text-xs font-medium">{d.nombre}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                              <span>{d.presentacion === "todas" ? "Todas las pres." : d.presentacion === "caja_cerrada" ? "Solo cajas" : "Solo unidad"}</span>
+                              {d.cantidad_minima && <span className="text-orange-600">Min: {d.cantidad_minima} un.</span>}
+                              <span>Hasta {new Date(d.fecha_fin).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}</span>
+                              <a href="/admin/productos/descuentos" target="_blank" className="text-primary hover:underline text-[10px]">Editar</a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 py-3">
+                        <p className="text-xs text-muted-foreground">No hay descuentos activos para este producto</p>
+                        <a href="/admin/productos/descuentos" target="_blank" className="text-xs text-primary hover:underline flex items-center gap-1">
+                          <Plus className="w-3 h-3" /> Crear descuento
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
 
               {/* Box summary */}
               {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).map((box, i) => {
@@ -2317,31 +2398,17 @@ export default function ProductosPage() {
                 const stockCajas = box.cantidad > 0 ? Math.floor(form.stock / box.cantidad) : 0;
                 const restoUnidades = box.cantidad > 0 ? form.stock % box.cantidad : form.stock;
                 return (
-                  <div key={i} className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                    <p className="text-xs font-semibold text-emerald-700 mb-2">{box.nombre}</p>
+                  <div key={i} className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Box className="w-3.5 h-3.5 text-emerald-600" />
+                      <p className="text-xs font-semibold text-emerald-700">{box.nombre}</p>
+                    </div>
                     <div className="grid grid-cols-5 gap-3 text-xs">
-                      <div>
-                        <span className="text-muted-foreground">Costo caja</span>
-                        <p className="font-semibold">{formatCurrency(box.costo)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Precio caja</span>
-                        <p className="font-semibold">{formatCurrency(box.precio)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Margen</span>
-                        <p className={`font-semibold ${boxGanancia >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                          {box.costo > 0 ? `${boxMargen.toFixed(1)}%` : "—"} ({formatCurrency(boxGanancia)})
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Stock en cajas</span>
-                        <p className="font-semibold">{stockCajas} {stockCajas === 1 ? "caja" : "cajas"}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Sueltas</span>
-                        <p className="font-semibold">{restoUnidades} un.</p>
-                      </div>
+                      <div><span className="text-muted-foreground block">Costo</span><p className="font-semibold">{formatCurrency(box.costo)}</p></div>
+                      <div><span className="text-muted-foreground block">Precio</span><p className="font-semibold">{formatCurrency(box.precio)}</p></div>
+                      <div><span className="text-muted-foreground block">Margen</span><p className={`font-semibold ${boxGanancia >= 0 ? "text-emerald-700" : "text-red-600"}`}>{box.costo > 0 ? `${boxMargen.toFixed(1)}%` : "—"}</p></div>
+                      <div><span className="text-muted-foreground block">Cajas</span><p className="font-semibold">{stockCajas}</p></div>
+                      <div><span className="text-muted-foreground block">Sueltas</span><p className="font-semibold">{restoUnidades} un.</p></div>
                     </div>
                   </div>
                 );
