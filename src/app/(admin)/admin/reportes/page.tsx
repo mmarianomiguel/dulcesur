@@ -219,26 +219,24 @@ export default function ReportesPage() {
     return a + (precioVenta - costoU * unidadesPres) * item.cantidad;
   }, 0), [ventaItems]);
 
-  // Split Mixto into Efectivo + Transferencia using caja_movimientos
+  // Split Mixto into Efectivo + Transferencia + CC using caja_movimientos
   const ventasPorPago = useMemo(() => {
     const map: Record<string, number> = {};
     ventas.forEach((v) => {
       if (v.forma_pago === "Mixto") {
-        // Mixto movements are already split in caja_movimientos
-        // We'll use the cajaMovimientos data if available, otherwise show as Mixto
         const movs = cajaMovimientos.filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta");
         if (movs.length > 0) {
           movs.forEach((m) => {
             map[m.metodo_pago] = (map[m.metodo_pago] || 0) + m.monto;
           });
-          // Check if there's a CC portion not in caja_movimientos
           const movsTotal = movs.reduce((a, m) => a + m.monto, 0);
           const ccPart = v.total - movsTotal;
           if (ccPart > 0) {
             map["Cuenta Corriente"] = (map["Cuenta Corriente"] || 0) + ccPart;
           }
         } else {
-          map["Mixto"] = (map["Mixto"] || 0) + v.total;
+          // No caja data — fallback to Efectivo (not "Mixto")
+          map["Efectivo"] = (map["Efectivo"] || 0) + v.total;
         }
       } else {
         map[v.forma_pago] = (map[v.forma_pago] || 0) + v.total;

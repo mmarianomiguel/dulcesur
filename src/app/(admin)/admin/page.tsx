@@ -319,25 +319,27 @@ export default function DashboardPage() {
     setVentasPeriodo(salesTotal);
     setTicketsPeriodo((periodSales || []).length);
 
-    // Split Mixto into Efectivo+Transferencia using caja_movimientos
+    // Split Mixto into Efectivo+Transferencia+CC using caja_movimientos + cuenta_corriente
     const mixtoIds = (periodSales || []).filter((v) => v.forma_pago === "Mixto").map((v) => v.id);
     let mixtoMovs: { referencia_id: string; metodo_pago: string; monto: number }[] = [];
+    let mixtoCCData: { venta_id: string; debe: number }[] = [];
     if (mixtoIds.length > 0) {
-      const { data: movs } = await supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds);
+      const [{ data: movs }, { data: ccRows }] = await Promise.all([
+        supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds),
+        supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds),
+      ]);
       mixtoMovs = (movs || []) as any[];
+      mixtoCCData = (ccRows || []) as any[];
     }
     const paymentMap: Record<string, number> = {};
     (periodSales || []).forEach((v) => {
       if (v.forma_pago === "Mixto") {
         const movs = mixtoMovs.filter((m) => m.referencia_id === v.id);
-        if (movs.length > 0) {
-          movs.forEach((m) => { paymentMap[m.metodo_pago] = (paymentMap[m.metodo_pago] || 0) + m.monto; });
-          const movsTotal = movs.reduce((a, m) => a + m.monto, 0);
-          const ccPart = v.total - movsTotal;
-          if (ccPart > 0) paymentMap["Cuenta Corriente"] = (paymentMap["Cuenta Corriente"] || 0) + ccPart;
-        } else {
-          paymentMap["Mixto"] = (paymentMap["Mixto"] || 0) + v.total;
-        }
+        const ccParts = mixtoCCData.filter((c) => c.venta_id === v.id);
+        let desglosado = false;
+        movs.forEach((m) => { paymentMap[m.metodo_pago] = (paymentMap[m.metodo_pago] || 0) + m.monto; desglosado = true; });
+        ccParts.forEach((c) => { if (c.debe > 0) { paymentMap["Cuenta Corriente"] = (paymentMap["Cuenta Corriente"] || 0) + c.debe; desglosado = true; } });
+        if (!desglosado) paymentMap["Efectivo"] = (paymentMap["Efectivo"] || 0) + v.total;
       } else {
         paymentMap[v.forma_pago] = (paymentMap[v.forma_pago] || 0) + v.total;
       }
