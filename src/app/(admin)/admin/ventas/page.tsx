@@ -531,6 +531,14 @@ export default function VentasPage() {
     setProductSearch("");
   };
 
+  const updateItemDiscount = (id: string, discount: number) => {
+    setItems((prev) => prev.map((i) => {
+      if (i.id !== id) return i;
+      const d = Math.max(0, Math.min(100, discount));
+      return { ...i, discount: d, subtotal: i.price * i.qty * (1 - d / 100) };
+    }));
+  };
+
   const removeItem = (id: string) => {
     setItems((prev) => {
       const newItems = prev.filter((i) => i.id !== id);
@@ -1846,7 +1854,7 @@ export default function VentasPage() {
                             );
                           })()}
                         </div>
-                        <div className="text-right w-16 lg:w-24 shrink-0">
+                        <div className="text-right w-20 lg:w-28 shrink-0">
                           <p className="text-xs lg:text-sm font-semibold">{formatCurrency(item.subtotal)}</p>
                           <p className="text-[10px] lg:text-xs text-muted-foreground">{formatCurrency(item.price)} c/u</p>
                           {item.es_combo && item.comboItems && item.comboItems.length > 0 && (() => {
@@ -1858,6 +1866,20 @@ export default function VentasPage() {
                           {!item.es_combo && item.unidades_por_presentacion > 1 && (
                             <p className="text-[9px] lg:text-[10px] text-emerald-600">{formatCurrency(item.price / item.unidades_por_presentacion)} x unidad</p>
                           )}
+                          {/* Descuento inline */}
+                          <div className="flex items-center justify-end gap-0.5 mt-1" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[10px] text-muted-foreground">Dto.</span>
+                            <Input
+                              type="number"
+                              value={item.discount || ""}
+                              onChange={(e) => updateItemDiscount(item.id, Number(e.target.value))}
+                              className={`w-10 h-5 text-[10px] text-center p-0 ${item.discount > 0 ? "border-orange-400 text-orange-600 font-semibold" : ""}`}
+                              min={0}
+                              max={100}
+                              placeholder="0"
+                            />
+                            <span className="text-[10px] text-muted-foreground">%</span>
+                          </div>
                         </div>
                         <Button
                           variant="ghost"
