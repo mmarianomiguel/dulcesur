@@ -1452,10 +1452,9 @@ export default function VentasPage() {
         }
 
         // Collect pending balance if toggled
-        // Re-read saldo from DB to avoid stale state after Mixto CC update
-        if (cobrarSaldo && clientId && selectedClient) {
-          const { data: freshClient } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-          const saldoActualDB = freshClient?.saldo ?? selectedClient.saldo;
+        // Collect ONLY the pre-existing debt (not what was just added by this sale's CC)
+        if (cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
+          const saldoActualDB = saldoRealAntesDeTodo;
           if (saldoActualDB > 0) {
             const saldoPendiente = saldoActualDB;
             await supabase.from("caja_movimientos").insert({
@@ -1468,18 +1467,21 @@ export default function VentasPage() {
               referencia_id: venta.id,
               referencia_tipo: "venta",
             });
+            // Re-read current DB saldo (may include new CC from this sale)
+            const { data: freshAfterCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+            const saldoDBNow = freshAfterCC?.saldo ?? saldoActualDB;
+            const newSaldoAfterCobro = saldoDBNow - saldoPendiente;
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
               comprobante: `Cobro saldo - Venta #${numero}`,
-              descripcion: `Cobro saldo pendiente (${formaPago === "Mixto" ? "Efectivo" : formaPago}) — desde Punto de Venta`,
+              descripcion: `Cobro saldo anterior (${formaPago === "Mixto" ? "Efectivo" : formaPago})`,
               debe: 0,
               haber: saldoPendiente,
-              saldo: 0,
+              saldo: newSaldoAfterCobro,
               forma_pago: formaPago === "Mixto" ? "Efectivo" : formaPago,
               venta_id: venta.id,
             });
-            const newSaldoAfterCobro = saldoActualDB - saldoPendiente;
             await supabase.from("clientes").update({ saldo: newSaldoAfterCobro }).eq("id", clientId);
             selectedClient.saldo = newSaldoAfterCobro;
           }
@@ -1491,9 +1493,9 @@ export default function VentasPage() {
           : 0;
         const saldoAnterior = saldoRealAntesDeTodo;
         const totalAdeudado = saldoAnterior + ccEnEstaVenta;
-        // cobrarSaldo amount (captured from the block above)
+        // cobrarSaldo only collects the PRE-EXISTING debt, not what was just added
         const montoCobroSaldo = cobrarSaldo && clientId && saldoRealAntesDeTodo > 0
-          ? totalAdeudado  // cobrarSaldo collected everything (old + new CC)
+          ? saldoRealAntesDeTodo
           : 0;
         // Re-read final saldo from DB
         let saldoFinal = saldoRealAntesDeTodo;

@@ -33,7 +33,10 @@ import {
   History,
   FileText,
   AlertCircle,
+  Download,
+  Loader2,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 import { formatCurrency, formatDateARG, todayARG } from "@/lib/formatters";
 import type { Proveedor, Compra, PagoProveedor, CuentaCorrienteProveedor } from "@/types/database";
@@ -433,89 +436,137 @@ export default function ProveedoresPage() {
       <Dialog open={ccDialog.open} onOpenChange={ccDialog.setOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Cuenta Corriente - {ccDialog.data?.nombre}</DialogTitle></DialogHeader>
-          {ccDialog.data && (
-            <div className="space-y-3 mt-2">
-              <div className="flex items-end gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Desde</Label>
-                  <Input type="date" value={ccDesde} onChange={(e) => setCcDesde(e.target.value)} className="h-8 text-sm" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Hasta</Label>
-                  <Input type="date" value={ccHasta} onChange={(e) => setCcHasta(e.target.value)} className="h-8 text-sm" />
-                </div>
-                <Button size="sm" className="h-8" onClick={() => ccDialog.data && fetchCuentaCorriente(ccDialog.data.id, ccDesde, ccHasta)}>
-                  <Search className="w-3.5 h-3.5 mr-1" />Filtrar
-                </Button>
-              </div>
+          {ccDialog.data && (() => {
+            const fmtSaldo = (v: number) => v > 0 ? formatCurrency(v) : v < 0 ? `${formatCurrency(Math.abs(v))} a favor` : "$0";
+            const saldoColor = (v: number) => v > 0 ? "text-orange-600" : v < 0 ? "text-emerald-600" : "";
+            const cleanDesc = (d: string) => d
+              .replace(/\s*-\s*([\w\s]+)$/i, "")
+              .replace(/Compra\s+(\d{5})-(\d{8})/i, (_, _a, b) => `Compra #${parseInt(b)}`)
+              .replace(/Pago\s+(Efectivo|Transferencia)/i, (_, m) => `Pago ${m}`);
+            const saldoAct = Math.round(ccTotals.saldo);
+            const exportExcel = () => {
+              if (!ccDialog.data || ccMovimientos.length === 0) return;
+              const rows = ccMovimientos.map((m) => ({
+                Fecha: formatDateARG(m.fecha),
+                Tipo: m.tipo === "compra" ? "Compra" : m.tipo === "pago" ? "Pago" : "Ajuste",
+                Descripcion: cleanDesc(m.descripcion),
+                Debe: m.tipo === "compra" ? Math.round(m.monto) : "",
+                Haber: m.tipo === "pago" ? Math.round(m.monto) : "",
+                Saldo: Math.round(m.saldo_resultante),
+              }));
+              const ws = XLSX.utils.json_to_sheet(rows);
+              ws["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, "Cuenta Corriente");
+              XLSX.writeFile(wb, `CC_${ccDialog.data!.nombre.replace(/\s/g, "_")}_${todayARG()}.xlsx`);
+            };
+            const totalDebe = ccMovimientos.filter((m) => m.tipo === "compra").reduce((s, m) => s + m.monto, 0);
+            const totalHaber = ccMovimientos.filter((m) => m.tipo === "pago").reduce((s, m) => s + m.monto, 0);
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Total Debe</p>
-                  <p className="text-lg font-bold">{formatCurrency(ccTotals.debe)}</p>
+            return (
+              <div className="space-y-3 mt-2">
+                <div className="flex items-end gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Desde</Label>
+                    <Input type="date" value={ccDesde} onChange={(e) => setCcDesde(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Hasta</Label>
+                    <Input type="date" value={ccHasta} onChange={(e) => setCcHasta(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                  <Button size="sm" className="h-8" onClick={() => ccDialog.data && fetchCuentaCorriente(ccDialog.data.id, ccDesde, ccHasta)}>
+                    <Search className="w-3.5 h-3.5 mr-1" />Filtrar
+                  </Button>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Total Haber</p>
-                  <p className="text-lg font-bold text-emerald-600">{formatCurrency(ccTotals.haber)}</p>
-                </div>
-                <div className={`rounded-lg border p-3 ${ccTotals.saldo > 0 ? "bg-orange-50 border-orange-200" : "bg-emerald-50 border-emerald-200"}`}>
-                  <p className="text-xs text-muted-foreground">Saldo actual</p>
-                  <p className={`text-lg font-bold ${ccTotals.saldo > 0 ? "text-orange-600" : "text-emerald-600"}`}>
-                    {ccTotals.saldo > 0 ? formatCurrency(ccTotals.saldo) : "$0"}
-                  </p>
-                </div>
-              </div>
 
-              {ccMovimientos.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No hay movimientos en cuenta corriente</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-background">
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2 px-2 font-medium">Fecha</th>
-                        <th className="text-left py-2 px-2 font-medium">Tipo</th>
-                        <th className="text-left py-2 px-2 font-medium">Descripción</th>
-                        <th className="text-right py-2 px-2 font-medium">Debe</th>
-                        <th className="text-right py-2 px-2 font-medium">Haber</th>
-                        <th className="text-right py-2 px-2 font-medium">Saldo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ccMovimientos.map((mov) => (
-                        <tr key={mov.id} className="border-b last:border-0 hover:bg-muted/50">
-                          <td className="py-2 px-2 text-muted-foreground text-xs">{formatDateARG(mov.fecha)}</td>
-                          <td className="py-2 px-2">
-                            <Badge
-                              variant={mov.tipo === "compra" ? "destructive" : mov.tipo === "pago" ? "default" : "secondary"}
-                              className="text-xs font-normal"
-                            >
-                              {mov.tipo === "compra" ? "Compra" : mov.tipo === "pago" ? "Pago" : "Ajuste"}
-                            </Badge>
-                          </td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{mov.descripcion}</td>
-                          <td className="py-2 px-2 text-right font-medium">
-                            {mov.tipo === "compra" ? formatCurrency(mov.monto) : ""}
-                          </td>
-                          <td className="py-2 px-2 text-right font-medium text-emerald-600">
-                            {mov.tipo === "pago" ? formatCurrency(mov.monto) : ""}
-                          </td>
-                          <td className={`py-2 px-2 text-right font-bold ${mov.saldo_resultante > 0 ? "text-orange-600" : "text-emerald-600"}`}>
-                            {mov.saldo_resultante > 0 ? formatCurrency(mov.saldo_resultante) : mov.saldo_resultante === 0 ? "$0" : formatCurrency(mov.saldo_resultante)}
-                          </td>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border p-2.5">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Débitos</p>
+                    <p className="text-base font-bold">{formatCurrency(Math.round(totalDebe))}</p>
+                  </div>
+                  <div className="rounded-lg border p-2.5">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Créditos</p>
+                    <p className="text-base font-bold text-emerald-600">{formatCurrency(Math.round(totalHaber))}</p>
+                  </div>
+                  <div className={`rounded-lg border p-2.5 ${saldoAct > 0 ? "bg-orange-50 border-orange-200" : saldoAct < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo actual</p>
+                    <p className={`text-base font-bold ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  {ccMovimientos.length > 0 && (
+                    <Button size="sm" variant="outline" onClick={exportExcel}>
+                      <Download className="w-3.5 h-3.5 mr-1" />Excel
+                    </Button>
+                  )}
+                  {saldoAct > 0 && (
+                    <Button size="sm" onClick={() => { ccDialog.onClose(); openPago(ccDialog.data!); }}>
+                      <DollarSign className="w-3.5 h-3.5 mr-1" />Registrar pago
+                    </Button>
+                  )}
+                </div>
+
+                {ccMovimientos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Sin movimientos en cuenta corriente</p>
+                ) : (
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
+                          <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-16">Tipo</th>
+                          <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
+                          <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
+                          <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
+                          <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="text-xs text-muted-foreground mt-2 text-right">{ccMovimientos.length} movimiento(s)</div>
-                </div>
-              )}
+                      </thead>
+                      <tbody>
+                        {ccMovimientos.map((mov, i) => {
+                          const prevDate = i > 0 ? ccMovimientos[i - 1].fecha : null;
+                          const isNewDate = mov.fecha !== prevDate;
+                          const sr = Math.round(mov.saldo_resultante);
+                          return (
+                            <tr key={mov.id} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
+                              <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
+                                {isNewDate ? new Date(mov.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
+                              </td>
+                              <td className="py-2 px-3">
+                                <Badge variant={mov.tipo === "compra" ? "destructive" : mov.tipo === "pago" ? "default" : "secondary"} className="text-[10px] font-normal px-1.5 py-0">
+                                  {mov.tipo === "compra" ? "FC" : mov.tipo === "pago" ? "RE" : "AJ"}
+                                </Badge>
+                              </td>
+                              <td className="py-2 px-3 text-xs text-muted-foreground">{cleanDesc(mov.descripcion)}</td>
+                              <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
+                                {mov.tipo === "compra" ? formatCurrency(Math.round(mov.monto)) : ""}
+                              </td>
+                              <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">
+                                {mov.tipo === "pago" ? formatCurrency(Math.round(mov.monto)) : ""}
+                              </td>
+                              <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${saldoColor(sr)}`}>{fmtSaldo(sr)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-muted/50 border-t font-bold text-xs">
+                          <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(totalDebe))}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(totalHaber))}</td>
+                          <td className={`py-2.5 px-3 text-right tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
 
-              <div className="flex justify-end pt-2">
-                <Button variant="outline" onClick={ccDialog.onClose}>Cerrar</Button>
+                <div className="flex justify-end pt-1">
+                  <Button variant="outline" size="sm" onClick={ccDialog.onClose}>Cerrar</Button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

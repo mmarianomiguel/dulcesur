@@ -138,7 +138,7 @@ export default function ClientesPage() {
   const [movDesde, setMovDesde] = useState("");
   const [movHasta, setMovHasta] = useState("");
   const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, totalComprado: 0 });
-  const [movCCTotals, setMovCCTotals] = useState({ debe: 0, haber: 0, saldo: 0 });
+  const [movCCTotals, setMovCCTotals] = useState({ debe: 0, haber: 0, saldo: 0, saldoInicial: 0 });
   const [movExpanded, setMovExpanded] = useState<string | null>(null);
   const [movTab, setMovTab] = useState<"compras" | "cc">("compras");
   // Payment from movimientos
@@ -377,6 +377,18 @@ export default function ClientesPage() {
     setMovTotals({ ventas: totalVentas, nc: totalNC, totalComprado: totalVentas - totalNC });
 
     // Tab Cuenta Corriente: extracto from cuenta_corriente table
+    // 1. Get saldo inicial: last movement BEFORE the period
+    const { data: prevData } = await supabase
+      .from("cuenta_corriente")
+      .select("saldo")
+      .eq("cliente_id", clienteId)
+      .lt("fecha", desde)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const saldoInicial = prevData && prevData.length > 0 ? (prevData[0].saldo || 0) : 0;
+
+    // 2. Get movements in period
     const { data: ccData } = await supabase
       .from("cuenta_corriente")
       .select("*")
@@ -401,9 +413,8 @@ export default function ClientesPage() {
 
     const totalDebe = ccRows.reduce((s: number, r: any) => s + r.debe, 0);
     const totalHaber = ccRows.reduce((s: number, r: any) => s + r.haber, 0);
-    // Get fresh saldo from client
     const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-    setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0 });
+    setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0, saldoInicial });
 
     setMovLoading(false);
   };
@@ -1309,102 +1320,146 @@ export default function ClientesPage() {
 
             {/* ══════ TAB CUENTA CORRIENTE ══════ */}
             <TabsContent value="cc" className="mt-3">
-              <div className="grid grid-cols-3 gap-3 mb-3">
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Cargos</p>
-                  <p className="text-lg font-bold">{formatCurrency(Math.round(movCCTotals.debe))}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Pagos</p>
-                  <p className="text-lg font-bold text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</p>
-                </div>
-                <div className={`rounded-lg border p-3 ${movCCTotals.saldo > 0 ? "bg-orange-50 border-orange-200" : movCCTotals.saldo < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
-                  <p className="text-xs text-muted-foreground">Saldo</p>
-                  <p className={`text-lg font-bold ${movCCTotals.saldo > 0 ? "text-orange-600" : movCCTotals.saldo < 0 ? "text-emerald-600" : ""}`}>
-                    {movCCTotals.saldo > 0 ? formatCurrency(Math.round(movCCTotals.saldo)) : movCCTotals.saldo < 0 ? `${formatCurrency(Math.round(Math.abs(movCCTotals.saldo)))} a favor` : "$0"}
-                  </p>
-                </div>
-              </div>
-
-              {movCCTotals.saldo > 0 && movClient && (
-                <div className="flex justify-end mb-2">
-                  <Button size="sm" variant="outline" onClick={() => openPayMov({ id: movClient.id, descripcion: "Saldo total", saldo_pendiente: movCCTotals.saldo, total: movCCTotals.saldo, pagado: 0 })}>
-                    <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar ({formatCurrency(Math.round(movCCTotals.saldo))})
-                  </Button>
-                </div>
-              )}
-
-              {movLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-              ) : movCCRows.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">Sin movimientos en cuenta corriente</p>
-                </div>
-              ) : (() => {
-                // Clean up comprobante and descripcion for display
+              {(() => {
+                // Helpers
+                const fmtSaldo = (v: number) => v > 0 ? formatCurrency(v) : v < 0 ? `${formatCurrency(Math.abs(v))} a favor` : "$0";
+                const saldoColor = (v: number) => v > 0 ? "text-orange-600" : v < 0 ? "text-emerald-600" : "";
                 const cleanComprobante = (c: string) => {
                   return c
-                    .replace(/#(\d{5})-(\d{8})/, (_, a, b) => `#${parseInt(b)}`)
-                    .replace(/^Cobro (saldo|deuda)\s*[-–]\s*/i, "Cobro ")
-                    .replace(/^RE\s+\d{4}-\d{2}-\d{2}$/, "Recibo");
+                    .replace(/Venta\s+#?/i, "FC ")
+                    .replace(/Edición Venta\s+#?/i, "AJ ")
+                    .replace(/Cobro (saldo|deuda)\s*[-–]\s*/i, "RE ")
+                    .replace(/^RE\s+\d{4}-\d{2}-\d{2}$/, "RE")
+                    .replace(/(\d{5})-(\d{8})/, (_, _a, b) => parseInt(b).toString().padStart(4, "0"));
                 };
                 const cleanDescripcion = (d: string) => {
                   return d
                     .replace(/\s*—\s*desde\s*(Punto de Venta|Clientes)/gi, "")
                     .replace(/\s*\(Cuenta Corriente\)/gi, "")
                     .replace(/Cobro saldo pendiente\s*/i, "Cobro saldo")
-                    .replace(/Venta\s*-\s*Cuenta Corriente\s*(\(parcial\))?/i, (_, p) => p ? "Venta CC (parcial)" : "Venta CC")
-                    .replace(/Ajuste por edición\s*\((aumento|reducción)\)/i, (_, t) => t === "aumento" ? "Ajuste (+)" : "Ajuste (-)");
+                    .replace(/Venta\s*-\s*Cuenta Corriente\s*(\(parcial\))?/i, (_, p) => p ? "Cta.Cte. (parcial)" : "Cta.Cte.")
+                    .replace(/Ajuste por edición\s*\((aumento|reducción)\)/i, (_, t) => t === "aumento" ? "Ajuste débito" : "Ajuste crédito")
+                    .replace(/\(saldo a favor aplicado:.*?\)/i, "");
+                };
+                const exportCCExcel = () => {
+                  if (!movClient || movCCRows.length === 0) return;
+                  const rows = movCCRows.map((r) => ({
+                    Fecha: new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR"),
+                    Comprobante: cleanComprobante(r.comprobante),
+                    Descripcion: cleanDescripcion(r.descripcion),
+                    Debe: r.debe > 0 ? Math.round(r.debe) : "",
+                    Haber: r.haber > 0 ? Math.round(r.haber) : "",
+                    Saldo: Math.round(r.saldo),
+                  }));
+                  const ws = XLSX.utils.json_to_sheet(rows);
+                  ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, "Cuenta Corriente");
+                  XLSX.writeFile(wb, `CC_${movClient.nombre.replace(/\s/g, "_")}_${todayARG()}.xlsx`);
                 };
 
+                const saldoIni = Math.round(movCCTotals.saldoInicial);
+                const saldoAct = Math.round(movCCTotals.saldo);
+
                 return (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b-2 border-foreground/20">
-                          <th className="text-left py-2 px-2 font-semibold text-xs uppercase tracking-wider">Fecha</th>
-                          <th className="text-left py-2 px-2 font-semibold text-xs uppercase tracking-wider">Detalle</th>
-                          <th className="text-right py-2 px-2 font-semibold text-xs uppercase tracking-wider">Debe</th>
-                          <th className="text-right py-2 px-2 font-semibold text-xs uppercase tracking-wider">Haber</th>
-                          <th className="text-right py-2 px-2 font-semibold text-xs uppercase tracking-wider">Saldo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {movCCRows.map((row, i) => {
-                          const prevDate = i > 0 ? movCCRows[i - 1].fecha : null;
-                          const isNewDate = row.fecha !== prevDate;
-                          const saldoRounded = Math.round(row.saldo);
-                          return (
-                            <tr key={row.id || i} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t-2 border-t-muted" : ""}`}>
-                              <td className="py-2.5 px-2 text-muted-foreground text-xs tabular-nums">
-                                {isNewDate ? new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
-                              </td>
-                              <td className="py-2.5 px-2">
-                                <div className="text-xs font-medium">{cleanComprobante(row.comprobante)}</div>
-                                <div className="text-[11px] text-muted-foreground">{cleanDescripcion(row.descripcion)}</div>
-                              </td>
-                              <td className="py-2.5 px-2 text-right tabular-nums font-medium">{row.debe > 0 ? formatCurrency(Math.round(row.debe)) : ""}</td>
-                              <td className="py-2.5 px-2 text-right tabular-nums font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(Math.round(row.haber)) : ""}</td>
-                              <td className={`py-2.5 px-2 text-right tabular-nums font-bold ${saldoRounded > 0 ? "text-orange-600" : saldoRounded < 0 ? "text-emerald-600" : ""}`}>
-                                {saldoRounded > 0 ? formatCurrency(saldoRounded) : saldoRounded < 0 ? `${formatCurrency(Math.abs(saldoRounded))} a favor` : "$0"}
-                              </td>
+                  <>
+                    {/* Summary */}
+                    <div className="grid grid-cols-4 gap-2 mb-3">
+                      <div className="rounded-lg border p-2.5">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo inicial</p>
+                        <p className={`text-base font-bold ${saldoColor(saldoIni)}`}>{fmtSaldo(saldoIni)}</p>
+                      </div>
+                      <div className="rounded-lg border p-2.5">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Débitos</p>
+                        <p className="text-base font-bold">{formatCurrency(Math.round(movCCTotals.debe))}</p>
+                      </div>
+                      <div className="rounded-lg border p-2.5">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Créditos</p>
+                        <p className="text-base font-bold text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</p>
+                      </div>
+                      <div className={`rounded-lg border p-2.5 ${saldoAct > 0 ? "bg-orange-50 border-orange-200" : saldoAct < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo actual</p>
+                        <p className={`text-base font-bold ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</p>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2 mb-2">
+                      {movCCRows.length > 0 && (
+                        <Button size="sm" variant="outline" onClick={exportCCExcel}>
+                          <Download className="w-3.5 h-3.5 mr-1" />Excel
+                        </Button>
+                      )}
+                      {movCCTotals.saldo > 0 && movClient && (
+                        <Button size="sm" onClick={() => openPayMov({ id: movClient.id, descripcion: "Saldo total", saldo_pendiente: movCCTotals.saldo, total: movCCTotals.saldo, pagado: 0 })}>
+                          <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar {formatCurrency(Math.round(movCCTotals.saldo))}
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Table */}
+                    {movLoading ? (
+                      <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                    ) : movCCRows.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">Sin movimientos en cuenta corriente</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto border rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-muted/50 border-b">
+                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
+                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Comp.</th>
+                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
+                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
+                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
+                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-foreground/20 font-bold text-xs">
-                          <td className="py-2 px-2" colSpan={2}>TOTALES</td>
-                          <td className="py-2 px-2 text-right tabular-nums">{formatCurrency(Math.round(movCCTotals.debe))}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</td>
-                          <td className={`py-2 px-2 text-right tabular-nums ${movCCTotals.saldo > 0 ? "text-orange-600" : movCCTotals.saldo < 0 ? "text-emerald-600" : ""}`}>
-                            {movCCTotals.saldo > 0 ? formatCurrency(Math.round(movCCTotals.saldo)) : movCCTotals.saldo < 0 ? `${formatCurrency(Math.round(Math.abs(movCCTotals.saldo)))} a favor` : "$0"}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody>
+                            {/* Saldo inicial row */}
+                            {saldoIni !== 0 && (
+                              <tr className="border-b bg-muted/20">
+                                <td className="py-2 px-3 text-xs text-muted-foreground" colSpan={5}>
+                                  <span className="italic">Saldo al inicio del período</span>
+                                </td>
+                                <td className={`py-2 px-3 text-right font-bold text-xs tabular-nums ${saldoColor(saldoIni)}`}>
+                                  {fmtSaldo(saldoIni)}
+                                </td>
+                              </tr>
+                            )}
+                            {movCCRows.map((row, i) => {
+                              const prevDate = i > 0 ? movCCRows[i - 1].fecha : null;
+                              const isNewDate = row.fecha !== prevDate;
+                              const sr = Math.round(row.saldo);
+                              return (
+                                <tr key={row.id || i} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
+                                  <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
+                                    {isNewDate ? new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
+                                  </td>
+                                  <td className="py-2 px-3 text-xs font-mono whitespace-nowrap">{cleanComprobante(row.comprobante)}</td>
+                                  <td className="py-2 px-3 text-xs text-muted-foreground">{cleanDescripcion(row.descripcion)}</td>
+                                  <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{row.debe > 0 ? formatCurrency(Math.round(row.debe)) : ""}</td>
+                                  <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(Math.round(row.haber)) : ""}</td>
+                                  <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${saldoColor(sr)}`}>{fmtSaldo(sr)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-muted/50 border-t font-bold text-xs">
+                              <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales del período</td>
+                              <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(movCCTotals.debe))}</td>
+                              <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</td>
+                              <td className={`py-2.5 px-3 text-right tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 );
               })()}
             </TabsContent>
