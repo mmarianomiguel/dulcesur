@@ -97,8 +97,8 @@ export interface ReceiptSale {
 }
 
 // Items per page (conservative to avoid overflow)
-const ITEMS_FIRST_PAGE = 22; // First page has header + client info
-const ITEMS_OTHER_PAGE = 28; // Other pages only have header
+const ITEMS_FIRST_PAGE = 25; // First page has header + client info
+const ITEMS_OTHER_PAGE = 32; // Other pages only have header
 
 export function ReceiptPrintView({
   sale,
@@ -113,6 +113,10 @@ export function ReceiptPrintView({
   const fsResumen = config.fontSizeResumen || config.fontSize + 6;
   const fmtCur = (v: number) =>
     new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+
+  // B&W friendly styles
+  const rowPad = "4px 5px";
+  const altRowBg = "#f0f0f0";
 
   // Split items into pages
   const pages: ReceiptLineItem[][] = [];
@@ -190,11 +194,11 @@ export function ReceiptPrintView({
     </>
   );
 
-  // Client info (only on first page)
+  // Client info (only on first page) — compact single block
   const ClientInfo = () => (
-    <div style={{ border: "1px solid #ccc", padding: "3px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.3" }}>
+    <div style={{ border: "1px solid #000", padding: "3px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.4" }}>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}{config.mostrarTelefono && sale.clienteTelefono && <span> · <span style={{ fontWeight: "bold" }}>Tel:</span> {sale.clienteTelefono}</span>}</span>
+        <span><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}{config.mostrarTelefono && sale.clienteTelefono && <span> · Tel: {sale.clienteTelefono}</span>}{sale.clienteCondicionIva && <span> · {sale.clienteCondicionIva}</span>}</span>
         {config.mostrarVendedor && (
           <span><span style={{ fontWeight: "bold" }}>Vendedor:</span> {sale.vendedor || (sale.tipoComprobante?.toLowerCase().includes("pedido web") || sale.tipoComprobante?.toLowerCase().includes("web") ? "Tienda Online" : "—")}</span>
         )}
@@ -215,15 +219,15 @@ export function ReceiptPrintView({
   const ItemsTable = ({ items, showContinue }: { items: ReceiptLineItem[]; showContinue?: boolean }) => (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fsProductos}px` }}>
       <thead>
-        <tr style={{ borderBottom: "2px solid #000", borderTop: "2px solid #000", background: "#f5f5f5" }}>
-          <th style={{ textAlign: "left", padding: "5px 4px", fontWeight: "bold" }}>Cant.</th>
-          <th style={{ textAlign: "left", padding: "5px 4px", fontWeight: "bold" }}>Producto</th>
-          <th style={{ textAlign: "center", padding: "5px 4px", fontWeight: "bold" }}>U/Med</th>
-          <th style={{ textAlign: "right", padding: "5px 4px", fontWeight: "bold", whiteSpace: "nowrap" }}>P.Unit.</th>
+        <tr style={{ borderBottom: "2px solid #000", borderTop: "2px solid #000" }}>
+          <th style={{ textAlign: "left", padding: rowPad, fontWeight: "bold" }}>Cant.</th>
+          <th style={{ textAlign: "left", padding: rowPad, fontWeight: "bold" }}>Producto</th>
+          <th style={{ textAlign: "center", padding: rowPad, fontWeight: "bold" }}>U/Med</th>
+          <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold", whiteSpace: "nowrap" }}>P.Unit.</th>
           {config.mostrarDescuento && (
-            <th style={{ textAlign: "right", padding: "5px 4px", fontWeight: "bold" }}>Dto.%</th>
+            <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold" }}>Dto.%</th>
           )}
-          <th style={{ textAlign: "right", padding: "5px 4px", fontWeight: "bold" }}>Importe</th>
+          <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold" }}>Importe</th>
         </tr>
       </thead>
       <tbody>
@@ -240,27 +244,27 @@ export function ReceiptPrintView({
                 ? item.price / item.unidades_por_presentacion
                 : item.price;
           return (
-            <tr key={i} style={{ borderBottom: "1px solid #ddd", background: i % 2 === 1 ? "#fafafa" : "transparent" }}>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
-              <td style={{ padding: "3px 4px", textAlign: "left" }}>
+            <tr key={i} style={{ borderBottom: "1px solid #ccc", background: i % 2 === 1 ? altRowBg : "transparent" }}>
+              <td style={{ padding: rowPad, textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
+              <td style={{ padding: rowPad, textAlign: "left" }}>
                 {item.es_combo && (
-                  <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", background: "#000", color: "#fff", padding: "1px 3px", borderRadius: "2px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
+                  <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", border: "1px solid #000", padding: "0 3px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
                 )}
                 {cleanDesc(item)}
                 {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
-                  <div style={{ fontSize: `${fsProductos - 3}px`, color: "#777", marginTop: "1px", lineHeight: "1.2" }}>
+                  <div style={{ fontSize: `${fsProductos - 3}px`, color: "#555", marginTop: "1px", lineHeight: "1.2" }}>
                     {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
                   </div>
                 )}
               </td>
-              <td style={{ padding: "3px 4px", textAlign: "center", color: "#555" }}>
+              <td style={{ padding: rowPad, textAlign: "center" }}>
                 {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : isBox ? `x${item.unidades_por_presentacion} un` : (item.unit === "Unidad" ? "Un" : item.unit) || "Un"}
               </td>
-              <td style={{ padding: "3px 4px", textAlign: "right" }}>{fmtCur(precioUnitario)}</td>
+              <td style={{ padding: rowPad, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtCur(precioUnitario)}</td>
               {config.mostrarDescuento && (
-                <td style={{ padding: "3px 4px", textAlign: "right", color: item.discount ? "#059669" : "#ccc" }}>{item.discount ? `−${item.discount}%` : "—"}</td>
+                <td style={{ padding: rowPad, textAlign: "right" }}>{item.discount ? `${item.discount}%` : ""}</td>
               )}
-              <td style={{ padding: "3px 4px", textAlign: "right", fontWeight: "600" }}>{fmtCur(item.subtotal)}</td>
+              <td style={{ padding: rowPad, textAlign: "right", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmtCur(item.subtotal)}</td>
             </tr>
           );
         })}
@@ -268,7 +272,7 @@ export function ReceiptPrintView({
       {showContinue && (
         <tfoot>
           <tr>
-            <td colSpan={config.mostrarDescuento ? 6 : 5} style={{ textAlign: "center", padding: "8px", fontSize: `${fsProductos - 1}px`, color: "#888", fontStyle: "italic", borderTop: "1px solid #ddd" }}>
+            <td colSpan={config.mostrarDescuento ? 6 : 5} style={{ textAlign: "center", padding: "6px", fontSize: `${fsProductos - 1}px`, fontStyle: "italic", borderTop: "1px solid #000" }}>
               Continúa en la siguiente página...
             </td>
           </tr>
@@ -277,130 +281,100 @@ export function ReceiptPrintView({
     </table>
   );
 
-  // Totals + Payment section (only on last page)
+  // Totals + Payment section (only on last page) — compact, B&W friendly
   const TotalsAndPayment = () => {
     const fs = config.fontSize;
-    const row = (label: string, value: string, bold = false, color?: string) => (
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "2px", fontWeight: bold ? "bold" : "normal", fontSize: `${fs}px` }}>
-        <span style={{ color: "#555" }}>{label}</span>
-        <span style={{ minWidth: "100px", textAlign: "right", color: color || "#000" }}>{value}</span>
-      </div>
-    );
-    const separator = () => <div style={{ borderTop: "1px solid #ccc", margin: "4px 0", marginLeft: "auto", width: "320px" }} />;
-
-    const totalAhorro = sale.descuento > 0 ? sale.descuento : sale.items.filter(i => i.discount > 0).reduce((a, i) => a + (i.price * i.qty * i.discount / 100), 0);
     const showDesglose = sale.formaPago === "Mixto" || sale.pagoEfectivo || sale.pagoTransferencia || sale.pagoCuentaCorriente;
     const showVuelto = config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0;
     const showSaldo = sale.saldoNuevo !== 0 || sale.saldoAnterior !== 0 || (sale.pagoCuentaCorriente ?? 0) > 0;
     const totalPagado = (sale.pagoEfectivo || 0) + (sale.pagoTransferencia || 0);
-    const showPaymentSection = showDesglose || showVuelto || showSaldo || totalAhorro > 0;
+    const hasPaymentOrCC = showDesglose || showVuelto || showSaldo;
+
+    // Build payment parts as inline text
+    const paymentParts: string[] = [];
+    if (showDesglose) {
+      if (sale.pagoEfectivo != null && sale.pagoEfectivo > 0) paymentParts.push(`Efectivo ${fmtCur(Math.round(sale.pagoEfectivo))}`);
+      if (sale.pagoTransferencia != null && sale.pagoTransferencia > 0) {
+        let t = `Transf. ${fmtCur(Math.round(sale.pagoTransferencia))}`;
+        if (sale.transferSurcharge > 0) t += ` (inc. rec. ${fmtCur(Math.round(sale.transferSurcharge))})`;
+        paymentParts.push(t);
+      }
+      if (sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0) paymentParts.push(`Cta.Cte. ${fmtCur(Math.round(sale.pagoCuentaCorriente))}`);
+    } else {
+      if (sale.formaPago === "Efectivo") paymentParts.push(`Efectivo ${fmtCur(sale.total)}`);
+      if (sale.formaPago === "Transferencia") {
+        let t = `Transf. ${fmtCur(sale.total)}`;
+        if (sale.transferSurcharge > 0) t += ` (inc. rec. ${fmtCur(Math.round(sale.transferSurcharge))})`;
+        paymentParts.push(t);
+      }
+      if (sale.formaPago === "Cuenta Corriente") paymentParts.push(`Cta.Cte. ${fmtCur(sale.total)}`);
+    }
 
     return (
       <>
-        {/* Spacer - pushes everything below to the bottom */}
+        {/* Spacer */}
         <div style={{ flex: 1 }} />
 
-        {/* Totals */}
-        <div style={{ borderTop: "2px solid #000" }}>
-          <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px", fontSize: `${fsResumen - 2}px`, gap: "30px" }}>
-            <div>
-              <span>Subtotal: </span>
-              <span style={{ fontWeight: "bold" }}>{fmtCur(Math.round(sale.subtotal))}</span>
-            </div>
-            {sale.descuento > 0 && (
-              <div>
-                <span>Descuento: </span>
-                <span style={{ fontWeight: "bold", color: "#059669" }}>-{fmtCur(Math.round(sale.descuento))}</span>
-              </div>
-            )}
-            {sale.recargo > 0 && (
-              <div>
-                <span>Recargo: </span>
-                <span style={{ fontWeight: "bold" }}>+{fmtCur(Math.round(sale.recargo))}</span>
-              </div>
-            )}
-            {sale.transferSurcharge > 0 && (
-              <div>
-                <span>Rec. Transf.: </span>
-                <span style={{ fontWeight: "bold" }}>+{fmtCur(Math.round(sale.transferSurcharge))}</span>
-              </div>
+        {/* TOTAL bar — bold, big, clear */}
+        <div style={{ borderTop: "2px solid #000", borderBottom: "2px solid #000", padding: "6px 4px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div style={{ fontSize: `${fs}px`, fontVariantNumeric: "tabular-nums" }}>
+            {(sale.descuento > 0 || sale.recargo > 0 || sale.transferSurcharge > 0) && (
+              <span>
+                Subtotal {fmtCur(Math.round(sale.subtotal))}
+                {sale.descuento > 0 && <span> — Dto. -{fmtCur(Math.round(sale.descuento))}</span>}
+                {sale.recargo > 0 && <span> — Rec. +{fmtCur(Math.round(sale.recargo))}</span>}
+                {sale.transferSurcharge > 0 && !sale.recargo && <span> — Rec.Transf. +{fmtCur(Math.round(sale.transferSurcharge))}</span>}
+                <span style={{ margin: "0 10px" }}>|</span>
+              </span>
             )}
           </div>
-          <div style={{ borderTop: "2px solid #000", display: "flex", justifyContent: "flex-end", padding: "8px 4px" }}>
-            <div style={{ fontSize: `${fsResumen}px`, fontWeight: "bold" }}>
-              TOTAL: {fmtCur(Math.round(sale.total))}
-            </div>
+          <div style={{ fontSize: `${fsResumen + 2}px`, fontWeight: "bold", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+            TOTAL {fmtCur(Math.round(sale.total))}
           </div>
         </div>
 
-        {/* Payment summary */}
-        {showPaymentSection ? (
-          <div style={{ borderTop: "2px solid #000", padding: "8px 4px" }}>
-            <div style={{ fontSize: `${fs - 1}px`, fontWeight: "bold", textAlign: "right", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px", color: "#333" }}>Detalle de pago</div>
-
-            {totalAhorro > 0 && (<>
-              {row("Ahorro en esta compra:", `-${fmtCur(Math.round(totalAhorro))}`, false, "#059669")}
-              {separator()}
-            </>)}
-
-            {showDesglose && (<>
-              {sale.pagoEfectivo != null && sale.pagoEfectivo > 0 && row("Efectivo:", fmtCur(Math.round(sale.pagoEfectivo)))}
-              {sale.pagoTransferencia != null && sale.pagoTransferencia > 0 && (
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "2px", fontSize: `${fs}px` }}>
-                  <span style={{ color: "#555" }}>
-                    Transferencia:{sale.transferSurcharge > 0 && <span style={{ fontSize: `${fs - 3}px`, color: "#888" }}> (inc. rec. +{fmtCur(Math.round(sale.transferSurcharge))})</span>}
-                  </span>
-                  <span style={{ minWidth: "100px", textAlign: "right" }}>{fmtCur(Math.round(sale.pagoTransferencia))}</span>
-                </div>
-              )}
-              {sale.pagoCuentaCorriente != null && sale.pagoCuentaCorriente > 0 && row("Cta. Corriente:", fmtCur(Math.round(sale.pagoCuentaCorriente)))}
-              {separator()}
-              {totalPagado > 0 && row("Abonado:", fmtCur(Math.round(totalPagado)), true)}
-              {(sale.pagoCuentaCorriente ?? 0) > 0 && row("Adeuda:", fmtCur(Math.round(sale.pagoCuentaCorriente || 0)), true, "#dc2626")}
-            </>)}
-
-            {!showDesglose && sale.formaPago === "Efectivo" && row("Efectivo:", fmtCur(sale.total))}
-            {!showDesglose && sale.formaPago === "Transferencia" && (
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "2px", fontSize: `${fs}px` }}>
-                <span style={{ color: "#555" }}>
-                  Transferencia:{sale.transferSurcharge > 0 && <span style={{ fontSize: `${fs - 3}px`, color: "#888" }}> (inc. rec. +{fmtCur(Math.round(sale.transferSurcharge))})</span>}
-                </span>
-                <span style={{ minWidth: "100px", textAlign: "right" }}>{fmtCur(sale.total)}</span>
+        {/* Payment + CC — compact inline rows */}
+        {hasPaymentOrCC && (
+          <div style={{ padding: "4px 4px 2px", fontSize: `${fs - 1}px`, borderBottom: "1px solid #000" }}>
+            {/* Payment detail */}
+            {paymentParts.length > 0 && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "4px", marginBottom: "2px" }}>
+                <span style={{ fontWeight: "bold" }}>Pago:</span>
+                <span>{paymentParts.join(" + ")}</span>
+                {showDesglose && totalPagado > 0 && (sale.pagoCuentaCorriente ?? 0) > 0 && (
+                  <span style={{ marginLeft: "6px" }}>(Abonado {fmtCur(Math.round(totalPagado))} — Adeuda {fmtCur(Math.round(sale.pagoCuentaCorriente || 0))})</span>
+                )}
               </div>
             )}
-            {!showDesglose && sale.formaPago === "Cuenta Corriente" && row("Cta. Corriente:", fmtCur(sale.total), false, "#dc2626")}
 
-            {showVuelto && (<>
-              {separator()}
-              {row("Recibido:", fmtCur(sale.cashReceived!))}
-              {row("Vuelto:", fmtCur(sale.cashChange ?? 0), true, "#059669")}
-            </>)}
+            {/* Vuelto */}
+            {showVuelto && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "4px", marginBottom: "2px" }}>
+                <span>Recibido {fmtCur(sale.cashReceived!)} — <span style={{ fontWeight: "bold" }}>Vuelto {fmtCur(sale.cashChange ?? 0)}</span></span>
+              </div>
+            )}
 
-            {showSaldo && (<>
-              {separator()}
-              <div style={{ fontSize: `${fs - 1}px`, fontWeight: "bold", textAlign: "right", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px", color: "#333" }}>Cuenta Corriente</div>
-              {row("Saldo anterior:", sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} a favor` : sale.saldoAnterior === 0 ? "$0" : fmtCur(sale.saldoAnterior))}
-              {(sale.pagoCuentaCorriente ?? 0) > 0 && row("Cargado en esta venta:", `+${fmtCur(Math.round(sale.pagoCuentaCorriente || 0))}`, false, "#dc2626")}
-              {separator()}
-              {row(
-                "Saldo total pendiente:",
-                sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} a favor` : sale.saldoNuevo === 0 ? "$0" : fmtCur(sale.saldoNuevo),
-                true,
-                sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#dc2626" : undefined
-              )}
-            </>)}
-
-            <div style={{ textAlign: "center", padding: "10px 0 4px", marginTop: "8px", borderTop: "1px solid #ccc", fontSize: `${config.fontSize - 2}px` }}>
-              <div>{config.footerTexto}</div>
-              <div style={{ marginTop: "2px" }}>{sale.items.length} artículo{sale.items.length !== 1 ? "s" : ""}</div>
-            </div>
-          </div>
-        ) : (
-          <div style={{ textAlign: "center", padding: "8px 0", fontSize: `${config.fontSize - 2}px`, borderTop: "1px solid #ccc" }}>
-            <div>{config.footerTexto}</div>
-            <div style={{ marginTop: "2px" }}>{sale.items.length} artículo{sale.items.length !== 1 ? "s" : ""}</div>
+            {/* Cuenta Corriente — single line */}
+            {showSaldo && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "4px", marginBottom: "2px" }}>
+                <span style={{ fontWeight: "bold" }}>Cta.Cte.:</span>
+                <span>
+                  Anterior {sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} a favor` : sale.saldoAnterior === 0 ? "$0" : fmtCur(sale.saldoAnterior)}
+                  {(sale.pagoCuentaCorriente ?? 0) > 0 && <span> + Esta venta {fmtCur(Math.round(sale.pagoCuentaCorriente || 0))}</span>}
+                  <span style={{ margin: "0 4px" }}>→</span>
+                  <span style={{ fontWeight: "bold", textDecoration: sale.saldoNuevo > 0 ? "underline" : "none" }}>
+                    Saldo {sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} a favor` : sale.saldoNuevo === 0 ? "$0" : fmtCur(sale.saldoNuevo)}
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
         )}
+
+        {/* Footer — minimal */}
+        <div style={{ textAlign: "center", padding: "6px 0 2px", fontSize: `${fs - 2}px` }}>
+          {config.footerTexto} — {sale.items.length} artículo{sale.items.length !== 1 ? "s" : ""}
+        </div>
       </>
     );
   };
