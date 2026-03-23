@@ -17,6 +17,7 @@ import {
   Box,
   Tag,
   Share2,
+  X,
 } from "lucide-react";
 import { showToast } from "@/components/tienda/toast";
 
@@ -75,6 +76,7 @@ export default function ProductoDetallePage() {
   const [relSelectedPres, setRelSelectedPres] = useState<Record<string, number>>({});
   const [relQty, setRelQty] = useState<Record<string, number>>({});
   const [relScroll, setRelScroll] = useState(0);
+  const [zoomOpen, setZoomOpen] = useState(false);
   const [comboComponentes, setComboComponentes] = useState<ComboComponente[]>([]);
   const [comboOpen, setComboOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -507,16 +509,19 @@ export default function ProductoDetallePage() {
 
       {/* Main */}
       <div className="grid gap-10 md:grid-cols-2">
-        {/* Left - Image */}
+        {/* Left - Image with zoom */}
         <div className="md:sticky md:top-24 md:self-start md:max-h-[calc(100vh-8rem)]">
-          <div className="relative aspect-square overflow-hidden rounded-2xl border border-gray-100 bg-white">
+          <div
+            className="relative aspect-square overflow-hidden rounded-2xl border border-gray-100 bg-white cursor-zoom-in group"
+            onClick={() => producto.imagen_url && setZoomOpen(true)}
+          >
             {producto.imagen_url ? (
               <Image
                 src={producto.imagen_url}
                 alt={producto.nombre}
                 fill
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className="object-contain p-4"
+                className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
               />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-gradient-to-br from-gray-50 to-gray-100">
@@ -939,6 +944,30 @@ export default function ProductoDetallePage() {
             </div>
           </div>
         </section>
+      )}
+
+      {/* Zoom modal */}
+      {zoomOpen && producto.imagen_url && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-zoom-out"
+          onClick={() => setZoomOpen(false)}
+        >
+          <button
+            onClick={() => setZoomOpen(false)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/40 transition z-10"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="relative w-[90vw] h-[90vh] max-w-3xl">
+            <Image
+              src={producto.imagen_url}
+              alt={producto.nombre}
+              fill
+              className="object-contain"
+              sizes="90vw"
+            />
+          </div>
+        </div>
       )}
     </div>
   );
