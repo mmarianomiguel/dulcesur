@@ -247,7 +247,7 @@ export function ReceiptPrintView({
           return (
             <tr key={i} style={{ borderBottom: "1px solid #ccc", background: i % 2 === 1 ? altRowBg : "transparent" }}>
               <td style={{ padding: rowPad, textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
-              <td style={{ padding: rowPad, textAlign: "left" }}>
+              <td style={{ padding: rowPad, textAlign: "left", maxWidth: "180px", wordBreak: "break-word", overflow: "hidden" }}>
                 {item.es_combo && (
                   <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", border: "1px solid #000", padding: "0 3px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
                 )}

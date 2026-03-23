@@ -201,6 +201,10 @@ export default function PerfilPage() {
       setPwMsg("La contraseña debe tener al menos 6 caracteres.");
       return;
     }
+    if (!/\d/.test(newPassword)) {
+      setPwMsg("La contraseña debe incluir al menos un número.");
+      return;
+    }
 
     setPwSaving(true);
 

@@ -185,7 +185,8 @@ export default function ClientesPage() {
       .from("clientes")
       .select("*")
       .eq("activo", true)
-      .order("nombre");
+      .order("nombre")
+      .limit(5000);
     setClients((data || []) as unknown as Cliente[]);
     const { data: vends } = await supabase.from("usuarios").select("id, nombre").eq("activo", true).order("nombre");
     setVendedores(vends || []);

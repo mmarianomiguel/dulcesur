@@ -491,6 +491,10 @@ export default function VentasPage() {
   };
 
   const addItem = (product: Producto, presentacion?: Presentacion) => {
+    if (items.length >= 500) {
+      setErrorModal({ open: true, message: "Máximo 500 líneas por venta. Finalizá esta y creá otra." });
+      return;
+    }
     const presName = presentacion ? presentacion.nombre : "Unidad";
     const presPrice = presentacion ? presentacion.precio : product.precio;
     const presUnits = presentacion ? presentacion.cantidad : 1;

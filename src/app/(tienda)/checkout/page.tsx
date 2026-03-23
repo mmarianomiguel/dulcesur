@@ -181,7 +181,7 @@ export default function CheckoutPage() {
       const prod = stockFixes[prodId];
       if (!prod) return item;
       const presUnits = item.unidades_por_presentacion || (() => {
-        const match = item.id.match(/Caja \(x(\d+)\)/);
+        const match = item.id.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
         const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
         return isMedio ? 0.5 : match ? Number(match[1]) : 1;
       })();
@@ -465,7 +465,7 @@ export default function CheckoutPage() {
       const prod = stockMap[prodId];
       if (!prod) continue;
       const presUnits = item.unidades_por_presentacion || (() => {
-        const match = item.id.match(/Caja \(x(\d+)\)/);
+        const match = item.id.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
         const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
         return isMedio ? 0.5 : match ? Number(match[1]) : 1;
       })();
@@ -646,7 +646,7 @@ export default function CheckoutPage() {
         const stockItems = items.map((item) => {
           const prodId = item.id.split("_")[0];
           const presUnits = item.unidades_por_presentacion || (() => {
-            const match = item.id.match(/Caja \(x(\d+)\)/);
+            const match = item.id.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
             const isMedioCarton = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
             return isMedioCarton ? 0.5 : match ? Number(match[1]) : 1;
           })();
