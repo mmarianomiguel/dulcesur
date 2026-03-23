@@ -119,77 +119,95 @@ export default function ProveedoresPage() {
   };
 
   // ─── Cuenta Corriente ───
-  const openCuentaCorriente = async (p: Proveedor) => {
-    ccDialog.onOpen(p);
+  const [ccDesde, setCcDesde] = useState("");
+  const [ccHasta, setCcHasta] = useState("");
+  const [ccTotals, setCcTotals] = useState({ debe: 0, haber: 0, saldo: 0 });
+
+  const fetchCuentaCorriente = async (provId: string, desde?: string, hasta?: string) => {
     setCcMovimientos([]);
 
-    // Fetch from cuenta_corriente_proveedor table
-    const { data: ccData } = await supabase
+    // Primary: fetch from cuenta_corriente_proveedor
+    let query = supabase
       .from("cuenta_corriente_proveedor")
       .select("*")
-      .eq("proveedor_id", p.id)
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .eq("proveedor_id", provId)
+      .order("fecha", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (desde) query = query.gte("fecha", desde);
+    if (hasta) query = query.lte("fecha", hasta);
+
+    const { data: ccData } = await query;
 
     if (ccData && ccData.length > 0) {
       setCcMovimientos(ccData as CuentaCorrienteProveedor[]);
+      const totalDebe = ccData.filter((r: any) => r.tipo === "compra").reduce((s: number, r: any) => s + (r.monto || 0), 0);
+      const totalHaber = ccData.filter((r: any) => r.tipo === "pago").reduce((s: number, r: any) => s + (r.monto || 0), 0);
+      const { data: freshProv } = await supabase.from("proveedores").select("saldo").eq("id", provId).single();
+      setCcTotals({ debe: totalDebe, haber: totalHaber, saldo: freshProv?.saldo ?? 0 });
     } else {
       // Fallback: build history from compras (CC) + pagos
-      const [{ data: compras }, { data: pagos }] = await Promise.all([
-        supabase
-          .from("compras")
-          .select("id, numero, fecha, total, forma_pago, estado_pago, created_at")
-          .eq("proveedor_id", p.id)
-          .order("fecha", { ascending: false })
-          .limit(50),
-        supabase
-          .from("pagos_proveedores")
-          .select("id, fecha, monto, forma_pago, observacion, created_at")
-          .eq("proveedor_id", p.id)
-          .order("fecha", { ascending: false })
-          .limit(50),
-      ]);
+      let comprasQuery = supabase
+        .from("compras")
+        .select("id, numero, fecha, total, forma_pago, estado_pago, created_at")
+        .eq("proveedor_id", provId)
+        .order("fecha", { ascending: true });
+      let pagosQuery = supabase
+        .from("pagos_proveedores")
+        .select("id, fecha, monto, forma_pago, observacion, created_at")
+        .eq("proveedor_id", provId)
+        .order("fecha", { ascending: true });
+
+      if (desde) { comprasQuery = comprasQuery.gte("fecha", desde); pagosQuery = pagosQuery.gte("fecha", desde); }
+      if (hasta) { comprasQuery = comprasQuery.lte("fecha", hasta); pagosQuery = pagosQuery.lte("fecha", hasta); }
+
+      const [{ data: compras }, { data: pagos }] = await Promise.all([comprasQuery, pagosQuery]);
 
       const movements: CuentaCorrienteProveedor[] = [];
 
-      // Compras that went to CC (increase debt)
       for (const c of (compras || []) as any[]) {
         if (c.forma_pago === "Cuenta Corriente" || c.estado_pago === "Pendiente") {
           movements.push({
-            id: c.id,
-            proveedor_id: p.id,
-            fecha: c.fecha,
-            tipo: "compra",
-            descripcion: `Compra ${c.numero}`,
-            monto: c.total,
-            saldo_resultante: 0,
-            referencia_id: c.id,
-            referencia_tipo: "compra",
-            created_at: c.created_at,
+            id: c.id, proveedor_id: provId, fecha: c.fecha, tipo: "compra",
+            descripcion: `Compra ${c.numero}`, monto: c.total, saldo_resultante: 0,
+            referencia_id: c.id, referencia_tipo: "compra", created_at: c.created_at,
           });
         }
       }
 
-      // Pagos (decrease debt)
       for (const pg of (pagos || []) as any[]) {
         movements.push({
-          id: pg.id,
-          proveedor_id: p.id,
-          fecha: pg.fecha,
-          tipo: "pago",
+          id: pg.id, proveedor_id: provId, fecha: pg.fecha, tipo: "pago",
           descripcion: `Pago ${pg.forma_pago}${pg.observacion ? " - " + pg.observacion : ""}`,
-          monto: pg.monto,
-          saldo_resultante: 0,
-          referencia_id: pg.id,
-          referencia_tipo: "pago",
-          created_at: pg.created_at,
+          monto: pg.monto, saldo_resultante: 0,
+          referencia_id: pg.id, referencia_tipo: "pago", created_at: pg.created_at,
         });
       }
 
-      // Sort by date descending
-      movements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      // Sort chronologically and calculate running balance
+      movements.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      let runBal = 0;
+      for (const m of movements) {
+        if (m.tipo === "compra") runBal += m.monto;
+        else if (m.tipo === "pago") runBal -= m.monto;
+        m.saldo_resultante = runBal;
+      }
       setCcMovimientos(movements);
+
+      const totalDebe = movements.filter((m) => m.tipo === "compra").reduce((s, m) => s + m.monto, 0);
+      const totalHaber = movements.filter((m) => m.tipo === "pago").reduce((s, m) => s + m.monto, 0);
+      const { data: freshProv } = await supabase.from("proveedores").select("saldo").eq("id", provId).single();
+      setCcTotals({ debe: totalDebe, haber: totalHaber, saldo: freshProv?.saldo ?? 0 });
     }
+  };
+
+  const openCuentaCorriente = async (p: Proveedor) => {
+    ccDialog.onOpen(p);
+    const hoy = todayARG();
+    const hace90 = new Date(Date.now() - 90 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    setCcDesde(hace90);
+    setCcHasta(hoy);
+    await fetchCuentaCorriente(p.id, hace90, hoy);
   };
 
   // ─── Boletas Pendientes ───
@@ -413,42 +431,61 @@ export default function ProveedoresPage() {
 
       {/* Cuenta Corriente Dialog */}
       <Dialog open={ccDialog.open} onOpenChange={ccDialog.setOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
-          <DialogHeader><DialogTitle>Cuenta Corriente</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Cuenta Corriente - {ccDialog.data?.nombre}</DialogTitle></DialogHeader>
           {ccDialog.data && (
-            <div className="space-y-4 mt-2">
-              <div className="rounded-lg bg-muted/50 p-3 flex items-center justify-between">
-                <div>
-                  <p className="font-medium">{ccDialog.data.nombre}</p>
-                  <p className="text-xs text-muted-foreground">{ccDialog.data.cuit || "Sin CUIT"}</p>
+            <div className="space-y-3 mt-2">
+              <div className="flex items-end gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Desde</Label>
+                  <Input type="date" value={ccDesde} onChange={(e) => setCcDesde(e.target.value)} className="h-8 text-sm" />
                 </div>
-                <div className="text-right">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Hasta</Label>
+                  <Input type="date" value={ccHasta} onChange={(e) => setCcHasta(e.target.value)} className="h-8 text-sm" />
+                </div>
+                <Button size="sm" className="h-8" onClick={() => ccDialog.data && fetchCuentaCorriente(ccDialog.data.id, ccDesde, ccHasta)}>
+                  <Search className="w-3.5 h-3.5 mr-1" />Filtrar
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total Debe</p>
+                  <p className="text-lg font-bold">{formatCurrency(ccTotals.debe)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total Haber</p>
+                  <p className="text-lg font-bold text-emerald-600">{formatCurrency(ccTotals.haber)}</p>
+                </div>
+                <div className={`rounded-lg border p-3 ${ccTotals.saldo > 0 ? "bg-orange-50 border-orange-200" : "bg-emerald-50 border-emerald-200"}`}>
                   <p className="text-xs text-muted-foreground">Saldo actual</p>
-                  <p className={`text-lg font-bold ${ccDialog.data.saldo > 0 ? "text-orange-500" : "text-emerald-500"}`}>
-                    {formatCurrency(ccDialog.data.saldo)}
+                  <p className={`text-lg font-bold ${ccTotals.saldo > 0 ? "text-orange-600" : "text-emerald-600"}`}>
+                    {ccTotals.saldo > 0 ? formatCurrency(ccTotals.saldo) : "$0"}
                   </p>
                 </div>
               </div>
 
               {ccMovimientos.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No hay movimientos registrados</p>
+                <p className="text-sm text-muted-foreground text-center py-8">No hay movimientos en cuenta corriente</p>
               ) : (
-                <div className="overflow-y-auto max-h-96">
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-background">
                       <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2 px-3 font-medium">Fecha</th>
-                        <th className="text-left py-2 px-3 font-medium">Tipo</th>
-                        <th className="text-left py-2 px-3 font-medium">Descripcion</th>
-                        <th className="text-right py-2 px-3 font-medium">Debe</th>
-                        <th className="text-right py-2 px-3 font-medium">Haber</th>
+                        <th className="text-left py-2 px-2 font-medium">Fecha</th>
+                        <th className="text-left py-2 px-2 font-medium">Tipo</th>
+                        <th className="text-left py-2 px-2 font-medium">Descripción</th>
+                        <th className="text-right py-2 px-2 font-medium">Debe</th>
+                        <th className="text-right py-2 px-2 font-medium">Haber</th>
+                        <th className="text-right py-2 px-2 font-medium">Saldo</th>
                       </tr>
                     </thead>
                     <tbody>
                       {ccMovimientos.map((mov) => (
                         <tr key={mov.id} className="border-b last:border-0 hover:bg-muted/50">
-                          <td className="py-2 px-3 text-muted-foreground text-xs">{formatDateARG(mov.fecha)}</td>
-                          <td className="py-2 px-3">
+                          <td className="py-2 px-2 text-muted-foreground text-xs">{formatDateARG(mov.fecha)}</td>
+                          <td className="py-2 px-2">
                             <Badge
                               variant={mov.tipo === "compra" ? "destructive" : mov.tipo === "pago" ? "default" : "secondary"}
                               className="text-xs font-normal"
@@ -456,21 +493,21 @@ export default function ProveedoresPage() {
                               {mov.tipo === "compra" ? "Compra" : mov.tipo === "pago" ? "Pago" : "Ajuste"}
                             </Badge>
                           </td>
-                          <td className="py-2 px-3 text-sm">{mov.descripcion}</td>
-                          <td className="py-2 px-3 text-right">
-                            {mov.tipo === "compra" && (
-                              <span className="text-red-500 font-medium">{formatCurrency(mov.monto)}</span>
-                            )}
+                          <td className="py-2 px-2 text-xs text-muted-foreground">{mov.descripcion}</td>
+                          <td className="py-2 px-2 text-right font-medium">
+                            {mov.tipo === "compra" ? formatCurrency(mov.monto) : ""}
                           </td>
-                          <td className="py-2 px-3 text-right">
-                            {mov.tipo === "pago" && (
-                              <span className="text-emerald-600 font-medium">{formatCurrency(mov.monto)}</span>
-                            )}
+                          <td className="py-2 px-2 text-right font-medium text-emerald-600">
+                            {mov.tipo === "pago" ? formatCurrency(mov.monto) : ""}
+                          </td>
+                          <td className={`py-2 px-2 text-right font-bold ${mov.saldo_resultante > 0 ? "text-orange-600" : "text-emerald-600"}`}>
+                            {mov.saldo_resultante > 0 ? formatCurrency(mov.saldo_resultante) : mov.saldo_resultante === 0 ? "$0" : formatCurrency(mov.saldo_resultante)}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  <div className="text-xs text-muted-foreground mt-2 text-right">{ccMovimientos.length} movimiento(s)</div>
                 </div>
               )}
 
