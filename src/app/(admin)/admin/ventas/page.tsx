@@ -834,10 +834,12 @@ export default function VentasPage() {
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
         barcodeTimer.current = setTimeout(() => {
           // Buffer timed out without Enter → not a barcode scan
-          // If it's 1-3 digits, treat as quantity input for selected item
+          // If it's 1-3 digits and NOT in an input, treat as quantity for selected item
           const buf = barcodeBuffer.current;
           barcodeBuffer.current = "";
-          if (buf.length > 0 && buf.length <= 3 && /^\d+$/.test(buf)) {
+          const activeTag = (document.activeElement as HTMLElement)?.tagName;
+          const isInInput = activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT";
+          if (buf.length > 0 && buf.length <= 3 && /^\d+$/.test(buf) && !isInInput) {
             applyQtyFromScanRef.current(buf);
           }
         }, 250);
