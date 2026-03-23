@@ -417,7 +417,7 @@ export default function VentasPage() {
 
   const mixtoSum = Math.round((mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente) * 100) / 100;
   const mixtoRemaining = formaPago === "Mixto" ? Math.round((baseTotal - mixtoSum) * 100) / 100 : 0;
-  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 1 && mixtoSum > 0);
+  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 0.5 && mixtoSum > 0);
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
   const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
@@ -1419,7 +1419,14 @@ export default function VentasPage() {
               const stockDespues = stockAntes - item.cantidad;
               const { error: updErr } = await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
               if (updErr) {
-                stockErrors.push(`Stock ${item.descripcion}: ${updErr.message}`);
+                stockErrors.push(`${item.descripcion}`);
+                // Log failed attempt in stock_movimientos for audit trail
+                await supabase.from("stock_movimientos").insert({
+                  producto_id: item.producto_id, tipo: "Venta", cantidad: -item.cantidad,
+                  cantidad_antes: stockAntes, cantidad_despues: stockAntes,
+                  referencia: `Venta #${numero} (ERROR)`, descripcion: `ERROR stock: ${item.descripcion} - ${updErr.message}`,
+                  usuario: currentUser?.nombre || "Admin Sistema", orden_id: venta.id,
+                });
                 continue;
               }
               await supabase.from("stock_movimientos").insert({

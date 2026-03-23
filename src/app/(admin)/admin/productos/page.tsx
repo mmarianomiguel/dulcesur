@@ -495,15 +495,21 @@ export default function ProductosPage() {
   };
 
   const toggleProductDiscount = async (id: string, currentActive: boolean) => {
-    await supabase.from("descuentos").update({ activo: !currentActive, updated_at: new Date().toISOString() }).eq("id", id);
-    if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
+    try {
+      const { error } = await supabase.from("descuentos").update({ activo: !currentActive, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+      if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
+    } catch (err: any) { showAdminToast("Error al actualizar descuento: " + (err?.message || ""), "error"); }
   };
 
   const deleteProductDiscount = async (id: string) => {
     if (!confirm("¿Eliminar este descuento?")) return;
-    await supabase.from("descuentos").delete().eq("id", id);
-    if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
-    showAdminToast("Descuento eliminado", "success");
+    try {
+      const { error } = await supabase.from("descuentos").delete().eq("id", id);
+      if (error) throw error;
+      if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
+      showAdminToast("Descuento eliminado", "success");
+    } catch (err: any) { showAdminToast("Error al eliminar descuento: " + (err?.message || ""), "error"); }
   };
 
   const openEdit = async (p: ProductoWithRelations) => {

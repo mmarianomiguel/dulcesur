@@ -160,20 +160,21 @@ export function GlobalSearch() {
     debounceRef.current = setTimeout(() => search(value), 300);
   };
 
+  const navigatingRef = useRef(false);
   const navigate = (result: SearchResult) => {
+    if (navigatingRef.current) return; // Prevent double-click
+    navigatingRef.current = true;
     setOpen(false);
     const searchParam = encodeURIComponent(result.type === "venta" ? result.title.replace("Venta ", "") : result.title);
     const url = `${result.url}?buscar=${searchParam}`;
-    // Wait for dialog close animation before navigating
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        if (window.location.pathname === result.url) {
-          window.location.href = url;
-        } else {
-          router.push(url);
-        }
-      }, 50);
-    });
+    setTimeout(() => {
+      if (window.location.pathname === result.url) {
+        window.location.href = url;
+      } else {
+        router.push(url);
+      }
+      navigatingRef.current = false;
+    }, 150);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

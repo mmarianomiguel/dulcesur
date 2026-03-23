@@ -382,13 +382,14 @@ export default function ComprasPage() {
         const newStock = stockAntes + item.cantidad;
 
         // Atomic update: only update if stock hasn't changed since we read it
-        const { error: updErr, count } = await supabase
+        const { data: updData, error: updErr } = await supabase
           .from("productos")
           .update({ stock: newStock })
           .eq("id", item.producto_id)
-          .eq("stock", stockAntes);
+          .eq("stock", stockAntes)
+          .select("id");
 
-        if (updErr || count === 0) {
+        if (updErr || !updData || updData.length === 0) {
           // Retry once with fresh read if concurrent update detected
           const { data: freshProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
           const freshStock = freshProd?.stock ?? 0;
