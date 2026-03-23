@@ -306,7 +306,7 @@ export function ReceiptPrintView({
     const totalAhorro = sale.descuento > 0 ? sale.descuento : sale.items.filter(i => i.discount > 0).reduce((a, i) => a + (i.price * i.qty * i.discount / 100), 0);
     const showDesglose = sale.formaPago === "Mixto" || sale.pagoEfectivo || sale.pagoTransferencia || sale.pagoCuentaCorriente;
     const showVuelto = config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0;
-    const showSaldo = sale.formaPago === "Cuenta Corriente" || (sale.formaPago === "Mixto" && (sale.pagoCuentaCorriente ?? 0) > 0) || sale.saldoNuevo !== sale.saldoAnterior;
+    const showSaldo = sale.saldoNuevo !== 0 || sale.saldoAnterior !== 0 || (sale.pagoCuentaCorriente ?? 0) > 0;
     const totalPagado = (sale.pagoEfectivo || 0) + (sale.pagoTransferencia || 0);
     const showPaymentSection = showDesglose || showVuelto || showSaldo || totalAhorro > 0;
 
@@ -368,6 +368,7 @@ export function ReceiptPrintView({
 
             {!showDesglose && sale.formaPago === "Efectivo" && row("Efectivo:", fmtCur(sale.total))}
             {!showDesglose && sale.formaPago === "Transferencia" && row("Transferencia:", fmtCur(sale.total))}
+            {!showDesglose && sale.formaPago === "Cuenta Corriente" && row("Cta. Corriente:", fmtCur(sale.total), false, "#dc2626")}
 
             {showVuelto && (<>
               {separator()}
@@ -377,9 +378,12 @@ export function ReceiptPrintView({
 
             {showSaldo && (<>
               {separator()}
+              <div style={{ fontSize: `${fs - 1}px`, fontWeight: "bold", textAlign: "right", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px", color: "#333" }}>Cuenta Corriente</div>
               {row("Saldo anterior:", sale.saldoAnterior < 0 ? `${fmtCur(Math.abs(sale.saldoAnterior))} a favor` : sale.saldoAnterior === 0 ? "$0" : fmtCur(sale.saldoAnterior))}
+              {(sale.pagoCuentaCorriente ?? 0) > 0 && row("Cargado en esta venta:", `+${fmtCur(Math.round(sale.pagoCuentaCorriente || 0))}`, false, "#dc2626")}
+              {separator()}
               {row(
-                `Saldo al ${sale.fecha}:`,
+                "Saldo total pendiente:",
                 sale.saldoNuevo < 0 ? `${fmtCur(Math.abs(sale.saldoNuevo))} a favor` : sale.saldoNuevo === 0 ? "$0" : fmtCur(sale.saldoNuevo),
                 true,
                 sale.saldoNuevo < 0 ? "#059669" : sale.saldoNuevo > 0 ? "#dc2626" : undefined
