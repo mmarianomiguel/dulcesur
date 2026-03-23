@@ -1246,6 +1246,13 @@ export default function VentasPage() {
     setSaving(true);
     setCashDialogOpen(false);
 
+    // Capture real client saldo from DB BEFORE any modification (for receipt)
+    let saldoRealAntesDeTodo = 0;
+    if (clientId) {
+      const { data: preData } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+      saldoRealAntesDeTodo = preData?.saldo ?? selectedClient?.saldo ?? 0;
+    }
+
     try {
       const { data: numData, error: numError } = await supabase.rpc("next_numero", { p_tipo: "venta" });
       if (numError) { setErrorModal({ open: true, message: `Error al generar número: ${numError.message}` }); setSaving(false); return; }
@@ -1442,9 +1449,6 @@ export default function VentasPage() {
           });
         }
 
-        // Capture saldo BEFORE cobrarSaldo modifies it (for the receipt)
-        const saldoAntesDeVenta = selectedClient?.saldo || 0;
-
         // Collect pending balance if toggled
         // Re-read saldo from DB to avoid stale state after Mixto CC update
         if (cobrarSaldo && clientId && selectedClient) {
@@ -1479,14 +1483,15 @@ export default function VentasPage() {
           }
         }
 
-        // Use saldo captured BEFORE cobrarSaldo ran
-        const saldoAnterior = saldoAntesDeVenta;
-        const saldoDespuesCobro = selectedClient?.saldo || 0;
-        const saldoNuevo = formaPago === "Cuenta Corriente"
-          ? saldoDespuesCobro + total
-          : formaPago === "Mixto" && mixtoCuentaCorriente > 0
-          ? saldoDespuesCobro + mixtoCuentaCorriente
-          : saldoDespuesCobro;
+        // saldoRealAntesDeTodo = saldo from DB before any insert/update
+        // After CC insert and cobrarSaldo, re-read the final saldo from DB
+        let saldoFinal = saldoRealAntesDeTodo;
+        if (clientId) {
+          const { data: postData } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+          saldoFinal = postData?.saldo ?? saldoFinal;
+        }
+        const saldoAnterior = saldoRealAntesDeTodo;
+        const saldoNuevo = saldoFinal;
         const saleData = {
           numero,
           total,
