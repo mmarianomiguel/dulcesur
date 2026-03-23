@@ -581,15 +581,25 @@ export default function ProductoDetallePage() {
                 <span className="text-sm text-green-600 font-semibold">Ahorrás {formatCurrency(savings)}</span>
               </div>
             )}
-            {volumeDiscountHint && currentDiscount === 0 && (
-              <div className="mt-2 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-lg px-3 py-2 flex items-center gap-2">
-                <span className="text-lg">🏷️</span>
-                <p className="text-xs text-orange-800">
-                  <span className="font-bold">¡{volumeDiscountHint.porcentaje}% OFF</span> comprando {volumeDiscountHint.minQty} o más!
-                  {` Sumá ${volumeDiscountHint.minQty - cantidad} más al carrito`}
-                </p>
-              </div>
-            )}
+            {volumeDiscountHint && currentDiscount === 0 && (() => {
+              const presLabel = currentPres && currentPres.cantidad > 1
+                ? (currentPres.cantidad >= 6 ? "cajas" : "packs")
+                : "unidades";
+              const faltan = volumeDiscountHint.minQty - cantidad;
+              return (
+                <div className="mt-2 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+                  <span className="text-xl">🏷️</span>
+                  <div>
+                    <p className="text-sm text-orange-900 font-bold">
+                      {volumeDiscountHint.porcentaje}% OFF llevando {volumeDiscountHint.minQty} {presLabel}
+                    </p>
+                    <p className="text-xs text-orange-700 mt-0.5">
+                      {faltan > 0 ? `Agregá ${faltan} ${presLabel} más para obtener el descuento` : "¡Ya alcanzaste el mínimo!"}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
             <p className="text-sm text-gray-500 mt-1">
               {currentPres && currentPres.cantidad > 1
                 ? `Por caja (${currentPres.cantidad} unidades)`
@@ -808,30 +818,10 @@ export default function ProductoDetallePage() {
         <section className="mt-16 mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-gray-900">Productos Relacionados</h2>
-            {relacionados.length > 5 && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setRelScroll((s) => Math.max(0, s - 1))}
-                  disabled={relScroll === 0}
-                  className="w-9 h-9 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setRelScroll((s) => Math.min(relacionados.length - 5, s + 1))}
-                  disabled={relScroll >= relacionados.length - 5}
-                  className="w-9 h-9 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <span className="text-xs text-gray-400 hidden md:block">Deslizá para ver más →</span>
           </div>
-          <div className="overflow-hidden">
-            <div
-              className="flex gap-4 transition-transform duration-300"
-              style={{ transform: `translateX(-${relScroll * (100 / Math.min(5, relacionados.length))}%)` }}
-            >
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 pb-2" style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
+            <div className="flex gap-4 w-max md:w-auto">
               {relacionados.map((rel) => {
                 const pres = relPresentaciones[rel.id];
                 const presIdx = relSelectedPres[rel.id] ?? 0;
@@ -844,7 +834,7 @@ export default function ProductoDetallePage() {
                 return (
                   <div
                     key={rel.id}
-                    className="flex-shrink-0 w-[calc(20%-12.8px)] min-w-[180px] rounded-2xl border border-gray-100 bg-white overflow-hidden flex flex-col"
+                    className="flex-shrink-0 w-[160px] sm:w-[180px] md:w-[200px] lg:w-[calc(20%-12.8px)] snap-start rounded-2xl border border-gray-100 bg-white overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow"
                   >
                     <Link href={`/productos/${rel.id}`}>
                       <div className="aspect-square bg-gray-100 overflow-hidden relative">

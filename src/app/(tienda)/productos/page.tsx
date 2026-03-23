@@ -1342,7 +1342,7 @@ function ProductosContent() {
                           return <p className="text-[10px] text-green-600 font-medium">Precio rebajado</p>;
                         })()}
                         {volHint && disc === 0 && (
-                          <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF comprando {volHint.minQty}+</p>
+                          <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ unidades</p>
                         )}
                       </div>
 
