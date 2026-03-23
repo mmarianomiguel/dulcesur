@@ -1282,6 +1282,17 @@ export default function VentasPage() {
       setErrorModal({ open: true, message: "Los montos del pago mixto no suman el total." });
       return;
     }
+    // Credit limit check
+    if (selectedClient && (selectedClient as any).limite_credito > 0) {
+      const ccAmount = formaPago === "Cuenta Corriente" ? total : formaPago === "Mixto" ? mixtoCuentaCorriente : 0;
+      if (ccAmount > 0) {
+        const newDebt = (selectedClient.saldo || 0) + ccAmount;
+        const limit = (selectedClient as any).limite_credito;
+        if (newDebt > limit) {
+          if (!confirm(`El cliente superará su límite de crédito (${formatCurrency(limit)}). Deuda resultante: ${formatCurrency(newDebt)}. ¿Continuar?`)) return;
+        }
+      }
+    }
     setSaving(true);
     setCashDialogOpen(false);
 

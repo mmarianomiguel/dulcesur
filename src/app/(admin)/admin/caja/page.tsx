@@ -94,6 +94,9 @@ async function getNextTurnoNumero(): Promise<number> {
 }
 
 async function abrirTurno(efectivoInicial: number, operador: string): Promise<TurnoCaja> {
+  // Verify no open turno exists (prevents concurrent opens from different browsers)
+  const existing = await getTurnoAbierto();
+  if (existing) throw new Error("Ya existe un turno abierto. Cerralo antes de abrir uno nuevo.");
   const numero = await getNextTurnoNumero();
   const { data, error } = await supabase
     .from("turnos_caja")

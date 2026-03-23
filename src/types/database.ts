@@ -146,6 +146,7 @@ export interface Cliente {
   observacion: string | null;
   fecha_nacimiento: string | null;
   saldo: number;
+  limite_credito: number;
   zona_entrega: string | null;
   dias_entrega: string[] | null;
   activo: boolean;

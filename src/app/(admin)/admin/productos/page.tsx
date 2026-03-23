@@ -559,6 +559,20 @@ export default function ProductosPage() {
         }
         productId = editingProduct.id;
 
+        // Log price change to precio_historial
+        if (editingProduct.precio !== form.precio || editingProduct.costo !== form.costo) {
+          try {
+            await supabase.from("precio_historial").insert({
+              producto_id: editingProduct.id,
+              precio_anterior: editingProduct.precio,
+              precio_nuevo: form.precio,
+              costo_anterior: editingProduct.costo,
+              costo_nuevo: form.costo,
+              usuario: "Admin",
+            });
+          } catch {} // Silent fail if table doesn't exist yet
+        }
+
         // Log stock movement if stock changed manually
         if (editingProduct.stock !== form.stock) {
           const diff = form.stock - editingProduct.stock;

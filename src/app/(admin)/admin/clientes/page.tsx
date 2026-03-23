@@ -82,6 +82,7 @@ const emptyForm = {
   localidad: "",
   codigo_postal: "",
   observacion: "",
+  limite_credito: 0,
   barrio: "",
   vendedor_id: "",
   zona_entrega: "",
@@ -253,6 +254,7 @@ export default function ClientesPage() {
       localidad: c.localidad || "",
       codigo_postal: c.codigo_postal || "",
       observacion: c.observacion || "",
+      limite_credito: (c as any).limite_credito || 0,
       barrio: (c as any).barrio || "",
       vendedor_id: (c as any).vendedor_id || "",
       zona_entrega: c.zona_entrega || "",
@@ -292,6 +294,7 @@ export default function ClientesPage() {
       localidad: form.localidad || null,
       codigo_postal: form.codigo_postal || null,
       observacion: form.observacion || null,
+      limite_credito: form.limite_credito || 0,
       barrio: form.barrio || null,
       vendedor_id: form.vendedor_id || null,
       zona_entrega: form.zona_entrega || null,
@@ -1818,9 +1821,13 @@ export default function ClientesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-2 space-y-2">
+                <div className="space-y-2">
+                  <Label>Límite de crédito</Label>
+                  <Input type="number" min={0} value={form.limite_credito || ""} onChange={(e) => setForm((prev) => ({ ...prev, limite_credito: Math.max(0, Number(e.target.value)) }))} placeholder="0 = sin límite" />
+                </div>
+                <div className="space-y-2">
                   <Label>Observación</Label>
-                  <Textarea value={form.observacion} onChange={(e) => f("observacion", e.target.value)} rows={3} />
+                  <Textarea value={form.observacion} onChange={(e) => f("observacion", e.target.value)} rows={2} />
                 </div>
               </div>
             </TabsContent>
