@@ -440,8 +440,10 @@ export default function VentasPage() {
     for (const d of activeDiscounts) {
       // Skip if discount excludes combos and product is combo
       if (d.excluir_combos && isCombo) continue;
-      // Check minimum quantity for volume discounts
-      if (d.cantidad_minima && qty != null && qty < d.cantidad_minima) continue;
+      // Check minimum quantity for volume discounts - skip if qty not met or not provided
+      if (d.cantidad_minima && d.cantidad_minima > 0) {
+        if (qty == null || qty < d.cantidad_minima) continue;
+      }
       // Check presentation filter
       if (d.presentacion === "unidad" && presName !== "Unidad") continue;
       if (d.presentacion === "caja" && presName === "Unidad") continue;

@@ -272,13 +272,17 @@ function ProductosContent() {
     loadDiscounts();
   }, []);
 
-  function getProductDiscount(producto: Producto, presLabel?: string | null): number {
+  function getProductDiscount(producto: Producto, presLabel?: string | null, qty?: number): number {
     let best = 0;
     // If no presLabel provided, treat as "Unidad" (default presentation)
     const effectivePres = presLabel ?? "Unidad";
     const isBox = effectivePres !== "Unidad" && !effectivePres.startsWith("Unidad");
     const isUnit = !isBox;
     for (const d of activeDiscounts) {
+      // Skip volume discounts if qty not met
+      if (d.cantidad_minima && d.cantidad_minima > 0) {
+        if (qty == null || qty < d.cantidad_minima) continue;
+      }
       // Check presentation filter
       if (d.presentacion === "unidad" && isBox) continue;
       if (d.presentacion === "caja" && isUnit) continue;

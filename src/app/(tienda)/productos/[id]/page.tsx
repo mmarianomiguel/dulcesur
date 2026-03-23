@@ -112,12 +112,16 @@ export default function ProductoDetallePage() {
     loadDiscounts();
   }, []);
 
-  function getProductDiscount(prod: Producto, presLabel?: string | null): number {
+  function getProductDiscount(prod: Producto, presLabel?: string | null, qty?: number): number {
     let best = 0;
     const effectivePres = presLabel ?? "Unidad";
     const isBox = effectivePres !== "Unidad" && !effectivePres.startsWith("Unidad");
     const isUnit = !isBox;
     for (const d of activeDiscounts) {
+      // Skip volume discounts if qty not met
+      if (d.cantidad_minima && d.cantidad_minima > 0) {
+        if (qty == null || qty < d.cantidad_minima) continue;
+      }
       if (d.presentacion === "unidad" && isBox) continue;
       if (d.presentacion === "caja" && isUnit) continue;
       if (d.aplica_a === "todos") {
@@ -803,8 +807,11 @@ export default function ProductoDetallePage() {
               {relacionados.map((rel) => {
                 const pres = relPresentaciones[rel.id];
                 const presIdx = relSelectedPres[rel.id] ?? 0;
+                const presLabel = pres && pres[presIdx] ? pres[presIdx].nombre : "Unidad";
                 const price = pres && pres.length > 1 ? (pres[presIdx]?.precio ?? rel.precio) : rel.precio;
                 const qty = relQty[rel.id] ?? 1;
+                const relDiscount = getProductDiscount(rel, presLabel);
+                const relDiscountedPrice = relDiscount > 0 ? Math.round(price * (1 - relDiscount / 100)) : price;
 
                 return (
                   <div
@@ -813,6 +820,11 @@ export default function ProductoDetallePage() {
                   >
                     <Link href={`/productos/${rel.id}`}>
                       <div className="aspect-square bg-gray-100 overflow-hidden relative">
+                        {relDiscount > 0 && (
+                          <span className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            -{relDiscount}%
+                          </span>
+                        )}
                         {rel.imagen_url ? (
                           <Image
                             src={rel.imagen_url}
@@ -836,9 +848,16 @@ export default function ProductoDetallePage() {
                           {rel.nombre}
                         </p>
                       </Link>
-                      <p className="text-base font-bold text-gray-900 mt-1">
-                        {formatCurrency(price)}
-                      </p>
+                      {relDiscount > 0 ? (
+                        <div className="mt-1">
+                          <span className="text-xs text-gray-400 line-through mr-1.5">{formatCurrency(price)}</span>
+                          <span className="text-base font-bold text-red-600">{formatCurrency(relDiscountedPrice)}</span>
+                        </div>
+                      ) : (
+                        <p className="text-base font-bold text-gray-900 mt-1">
+                          {formatCurrency(price)}
+                        </p>
+                      )}
 
                       {/* Presentacion pills */}
                       {pres && pres.length > 1 && (
@@ -886,12 +905,13 @@ export default function ProductoDetallePage() {
                         </div>
                         <button
                           onClick={() => {
-                            addToCart(rel, price, getRelLabel(rel), qty);
+                            const finalPrice = relDiscount > 0 ? relDiscountedPrice : price;
+                            addToCart(rel, finalPrice, getRelLabel(rel), qty, relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined);
                             setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
                           }}
                           className="flex-1 bg-pink-600 hover:bg-pink-700 text-white text-xs py-2 rounded-lg font-semibold transition-colors"
                         >
-                          Agregar {formatCurrency(price * qty)}
+                          Agregar {formatCurrency((relDiscount > 0 ? relDiscountedPrice : price) * qty)}
                         </button>
                       </div>
                     </div>
