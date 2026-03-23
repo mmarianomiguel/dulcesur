@@ -1545,7 +1545,7 @@ export default function VentasPage() {
               venta_id: venta.id,
             });
             await supabase.from("clientes").update({ saldo: newSaldoAfterCobro }).eq("id", clientId);
-            selectedClient.saldo = newSaldoAfterCobro;
+            if (selectedClient) Object.assign(selectedClient, { saldo: newSaldoAfterCobro });
           }
         }
 
