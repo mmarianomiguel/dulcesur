@@ -115,11 +115,13 @@ export function GlobalSearch() {
 
   const navigate = (result: SearchResult) => {
     setOpen(false);
+    const searchParam = encodeURIComponent(result.type === "venta" ? result.title.replace("Venta ", "") : result.title);
+    const url = `${result.url}?buscar=${searchParam}`;
     setTimeout(() => {
       if (window.location.pathname === result.url) {
-        window.location.reload();
+        window.location.href = url;
       } else {
-        router.push(result.url);
+        router.push(url);
       }
     }, 100);
   };

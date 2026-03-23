@@ -118,8 +118,9 @@ export default function ProductosPage() {
   const [proveedores, setProveedores] = useState<ProveedorOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const [search, setSearch] = useState(searchParams?.get("buscar") || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams?.get("buscar") || "");
   const [category, setCategory] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductoWithRelations | null>(null);

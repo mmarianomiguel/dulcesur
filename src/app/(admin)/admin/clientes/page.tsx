@@ -107,7 +107,10 @@ export default function ClientesPage() {
   const [activeTab, setActiveTab] = useState<"listado" | "cobranzas" | "zonas">("listado");
   const [clients, setClients] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => {
+    if (typeof window !== "undefined") return new URLSearchParams(window.location.search).get("buscar") || "";
+    return "";
+  });
   const [filterDomicilio, setFilterDomicilio] = useState("");
   const [filterZona, setFilterZona] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
