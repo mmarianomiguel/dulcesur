@@ -1589,7 +1589,9 @@ export default function VentasPage() {
 
         resetSale();
         fetchData();
-        setSuccessModal({ open: true, ...saleData, pdfUrl: null });
+        const modalData = { open: true, ...saleData, pdfUrl: null };
+        setSuccessModal(modalData);
+        setLastPrintData(modalData);
       }
     } catch (err: any) {
       setErrorModal({ open: true, message: `Error inesperado: ${err?.message || String(err)}` });
@@ -3329,7 +3331,7 @@ export default function VentasPage() {
 
       {/* Success Modal with PDF Preview */}
       <Dialog open={successModal.open} onOpenChange={(open) => {
-        if (!open) { setLastPrintData({ ...successModal }); setSuccessModal((prev) => ({ ...prev, open: false, pdfUrl: null })); }
+        if (!open) setSuccessModal((prev) => ({ ...prev, open: false, pdfUrl: null }));
       }}>
         <DialogContent className="max-w-3xl max-h-[92vh] p-0 overflow-hidden flex flex-col">
           {/* Header */}

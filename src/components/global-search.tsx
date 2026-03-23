@@ -115,7 +115,13 @@ export function GlobalSearch() {
 
   const navigate = (result: SearchResult) => {
     setOpen(false);
-    router.push(result.url);
+    setTimeout(() => {
+      if (window.location.pathname === result.url) {
+        window.location.reload();
+      } else {
+        router.push(result.url);
+      }
+    }, 100);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
