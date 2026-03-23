@@ -2122,14 +2122,18 @@ export default function VentasPage() {
                                 value={value ? new Intl.NumberFormat("es-AR").format(value) : ""}
                                 onChange={(e) => {
                                   const raw = e.target.value.replace(/\./g, "").replace(",", ".");
-                                  const val = parseFloat(raw) || 0;
+                                  const val = Math.min(parseFloat(raw) || 0, baseTotal);
                                   setter(val);
-                                  // Auto-calculate transfer as remainder
+                                  // Auto-calculate the other field as remainder
                                   if (mixtoToggleTransferencia) {
                                     const otherNonTransf = key === "efectivo"
                                       ? mixtoCuentaCorriente
                                       : mixtoEfectivo;
                                     setMixtoTransferencia(Math.max(0, baseTotal - val - otherNonTransf));
+                                  } else {
+                                    // No transfer: auto-fill the other field
+                                    const otherSetter = key === "efectivo" ? setMixtoCuentaCorriente : setMixtoEfectivo;
+                                    otherSetter(Math.max(0, baseTotal - val));
                                   }
                                 }}
                                 className="pl-6 h-9 text-right text-sm"
