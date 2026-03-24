@@ -212,9 +212,18 @@ export default function CheckoutPage() {
         costo_envio: data.costo_envio ?? 0,
       };
       setConfig(cfg);
-      // Load WhatsApp URL from footer_config
+      // Load WhatsApp URL from footer_config or empresa phone
       const fc = (data as any)?.footer_config;
-      if (fc?.whatsapp_url) setWhatsappUrl(fc.whatsapp_url);
+      if (fc?.whatsapp_url) {
+        setWhatsappUrl(fc.whatsapp_url);
+      } else {
+        // Fallback: try empresa phone
+        const { data: emp } = await supabase.from("empresa").select("telefono").limit(1).single();
+        if (emp?.telefono) {
+          const phone = emp.telefono.replace(/\D/g, "");
+          setWhatsappUrl(`https://wa.me/54${phone.startsWith("54") ? phone.slice(2) : phone}`);
+        }
+      }
       const dates = getAvailableDates(cfg.dias_entrega, cfg.dias_max_programacion, cfg.hora_corte);
       setAvailableDates(dates);
       if (dates.length > 0) {
@@ -787,10 +796,10 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* WhatsApp button for transfers */}
+          {/* WhatsApp button for transfers - always use store phone */}
           {isTransfer && whatsappUrl && (
             <a
-              href={`${whatsappUrl}${whatsappUrl.includes("?") ? "&" : "?"}text=${waMsg}`}
+              href={`${whatsappUrl.split("?")[0]}?text=${waMsg}`}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full flex items-center justify-center gap-3 bg-[#25D366] hover:bg-[#20BD5A] text-white py-3.5 rounded-xl font-semibold transition mb-4 text-sm"
