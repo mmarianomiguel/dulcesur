@@ -740,15 +740,20 @@ export default function CheckoutPage() {
     const totalFinal = subtotal + costoEnvio + recargoTransf;
     const montoTransf = metodoPago === "transferencia" ? totalFinal : metodoPago === "mixto" ? mixtoTransferencia : 0;
 
-    // Build WhatsApp message
+    // Build WhatsApp message with full breakdown
+    const pagoDetalle = metodoPago === "mixto"
+      ? `💵 Efectivo: $${mixtoEfectivo.toLocaleString("es-AR")}\n🏦 Transferencia: $${mixtoTransferencia.toLocaleString("es-AR")}`
+      : metodoPago === "transferencia"
+      ? `🏦 Transferencia: $${totalFinal.toLocaleString("es-AR")}`
+      : `💵 Efectivo: $${totalFinal.toLocaleString("es-AR")}`;
+
     const waMsg = encodeURIComponent(
       `Hola! Realicé un pedido online 🛒\n\n` +
       `📋 Pedido: #${orderNumber}\n` +
-      `👤 Cliente: ${nombre} ${apellido}\n` +
-      `💰 Total: $${totalFinal.toLocaleString("es-AR")}\n` +
-      (isTransfer ? `🏦 Monto a transferir: $${montoTransf.toLocaleString("es-AR")}\n` : "") +
-      `📱 Método de pago: ${metodoPago === "efectivo" ? "Efectivo" : metodoPago === "transferencia" ? "Transferencia" : "Pago Mixto"}\n\n` +
-      `¿Me pueden enviar los datos para la transferencia? Gracias!`
+      `👤 ${nombre} ${apellido}\n` +
+      `💰 Total: $${totalFinal.toLocaleString("es-AR")}\n\n` +
+      `Detalle de pago:\n${pagoDetalle}\n\n` +
+      (montoTransf > 0 ? `Necesito transferir $${montoTransf.toLocaleString("es-AR")}. ¿Me pasan los datos? Gracias!` : ``)
     );
 
     return (
@@ -767,32 +772,78 @@ export default function CheckoutPage() {
           </div>
 
           {/* Order details card */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 mb-6 space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 mb-6">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
               <span className="text-sm text-gray-500">N.° de pedido</span>
               <span className="font-mono font-bold text-pink-600 text-lg">{orderNumber}</span>
             </div>
-            <div className="border-t border-gray-100" />
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">Total</span>
-              <span className="font-bold text-gray-900 text-lg">${totalFinal.toLocaleString("es-AR")}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">Método de pago</span>
-              <span className="text-sm font-medium">{metodoPago === "efectivo" ? "Efectivo" : metodoPago === "transferencia" ? "Transferencia" : "Pago Mixto"}</span>
-            </div>
-            {isTransfer && montoTransf > 0 && (
-              <>
-                <div className="border-t border-gray-100" />
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-blue-900 mb-1">💳 Monto a transferir: ${montoTransf.toLocaleString("es-AR")}</p>
-                  <p className="text-xs text-blue-700">Te enviaremos los datos bancarios por WhatsApp para realizar la transferencia.</p>
+
+            {/* Desglose */}
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Subtotal</span>
+                <span className="font-medium">${subtotal.toLocaleString("es-AR")}</span>
+              </div>
+              {recargoTransf > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Recargo transferencia</span>
+                  <span className="font-medium">${recargoTransf.toLocaleString("es-AR")}</span>
                 </div>
-              </>
+              )}
+              <div className="border-t border-gray-200 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-900">Total</span>
+                  <span className="font-bold text-gray-900 text-xl">${totalFinal.toLocaleString("es-AR")}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Detalle de pago */}
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Detalle de pago</p>
+              {metodoPago === "efectivo" && (
+                <div className="flex items-center justify-between text-sm bg-green-50 rounded-lg px-3 py-2">
+                  <span className="text-green-800">💵 Efectivo</span>
+                  <span className="font-bold text-green-900">${totalFinal.toLocaleString("es-AR")}</span>
+                </div>
+              )}
+              {metodoPago === "transferencia" && (
+                <div className="flex items-center justify-between text-sm bg-blue-50 rounded-lg px-3 py-2">
+                  <span className="text-blue-800">🏦 Transferencia</span>
+                  <span className="font-bold text-blue-900">${totalFinal.toLocaleString("es-AR")}</span>
+                </div>
+              )}
+              {metodoPago === "mixto" && (
+                <>
+                  {mixtoEfectivo > 0 && (
+                    <div className="flex items-center justify-between text-sm bg-green-50 rounded-lg px-3 py-2">
+                      <span className="text-green-800">💵 Efectivo</span>
+                      <span className="font-bold text-green-900">${mixtoEfectivo.toLocaleString("es-AR")}</span>
+                    </div>
+                  )}
+                  {mixtoTransferencia > 0 && (
+                    <div className="flex items-center justify-between text-sm bg-blue-50 rounded-lg px-3 py-2">
+                      <span className="text-blue-800">🏦 Transferencia</span>
+                      <span className="font-bold text-blue-900">${mixtoTransferencia.toLocaleString("es-AR")}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Transfer info */}
+            {isTransfer && montoTransf > 0 && (
+              <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-blue-900">💳 Monto a transferir: ${montoTransf.toLocaleString("es-AR")}</p>
+                <p className="text-xs text-blue-700 mt-1">Te enviaremos los datos bancarios por WhatsApp para realizar la transferencia.</p>
+              </div>
             )}
-            <div className="flex items-center justify-between text-xs text-gray-400">
-              <span>Email: {email}</span>
-              <span>{metodoEntrega === "envio" ? "Envío a domicilio" : "Retiro en local"}</span>
+
+            {/* Footer */}
+            <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
+              <span>📧 {email}</span>
+              <span>{metodoEntrega === "envio" ? "🚚 Envío a domicilio" : "🏪 Retiro en local"}</span>
             </div>
           </div>
 
