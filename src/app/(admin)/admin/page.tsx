@@ -386,7 +386,7 @@ export default function DashboardPage() {
     }
     setMonthlyData(months);
 
-    const { data: ventasCat } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha)").gte("ventas.fecha", start).lt("ventas.fecha", end);
+    const { data: ventasCat } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada");
     const catMap: Record<string, number> = {};
     (ventasCat || []).forEach((vi: any) => { catMap[vi.productos?.categorias?.nombre || "Sin categoria"] = (catMap[vi.productos?.categorias?.nombre || "Sin categoria"] || 0) + (vi.subtotal || 0); });
     setVentasPorCategoria(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));

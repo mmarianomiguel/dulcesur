@@ -1136,46 +1136,30 @@ export default function ListadoVentasPage() {
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     const hora = nowTimeARG();
 
-    // Always update pedidos_tienda by numero (works for both sources)
+    // Single update to pedidos_tienda by numero (covers all sources)
     if (pedido.numero) {
       await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("numero", pedido.numero);
     }
-    // Also try by id for direct pedido objects
-    if (pedido._source !== "historial" && pedido.id > 0) {
-      await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
-    }
 
-    // Find linked venta
+    // Find linked venta (use cached _ventaId first, then query)
     let ventaLinked: { id: string; cliente_id: string | null } | null = null;
-    if (pedido._source === "historial" && pedido._ventaId) {
+    if (pedido._ventaId) {
       ventaLinked = { id: pedido._ventaId, cliente_id: pedido._clienteId || null };
-    } else {
-      const { data } = await supabase
-        .from("ventas")
-        .select("id, cliente_id")
-        .eq("numero", pedido.numero)
-        .maybeSingle();
+    } else if (pedido.numero) {
+      const { data } = await supabase.from("ventas").select("id, cliente_id").eq("numero", pedido.numero).maybeSingle();
       ventaLinked = data as typeof ventaLinked;
     }
 
-    // Sync estado to linked venta (ventas uses "anulada" instead of "cancelado")
-    const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;
-    const ventaUpdate: Record<string, unknown> = { estado: ventaEstado };
-    if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
-    if (nuevoEstado === "cancelado") {
-      ventaUpdate.entregado = false;
-      ventaUpdate.observacion = isHistorial
-        ? `ANULADA (Cancelación desde Historial)`
-        : `ANULADA (Cancelación desde Pedidos Online)`;
-    }
+    // Sync estado to linked venta
     if (ventaLinked) {
+      const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;
+      const ventaUpdate: Record<string, unknown> = { estado: ventaEstado };
+      if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
+      if (nuevoEstado === "cancelado") {
+        ventaUpdate.entregado = false;
+        ventaUpdate.observacion = `ANULADA (Cancelación desde ${isHistorial ? "Historial" : "Pedidos Online"})`;
+      }
       await supabase.from("ventas").update(ventaUpdate).eq("id", ventaLinked.id);
-    }
-
-    // Also sync to pedidos_tienda if this is a historial venta (might be a linked web order)
-    if (isHistorial) {
-      const ptEstado = nuevoEstado === "cancelado" ? "cancelado" : nuevoEstado;
-      await supabase.from("pedidos_tienda").update({ estado: ptEstado }).eq("numero", pedido.numero);
     }
 
     // Return stock when cancelling (only if wasn't already cancelled)
@@ -1679,17 +1663,22 @@ export default function ListadoVentasPage() {
                         <Eye className="w-4 h-4" />
                       </Button>
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={async () => {
-                        let v = ventas.find((vr) => vr.id === order._ventaId);
-                        if (!v) {
-                          const { data } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", order.numero).single();
-                          if (data) v = data as any;
-                        }
-                        if (v) {
-                          // Override client data for online orders (both sources)
-                          if (order.nombre_cliente && (order._source === "pedidos" || order.isOnline)) {
-                            (v as any).clientes = { nombre: order.nombre_cliente, cuit: "", domicilio: order.direccion_texto || "", telefono: order.telefono || "", email: order.email || "" };
+                        try {
+                          let v = ventas.find((vr) => vr.id === order._ventaId);
+                          if (!v) {
+                            const { data } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", order.numero).maybeSingle();
+                            if (data) v = data as any;
                           }
-                          preparePrint(v);
+                          if (v) {
+                            if (order.nombre_cliente && (order._source === "pedidos" || order.isOnline)) {
+                              (v as any).clientes = { nombre: order.nombre_cliente, cuit: "", domicilio: order.direccion_texto || "", telefono: order.telefono || "", email: order.email || "" };
+                            }
+                            preparePrint(v);
+                          } else {
+                            showAdminToast("No se encontró la venta vinculada para imprimir", "error");
+                          }
+                        } catch (err) {
+                          showAdminToast("Error al preparar impresión", "error");
                         }
                       }} title="Imprimir">
                         <Printer className="w-4 h-4" />
@@ -1697,11 +1686,11 @@ export default function ListadoVentasPage() {
                       {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
                         <>
                           {order.estado === "pendiente" && (
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50" onClick={() => poHandleEstadoChange(order, "armado")} title="Marcar armado">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50" onClick={async () => { await poHandleEstadoChange(order, "armado"); setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "armado" } : p)); setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "armado" } : v)); showAdminToast("Marcado como armado", "success"); }} title="Marcar armado">
                               <Package className="w-4 h-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => poHandleEstadoChange(order, "entregado")} title="Marcar entregado">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={async () => { await poHandleEstadoChange(order, "entregado"); setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p)); setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v)); showAdminToast("Marcado como entregado", "success"); }} title="Marcar entregado">
                             <CheckCircle className="w-4 h-4" />
                           </Button>
                         </>
@@ -1940,9 +1929,10 @@ export default function ListadoVentasPage() {
                             }
                             await poHandleEstadoChange(poSelectedPedido, val);
                             setPoSelectedPedido({ ...poSelectedPedido, estado: val });
-                            // Refresh lists so cards update
-                            fetchPedidos();
-                            fetchVentas();
+                            // Update local arrays immediately for instant UI feedback
+                            setPoPedidos(prev => prev.map(p => p.numero === poSelectedPedido.numero ? { ...p, estado: val } : p));
+                            setVentas(prev => prev.map(v => v.numero === poSelectedPedido.numero ? { ...v, estado: val as string === "cancelado" ? "anulada" : val as string, entregado: val === "entregado" } as any : v));
+                            showAdminToast(`Estado actualizado a ${val}`, "success");
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                             poSelectedPedido.estado === val
