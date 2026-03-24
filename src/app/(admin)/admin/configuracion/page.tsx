@@ -111,7 +111,7 @@ export default function ConfiguracionPage() {
   const [rcfg, setRcfg] = useState<ReceiptConfig>(defaultReceiptConfig);
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
   const [editingCuenta, setEditingCuenta] = useState<CuentaBancaria | null>(null);
-  const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "" });
+  const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "" });
   const [showCuentaForm, setShowCuentaForm] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("empresa");
   const [successMsg, setSuccessMsg] = useState("");
@@ -768,15 +768,21 @@ export default function ConfiguracionPage() {
                                 <Landmark className="w-5 h-5 text-cyan-500" />
                               </div>
                               <div>
-                                <p className="text-sm font-semibold">{c.nombre}</p>
-                                <p className="text-xs text-muted-foreground">{c.tipo}{c.alias ? ` · ${c.alias}` : ""}</p>
-                                <p className="text-xs text-muted-foreground font-mono mt-0.5">{c.cbu_cvu}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-semibold">{c.nombre}</p>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${c.origen === "proveedor" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
+                                    {c.origen === "proveedor" ? "Proveedor" : "Propia"}
+                                  </span>
+                                </div>
+                                {c.alias && <p className="text-xs text-muted-foreground">Alias: <span className="font-mono font-medium">{c.alias}</span></p>}
+                                {c.titular && <p className="text-xs text-muted-foreground">Titular: {c.titular}</p>}
+                                {c.cbu_cvu && <p className="text-xs text-muted-foreground font-mono mt-0.5">{c.cbu_cvu}</p>}
                               </div>
                             </div>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="sm" onClick={() => {
                                 setEditingCuenta(c);
-                                setCuentaForm({ nombre: c.nombre, tipo: c.tipo, cbu_cvu: c.cbu_cvu, alias: c.alias });
+                                setCuentaForm({ nombre: c.nombre, tipo: c.tipo, cbu_cvu: c.cbu_cvu, alias: c.alias, origen: c.origen || "propia", titular: c.titular || "" });
                                 setShowCuentaForm(true);
                               }}>
                                 <Pencil className="w-3.5 h-3.5" />
@@ -808,47 +814,65 @@ export default function ConfiguracionPage() {
                     <CardContent className="pt-6 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <Label>Nombre</Label>
-                          <Input placeholder="Ej: Brubank, Mercado Pago" value={cuentaForm.nombre} onChange={(ev) => setCuentaForm({ ...cuentaForm, nombre: ev.target.value })} />
+                          <Label>Nombre de la cuenta</Label>
+                          <Input placeholder="Ej: Brubank, Mercado Pago, Arcor" value={cuentaForm.nombre} onChange={(ev) => setCuentaForm({ ...cuentaForm, nombre: ev.target.value })} />
                         </div>
                         <div className="space-y-1">
-                          <Label>Tipo</Label>
+                          <Label>¿De quién es?</Label>
+                          <div className="flex gap-2">
+                            {([["propia", "🏦 Propia"], ["proveedor", "🏭 Proveedor"]] as const).map(([val, label]) => (
+                              <button
+                                key={val}
+                                type="button"
+                                onClick={() => setCuentaForm({ ...cuentaForm, origen: val })}
+                                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition ${cuentaForm.origen === val ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:border-primary/50"}`}
+                              >{label}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Alias</Label>
+                          <Input placeholder="Ej: dulcesur.mp, arcor.pagos" value={cuentaForm.alias} onChange={(ev) => setCuentaForm({ ...cuentaForm, alias: ev.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Titular (opcional)</Label>
+                          <Input placeholder="Nombre del titular" value={cuentaForm.titular} onChange={(ev) => setCuentaForm({ ...cuentaForm, titular: ev.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>CBU / CVU (opcional)</Label>
+                          <Input placeholder="22 dígitos" value={cuentaForm.cbu_cvu} onChange={(ev) => setCuentaForm({ ...cuentaForm, cbu_cvu: ev.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Tipo de cuenta</Label>
                           <Select value={cuentaForm.tipo} onValueChange={(v) => setCuentaForm({ ...cuentaForm, tipo: v ?? "" })}>
                             <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Caja de Ahorro">Caja de Ahorro</SelectItem>
                               <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
+                              <SelectItem value="Billetera Virtual">Billetera Virtual</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1">
-                          <Label>CBU / CVU</Label>
-                          <Input placeholder="22 dígitos" value={cuentaForm.cbu_cvu} onChange={(ev) => setCuentaForm({ ...cuentaForm, cbu_cvu: ev.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Alias (opcional)</Label>
-                          <Input placeholder="mi.alias.mp" value={cuentaForm.alias} onChange={(ev) => setCuentaForm({ ...cuentaForm, alias: ev.target.value })} />
-                        </div>
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "" }); }}>
+                        <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "" }); }}>
                           Cancelar
                         </Button>
                         <Button size="sm" disabled={!cuentaForm.nombre} onClick={async () => {
                           if (editingCuenta) {
                             await supabase.from("cuentas_bancarias").update({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, updated_at: new Date().toISOString(),
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, updated_at: new Date().toISOString(),
                             }).eq("id", editingCuenta.id);
                             setCuentas(cuentas.map((c) => c.id === editingCuenta.id ? { ...c, ...cuentaForm } : c));
                           } else {
                             const { data: newCuenta } = await supabase.from("cuentas_bancarias").insert({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, origen: "propia",
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen,
                             }).select("id").single();
                             if (newCuenta) setCuentas([...cuentas, { id: newCuenta.id, ...cuentaForm }]);
                           }
                           setShowCuentaForm(false);
                           setEditingCuenta(null);
-                          setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "" });
+                          setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "" });
                         }}>
                           <Check className="w-4 h-4 mr-1" />
                           {editingCuenta ? "Actualizar" : "Agregar"}
