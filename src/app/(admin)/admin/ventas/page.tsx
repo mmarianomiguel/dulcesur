@@ -416,8 +416,8 @@ export default function VentasPage() {
   const total = baseTotal + transferSurcharge;
 
   const mixtoSum = Math.round((mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente) * 100) / 100;
-  const mixtoRemaining = formaPago === "Mixto" ? Math.round((baseTotal - mixtoSum) * 100) / 100 : 0;
-  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 0.5 && mixtoSum > 0);
+  const mixtoRemaining = formaPago === "Mixto" ? Math.round((total - mixtoSum) * 100) / 100 : 0;
+  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 1 && mixtoSum > 0);
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
   const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
@@ -737,7 +737,7 @@ export default function VentasPage() {
       if (others.length === 1) {
         // Two methods: auto-fill the other
         const otherKey = others[0];
-        const remaining = baseTotal - changedValue;
+        const remaining = total - changedValue;
         if (otherKey === "efectivo") setMixtoEfectivo(Math.max(0, remaining));
         if (otherKey === "transferencia") setMixtoTransferencia(Math.max(0, remaining));
         if (otherKey === "corriente") setMixtoCuentaCorriente(Math.max(0, remaining));
@@ -745,13 +745,13 @@ export default function VentasPage() {
         // Three methods: auto-fill the last one
         const lastOther = others[others.length - 1];
         const sumOthers = others.slice(0, -1).reduce((s, k) => s + values[k], 0);
-        const remaining = baseTotal - changedValue - sumOthers;
+        const remaining = total - changedValue - sumOthers;
         if (lastOther === "efectivo") setMixtoEfectivo(Math.max(0, remaining));
         if (lastOther === "transferencia") setMixtoTransferencia(Math.max(0, remaining));
         if (lastOther === "corriente") setMixtoCuentaCorriente(Math.max(0, remaining));
       }
     },
-    [baseTotal, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente, mixtoToggleEfectivo, mixtoToggleTransferencia, mixtoToggleCuentaCorriente]
+    [total, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente, mixtoToggleEfectivo, mixtoToggleTransferencia, mixtoToggleCuentaCorriente]
   );
 
   const handleMixtoInputChange = (field: string, value: number, setter: (v: number) => void) => {

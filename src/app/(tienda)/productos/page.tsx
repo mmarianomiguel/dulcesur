@@ -571,6 +571,7 @@ function ProductosContent() {
         imagen_url: producto.imagen_url,
         cantidad: canAdd,
         presentacion: presLabel || undefined,
+        unidades_por_presentacion: presUnits,
       });
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
