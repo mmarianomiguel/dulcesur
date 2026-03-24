@@ -212,6 +212,58 @@ export default function EditarPreciosPage() {
   // Dialogs
   const [massEditOpen, setMassEditOpen] = useState(false);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
+  const [roundMultiple, setRoundMultiple] = useState<5 | 10>(10);
+  const [roundMode, setRoundMode] = useState<"nearest" | "up" | "down">("nearest");
+  const [roundPreview, setRoundPreview] = useState<{ id: string; nombre: string; precioActual: number; precioNuevo: number }[]>([]);
+  const [roundOpen, setRoundOpen] = useState(false);
+
+  const calcRound = (price: number, mult: number, mode: string) => {
+    if (mode === "up") return Math.ceil(price / mult) * mult;
+    if (mode === "down") return Math.floor(price / mult) * mult;
+    return Math.round(price / mult) * mult;
+  };
+
+  const generateRoundPreview = () => {
+    const ids = selectedIds.size > 0 ? [...selectedIds] : productos.map((p) => p.id);
+    const preview = ids.map((id) => {
+      const p = productos.find((pr) => pr.id === id);
+      if (!p) return null;
+      const nuevo = calcRound(p.precio, roundMultiple, roundMode);
+      if (nuevo === p.precio) return null;
+      return { id: p.id, nombre: p.nombre, precioActual: p.precio, precioNuevo: nuevo };
+    }).filter(Boolean) as any[];
+    setRoundPreview(preview);
+  };
+
+  const applyRounding = async () => {
+    if (roundPreview.length === 0) return;
+    setSaving(true);
+    for (const item of roundPreview) {
+      const prod = productos.find((p) => p.id === item.id);
+      if (!prod) continue;
+      await supabase.from("productos").update({ precio: item.precioNuevo }).eq("id", item.id);
+      await supabase.from("precio_historial").insert({
+        producto_id: item.id, precio_anterior: item.precioActual, precio_nuevo: item.precioNuevo,
+        costo_anterior: prod.costo, costo_nuevo: prod.costo, usuario: "Admin (Redondeo)",
+      });
+      // Update presentaciones
+      const presRows = presentaciones.filter((pr) => pr.producto_id === item.id);
+      for (const pres of presRows) {
+        if (pres.cantidad === 1) {
+          await supabase.from("presentaciones").update({ precio: item.precioNuevo }).eq("id", pres.id);
+        } else if (pres.cantidad > 1 && item.precioActual > 0) {
+          const ratio = item.precioNuevo / item.precioActual;
+          const newPresPrecio = calcRound(Math.round(pres.precio * ratio), roundMultiple, roundMode);
+          await supabase.from("presentaciones").update({ precio: newPresPrecio }).eq("id", pres.id);
+        }
+      }
+    }
+    setSaving(false);
+    setRoundOpen(false);
+    setRoundPreview([]);
+    // Reload page to refresh data
+    window.location.reload();
+  };
 
   // Confirmation dialog for mass edit
   const [confirmMassEditOpen, setConfirmMassEditOpen] = useState(false);
@@ -797,6 +849,21 @@ export default function EditarPreciosPage() {
                   </Badge>
                 )}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setRoundOpen(true);
+                  setRoundPreview([]);
+                }}
+              >
+                🔄 Redondear Precios
+                {selectedIds.size > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-xs">
+                    {selectedIds.size}
+                  </Badge>
+                )}
+              </Button>
             </div>
           </div>
 
@@ -1154,6 +1221,99 @@ export default function EditarPreciosPage() {
             >
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rounding Dialog */}
+      <Dialog open={roundOpen} onOpenChange={setRoundOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Redondear Precios</DialogTitle>
+            <DialogDescription>
+              {selectedIds.size > 0 ? `${selectedIds.size} productos seleccionados` : "Todos los productos"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Multiple */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Redondear a múltiplo de</Label>
+              <div className="flex gap-2">
+                {([5, 10] as const).map((m) => (
+                  <button key={m} onClick={() => setRoundMultiple(m)}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-all ${roundMultiple === m ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-border"}`}
+                  >${m}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mode */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Dirección del redondeo</Label>
+              <div className="flex gap-2">
+                {([
+                  { val: "nearest" as const, label: "Más cercano", desc: "$1.946 → $1.945" },
+                  { val: "up" as const, label: "Hacia arriba", desc: "$1.941 → $1.945" },
+                  { val: "down" as const, label: "Hacia abajo", desc: "$1.949 → $1.945" },
+                ]).map((opt) => (
+                  <button key={opt.val} onClick={() => setRoundMode(opt.val)}
+                    className={`flex-1 py-2.5 px-2 rounded-lg text-center border transition-all ${roundMode === opt.val ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-border"}`}
+                  >
+                    <div className="text-sm font-semibold">{opt.label}</div>
+                    <div className={`text-[10px] mt-0.5 ${roundMode === opt.val ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Button variant="outline" className="w-full" onClick={generateRoundPreview}>
+              Ver preview de cambios
+            </Button>
+
+            {/* Preview */}
+            {roundPreview.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{roundPreview.length} precios a modificar</Label>
+                <div className="border rounded-lg overflow-auto max-h-56">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-right">Actual</TableHead>
+                        <TableHead className="text-center w-8"></TableHead>
+                        <TableHead className="text-right">Nuevo</TableHead>
+                        <TableHead className="text-right">Dif.</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {roundPreview.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="text-sm">{item.nombre}</TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(item.precioActual)}</TableCell>
+                          <TableCell className="text-center text-muted-foreground">→</TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">{formatCurrency(item.precioNuevo)}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            <span className={item.precioNuevo > item.precioActual ? "text-red-500" : "text-green-500"}>
+                              {item.precioNuevo > item.precioActual ? "+" : ""}{formatCurrency(item.precioNuevo - item.precioActual)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+            {roundPreview.length === 0 && roundOpen && (
+              <p className="text-center text-sm text-muted-foreground py-4">Hacé click en &quot;Ver preview&quot; para ver qué precios cambiarían</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoundOpen(false)}>Cancelar</Button>
+            <Button onClick={applyRounding} disabled={roundPreview.length === 0 || saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Aplicar redondeo ({roundPreview.length})
             </Button>
           </DialogFooter>
         </DialogContent>
