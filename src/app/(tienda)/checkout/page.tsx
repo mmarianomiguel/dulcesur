@@ -709,6 +709,7 @@ export default function CheckoutPage() {
       localStorage.removeItem("carrito");
       window.dispatchEvent(new Event("cart-updated"));
       setOrderNumber(numero);
+      window.scrollTo({ top: 0, behavior: "instant" });
     } catch (err: any) {
       const msg = err?.message || err?.details || "Error desconocido";
       setErrors([`Hubo un error al procesar tu pedido: ${msg}`]);
@@ -722,42 +723,85 @@ export default function CheckoutPage() {
 
   // Success state
   if (orderNumber) {
+    const isTransfer = metodoPago === "transferencia" || metodoPago === "mixto";
+    const totalFinal = subtotal + costoEnvio + recargoTransf;
+    const montoTransf = metodoPago === "transferencia" ? totalFinal : metodoPago === "mixto" ? mixtoTransferencia : 0;
+
+    // Build WhatsApp message
+    const waMsg = encodeURIComponent(
+      `Hola! Realicé un pedido online 🛒\n\n` +
+      `📋 Pedido: #${orderNumber}\n` +
+      `👤 Cliente: ${nombre} ${apellido}\n` +
+      `💰 Total: $${totalFinal.toLocaleString("es-AR")}\n` +
+      (isTransfer ? `🏦 Monto a transferir: $${montoTransf.toLocaleString("es-AR")}\n` : "") +
+      `📱 Método de pago: ${metodoPago === "efectivo" ? "Efectivo" : metodoPago === "transferencia" ? "Transferencia" : "Pago Mixto"}\n\n` +
+      `¿Me pueden enviar los datos para la transferencia? Gracias!`
+    );
+
     return (
-      <div className="min-h-[80vh] flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="relative mx-auto w-24 h-24 mb-8">
-            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-20" />
-            <div className="relative flex items-center justify-center w-24 h-24 bg-green-100 rounded-full">
-              <CheckCircle className="h-12 w-12 text-green-500" />
+      <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+        <div className="max-w-lg w-full">
+          {/* Success icon */}
+          <div className="text-center mb-8">
+            <div className="relative mx-auto w-20 h-20 mb-6">
+              <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-20" />
+              <div className="relative flex items-center justify-center w-20 h-20 bg-green-100 rounded-full">
+                <CheckCircle className="h-10 w-10 text-green-500" />
+              </div>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">¡Pedido confirmado!</h1>
+            <p className="text-gray-500">Gracias por tu compra en {APP_NAME}</p>
+          </div>
+
+          {/* Order details card */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 mb-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500">N.° de pedido</span>
+              <span className="font-mono font-bold text-pink-600 text-lg">{orderNumber}</span>
+            </div>
+            <div className="border-t border-gray-100" />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500">Total</span>
+              <span className="font-bold text-gray-900 text-lg">${totalFinal.toLocaleString("es-AR")}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-500">Método de pago</span>
+              <span className="text-sm font-medium">{metodoPago === "efectivo" ? "Efectivo" : metodoPago === "transferencia" ? "Transferencia" : "Pago Mixto"}</span>
+            </div>
+            {isTransfer && montoTransf > 0 && (
+              <>
+                <div className="border-t border-gray-100" />
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-blue-900 mb-1">💳 Monto a transferir: ${montoTransf.toLocaleString("es-AR")}</p>
+                  <p className="text-xs text-blue-700">Te enviaremos los datos bancarios por WhatsApp para realizar la transferencia.</p>
+                </div>
+              </>
+            )}
+            <div className="flex items-center justify-between text-xs text-gray-400">
+              <span>Email: {email}</span>
+              <span>{metodoEntrega === "envio" ? "Envío a domicilio" : "Retiro en local"}</span>
             </div>
           </div>
 
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            ¡Pedido confirmado!
-          </h1>
-          <p className="text-gray-500 mb-6">Gracias por tu compra en {APP_NAME}</p>
-
-          <div className="inline-block bg-pink-50 border border-pink-200 rounded-xl px-6 py-3 mb-6">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">N.° de pedido</p>
-            <p className="text-lg font-mono font-bold text-pink-600">{orderNumber}</p>
-          </div>
-
-          <p className="text-gray-500 text-sm mb-8">
-            Te enviamos los detalles a{" "}
-            <span className="font-semibold text-gray-700">{email}</span>
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Link
-              href="/cuenta/pedidos"
-              className="flex-1 inline-flex items-center justify-center gap-2 border-2 border-pink-600 text-pink-600 px-6 py-3 rounded-xl font-semibold hover:bg-pink-50 transition"
+          {/* WhatsApp button for transfers */}
+          {isTransfer && (
+            <a
+              href={`https://wa.me/5491134567890?text=${waMsg}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-3 bg-[#25D366] hover:bg-[#20BD5A] text-white py-3.5 rounded-xl font-semibold transition mb-4 text-sm"
             >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492l4.6-1.47A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75c-2.16 0-4.16-.685-5.797-1.85l-.416-.265-2.722.87.884-2.64-.295-.445A9.697 9.697 0 012.25 12 9.75 9.75 0 0112 2.25 9.75 9.75 0 0121.75 12 9.75 9.75 0 0112 21.75z"/></svg>
+              Enviar por WhatsApp para recibir los datos
+            </a>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Link href="/cuenta/pedidos" className="flex-1 inline-flex items-center justify-center gap-2 border-2 border-pink-600 text-pink-600 px-6 py-3 rounded-xl font-semibold hover:bg-pink-50 transition text-sm">
               Ver mis pedidos
             </Link>
-            <Link
-              href="/productos"
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-pink-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-pink-700 transition"
-            >
+            <Link href="/productos" className="flex-1 inline-flex items-center justify-center gap-2 bg-pink-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-pink-700 transition text-sm">
               Seguir comprando
             </Link>
           </div>

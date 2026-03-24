@@ -61,18 +61,8 @@ interface CuentaBancaria {
   tipo: string;
   cbu_cvu: string;
   alias: string;
-}
-
-function loadCuentasBancarias(): CuentaBancaria[] {
-  try {
-    const stored = localStorage.getItem("cuentas_bancarias");
-    if (stored) return JSON.parse(stored);
-  } catch (err) { console.error("Config load error:", err); }
-  return [];
-}
-
-function saveCuentasBancarias(cuentas: CuentaBancaria[]) {
-  localStorage.setItem("cuentas_bancarias", JSON.stringify(cuentas));
+  titular?: string;
+  origen?: string;
 }
 
 function loadReceiptConfig(): ReceiptConfig {
@@ -147,7 +137,14 @@ export default function ConfiguracionPage() {
   // Load receipt config, bank accounts and module config from localStorage on mount
   useEffect(() => {
     setRcfg(loadReceiptConfig());
-    setCuentas(loadCuentasBancarias());
+    supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre").then(({ data }) => {
+      if (data && data.length > 0) {
+        setCuentas(data.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo_cuenta || "Caja de Ahorro", cbu_cvu: c.cbu_cvu || "", alias: c.alias || "", titular: c.titular || "", origen: c.origen || "propia" })));
+      } else {
+        // Fallback: try localStorage for migration
+        try { const stored = localStorage.getItem("cuentas_bancarias"); if (stored) setCuentas(JSON.parse(stored)); } catch {}
+      }
+    });
     try {
       const stored = localStorage.getItem("modulos_habilitados");
       if (stored) {
@@ -784,10 +781,9 @@ export default function ConfiguracionPage() {
                               }}>
                                 <Pencil className="w-3.5 h-3.5" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="text-destructive" onClick={() => {
-                                const updated = cuentas.filter((x) => x.id !== c.id);
-                                setCuentas(updated);
-                                saveCuentasBancarias(updated);
+                              <Button variant="ghost" size="sm" className="text-destructive" onClick={async () => {
+                                await supabase.from("cuentas_bancarias").update({ activo: false }).eq("id", c.id);
+                                setCuentas(cuentas.filter((x) => x.id !== c.id));
                               }}>
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
@@ -838,15 +834,18 @@ export default function ConfiguracionPage() {
                         <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "" }); }}>
                           Cancelar
                         </Button>
-                        <Button size="sm" disabled={!cuentaForm.nombre || !cuentaForm.cbu_cvu} onClick={() => {
-                          let updated: CuentaBancaria[];
+                        <Button size="sm" disabled={!cuentaForm.nombre} onClick={async () => {
                           if (editingCuenta) {
-                            updated = cuentas.map((c) => c.id === editingCuenta.id ? { ...editingCuenta, ...cuentaForm } : c);
+                            await supabase.from("cuentas_bancarias").update({
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, updated_at: new Date().toISOString(),
+                            }).eq("id", editingCuenta.id);
+                            setCuentas(cuentas.map((c) => c.id === editingCuenta.id ? { ...c, ...cuentaForm } : c));
                           } else {
-                            updated = [...cuentas, { id: crypto.randomUUID(), ...cuentaForm }];
+                            const { data: newCuenta } = await supabase.from("cuentas_bancarias").insert({
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, origen: "propia",
+                            }).select("id").single();
+                            if (newCuenta) setCuentas([...cuentas, { id: newCuenta.id, ...cuentaForm }]);
                           }
-                          setCuentas(updated);
-                          saveCuentasBancarias(updated);
                           setShowCuentaForm(false);
                           setEditingCuenta(null);
                           setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "" });
