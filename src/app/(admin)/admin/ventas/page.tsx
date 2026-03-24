@@ -1489,8 +1489,8 @@ export default function VentasPage() {
           const mixtoEntries: { metodo: string; monto: number }[] = [];
           if (mixtoEfectivo > 0) mixtoEntries.push({ metodo: "Efectivo", monto: mixtoEfectivo });
           if (mixtoTransferencia > 0) {
-            const montoConRecargo = mixtoTransferencia + (mixtoTransferencia * (porcentajeTransferencia / 100));
-            mixtoEntries.push({ metodo: "Transferencia", monto: montoConRecargo });
+            // Don't add surcharge again - it's already included in the total calculation
+            mixtoEntries.push({ metodo: "Transferencia", monto: mixtoTransferencia });
           }
           if (mixtoCuentaCorriente > 0) mixtoEntries.push({ metodo: "Cuenta Corriente", monto: mixtoCuentaCorriente });
 

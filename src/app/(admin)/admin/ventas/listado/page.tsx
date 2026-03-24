@@ -1657,24 +1657,11 @@ export default function ListadoVentasPage() {
                       {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
                         <>
                           {order.estado === "pendiente" && (
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50" onClick={() => {
-                              if (isHistorial) {
-                                poHandleEstadoChange(order, "armado");
-                              } else {
-                                poHandleEstadoChange(order, "armado");
-                              }
-                            }} title="Marcar armado">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50" onClick={() => poHandleEstadoChange(order, "armado")} title="Marcar armado">
                               <Package className="w-4 h-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => {
-                            if (isHistorial) {
-                              const v = ventas.find((vr) => vr.id === order._ventaId);
-                              if (v) marcarEntregado(v);
-                            } else {
-                              poHandleEstadoChange(order, "entregado");
-                            }
-                          }} title="Marcar entregado">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => poHandleEstadoChange(order, "entregado")} title="Marcar entregado">
                             <CheckCircle className="w-4 h-4" />
                           </Button>
                         </>
