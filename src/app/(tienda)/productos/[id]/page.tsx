@@ -340,7 +340,8 @@ export default function ProductoDetallePage() {
       // Check presentation
       if (d.presentacion === "unidad" && currentPresLabel !== "Unidad") continue;
       if (d.presentacion === "caja" && currentPresLabel === "Unidad") continue;
-      return { minQty: d.cantidad_minima, porcentaje: d.porcentaje, nombre: d.nombre };
+      const presType = d.presentacion === "caja" ? "cajas" : d.presentacion === "unidad" ? "unidades" : (currentPresLabel !== "Unidad" ? "cajas" : "unidades");
+      return { minQty: d.cantidad_minima, porcentaje: d.porcentaje, nombre: d.nombre, presType };
     }
     return null;
   })() : null;
@@ -597,10 +598,10 @@ export default function ProductoDetallePage() {
                   <span className="text-xl">🏷️</span>
                   <div>
                     <p className="text-sm text-orange-900 font-bold">
-                      {volumeDiscountHint.porcentaje}% OFF llevando {volumeDiscountHint.minQty} {presLabel}
+                      {volumeDiscountHint.porcentaje}% OFF llevando {volumeDiscountHint.minQty} {volumeDiscountHint.presType}
                     </p>
                     <p className="text-xs text-orange-700 mt-0.5">
-                      {faltan > 0 ? `Agregá ${faltan} ${presLabel} más para obtener el descuento` : "¡Ya alcanzaste el mínimo!"}
+                      {faltan > 0 ? `Agregá ${faltan} ${volumeDiscountHint.presType} más para obtener el descuento` : "¡Ya alcanzaste el mínimo!"}
                     </p>
                   </div>
                 </div>
@@ -838,11 +839,15 @@ export default function ProductoDetallePage() {
                 const relDiscountedPrice = relDiscount > 0 ? Math.round(price * (1 - relDiscount / 100)) : price;
                 // Check for volume discount hint
                 const relVolHint = (() => {
+                  const isBox = presLabel !== "Unidad";
                   for (const d of activeDiscounts) {
                     if (!d.cantidad_minima || d.cantidad_minima <= 0) continue;
+                    if (d.presentacion === "caja" && !isBox) continue;
+                    if (d.presentacion === "unidad" && isBox) continue;
                     const applies = d.aplica_a === "todos" || (d.aplica_a === "productos" && (d.productos_ids || []).includes(rel.id)) || (d.aplica_a === "categorias" && ((d.categorias_ids || []).includes(rel.categoria_id)));
                     if (!applies) continue;
-                    return { minQty: d.cantidad_minima, pct: d.porcentaje };
+                    const label = d.presentacion === "caja" ? "cajas" : d.presentacion === "unidad" ? "un." : (isBox ? "cajas" : "un.");
+                    return { minQty: d.cantidad_minima, pct: d.porcentaje, label };
                   }
                   return null;
                 })();
@@ -863,7 +868,7 @@ export default function ProductoDetallePage() {
                         )}
                         {!relDiscount && relVolHint && (
                           <span className="absolute top-2 left-2 z-10 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow">
-                            -{relVolHint.pct}% x{relVolHint.minQty}+
+                            -{relVolHint.pct}% x{relVolHint.minQty}+ {relVolHint.label}
                           </span>
                         )}
                         {isNew && !relDiscount && !relVolHint && (

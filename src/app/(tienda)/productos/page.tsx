@@ -1235,11 +1235,17 @@ function ProductosContent() {
                 const discountedPrice = disc > 0 ? Math.round(activePrice * (1 - disc / 100)) : activePrice;
                 // Volume discount hint
                 const volHint = (() => {
+                  const isCurrentBox = currentPresLabel && currentPresLabel !== "Unidad" && !currentPresLabel.startsWith("Unidad");
+                  const isCurrentUnit = !isCurrentBox;
                   for (const d of activeDiscounts) {
                     if (!d.cantidad_minima || d.cantidad_minima <= 0 || qty >= d.cantidad_minima) continue;
+                    // Skip if presentation doesn't match current selection
+                    if (d.presentacion === "caja" && isCurrentUnit) continue;
+                    if (d.presentacion === "unidad" && isCurrentBox) continue;
                     const applies = d.aplica_a === "todos" || (d.aplica_a === "productos" && (d.productos_ids || []).includes(producto.id)) || (d.aplica_a === "categorias" && ((d.categorias_ids || []).includes(producto.categoria_id)));
                     if (!applies) continue;
-                    return { minQty: d.cantidad_minima, pct: d.porcentaje };
+                    const label = d.presentacion === "caja" ? "cajas" : d.presentacion === "unidad" ? "unidades" : (isCurrentBox ? "cajas" : "unidades");
+                    return { minQty: d.cantidad_minima, pct: d.porcentaje, label };
                   }
                   return null;
                 })();
@@ -1303,7 +1309,7 @@ function ProductosContent() {
                         // Volume discount hint badge
                         if (volHint) return (
                           <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
-                            {volHint.pct}% OFF x{volHint.minQty}+
+                            {volHint.pct}% OFF x{volHint.minQty}+ {volHint.label}
                           </span>
                         );
                         // "New" badge
@@ -1354,7 +1360,7 @@ function ProductosContent() {
                           return <p className="text-[10px] text-green-600 font-medium">Precio rebajado</p>;
                         })()}
                         {volHint && disc === 0 && (
-                          <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ unidades</p>
+                          <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ {volHint.label}</p>
                         )}
                       </div>
 
