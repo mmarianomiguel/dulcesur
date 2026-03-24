@@ -740,20 +740,20 @@ export default function CheckoutPage() {
     const totalFinal = subtotal + costoEnvio + recargoTransf;
     const montoTransf = metodoPago === "transferencia" ? totalFinal : metodoPago === "mixto" ? mixtoTransferencia : 0;
 
-    // Build WhatsApp message with full breakdown
+    // Build WhatsApp message with full breakdown (no emojis - cause encoding issues)
     const pagoDetalle = metodoPago === "mixto"
-      ? `💵 Efectivo: $${mixtoEfectivo.toLocaleString("es-AR")}\n🏦 Transferencia: $${mixtoTransferencia.toLocaleString("es-AR")}`
+      ? `- Efectivo: $${mixtoEfectivo.toLocaleString("es-AR")}\n- Transferencia: $${mixtoTransferencia.toLocaleString("es-AR")}`
       : metodoPago === "transferencia"
-      ? `🏦 Transferencia: $${totalFinal.toLocaleString("es-AR")}`
-      : `💵 Efectivo: $${totalFinal.toLocaleString("es-AR")}`;
+      ? `- Transferencia: $${totalFinal.toLocaleString("es-AR")}`
+      : `- Efectivo: $${totalFinal.toLocaleString("es-AR")}`;
 
     const waMsg = encodeURIComponent(
-      `Hola! Realicé un pedido online 🛒\n\n` +
-      `📋 Pedido: #${orderNumber}\n` +
-      `👤 ${nombre} ${apellido}\n` +
-      `💰 Total: $${totalFinal.toLocaleString("es-AR")}\n\n` +
+      `Hola! Realice un pedido online.\n\n` +
+      `Pedido: #${orderNumber}\n` +
+      `Cliente: ${nombre} ${apellido}\n` +
+      `Total: $${totalFinal.toLocaleString("es-AR")}\n\n` +
       `Detalle de pago:\n${pagoDetalle}\n\n` +
-      (montoTransf > 0 ? `Necesito transferir $${montoTransf.toLocaleString("es-AR")}. ¿Me pasan los datos? Gracias!` : ``)
+      (montoTransf > 0 ? `Necesito transferir $${montoTransf.toLocaleString("es-AR")}. Me pasan los datos? Gracias!` : ``)
     );
 
     return (
