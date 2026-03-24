@@ -133,6 +133,15 @@ export default function ComprasPage() {
   const [formaPago, setFormaPago] = useState("Transferencia");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [confirmCuentaBancariaId, setConfirmCuentaBancariaId] = useState("");
+  const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
+
+  // Load cuentas bancarias
+  useEffect(() => {
+    supabase.from("cuentas_bancarias").select("id, nombre, alias, tipo_cuenta").eq("activo", true).then(({ data }) => {
+      setCuentasBancarias(data || []);
+    });
+  }, []);
 
   // Confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -894,86 +903,127 @@ export default function ComprasPage() {
 
         {/* Confirmation dialog */}
         <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Confirmar Compra</DialogTitle>
+              <DialogTitle className="text-lg">Confirmar Compra</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              {/* Summary */}
-              <div className="rounded-lg border p-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Proveedor</span>
-                  <span className="font-medium">
-                    {providers.find((p) => p.id === selectedProveedorId)?.nombre || "Sin proveedor"}
-                  </span>
+            <div className="space-y-5">
+              {/* Header info */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Proveedor</span>
+                  <p className="font-medium text-sm mt-0.5">{providers.find((p) => p.id === selectedProveedorId)?.nombre || "Sin proveedor"}</p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Fecha</span>
-                  <span className="font-medium">
-                    {new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Productos</span>
-                  <span className="font-medium">{items.length} ({totalUnidades} unidades)</span>
-                </div>
-                <div className="flex justify-between border-t pt-2 mt-2">
-                  <span className="text-muted-foreground font-medium">Total</span>
-                  <span className="font-bold text-lg">{formatCurrency(totalCompra)}</span>
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Fecha</span>
+                  <p className="font-medium text-sm mt-0.5">{new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
                 </div>
               </div>
 
-              {/* Update prices checkbox */}
-              {items.some((i) => i.costo_unitario !== i.costo_original) && (
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={actualizarPrecios}
-                    onChange={(e) => setActualizarPrecios(e.target.checked)}
-                    className="w-4 h-4 rounded border-border mt-0.5"
-                  />
-                  <span className="text-sm">
-                    Actualizar precios de venta manteniendo el margen de ganancia
-                    <span className="block text-xs text-muted-foreground mt-0.5">
-                      {items.filter((i) => i.costo_unitario !== i.costo_original).length} producto(s) con costo modificado
-                    </span>
-                  </span>
-                </label>
-              )}
-
-              {/* Forma de pago */}
+              {/* Items detail */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Forma de pago</Label>
-                <Select value={formaPago} onValueChange={(v) => setFormaPago(v ?? "")}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Efectivo">Efectivo</SelectItem>
-                    <SelectItem value="Transferencia">Transferencia</SelectItem>
-                    <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
-                  </SelectContent>
-                </Select>
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Detalle ({items.length} productos · {totalUnidades} unidades)</span>
+                <div className="rounded-lg border divide-y max-h-40 overflow-y-auto">
+                  {items.map((item) => {
+                    const costoChanged = item.costo_unitario !== item.costo_original;
+                    const pctChange = item.costo_original > 0 ? Math.round(((item.costo_unitario - item.costo_original) / item.costo_original) * 100) : 0;
+                    return (
+                      <div key={item.producto_id} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="truncate">{item.nombre}</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">×{item.cantidad}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {costoChanged && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${pctChange > 0 ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>
+                              {pctChange > 0 ? "+" : ""}{pctChange}%
+                            </span>
+                          )}
+                          <span className="font-medium tabular-nums">{formatCurrency(item.subtotal)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between items-center px-1 pt-1">
+                  <span className="text-sm font-semibold">Total compra</span>
+                  <span className="text-xl font-bold">{formatCurrency(totalCompra)}</span>
+                </div>
               </div>
 
-              {/* Registrar en caja */}
-              {(formaPago === "Efectivo" || formaPago === "Transferencia") && (
-                <label className="flex items-center gap-2 cursor-pointer py-2">
-                  <input type="checkbox" checked={registrarEnCaja} onChange={(e) => setRegistrarEnCaja(e.target.checked)} className="rounded" />
-                  <span className="text-sm">Registrar movimiento en caja diaria</span>
-                </label>
+              {/* Price changes */}
+              {items.some((i) => i.costo_unitario !== i.costo_original) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={actualizarPrecios}
+                      onChange={(e) => setActualizarPrecios(e.target.checked)}
+                      className="w-4 h-4 rounded border-border mt-0.5 accent-amber-600"
+                    />
+                    <span className="text-sm text-amber-900">
+                      <strong>Actualizar precios de venta</strong> manteniendo el margen
+                      <span className="block text-xs text-amber-700 mt-0.5">
+                        {items.filter((i) => i.costo_unitario !== i.costo_original).length} producto(s) con costo modificado
+                      </span>
+                    </span>
+                  </label>
+                </div>
               )}
 
-              {formaPago === "Cuenta Corriente" && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Se agregara al saldo del proveedor como deuda pendiente
-                </p>
-              )}
+              {/* Payment section */}
+              <div className="space-y-3 border-t pt-4">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Forma de pago</span>
+                <div className="grid grid-cols-3 gap-2">
+                  {["Efectivo", "Transferencia", "Cuenta Corriente"].map((fp) => (
+                    <button
+                      key={fp}
+                      onClick={() => setFormaPago(fp)}
+                      className={`px-3 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                        formaPago === fp
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-background hover:bg-muted border-border"
+                      }`}
+                    >
+                      {fp === "Cuenta Corriente" ? "Cta. Cte." : fp}
+                    </button>
+                  ))}
+                </div>
+
+                {formaPago === "Transferencia" && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Cuenta bancaria destino</Label>
+                    <Select value={confirmCuentaBancariaId || ""} onValueChange={(v) => setConfirmCuentaBancariaId(v || "")}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                      <SelectContent>
+                        {cuentasBancarias.map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>{c.nombre} {c.alias ? `(${c.alias})` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {(formaPago === "Efectivo" || formaPago === "Transferencia") && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={registrarEnCaja} onChange={(e) => setRegistrarEnCaja(e.target.checked)} className="rounded" />
+                    <span className="text-sm">Registrar movimiento en caja diaria</span>
+                  </label>
+                )}
+
+                {formaPago === "Cuenta Corriente" && (
+                  <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2.5 border border-amber-200">
+                    Se cargará {formatCurrency(totalCompra)} al saldo del proveedor como deuda pendiente
+                  </p>
+                )}
+              </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t">
                 <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancelar</Button>
-                <Button onClick={handleSave} disabled={saving}>
+                <Button onClick={handleSave} disabled={saving} size="lg">
                   {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Confirmar compra
+                  Confirmar compra — {formatCurrency(totalCompra)}
                 </Button>
               </div>
             </div>
