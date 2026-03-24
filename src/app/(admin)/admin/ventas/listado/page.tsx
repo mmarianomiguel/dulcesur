@@ -1709,9 +1709,6 @@ export default function ListadoVentasPage() {
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(pedido)} title="Ver detalle">
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(pedido)} title="Editar pedido">
-                            <Pencil className="w-4 h-4" />
-                          </Button>
                           {pedido.estado !== "entregado" && pedido.estado !== "cancelado" && (
                             <>
                               {pedido.estado === "pendiente" && (
@@ -2098,14 +2095,17 @@ export default function ListadoVentasPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  {isHistorial && (
-                    <Button variant="outline" size="sm" onClick={() => {
-                      const v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
-                      if (v) { setPoDetailOpen(false); preparePrint(v); }
-                    }}>
-                      <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
-                    </Button>
-                  )}
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    let v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
+                    if (!v && poSelectedPedido.numero) {
+                      // For pedidos online, find linked venta by numero
+                      const { data } = await supabase.from("ventas").select("*").eq("numero", poSelectedPedido.numero).single();
+                      if (data) v = data as VentaRow;
+                    }
+                    if (v) { setPoDetailOpen(false); preparePrint(v); }
+                  }}>
+                    <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
+                  </Button>
                   <Button variant="outline" onClick={() => {
                     if (poHasChanges && !confirm("Tenés cambios sin guardar. ¿Cerrar de todas formas?")) return;
                     setPoDetailOpen(false);
