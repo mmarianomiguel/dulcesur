@@ -110,7 +110,7 @@ interface PdfConfig {
   poster_mostrarPrecioUnitario: boolean;
 }
 
-type PdfStyle = "combinado" | "poster";
+type PdfStyle = "combinado" | "poster" | "lista";
 type ConfigTab = "general" | PdfStyle;
 
 const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "", fechaDesde: "", fechaHasta: "" };
@@ -410,7 +410,14 @@ export default function ListaPreciosPage() {
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
       const margin = 5;
-      const today = new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+      // Use the most recent product update date, not today
+      const latestUpdate = selectedProducts.reduce((latest, p) => {
+        const d = p.fechaActualizacion ? new Date(p.fechaActualizacion).getTime() : 0;
+        return d > latest ? d : latest;
+      }, 0);
+      const today = latestUpdate > 0
+        ? new Date(latestUpdate).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
+        : new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
 
       if (style === "combinado") {
         const cols = config.combinado_columnas;
@@ -618,6 +625,112 @@ export default function ListaPreciosPage() {
             pdf.text(`Mira todos nuestros productos en nuestra página web: ${config.webUrl}`, pageW / 2, footerY + 10, { align: "center" });
           }
         });
+      }
+
+      if (style === "lista") {
+        // ── Lista General de Precios ──
+        const empresaNombre = "DULCESUR";
+        const lm = 12; // left margin
+        const rm = pageW - 12;
+        const colW = rm - lm;
+
+        // Header
+        if (logoBase64) {
+          try { pdf.addImage(logoBase64, "PNG", lm, 8, 18, 18); } catch {}
+        }
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(16);
+        pdf.text(`LISTA DE PRECIOS`, pageW / 2, 15, { align: "center" });
+        pdf.setFontSize(10);
+        pdf.setFont("helvetica", "normal");
+        pdf.text(empresaNombre, pageW / 2, 21, { align: "center" });
+        pdf.setFontSize(8);
+        pdf.setTextColor(100);
+        pdf.text(`Última actualización: ${today}`, pageW / 2, 26, { align: "center" });
+        pdf.setTextColor(0);
+
+        // Separator
+        pdf.setDrawColor(200);
+        pdf.setLineWidth(0.5);
+        pdf.line(lm, 30, rm, 30);
+
+        // Table header
+        let yPos = 36;
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7);
+        pdf.setFillColor(240, 240, 240);
+        pdf.rect(lm, yPos - 3, colW, 6, "F");
+        pdf.text("PRODUCTO", lm + 2, yPos);
+        pdf.text("MARCA", lm + 78, yPos);
+        pdf.text("UNIDAD", lm + 108, yPos);
+        pdf.text("CAJA", lm + 133, yPos);
+        pdf.text("DTO.", lm + 158, yPos);
+        pdf.text("ACTUALIZ.", rm - 2, yPos, { align: "right" });
+        yPos += 5;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(6.5);
+        const fmtP = (n: number) => `$${n.toLocaleString("es-AR")}`;
+
+        selectedProducts.forEach((p, idx) => {
+          if (yPos > pageH - 25) {
+            pdf.addPage();
+            yPos = 15;
+            // Re-draw header on new page
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7);
+            pdf.setFillColor(240, 240, 240);
+            pdf.rect(lm, yPos - 3, colW, 6, "F");
+            pdf.text("PRODUCTO", lm + 2, yPos);
+            pdf.text("MARCA", lm + 78, yPos);
+            pdf.text("UNIDAD", lm + 108, yPos);
+            pdf.text("CAJA", lm + 133, yPos);
+            pdf.text("DTO.", lm + 158, yPos);
+            pdf.text("ACTUALIZ.", rm - 2, yPos, { align: "right" });
+            yPos += 5;
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(6.5);
+          }
+
+          // Alternating row background
+          if (idx % 2 === 0) {
+            pdf.setFillColor(250, 250, 250);
+            pdf.rect(lm, yPos - 3, colW, 5, "F");
+          }
+
+          const nombre = p.nombre.length > 45 ? p.nombre.substring(0, 42) + "..." : p.nombre;
+          const unitPrice = p.enOferta && p.precioOferta > 0 ? p.precioOferta : p.precioUnitario;
+          const boxPrice = p.precioCaja > 0 ? p.precioCaja : 0;
+          const hasDiscount = p.enOferta && p.precioOferta > 0 && p.precioOferta < p.precioUnitario;
+          const discPct = hasDiscount ? Math.round((1 - p.precioOferta / p.precioUnitario) * 100) : 0;
+          const fechaAct = p.fechaActualizacion ? new Date(p.fechaActualizacion).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "—";
+
+          pdf.text(nombre, lm + 2, yPos);
+          pdf.text(p.marca || "—", lm + 78, yPos);
+          pdf.text(fmtP(unitPrice), lm + 108, yPos);
+          pdf.text(boxPrice > 0 ? fmtP(boxPrice) : "—", lm + 133, yPos);
+          if (discPct > 0) {
+            pdf.setTextColor(220, 50, 50);
+            pdf.text(`-${discPct}%`, lm + 158, yPos);
+            pdf.setTextColor(0);
+          } else {
+            pdf.text("—", lm + 158, yPos);
+          }
+          pdf.text(fechaAct, rm - 2, yPos, { align: "right" });
+          yPos += 5;
+        });
+
+        // Footer
+        yPos = pageH - 18;
+        pdf.setDrawColor(200);
+        pdf.line(lm, yPos, rm, yPos);
+        yPos += 5;
+        pdf.setFontSize(7);
+        pdf.setTextColor(100);
+        const contacto = config.webUrl || "www.dulcesur.com";
+        pdf.text(`${empresaNombre} | ${contacto}`, lm + 2, yPos);
+        pdf.text(`${selectedProducts.length} productos | Pág ${pdf.getNumberOfPages()}`, rm - 2, yPos, { align: "right" });
+        pdf.setTextColor(0);
       }
 
       const blob = pdf.output("blob");
@@ -971,6 +1084,22 @@ export default function ListaPreciosPage() {
                 </div>
                 <p className="font-semibold text-sm">Poster</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Página completa A4</p>
+              </button>
+
+              {/* Lista General */}
+              <button onClick={() => generatePDF("lista")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left col-span-2">
+                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
+                  <p className="text-[6px] font-bold text-center mb-1">LISTA DE PRECIOS - DULCESUR</p>
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-[4px] border-b border-border pb-0.5">
+                      <span className="font-bold w-1/3">Producto</span><span className="font-bold w-1/6 text-right">Precio</span><span className="font-bold w-1/6 text-right">Caja</span><span className="font-bold w-1/6 text-right">Dto.</span>
+                    </div>
+                    <div className="flex justify-between text-[4px]"><span className="w-1/3">Chocolate 200g</span><span className="w-1/6 text-right">$1.200</span><span className="w-1/6 text-right">$12.000</span><span className="w-1/6 text-right text-green-600">-10%</span></div>
+                    <div className="flex justify-between text-[4px]"><span className="w-1/3">Galletitas 315g</span><span className="w-1/6 text-right">$850</span><span className="w-1/6 text-right">$10.200</span><span className="w-1/6 text-right">—</span></div>
+                  </div>
+                </div>
+                <p className="font-semibold text-sm">📋 Lista General de Precios</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Tabla completa con presentaciones, descuentos y fecha de última actualización</p>
               </button>
             </div>
           </div>
