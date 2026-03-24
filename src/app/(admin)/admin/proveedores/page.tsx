@@ -576,10 +576,15 @@ export default function ProveedoresPage() {
                 ) : (
                   <div className="space-y-1.5">
                     {provCuentas.map((c) => (
-                      <div key={c.id} className="flex items-center justify-between rounded-lg border p-2 text-sm">
-                        <div>
-                          <span className="font-medium">{c.alias || c.nombre}</span>
-                          {c.titular && <span className="text-xs text-muted-foreground ml-2">({c.titular})</span>}
+                      <div key={c.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{c.alias || c.nombre}</span>
+                            {c.tipo_cuenta && <Badge variant="outline" className="text-[10px] h-4">{c.tipo_cuenta}</Badge>}
+                          </div>
+                          {c.cbu_cvu && <div className="text-[11px] text-muted-foreground font-mono">CBU/CVU: {c.cbu_cvu}</div>}
+                          {c.titular && <div className="text-[11px] text-muted-foreground">Titular: {c.titular}</div>}
+                          {c.nombre && c.alias && <div className="text-[10px] text-muted-foreground">{c.nombre}</div>}
                         </div>
                         <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 hover:text-red-600" onClick={async () => {
                           if (!confirm("¿Eliminar esta cuenta?")) return;
