@@ -305,7 +305,9 @@ export default function ProductoDetallePage() {
   }, [id]);
 
   const currentPres = presentaciones[selectedPresIdx];
-  const currentPrice = currentPres ? currentPres.precio : (producto?.precio ?? 0);
+  const currentPrice = currentPres
+    ? (currentPres.precio > 0 && currentPres.cantidad > 1 && producto && currentPres.precio === producto.precio ? currentPres.precio * currentPres.cantidad : (currentPres.precio > 0 ? currentPres.precio : (producto?.precio ?? 0) * Math.max(1, currentPres.cantidad)))
+    : (producto?.precio ?? 0);
   const presQty = currentPres ? Number(currentPres.cantidad) : 1;
 
   function presLabelFn(p: { cantidad: number; nombre?: string }): string {
@@ -449,7 +451,12 @@ export default function ProductoDetallePage() {
     const pres = relPresentaciones[prod.id];
     if (pres && pres.length > 1) {
       const idx = relSelectedPres[prod.id] ?? 0;
-      return pres[idx]?.precio ?? prod.precio;
+      const p = pres[idx];
+      if (p) {
+        if (p.precio > 0 && p.cantidad > 1 && p.precio === prod.precio) return p.precio * p.cantidad;
+        return p.precio > 0 ? p.precio : prod.precio * Math.max(1, p.cantidad);
+      }
+      return prod.precio;
     }
     return prod.precio;
   }
@@ -833,7 +840,8 @@ export default function ProductoDetallePage() {
                 const pres = relPresentaciones[rel.id];
                 const presIdx = relSelectedPres[rel.id] ?? 0;
                 const presLabel = pres && pres[presIdx] ? pres[presIdx].nombre : "Unidad";
-                const price = pres && pres.length > 1 ? (pres[presIdx]?.precio ?? rel.precio) : rel.precio;
+                const rawPrice = pres && pres.length > 1 ? (pres[presIdx]?.precio ?? rel.precio) : rel.precio;
+                const price = (pres && pres[presIdx] && pres[presIdx].precio > 0 && pres[presIdx].cantidad > 1 && pres[presIdx].precio === rel.precio) ? pres[presIdx].precio * pres[presIdx].cantidad : rawPrice;
                 const qty = relQty[rel.id] ?? 1;
                 const relDiscount = getProductDiscount(rel, presLabel);
                 const relDiscountedPrice = relDiscount > 0 ? Math.round(price * (1 - relDiscount / 100)) : price;

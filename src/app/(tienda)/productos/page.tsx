@@ -501,7 +501,15 @@ function ProductosContent() {
     const pres = presentacionesMap[producto.id];
     if (pres && pres.length > 1) {
       const idx = selectedPres[producto.id] ?? 0;
-      return pres[idx]?.precio ?? producto.precio;
+      const p = pres[idx];
+      if (p) {
+        // If presentacion price seems like unit price (same as base), multiply by cantidad
+        if (p.precio > 0 && p.cantidad > 1 && p.precio === producto.precio) {
+          return p.precio * p.cantidad;
+        }
+        return p.precio > 0 ? p.precio : producto.precio * Math.max(1, p.cantidad);
+      }
+      return producto.precio;
     }
     return producto.precio;
   }
