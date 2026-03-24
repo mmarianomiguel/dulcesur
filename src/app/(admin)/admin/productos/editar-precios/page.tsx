@@ -957,7 +957,7 @@ export default function EditarPreciosPage() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{p.stock}</TableCell>
                       <TableCell className="text-right">
-                        {renderEditableCell("costo", currentCosto, currentCosto > 0 ? formatCurrency(currentCosto) : "—")}
+                        {renderEditableCell("costo", currentCosto, currentCosto > 0 ? formatCurrency(currentCosto, true) : "—")}
                       </TableCell>
                       <TableCell className="text-right">
                         {currentCosto > 0 ? renderEditableCell("margen", margen, `${margen.toFixed(1)}%`) : <span className="text-muted-foreground">—</span>}
