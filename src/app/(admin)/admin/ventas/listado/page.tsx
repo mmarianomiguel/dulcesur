@@ -1938,9 +1938,12 @@ export default function ListadoVentasPage() {
                         <button
                           key={val}
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             if (val === poSelectedPedido.estado) return;
-                            poHandleEstadoChange(poSelectedPedido, val);
+                            if (val === "cancelado") {
+                              if (!confirm("¿Estás seguro de cancelar este pedido? Se revertirá el stock y los movimientos de caja.")) return;
+                            }
+                            await poHandleEstadoChange(poSelectedPedido, val);
                             setPoSelectedPedido({ ...poSelectedPedido, estado: val });
                             if ((val as string) === "confirmado" && ((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && !(poSelectedPedido as any).cuenta_transferencia_alias) {
                               setShowCuentaSelector(true);
@@ -2120,14 +2123,26 @@ export default function ListadoVentasPage() {
                   <Button variant="outline" size="sm" onClick={async () => {
                     let v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
                     if (!v && (poSelectedPedido._ventaId || poSelectedPedido.numero)) {
-                      // For pedidos online, find linked venta with full client data
                       const q = poSelectedPedido._ventaId
                         ? supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).single()
                         : supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).single();
                       const { data } = await q;
                       if (data) v = data as VentaRow;
                     }
-                    if (v) { setPoDetailOpen(false); preparePrint(v); }
+                    if (v) {
+                      // Override client data with pedido data for online orders
+                      if (poSelectedPedido._source === "pedidos" && poSelectedPedido.nombre_cliente) {
+                        (v as any).clientes = {
+                          nombre: poSelectedPedido.nombre_cliente,
+                          cuit: (poSelectedPedido as any)._cuit || "",
+                          domicilio: poSelectedPedido.direccion_texto || (poSelectedPedido as any)._domicilio || "",
+                          telefono: poSelectedPedido.telefono || "",
+                          email: poSelectedPedido.email || "",
+                        };
+                      }
+                      setPoDetailOpen(false);
+                      preparePrint(v);
+                    }
                   }}>
                     <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
                   </Button>
