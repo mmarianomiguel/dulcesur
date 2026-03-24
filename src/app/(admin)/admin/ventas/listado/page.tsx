@@ -249,6 +249,7 @@ export default function ListadoVentasPage() {
   const [poHasChanges, setPoHasChanges] = useState(false);
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
+  const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
 
   // PO Cancel confirmation
   const [poCancelPedido, setPoCancelPedido] = useState<Pedido | null>(null);
@@ -809,6 +810,18 @@ export default function ListadoVentasPage() {
         }));
       }
     }
+
+    // Load payment breakdown
+    const pagos: { metodo: string; monto: number }[] = [];
+    if (ventaId) {
+      const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+      for (const m of movs || []) {
+        const existing = pagos.find((p) => p.metodo === m.metodo_pago);
+        if (existing) existing.monto += m.monto;
+        else pagos.push({ metodo: m.metodo_pago, monto: m.monto });
+      }
+    }
+    setDetailPagos(pagos);
 
     setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId } as any);
     setPoEditItems(items.map((i) => ({ ...i })));
@@ -1846,21 +1859,26 @@ export default function ListadoVentasPage() {
                     <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
                       <DollarSign className="w-4 h-4" /> Detalle de Pago
                     </h3>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                      {(() => {
-                        const fp = (poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "";
-                        const fpLabel = fp === "efectivo" || fp === "Efectivo" ? "Efectivo"
-                          : fp === "transferencia" || fp === "Transferencia" ? "Transferencia bancaria"
-                          : fp === "Cuenta Corriente" ? "Cuenta Corriente"
-                          : fp === "mixto" || fp === "Mixto" ? "Pago Mixto"
-                          : fp || "—";
-                        return (
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{fpLabel}</span>
-                            <span className="font-bold">{formatCurrency(poSelectedPedido.total)}</span>
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm">
+                      {detailPagos.length > 0 ? (
+                        <>
+                          {detailPagos.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                              <span className="text-muted-foreground">{p.metodo}</span>
+                              <span className="font-medium">{formatCurrency(p.monto)}</span>
+                            </div>
+                          ))}
+                          <div className="border-t pt-2 flex items-center justify-between">
+                            <span className="font-bold">Total</span>
+                            <span className="font-bold text-base">{formatCurrency(poSelectedPedido.total)}</span>
                           </div>
-                        );
-                      })()}
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{formatPago((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago)}</span>
+                          <span className="font-bold">{formatCurrency(poSelectedPedido.total)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1895,9 +1913,6 @@ export default function ListadoVentasPage() {
                             }
                             await poHandleEstadoChange(poSelectedPedido, val);
                             setPoSelectedPedido({ ...poSelectedPedido, estado: val });
-                            if ((val as string) === "confirmado" && ((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && !(poSelectedPedido as any).cuenta_transferencia_alias) {
-                              setShowCuentaSelector(true);
-                            }
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                             poSelectedPedido.estado === val

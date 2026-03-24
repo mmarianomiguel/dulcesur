@@ -237,13 +237,7 @@ export function ReceiptPrintView({
             ? item.comboItems.reduce((s, ci) => s + ci.cantidad, 0)
             : 0;
           const isBox = !item.es_combo && item.unidades_por_presentacion > 1;
-          const precioUnitario = item.es_combo && totalComboUnits > 0
-            ? item.price / totalComboUnits
-            : isBox
-              ? item.price / item.unidades_por_presentacion
-              : item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1
-                ? item.price / item.unidades_por_presentacion
-                : item.price;
+          const precioUnitario = item.price;
           return (
             <tr key={i} style={{ borderBottom: "1px solid #ccc", background: i % 2 === 1 ? altRowBg : "transparent" }}>
               <td style={{ padding: rowPad, textAlign: "left" }}>{item.unidades_por_presentacion > 0 && item.unidades_por_presentacion < 1 ? item.qty * item.unidades_por_presentacion : item.qty}</td>
