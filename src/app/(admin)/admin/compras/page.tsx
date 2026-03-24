@@ -85,6 +85,9 @@ interface CompraItem {
   imagen_url: string | null;
   stock_actual: number;
   cantidad: number;
+  cajas: number;
+  sueltas: number;
+  unidades_por_caja: number;
   costo_unitario: number;
   costo_original: number;
   precio_original: number;
@@ -266,7 +269,10 @@ export default function ComprasPage() {
 
   const addProduct = (product: ProductSearch, presQty?: number, presCosto?: number) => {
     if (items.some((i) => i.producto_id === product.id)) return;
-    const cantidad = presQty || 1;
+    const unidadesPorCaja = presQty || 0;
+    const cajas = unidadesPorCaja > 0 ? 1 : 0;
+    const sueltas = unidadesPorCaja > 0 ? 0 : 1;
+    const cantidad = unidadesPorCaja > 0 ? cajas * unidadesPorCaja + sueltas : 1;
     const costoUnit = presCosto || product.costo;
     setItems((prev) => [
       ...prev,
@@ -277,6 +283,9 @@ export default function ComprasPage() {
         imagen_url: product.imagen_url,
         stock_actual: product.stock,
         cantidad,
+        cajas,
+        sueltas,
+        unidades_por_caja: unidadesPorCaja,
         costo_unitario: costoUnit,
         costo_original: product.costo,
         precio_original: product.precio,
@@ -797,11 +806,13 @@ export default function ComprasPage() {
                       <th className="text-left py-3 px-2 font-medium w-10"></th>
                       <th className="text-left py-3 px-3 font-medium">Codigo</th>
                       <th className="text-left py-3 px-3 font-medium">Producto</th>
-                      <th className="text-center py-3 px-3 font-medium">Stock actual</th>
-                      <th className="text-center py-3 px-3 font-medium">Cantidad</th>
+                      <th className="text-center py-3 px-3 font-medium">Stock</th>
+                      <th className="text-center py-3 px-3 font-medium">Cajas</th>
+                      <th className="text-center py-3 px-3 font-medium">Sueltas</th>
+                      <th className="text-center py-3 px-3 font-medium">Total un.</th>
                       <th className="text-right py-3 px-3 font-medium">Costo Unit.</th>
                       <th className="text-right py-3 px-3 font-medium">Subtotal</th>
-                      <th className="text-center py-3 px-3 font-medium">Costo mod.</th>
+                      <th className="text-center py-3 px-3 font-medium">Mod.</th>
                       <th className="w-10"></th>
                     </tr>
                   </thead>
@@ -827,13 +838,44 @@ export default function ComprasPage() {
                             </Badge>
                           </td>
                           <td className="py-2 px-3 text-center">
+                            {item.unidades_por_caja > 0 ? (
+                              <Input
+                                type="number"
+                                min={0}
+                                value={item.cajas}
+                                onChange={(e) => {
+                                  const newCajas = Math.max(0, Number(e.target.value));
+                                  const newTotal = newCajas * item.unidades_por_caja + item.sueltas;
+                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cajas: newCajas, cantidad: newTotal, subtotal: it.costo_unitario * newTotal } : it));
+                                }}
+                                className="w-16 mx-auto text-center h-8"
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-center">
                             <Input
                               type="number"
-                              min={1}
-                              value={item.cantidad}
-                              onChange={(e) => updateItemField(idx, "cantidad", Math.max(1, Number(e.target.value)))}
-                              className="w-20 mx-auto text-center h-8"
+                              min={0}
+                              value={item.unidades_por_caja > 0 ? item.sueltas : item.cantidad}
+                              onChange={(e) => {
+                                const val = Math.max(0, Number(e.target.value));
+                                if (item.unidades_por_caja > 0) {
+                                  const newTotal = item.cajas * item.unidades_por_caja + val;
+                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, sueltas: val, cantidad: newTotal, subtotal: it.costo_unitario * newTotal } : it));
+                                } else {
+                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: Math.max(1, val), sueltas: val, subtotal: it.costo_unitario * Math.max(1, val) } : it));
+                                }
+                              }}
+                              className="w-16 mx-auto text-center h-8"
                             />
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <span className="text-sm font-semibold">{item.cantidad}</span>
+                            {item.unidades_por_caja > 0 && (
+                              <span className="text-[10px] text-muted-foreground block">{item.cajas}×{item.unidades_por_caja}+{item.sueltas}</span>
+                            )}
                           </td>
                           <td className="py-2 px-3 text-right">
                             <Input
