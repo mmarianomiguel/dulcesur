@@ -51,7 +51,13 @@ import { supabase } from "@/lib/supabase";
 
 const proveedorService = new BaseService<Proveedor>("proveedores");
 
-const emptyForm = { nombre: "", cuit: "", telefono: "", email: "", domicilio: "", rubro: "", observacion: "" };
+const emptyForm = {
+  nombre: "", razon_social: "", cuit: "", condicion_iva: "Responsable Inscripto",
+  codigo_proveedor: "", telefono: "", telefono2: "", email: "", web: "",
+  domicilio: "", localidad: "", provincia: "Buenos Aires",
+  rubro: "", contacto_nombre: "", contacto_cargo: "",
+  dias_entrega: "", plazo_pago: "", observacion: "",
+};
 
 const emptyPagoForm = { monto: "", forma_pago: "Efectivo", compra_ids: [] as string[], observacion: "", registrar_caja: true, cuenta_bancaria_id: "" };
 
@@ -88,11 +94,22 @@ export default function ProveedoresPage() {
   const openEdit = async (p: Proveedor) => {
     setForm({
       nombre: p.nombre,
+      razon_social: (p as any).razon_social || "",
       cuit: p.cuit || "",
+      condicion_iva: (p as any).condicion_iva || "Responsable Inscripto",
+      codigo_proveedor: (p as any).codigo_proveedor || "",
       telefono: p.telefono || "",
+      telefono2: (p as any).telefono2 || "",
       email: p.email || "",
+      web: (p as any).web || "",
       domicilio: p.domicilio || "",
+      localidad: (p as any).localidad || "",
+      provincia: (p as any).provincia || "Buenos Aires",
       rubro: p.rubro || "",
+      contacto_nombre: (p as any).contacto_nombre || "",
+      contacto_cargo: (p as any).contacto_cargo || "",
+      dias_entrega: (p as any).dias_entrega || "",
+      plazo_pago: (p as any).plazo_pago || "",
       observacion: p.observacion || "",
     });
     editDialog.onOpen(p);
@@ -103,13 +120,24 @@ export default function ProveedoresPage() {
 
   const handleSave = async () => {
     if (!form.nombre.trim()) { showAdminToast("El nombre es obligatorio", "error"); return; }
-    const payload = {
+    const payload: Record<string, any> = {
       nombre: form.nombre.trim(),
+      razon_social: form.razon_social || null,
       cuit: form.cuit || null,
+      condicion_iva: form.condicion_iva || null,
+      codigo_proveedor: form.codigo_proveedor || null,
       telefono: form.telefono || null,
+      telefono2: form.telefono2 || null,
       email: form.email || null,
+      web: form.web || null,
       domicilio: form.domicilio || null,
+      localidad: form.localidad || null,
+      provincia: form.provincia || null,
       rubro: form.rubro || null,
+      contacto_nombre: form.contacto_nombre || null,
+      contacto_cargo: form.contacto_cargo || null,
+      dias_entrega: form.dias_entrega || null,
+      plazo_pago: form.plazo_pago || null,
       observacion: form.observacion || null,
     };
     if (editDialog.data) {
@@ -355,7 +383,20 @@ export default function ProveedoresPage() {
         title="Proveedores"
         description={`${providers.length} proveedores registrados`}
         actions={
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo proveedor</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => {
+              const ws = XLSX.utils.json_to_sheet(providers.map((p: any) => ({
+                Nombre: p.nombre, "Razón Social": p.razon_social || "", CUIT: p.cuit || "", Rubro: p.rubro || "",
+                Teléfono: p.telefono || "", Email: p.email || "", Domicilio: p.domicilio || "",
+                Localidad: p.localidad || "", Provincia: p.provincia || "",
+                Contacto: p.contacto_nombre || "", "Días Entrega": p.dias_entrega || "",
+                "Plazo Pago": p.plazo_pago || "", Saldo: p.saldo || 0,
+              })));
+              const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Proveedores");
+              XLSX.writeFile(wb, "proveedores.xlsx");
+            }}><Download className="w-4 h-4 mr-1" />Exportar</Button>
+            <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo proveedor</Button>
+          </div>
         }
       />
 
@@ -399,13 +440,21 @@ export default function ProveedoresPage() {
                 <tbody>
                   {filtered.map((p) => (
                     <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-medium">{p.nombre}</td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.cuit || "\u2014"}</td>
-                      <td className="py-3 px-4"><Badge variant="secondary" className="text-xs font-normal">{p.rubro || "\u2014"}</Badge></td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-3 text-muted-foreground text-xs">
+                        <div className="font-medium">{p.nombre}</div>
+                        {(p as any).razon_social && <div className="text-xs text-muted-foreground">{(p as any).razon_social}</div>}
+                        {(p as any).codigo_proveedor && <div className="text-[10px] text-muted-foreground">Cód: {(p as any).codigo_proveedor}</div>}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.cuit || "\u2014"}</td>
+                      <td className="py-3 px-4">
+                        {p.rubro && <Badge variant="secondary" className="text-xs font-normal">{p.rubro}</Badge>}
+                        {(p as any).plazo_pago && <div className="text-[10px] text-muted-foreground mt-0.5">{(p as any).plazo_pago}</div>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col gap-0.5 text-muted-foreground text-xs">
                           {p.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{p.telefono}</span>}
                           {p.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{p.email}</span>}
+                          {(p as any).contacto_nombre && <span className="text-[10px]">Contacto: {(p as any).contacto_nombre}</span>}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -433,20 +482,69 @@ export default function ProveedoresPage() {
 
       {/* Edit/Create Dialog */}
       <Dialog open={editDialog.open} onOpenChange={editDialog.setOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editDialog.data ? "Editar proveedor" : "Nuevo proveedor"}</DialogTitle></DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div className="space-y-2"><Label>Nombre</Label><Input value={form.nombre} onChange={(e) => f("nombre", e.target.value)} /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>CUIT</Label><Input value={form.cuit} onChange={(e) => f("cuit", e.target.value)} placeholder="XX-XXXXXXXX-X" /></div>
-              <div className="space-y-2"><Label>Rubro</Label><Input value={form.rubro} onChange={(e) => f("rubro", e.target.value)} /></div>
+          <div className="space-y-5 mt-2">
+            {/* Datos principales */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Datos principales</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs">Nombre comercial *</Label><Input value={form.nombre} onChange={(e) => f("nombre", e.target.value)} placeholder="Ej: Arcor" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Razón social</Label><Input value={form.razon_social} onChange={(e) => f("razon_social", e.target.value)} placeholder="Ej: Arcor S.A.I.C." /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs">CUIT</Label><Input value={form.cuit} onChange={(e) => f("cuit", e.target.value)} placeholder="XX-XXXXXXXX-X" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Cond. IVA</Label>
+                  <Select value={form.condicion_iva} onValueChange={(v) => f("condicion_iva", v || "")}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Responsable Inscripto">Responsable Inscripto</SelectItem>
+                      <SelectItem value="Monotributista">Monotributista</SelectItem>
+                      <SelectItem value="Exento">Exento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5"><Label className="text-xs">Código proveedor</Label><Input value={form.codigo_proveedor} onChange={(e) => f("codigo_proveedor", e.target.value)} placeholder="Código interno" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs">Rubro</Label><Input value={form.rubro} onChange={(e) => f("rubro", e.target.value)} placeholder="Ej: Golosinas, Bebidas" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Página web</Label><Input value={form.web} onChange={(e) => f("web", e.target.value)} placeholder="www.ejemplo.com" /></div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Telefono</Label><Input value={form.telefono} onChange={(e) => f("telefono", e.target.value)} /></div>
-              <div className="space-y-2"><Label>E-mail</Label><Input value={form.email} onChange={(e) => f("email", e.target.value)} /></div>
+
+            {/* Contacto */}
+            <div className="space-y-3 border-t pt-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Contacto</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs">Teléfono principal</Label><Input value={form.telefono} onChange={(e) => f("telefono", e.target.value)} /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Teléfono alternativo</Label><Input value={form.telefono2} onChange={(e) => f("telefono2", e.target.value)} /></div>
+              </div>
+              <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={(e) => f("email", e.target.value)} type="email" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs">Nombre de contacto</Label><Input value={form.contacto_nombre} onChange={(e) => f("contacto_nombre", e.target.value)} placeholder="Ej: Juan Pérez" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Cargo</Label><Input value={form.contacto_cargo} onChange={(e) => f("contacto_cargo", e.target.value)} placeholder="Ej: Vendedor" /></div>
+              </div>
             </div>
-            <div className="space-y-2"><Label>Domicilio</Label><Input value={form.domicilio} onChange={(e) => f("domicilio", e.target.value)} /></div>
-            <div className="space-y-2"><Label>Observaciones</Label><Textarea value={form.observacion} onChange={(e) => f("observacion", e.target.value)} rows={2} placeholder="Notas, datos bancarios, etc." /></div>
+
+            {/* Dirección */}
+            <div className="space-y-3 border-t pt-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Dirección</h3>
+              <div className="space-y-1.5"><Label className="text-xs">Domicilio</Label><Input value={form.domicilio} onChange={(e) => f("domicilio", e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs">Localidad</Label><Input value={form.localidad} onChange={(e) => f("localidad", e.target.value)} /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Provincia</Label><Input value={form.provincia} onChange={(e) => f("provincia", e.target.value)} /></div>
+              </div>
+            </div>
+
+            {/* Condiciones comerciales */}
+            <div className="space-y-3 border-t pt-4">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Condiciones comerciales</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs">Días de entrega</Label><Input value={form.dias_entrega} onChange={(e) => f("dias_entrega", e.target.value)} placeholder="Ej: Lunes y Jueves" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Plazo de pago</Label><Input value={form.plazo_pago} onChange={(e) => f("plazo_pago", e.target.value)} placeholder="Ej: 30 días, Contado" /></div>
+              </div>
+              <div className="space-y-1.5"><Label className="text-xs">Observaciones</Label><Textarea value={form.observacion} onChange={(e) => f("observacion", e.target.value)} rows={2} placeholder="Notas adicionales..." /></div>
+            </div>
 
             {/* Cuentas bancarias del proveedor */}
             {editDialog.data && (
