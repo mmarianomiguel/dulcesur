@@ -1562,7 +1562,7 @@ export default function ListadoVentasPage() {
       </Card>
 
       {/* Unified Cards */}
-      {(loading && poLoading) ? (
+      {(loading || poLoading) ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : filteredOrders.length === 0 ? (
         <div className="text-center py-16">
@@ -1669,8 +1669,11 @@ export default function ListadoVentasPage() {
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={async () => {
                         try {
                           let v = ventas.find((vr) => vr.id === order._ventaId);
+                          if (!v && order._ventaId) {
+                            v = ventas.find((vr) => vr.numero === order.numero);
+                          }
                           if (!v) {
-                            const { data } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", order.numero).maybeSingle();
+                            const { data } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email), venta_items(*)").eq("numero", order.numero).order("created_at", { ascending: false }).limit(1).single();
                             if (data) v = data as any;
                           }
                           if (v) {
@@ -2119,7 +2122,7 @@ export default function ListadoVentasPage() {
                       if (!v && (poSelectedPedido._ventaId || poSelectedPedido.numero)) {
                         const q = poSelectedPedido._ventaId
                           ? supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).maybeSingle()
-                          : supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).maybeSingle();
+                          : supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).order("created_at", { ascending: false }).limit(1).single();
                         const { data } = await q;
                         if (data) v = data as VentaRow;
                       }
