@@ -949,13 +949,7 @@ export default function CheckoutPage() {
                     <p className="font-semibold text-gray-900 text-sm">Envío a domicilio</p>
                   </div>
                   <p className="text-xs text-gray-500">Recibilo en tu dirección</p>
-                  <p className="text-xs font-semibold mt-1">
-                    {envioGratis ? (
-                      <span className="text-green-600">Sin costo de envío</span>
-                    ) : (
-                      <span className="text-gray-600">{formatCurrency(costoEnvioBase)}</span>
-                    )}
-                  </p>
+                  <p className="text-xs font-semibold text-green-600 mt-1">Envío sin cargo</p>
                 </div>
               </button>
             </div>
@@ -1020,19 +1014,16 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                {/* Add new address button */}
-                {!showNewAddress && (
-                  <button
-                    onClick={() => setShowNewAddress(true)}
-                    className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-300 text-sm text-pink-600 font-medium hover:border-pink-400 hover:bg-pink-50 transition"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Agregar nueva dirección
-                  </button>
+                {/* No addresses message */}
+                {savedAddresses.length === 0 && !showNewAddress && (
+                  <div className="text-center py-4 text-sm text-gray-500 bg-gray-50 rounded-xl">
+                    <p>No tenés direcciones guardadas.</p>
+                    <p className="text-xs mt-1">Podés agregar una desde <a href="/cuenta/direcciones" className="text-pink-600 hover:underline font-medium">Mi cuenta → Direcciones</a></p>
+                  </div>
                 )}
 
-                {/* New address form */}
-                {showNewAddress && (
+                {/* New address form - hidden, use Mi Cuenta instead */}
+                {false && showNewAddress && (
                   <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                     <p className="text-sm font-medium text-gray-700">Nueva dirección</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
