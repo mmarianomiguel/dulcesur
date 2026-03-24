@@ -1947,8 +1947,8 @@ export default function ListadoVentasPage() {
                   </div>
                 )}
 
-                {/* Cuenta de transferencia */}
-                {(((poSelectedPedido as any).forma_pago || "") + " " + (poSelectedPedido.metodo_pago || "")).toLowerCase().includes("transferencia") && (
+                {/* Cuenta de transferencia - show for transferencia OR mixto */}
+                {(() => { const fp = (((poSelectedPedido as any).forma_pago || "") + " " + (poSelectedPedido.metodo_pago || "")).toLowerCase(); return fp.includes("transferencia") || fp.includes("mixto"); })() && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -2110,27 +2110,32 @@ export default function ListadoVentasPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={async () => {
-                    let v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
-                    if (!v && (poSelectedPedido._ventaId || poSelectedPedido.numero)) {
-                      const q = poSelectedPedido._ventaId
-                        ? supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).single()
-                        : supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).single();
-                      const { data } = await q;
-                      if (data) v = data as VentaRow;
-                    }
-                    if (v) {
-                      // Override client data with pedido data for online orders (both sources)
-                      if (poSelectedPedido.nombre_cliente && (poSelectedPedido._source === "pedidos" || poSelectedPedido.isOnline)) {
-                        (v as any).clientes = {
-                          nombre: poSelectedPedido.nombre_cliente,
-                          cuit: (poSelectedPedido as any)._cuit || "",
-                          domicilio: poSelectedPedido.direccion_texto || (poSelectedPedido as any)._domicilio || "",
-                          telefono: poSelectedPedido.telefono || "",
-                          email: poSelectedPedido.email || "",
-                        };
+                    try {
+                      let v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
+                      if (!v && (poSelectedPedido._ventaId || poSelectedPedido.numero)) {
+                        const q = poSelectedPedido._ventaId
+                          ? supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).maybeSingle()
+                          : supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).maybeSingle();
+                        const { data } = await q;
+                        if (data) v = data as VentaRow;
                       }
-                      setPoDetailOpen(false);
-                      preparePrint(v);
+                      if (v) {
+                        if (poSelectedPedido.nombre_cliente && (poSelectedPedido._source === "pedidos" || poSelectedPedido.isOnline)) {
+                          (v as any).clientes = {
+                            nombre: poSelectedPedido.nombre_cliente,
+                            cuit: (poSelectedPedido as any)._cuit || "",
+                            domicilio: poSelectedPedido.direccion_texto || (poSelectedPedido as any)._domicilio || "",
+                            telefono: poSelectedPedido.telefono || "",
+                            email: poSelectedPedido.email || "",
+                          };
+                        }
+                        setPoDetailOpen(false);
+                        preparePrint(v);
+                      } else {
+                        showAdminToast("No se encontró la venta vinculada", "error");
+                      }
+                    } catch (err) {
+                      showAdminToast("Error al preparar impresión", "error");
                     }
                   }}>
                     <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir

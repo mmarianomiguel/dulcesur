@@ -111,7 +111,8 @@ export default function ConfiguracionPage() {
   const [rcfg, setRcfg] = useState<ReceiptConfig>(defaultReceiptConfig);
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
   const [editingCuenta, setEditingCuenta] = useState<CuentaBancaria | null>(null);
-  const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "" });
+  const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "" });
+  const [proveedoresList, setProveedoresList] = useState<{ id: string; nombre: string }[]>([]);
   const [showCuentaForm, setShowCuentaForm] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("empresa");
   const [successMsg, setSuccessMsg] = useState("");
@@ -139,11 +140,13 @@ export default function ConfiguracionPage() {
     setRcfg(loadReceiptConfig());
     supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre").then(({ data }) => {
       if (data && data.length > 0) {
-        setCuentas(data.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo_cuenta || "Caja de Ahorro", cbu_cvu: c.cbu_cvu || "", alias: c.alias || "", titular: c.titular || "", origen: c.origen || "propia" })));
+        setCuentas(data.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo_cuenta || "Caja de Ahorro", cbu_cvu: c.cbu_cvu || "", alias: c.alias || "", titular: c.titular || "", origen: c.origen || "propia", proveedor_id: c.proveedor_id || "" })));
       } else {
-        // Fallback: try localStorage for migration
         try { const stored = localStorage.getItem("cuentas_bancarias"); if (stored) setCuentas(JSON.parse(stored)); } catch {}
       }
+    });
+    supabase.from("proveedores").select("id, nombre").order("nombre").then(({ data }) => {
+      if (data) setProveedoresList(data);
     });
     try {
       const stored = localStorage.getItem("modulos_habilitados");
@@ -782,7 +785,7 @@ export default function ConfiguracionPage() {
                             <div className="flex gap-1">
                               <Button variant="ghost" size="sm" onClick={() => {
                                 setEditingCuenta(c);
-                                setCuentaForm({ nombre: c.nombre, tipo: c.tipo, cbu_cvu: c.cbu_cvu, alias: c.alias, origen: c.origen || "propia", titular: c.titular || "" });
+                                setCuentaForm({ nombre: c.nombre, tipo: c.tipo, cbu_cvu: c.cbu_cvu, alias: c.alias, origen: c.origen || "propia", titular: c.titular || "", proveedor_id: (c as any).proveedor_id || "" });
                                 setShowCuentaForm(true);
                               }}>
                                 <Pencil className="w-3.5 h-3.5" />
@@ -830,6 +833,19 @@ export default function ConfiguracionPage() {
                             ))}
                           </div>
                         </div>
+                        {cuentaForm.origen === "proveedor" && (
+                          <div className="space-y-1">
+                            <Label>Proveedor vinculado</Label>
+                            <Select value={cuentaForm.proveedor_id} onValueChange={(v) => setCuentaForm({ ...cuentaForm, proveedor_id: v ?? "" })}>
+                              <SelectTrigger><SelectValue placeholder="Seleccionar proveedor..." /></SelectTrigger>
+                              <SelectContent>
+                                {proveedoresList.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <div className="space-y-1">
                           <Label>Alias</Label>
                           <Input placeholder="Ej: dulcesur.mp, arcor.pagos" value={cuentaForm.alias} onChange={(ev) => setCuentaForm({ ...cuentaForm, alias: ev.target.value })} />
@@ -855,24 +871,24 @@ export default function ConfiguracionPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "" }); }}>
+                        <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "" }); }}>
                           Cancelar
                         </Button>
                         <Button size="sm" disabled={!cuentaForm.nombre} onClick={async () => {
                           if (editingCuenta) {
                             await supabase.from("cuentas_bancarias").update({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, updated_at: new Date().toISOString(),
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null, updated_at: new Date().toISOString(),
                             }).eq("id", editingCuenta.id);
                             setCuentas(cuentas.map((c) => c.id === editingCuenta.id ? { ...c, ...cuentaForm } : c));
                           } else {
                             const { data: newCuenta } = await supabase.from("cuentas_bancarias").insert({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen,
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null,
                             }).select("id").single();
                             if (newCuenta) setCuentas([...cuentas, { id: newCuenta.id, ...cuentaForm }]);
                           }
                           setShowCuentaForm(false);
                           setEditingCuenta(null);
-                          setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "" });
+                          setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "" });
                         }}>
                           <Check className="w-4 h-4 mr-1" />
                           {editingCuenta ? "Actualizar" : "Agregar"}
