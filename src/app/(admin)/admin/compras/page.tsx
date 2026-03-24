@@ -811,6 +811,7 @@ export default function ComprasPage() {
                       <th className="text-center py-3 px-3 font-medium">Sueltas</th>
                       <th className="text-center py-3 px-3 font-medium">Total un.</th>
                       <th className="text-right py-3 px-3 font-medium">Costo Unit.</th>
+                      <th className="text-right py-3 px-3 font-medium">Costo Caja</th>
                       <th className="text-right py-3 px-3 font-medium">Subtotal</th>
                       <th className="text-center py-3 px-3 font-medium">Mod.</th>
                       <th className="w-10"></th>
@@ -883,8 +884,15 @@ export default function ComprasPage() {
                               min={0}
                               value={item.costo_unitario}
                               onChange={(e) => updateItemField(idx, "costo_unitario", Math.max(0, Number(e.target.value)))}
-                              className="w-28 ml-auto text-right h-8"
+                              className="w-24 ml-auto text-right h-8"
                             />
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            {item.unidades_por_caja > 0 ? (
+                              <span className="text-sm font-medium text-muted-foreground">{formatCurrency(item.costo_unitario * item.unidades_por_caja)}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </td>
                           <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
                           <td className="py-2 px-3 text-center">
