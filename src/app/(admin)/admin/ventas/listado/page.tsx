@@ -1852,31 +1852,24 @@ export default function ListadoVentasPage() {
                       {poSelectedPedido._cuit && <p className="text-xs text-muted-foreground">CUIT: {poSelectedPedido._cuit}</p>}
                     </div>
                   </div>
+                  {/* Entrega */}
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <Truck className="w-4 h-4" /> Entrega y Pago
+                      <Truck className="w-4 h-4" /> Entrega
                     </h3>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                      {poSelectedPedido.metodo_entrega ? (
-                        <p className="flex items-center gap-1.5">
-                          {poSelectedPedido.metodo_entrega === "envio" ? (
-                            <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
-                          ) : poSelectedPedido.metodo_entrega === "retiro" ? (
-                            <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
-                          ) : (
-                            <>{poSelectedPedido.metodo_entrega}</>
-                          )}
-                        </p>
-                      ) : isHistorial ? (
-                        <p className="flex items-center gap-1.5">
-                          {poSelectedPedido._entregado ? (
-                            <><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Entregado</>
-                          ) : (
-                            <><Clock className="w-3.5 h-3.5 text-amber-500" /> Pendiente de entrega</>
-                          )}
-                        </p>
-                      ) : null}
-                      {!isHistorial && poSelectedPedido.direccion_texto && (
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const me = poSelectedPedido.metodo_entrega;
+                          if (me === "envio") return <><Truck className="w-4 h-4 text-blue-500" /><span className="font-medium">Envío a domicilio</span></>;
+                          if (me === "retiro" || me === "retiro_local") return <><Store className="w-4 h-4 text-green-500" /><span className="font-medium">Retiro en local</span></>;
+                          if (!me && isHistorial) return poSelectedPedido._entregado
+                            ? <><CheckCircle className="w-4 h-4 text-green-500" /><span className="font-medium">Entregado</span></>
+                            : <><Clock className="w-4 h-4 text-amber-500" /><span className="font-medium">Pendiente de entrega</span></>;
+                          return me ? <span className="font-medium">{me}</span> : null;
+                        })()}
+                      </div>
+                      {poSelectedPedido.direccion_texto && (
                         <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3 mt-0.5 shrink-0" />{poSelectedPedido.direccion_texto}</p>
                       )}
                       {poSelectedPedido.fecha_entrega && (
@@ -1885,10 +1878,32 @@ export default function ListadoVentasPage() {
                           {new Date(poSelectedPedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
                         </p>
                       )}
-                      <p className="text-xs text-muted-foreground">Pago: {poSelectedPedido.metodo_pago}</p>
                       {poSelectedPedido._vendedor && poSelectedPedido._vendedor !== "—" && (
                         <p className="text-xs text-muted-foreground">Vendedor: {poSelectedPedido._vendedor}</p>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Pago */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                      <DollarSign className="w-4 h-4" /> Detalle de Pago
+                    </h3>
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
+                      {(() => {
+                        const fp = (poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "";
+                        const fpLabel = fp === "efectivo" || fp === "Efectivo" ? "Efectivo"
+                          : fp === "transferencia" || fp === "Transferencia" ? "Transferencia bancaria"
+                          : fp === "Cuenta Corriente" ? "Cuenta Corriente"
+                          : fp === "mixto" || fp === "Mixto" ? "Pago Mixto"
+                          : fp || "—";
+                        return (
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{fpLabel}</span>
+                            <span className="font-bold">{formatCurrency(poSelectedPedido.total)}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1906,11 +1921,10 @@ export default function ListadoVentasPage() {
                     <Label className="text-sm font-medium mb-2 block">Estado de entrega:</Label>
                     <div className="flex flex-wrap gap-1.5">
                       {([
-                        ["cerrada", "✅ Completada", "bg-gray-100 text-gray-700 border-gray-300"],
                         ["pendiente", "⏳ Pendiente", "bg-amber-50 text-amber-700 border-amber-300"],
                         ["armado", "📦 Armado", "bg-violet-50 text-violet-700 border-violet-300"],
-                        ["confirmado", "✔️ Confirmado", "bg-blue-50 text-blue-700 border-blue-300"],
                         ["entregado", "🚚 Entregado", "bg-emerald-50 text-emerald-700 border-emerald-300"],
+                        ["cerrada", "✅ Completado", "bg-gray-100 text-gray-700 border-gray-300"],
                         ["cancelado", "❌ Cancelado", "bg-red-50 text-red-700 border-red-300"],
                       ] as const).map(([val, label, colors]) => (
                         <button
@@ -1920,7 +1934,7 @@ export default function ListadoVentasPage() {
                             if (val === poSelectedPedido.estado) return;
                             poHandleEstadoChange(poSelectedPedido, val);
                             setPoSelectedPedido({ ...poSelectedPedido, estado: val });
-                            if (val === "confirmado" && ((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && !(poSelectedPedido as any).cuenta_transferencia_alias) {
+                            if ((val as string) === "confirmado" && ((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && !(poSelectedPedido as any).cuenta_transferencia_alias) {
                               setShowCuentaSelector(true);
                             }
                           }}
