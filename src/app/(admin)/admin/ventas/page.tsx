@@ -50,6 +50,7 @@ import {
   Download,
   Eye,
   ScanBarcode,
+  AlertCircle,
 } from "lucide-react";
 
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -137,6 +138,7 @@ export default function VentasPage() {
   const [sellers, setSellers] = useState<Usuario[]>([]);
   const [comboItemsMap, setComboItemsMap] = useState<Record<string, ComboItemRef[]>>({});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>([]);
+  const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null);
 
   // --- sale state ---
   const [items, setItems] = useState<LineItem[]>([]);
@@ -352,6 +354,10 @@ export default function VentasPage() {
 
   useEffect(() => {
     fetchData();
+    // Check if caja is open
+    supabase.from("turnos_caja").select("id").eq("estado", "abierto").limit(1).then(({ data }) => {
+      setCajaAbierta(data && data.length > 0);
+    });
   }, [fetchData]);
 
   // Load bank accounts from localStorage
@@ -1715,6 +1721,16 @@ export default function VentasPage() {
   // ---------- RENDER ----------
   return (
     <div className="h-[calc(100vh-3rem)] lg:h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
+      {/* Caja warning */}
+      {cajaAbierta === false && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-sm text-amber-800">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            La caja no está abierta. Las ventas no se registrarán en la caja diaria.
+          </span>
+          <a href="/admin/caja" className="font-semibold underline hover:text-amber-900">Abrir caja</a>
+        </div>
+      )}
       {/* Main two-column layout */}
       <div className="flex-1 flex flex-col lg:flex-row gap-2 lg:gap-3 p-2 lg:p-3 overflow-hidden">
         {/* LEFT COLUMN */}

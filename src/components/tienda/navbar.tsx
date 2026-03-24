@@ -115,7 +115,7 @@ export default function TiendaNavbar() {
         <div className="mx-auto flex max-w-7xl items-center justify-center md:justify-between px-4 py-1.5 text-[10px] md:text-xs">
           <span className="flex items-center gap-1.5">
             <Truck className="h-3.5 w-3.5" />
-            Envío gratis en compras +${config?.umbral_envio_gratis ? new Intl.NumberFormat("es-AR").format(config.umbral_envio_gratis) : "50.000"}
+            {config?.umbral_envio_gratis && config.umbral_envio_gratis > 0 ? `Envío gratis en compras +$${new Intl.NumberFormat("es-AR").format(config.umbral_envio_gratis)}` : "Envío sin cargo"}
           </span>
           <span className="hidden md:inline text-gray-400">
             Atención: {config?.dias_atencion ? `${config.dias_atencion[0]} a ${config.dias_atencion[config.dias_atencion.length - 1]}` : "Lunes a Sábados"} de {config?.horario_atencion_inicio?.slice(0, 5)?.replace(/^0/, "") || "8"} a {config?.horario_atencion_fin?.slice(0, 5)?.replace(/^0/, "") || "14"}hs
