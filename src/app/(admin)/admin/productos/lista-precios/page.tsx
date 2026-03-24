@@ -251,7 +251,7 @@ export default function ListaPreciosPage() {
     }
 
     const [dbProducts, presentaciones] = await Promise.all([
-      fetchAllRows("productos", "*, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
+      fetchAllRows("productos", "*, categorias(nombre), subcategorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
       fetchAllRows("presentaciones", "*"),
     ]);
 
@@ -298,7 +298,7 @@ export default function ListaPreciosPage() {
         aumento: isRecent,
         id: p.id,
         categoria: dbCategoria || clasificacion.categoria,
-        subcategoria: clasificacion.subcategoria,
+        subcategoria: (p as any).subcategorias?.nombre || clasificacion.subcategoria,
         fechaActualizacion: fechaAct,
       };
     });
