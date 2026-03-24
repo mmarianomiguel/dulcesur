@@ -138,6 +138,7 @@ export default function ProductosPage() {
   const [discountForm, setDiscountForm] = useState({ nombre: "", porcentaje: 5, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
   const [savingDiscount, setSavingDiscount] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProductoWithRelations | null>(null);
+  const [editTab, setEditTab] = useState<string>("info");
   const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -445,6 +446,7 @@ export default function ProductosPage() {
     setPresentaciones([
       { nombre: "Unidad", cantidad: 1, sku: form.codigo || "", costo: 0, precio: 0, precio_oferta: null },
     ]);
+    setEditTab("info");
     setDialogOpen(true);
   };
 
@@ -607,6 +609,7 @@ export default function ProductosPage() {
       setProductDiscounts(applicableDiscounts);
     } catch { setProductDiscounts([]); }
 
+    setEditTab("info");
     setDialogOpen(true);
   };
 
@@ -878,6 +881,7 @@ export default function ProductosPage() {
       setComboItems([]);
     }
 
+    setEditTab("info");
     setDialogOpen(true);
   };
 
@@ -2065,6 +2069,17 @@ export default function ProductosPage() {
             </div>
           </div>
 
+          {editingProduct && (
+            <div className="flex border-b bg-muted/20 px-6">
+              {[["info","Informaci\u00f3n"],["precios","Precios"],["descuentos","Descuentos"],["stock","Stock"],["historial","Historial"]].map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setEditTab(key)}
+                  className={`px-4 py-2.5 text-xs font-medium transition-all border-b-2 -mb-px ${editTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Combo toggle */}
@@ -2091,6 +2106,8 @@ export default function ProductosPage() {
               </div>
             )}
 
+            {/* TAB: info */}
+            <div className={editingProduct && editTab !== "info" ? "hidden" : ""}>
             {/* Section 1: Product Info */}
             <div>
               <h3 className="text-sm font-medium mb-3 flex items-center gap-2 text-muted-foreground">
@@ -2249,7 +2266,11 @@ export default function ProductosPage() {
                 })()}
               </div>
             </div>
+            </div>
+            {/* END TAB: info (sections 1+2) */}
 
+            {/* TAB: precios */}
+            <div className={editingProduct && editTab !== "precios" ? "hidden" : ""}>
             {/* Section 3: Pricing & Stock - redesigned */}
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-muted-foreground">Precios e Inventario</h3>
@@ -2427,9 +2448,16 @@ export default function ProductosPage() {
                 </details>
               )}
 
-              {/* Descuentos del producto - CRUD interactivo */}
-              {editingProduct && (
-                <div className="border rounded-xl overflow-hidden">
+            </div>
+            {/* END Section 3 pricing part */}
+            </div>
+            {/* END TAB: precios (section 3 pricing) */}
+
+            {/* TAB: descuentos */}
+            <div className={editingProduct && editTab !== "descuentos" ? "hidden" : ""}>
+            {/* Descuentos del producto - CRUD interactivo */}
+            {editingProduct && (
+              <div className="border rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-orange-50 to-amber-50 border-b">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-4 h-4 text-orange-600" />
@@ -2574,8 +2602,13 @@ export default function ProductosPage() {
                   </div>
                 </div>
               )}
+            </div>
+            {/* END TAB: descuentos */}
 
-              {/* Box summary */}
+            {/* TAB: precios (continued - box summary, combos, presentaciones) */}
+            <div className={editingProduct && editTab !== "precios" ? "hidden" : ""}>
+            {/* Box summary */}
+            <div className="space-y-4">
               {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).map((box, i) => {
                 const boxMargen = box.costo > 0 ? ((box.precio - box.costo) / box.costo) * 100 : 0;
                 const boxGanancia = box.precio - box.costo;
@@ -2875,7 +2908,11 @@ export default function ProductosPage() {
               </div>
             </div>
             }
+            </div>
+            {/* END TAB: precios (box summary, combos, presentaciones) */}
 
+            {/* TAB: info (proveedores) */}
+            <div className={editingProduct && editTab !== "info" ? "hidden" : ""}>
             {/* Section 5: Proveedores - compact */}
             {!isCombo && <div>
               <h3 className="text-sm font-medium mb-3 text-muted-foreground">Proveedores</h3>
@@ -2920,6 +2957,183 @@ export default function ProductosPage() {
               </div>
             </div>
             }
+            </div>
+            {/* END TAB: info (proveedores) */}
+
+            {/* TAB: stock */}
+            <div className={editingProduct && editTab !== "stock" ? "hidden" : ""}>
+              <div className="space-y-6">
+                <div className="text-center py-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Stock actual</p>
+                  <p className={`text-5xl font-bold ${form.stock <= form.stock_minimo && form.stock > 0 ? "text-orange-600" : form.stock === 0 ? "text-red-600" : "text-foreground"}`}>
+                    {form.stock}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">{form.unidad_medida === "KG" ? "kilogramos" : "unidades"}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="border rounded-xl p-4 space-y-2">
+                    <Label className="text-xs text-muted-foreground">Stock m\u00ednimo</Label>
+                    <Input type="number" min="0" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: Math.max(0, Number(e.target.value)) })} className="h-10 text-lg font-semibold text-center" />
+                    <p className="text-[11px] text-muted-foreground text-center">Alerta cuando el stock baje de este valor</p>
+                  </div>
+                  <div className="border rounded-xl p-4 space-y-2">
+                    <Label className="text-xs text-muted-foreground">Stock m\u00e1ximo</Label>
+                    <Input type="number" min="0" value={form.stock_maximo} onChange={(e) => setForm({ ...form, stock_maximo: Math.max(0, Number(e.target.value)) })} className="h-10 text-lg font-semibold text-center" />
+                    <p className="text-[11px] text-muted-foreground text-center">Capacidad m\u00e1xima de almacenamiento</p>
+                  </div>
+                </div>
+
+                {/* Stock status indicator */}
+                <div className="border rounded-xl p-4">
+                  <p className="text-xs text-muted-foreground mb-3">Estado del stock</p>
+                  {form.stock === 0 ? (
+                    <div className="flex items-center gap-2 text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="text-sm font-medium">Sin stock</span>
+                    </div>
+                  ) : form.stock <= form.stock_minimo ? (
+                    <div className="flex items-center gap-2 text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="text-sm font-medium">Stock bajo &mdash; por debajo del m\u00ednimo ({form.stock_minimo})</span>
+                    </div>
+                  ) : form.stock_maximo > 0 && form.stock >= form.stock_maximo ? (
+                    <div className="flex items-center gap-2 text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                      <Package className="w-4 h-4" />
+                      <span className="text-sm font-medium">Stock al m\u00e1ximo</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                      <Check className="w-4 h-4" />
+                      <span className="text-sm font-medium">Stock normal</span>
+                    </div>
+                  )}
+                  {/* Progress bar */}
+                  {form.stock_maximo > 0 && (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+                        <span>0</span>
+                        <span>{form.stock_maximo}</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${form.stock <= form.stock_minimo ? "bg-orange-500" : form.stock >= form.stock_maximo ? "bg-blue-500" : "bg-emerald-500"}`}
+                          style={{ width: `${Math.min(100, (form.stock / form.stock_maximo) * 100)}%` }}
+                        />
+                      </div>
+                      {form.stock_minimo > 0 && (
+                        <div className="relative h-0">
+                          <div className="absolute top-[-14px] text-[9px] text-orange-500 font-medium" style={{ left: `${Math.min(100, (form.stock_minimo / form.stock_maximo) * 100)}%`, transform: "translateX(-50%)" }}>
+                            \u25BC {form.stock_minimo}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Box breakdown */}
+                {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).length > 0 && (
+                  <div className="border rounded-xl p-4">
+                    <p className="text-xs text-muted-foreground mb-3">Desglose por presentaci\u00f3n</p>
+                    <div className="space-y-2">
+                      {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).map((box, i) => {
+                        const stockCajas = box.cantidad > 0 ? Math.floor(form.stock / box.cantidad) : 0;
+                        const restoUnidades = box.cantidad > 0 ? form.stock % box.cantidad : form.stock;
+                        return (
+                          <div key={i} className="flex items-center justify-between bg-muted/30 rounded-lg px-4 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <Box className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="text-sm font-medium">{box.nombre}</span>
+                              <span className="text-xs text-muted-foreground">({box.cantidad} un.)</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm">
+                              <span className="font-semibold">{stockCajas} cajas</span>
+                              {restoUnidades > 0 && <span className="text-muted-foreground">+ {restoUnidades} sueltas</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* END TAB: stock */}
+
+            {/* TAB: historial */}
+            <div className={editingProduct && editTab !== "historial" ? "hidden" : ""}>
+              <div className="space-y-4">
+                {priceHistory.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        Historial de precios
+                      </h3>
+                      <Badge variant="secondary" className="text-xs">{priceHistory.length} cambios</Badge>
+                    </div>
+                    <div className="space-y-3">
+                      {priceHistory.map((h, i) => {
+                        const precioChange = h.precio_nuevo - h.precio_anterior;
+                        const costoChange = h.costo_nuevo - h.costo_anterior;
+                        return (
+                          <div key={h.id} className="border rounded-xl p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${precioChange > 0 ? "bg-red-500" : precioChange < 0 ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(h.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" })}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {new Date(h.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                              {h.usuario && <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{h.usuario}</span>}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Precio</p>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-muted-foreground line-through">{formatCurrency(h.precio_anterior)}</span>
+                                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                                  <span className="text-sm font-semibold">{formatCurrency(h.precio_nuevo)}</span>
+                                  {precioChange !== 0 && (
+                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${precioChange > 0 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                                      {precioChange > 0 ? "+" : ""}{((precioChange / (h.precio_anterior || 1)) * 100).toFixed(1)}%
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Costo</p>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-muted-foreground line-through">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "\u2014"}</span>
+                                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                                  <span className="text-sm font-semibold">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "\u2014"}</span>
+                                  {costoChange !== 0 && h.costo_anterior > 0 && (
+                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${costoChange > 0 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                                      {costoChange > 0 ? "+" : ""}{((costoChange / (h.costo_anterior || 1)) * 100).toFixed(1)}%
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <Clock className="w-10 h-10 mb-3 opacity-30" />
+                    <p className="text-sm font-medium">Sin historial de precios</p>
+                    <p className="text-xs mt-1">Los cambios de precio se registrar\u00e1n aqu\u00ed</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* END TAB: historial */}
 
           </div>
 
