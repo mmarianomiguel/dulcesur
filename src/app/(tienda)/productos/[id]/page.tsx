@@ -669,7 +669,7 @@ export default function ProductoDetallePage() {
                       }`}
                     >
                       {isUnit ? <Layers className="w-4 h-4" /> : <Box className="w-4 h-4" />}
-                      {isUnit ? "Unidad" : `Caja x${p.cantidad}`}
+                      {isUnit ? "Unidad" : (p.cantidad <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio"))) ? "Medio Cartón" : `Caja (x${p.cantidad})`}
                       {disabled && <span className="text-[10px] font-normal ml-1">(sin stock)</span>}
                     </button>
                   );
