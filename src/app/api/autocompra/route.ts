@@ -35,6 +35,11 @@ export async function POST(req: Request) {
     if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    // Verify user is admin
+    const { data: usuario } = await supabaseAdmin.from("usuarios").select("es_admin").eq("auth_id", user.id).single();
+    if (!usuario?.es_admin) {
+      return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+    }
   }
 
   // Fetch all active products with their providers

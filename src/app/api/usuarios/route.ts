@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (!email.includes("@") || !email.includes(".")) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json(
         { error: "Email inválido" },
         { status: 400 }

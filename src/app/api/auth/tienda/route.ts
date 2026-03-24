@@ -225,6 +225,12 @@ async function handleResetPassword({
     return NextResponse.json({ error: "La contraseña debe tener al menos 6 caracteres" }, { status: 400 });
   }
 
+  // Verify caller is an authenticated admin user
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
   const bcryptHash = await bcrypt.hash(newPassword, 10);
   const { error } = await supabase
     .from("clientes_auth")
