@@ -40,6 +40,7 @@ import {
   DollarSign,
   Package,
   Filter,
+  Printer,
 } from "lucide-react";
 
 
@@ -216,6 +217,8 @@ export default function EditarPreciosPage() {
   const [roundMode, setRoundMode] = useState<"nearest" | "up" | "down">("nearest");
   const [roundPreview, setRoundPreview] = useState<{ id: string; nombre: string; precioActual: number; precioNuevo: number }[]>([]);
   const [roundOpen, setRoundOpen] = useState(false);
+  const [postSaveDialog, setPostSaveDialog] = useState(false);
+  const [savedProductNames, setSavedProductNames] = useState<{ id: string; nombre: string; codigo: string; precio: number }[]>([]);
 
   const calcRound = (price: number, mult: number, mode: string) => {
     if (mode === "up") return Math.ceil(price / mult) * mult;
@@ -500,8 +503,28 @@ export default function EditarPreciosPage() {
           return pres;
         })
       );
+      // Collect saved product info for post-save dialog
+      const savedInfo: { id: string; nombre: string; codigo: string; precio: number }[] = [];
+      for (const id of allIds) {
+        const prod = productos.find((p) => p.id === id);
+        if (prod) {
+          savedInfo.push({
+            id: prod.id,
+            nombre: prod.nombre,
+            codigo: prod.codigo,
+            precio: priceChanges[id] ?? prod.precio,
+          });
+        }
+      }
+
       setPriceChanges({});
       setCostoChanges({});
+
+      // Show post-save dialog
+      if (savedInfo.length > 0) {
+        setSavedProductNames(savedInfo);
+        setPostSaveDialog(true);
+      }
     } catch (err) {
       console.error("Error saving prices:", err);
     } finally {
@@ -1359,6 +1382,45 @@ export default function EditarPreciosPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setVisibilityOpen(false)}>
               Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post-save dialog - print price tags */}
+      <Dialog open={postSaveDialog} onOpenChange={setPostSaveDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="w-5 h-5 text-green-600" />
+              Precios actualizados
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Se actualizaron <strong className="text-foreground">{savedProductNames.length} productos</strong> correctamente.
+            </p>
+            <div className="max-h-40 overflow-y-auto border rounded-lg divide-y">
+              {savedProductNames.map((p) => (
+                <div key={p.id} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                  <span className="truncate mr-2">{p.nombre}</span>
+                  <span className="font-semibold tabular-nums whitespace-nowrap">{formatCurrency(p.precio)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm font-medium">¿Querés imprimir los nuevos carteles de precios?</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPostSaveDialog(false)}>
+              No, gracias
+            </Button>
+            <Button onClick={() => {
+              const ids = savedProductNames.map((p) => p.id).join(",");
+              setPostSaveDialog(false);
+              window.location.href = `/admin/productos/lista-precios?ids=${ids}`;
+            }}>
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimir carteles
             </Button>
           </DialogFooter>
         </DialogContent>

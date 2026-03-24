@@ -1,7 +1,7 @@
 "use client";
 
 import { SearchableSelect } from "@/components/searchable-select";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { jsPDF } from "jspdf";
 import {
@@ -310,7 +310,27 @@ export default function ListaPreciosPage() {
     setLoading(false);
   }, []);
 
+  const preSelectDone = useRef(false);
+
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
+
+  // Pre-select products from URL params (from editar-precios)
+  useEffect(() => {
+    if (preSelectDone.current || products.length === 0) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const idsParam = params.get("ids");
+      if (idsParam) {
+        const ids = idsParam.split(",");
+        const indices = new Set<number>();
+        products.forEach((p, i) => { if (ids.includes(p.id)) indices.add(i); });
+        if (indices.size > 0) {
+          setSelected(indices);
+          preSelectDone.current = true;
+        }
+      }
+    } catch {}
+  }, [products]);
 
   const updateFilter = (key: keyof Filters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
