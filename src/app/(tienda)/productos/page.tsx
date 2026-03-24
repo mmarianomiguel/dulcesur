@@ -570,7 +570,7 @@ function ProductosContent() {
         descuento: disc > 0 ? disc : undefined,
         imagen_url: producto.imagen_url,
         cantidad: canAdd,
-        presentacion: presLabel || undefined,
+        presentacion: presLabel || "Unidad",
         unidades_por_presentacion: presUnits,
       });
     }
