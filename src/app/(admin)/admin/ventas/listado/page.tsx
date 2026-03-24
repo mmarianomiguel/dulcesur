@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
@@ -74,6 +74,7 @@ interface ClienteInfo {
   tipo_factura?: string;
   domicilio?: string | null;
   telefono?: string | null;
+  email?: string | null;
   situacion_iva?: string;
   localidad?: string | null;
   provincia?: string | null;
@@ -163,6 +164,7 @@ interface Pedido {
   _cuit?: string;
   _domicilio?: string;
   _comboIds?: Set<string>;
+  forma_pago?: string;
 }
 
 interface ProductoSearch {
@@ -181,12 +183,13 @@ const estadoBadge: Record<string, { bg: string; text: string; label: string }> =
   confirmado: { bg: "bg-blue-50 border-blue-200", text: "text-blue-700", label: "Confirmado" },
   entregado: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", label: "Entregado" },
   cancelado: { bg: "bg-red-50 border-red-200", text: "text-red-700", label: "Cancelado" },
+  cerrada: { bg: "bg-gray-50 border-gray-200", text: "text-gray-700", label: "Completado" },
 };
 
 export default function ListadoVentasPage() {
   const currentUser = useCurrentUser();
-  // ─── Main tab state ───
-  const [activeTab, setActiveTab] = useState<"historial" | "pedidos">("historial");
+  // ─── Unified source filter ───
+  const [filterSource, setFilterSource] = useState<"todos" | "pos" | "online">("todos");
 
   // ══════════════════════════════════════════════════════════════
   // HISTORIAL DE VENTAS STATE
@@ -265,7 +268,7 @@ export default function ListadoVentasPage() {
     setLoading(true);
     let query = supabase
       .from("ventas")
-      .select("*, created_at, clientes(id, nombre, cuit, tipo_factura, domicilio, telefono, situacion_iva, localidad, provincia, codigo_postal, numero_documento)")
+      .select("*, created_at, clientes(id, nombre, cuit, tipo_factura, domicilio, telefono, email, situacion_iva, localidad, provincia, codigo_postal, numero_documento)")
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -1211,6 +1214,100 @@ export default function ListadoVentasPage() {
   const poTotalPendiente = poPedidos.filter((p) => p.estado === "pendiente" || p.estado === "armado").reduce((s, p) => s + p.total, 0);
 
   // ══════════════════════════════════════════════════════════════
+  // UNIFIED ALL ORDERS
+  // ══════════════════════════════════════════════════════════════
+
+  const formatEntrega = (v: string | null | undefined) => {
+    if (!v) return "";
+    if (v === "envio") return "Envio";
+    if (v === "retiro_local" || v === "retiro") return "Retiro en local";
+    return v.charAt(0).toUpperCase() + v.slice(1);
+  };
+
+  const formatPago = (v: string | null | undefined) => {
+    if (!v) return "";
+    if (v === "efectivo") return "Efectivo";
+    if (v === "transferencia") return "Transferencia";
+    if (v === "cuenta_corriente") return "Cuenta Corriente";
+    if (v === "mixto") return "Mixto";
+    return v.charAt(0).toUpperCase() + v.slice(1);
+  };
+
+  const allOrders = useMemo(() => {
+    const fromHistorial: Pedido[] = ventas.map((v) => {
+      const estado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "cerrada";
+      return {
+        id: 0,
+        numero: v.numero,
+        created_at: v.created_at || v.fecha,
+        estado,
+        nombre_cliente: v.clientes?.nombre || "Consumidor Final",
+        email: v.clientes?.email || "",
+        telefono: v.clientes?.telefono || "",
+        metodo_entrega: v.metodo_entrega || "",
+        direccion_texto: v.clientes?.domicilio || null,
+        fecha_entrega: null,
+        metodo_pago: v.forma_pago,
+        subtotal: v.subtotal,
+        costo_envio: 0,
+        total: v.total,
+        observacion: v.observacion,
+        cliente_auth_id: null,
+        items: [],
+        _source: "historial" as const,
+        _ventaId: v.id,
+        _clienteId: v.cliente_id,
+        _entregado: v.entregado,
+        _tipo_comprobante: v.tipo_comprobante,
+        _descuento_porcentaje: v.descuento_porcentaje,
+        _recargo_porcentaje: v.recargo_porcentaje,
+        _vendedor: v.vendedor_id ? (vendedores.find((vd) => vd.id === v.vendedor_id)?.nombre || "") : "",
+        _cuit: v.clientes?.cuit || "",
+        _domicilio: v.clientes?.domicilio || "",
+        forma_pago: v.forma_pago,
+      } as Pedido;
+    });
+
+    const fromPedidos: Pedido[] = poPedidos.map((p) => ({ ...p, _source: "pedidos" as const }));
+
+    return [...fromHistorial, ...fromPedidos].sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [ventas, poPedidos, vendedores]);
+
+  const filteredOrders = useMemo(() => {
+    return allOrders.filter((o) => {
+      // Source filter
+      if (filterSource === "pos" && o._source !== "historial") return false;
+      if (filterSource === "online" && o._source !== "pedidos") return false;
+      // Estado filter
+      if (poFilterEstado !== "todos" && o.estado !== poFilterEstado) return false;
+      // Payment filter
+      if (filterPayment !== "all") {
+        const pago = (o.forma_pago || o.metodo_pago || "").toLowerCase();
+        if (filterPayment.toLowerCase() !== pago) return false;
+      }
+      // Search filter
+      if (searchClient) {
+        const q = searchClient.toLowerCase();
+        if (
+          !(o.nombre_cliente || "").toLowerCase().includes(q) &&
+          !(o.numero || "").toLowerCase().includes(q) &&
+          !(o.email || "").toLowerCase().includes(q)
+        ) return false;
+      }
+      return true;
+    });
+  }, [allOrders, filterSource, poFilterEstado, filterPayment, searchClient]);
+
+  // Unified stats
+  const unifiedTotal = filteredOrders.filter((o) => o.estado !== "cancelado").reduce((s, o) => {
+    const isNC = o._tipo_comprobante?.includes("Nota de Crédito");
+    return s + (isNC ? -o.total : o.total);
+  }, 0);
+  const unifiedPendientes = filteredOrders.filter((o) => o.estado === "pendiente" || o.estado === "armado").length;
+
+  // ══════════════════════════════════════════════════════════════
   // RENDER
   // ══════════════════════════════════════════════════════════════
 
@@ -1223,526 +1320,355 @@ export default function ListadoVentasPage() {
             <Receipt className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold">Historial y Pedidos</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Ventas y Pedidos</h1>
             <p className="text-sm text-muted-foreground">
-              {activeTab === "historial"
-                ? `${ventas.length} comprobantes encontrados${ventas.length !== ventasActivas.length ? ` (${ventas.length - ventasActivas.length} anulados)` : ""}`
-                : `${poPedidos.length} pedidos en total`
-              }
+              {filteredOrders.length} resultados{poPendientes > 0 ? ` · ${poPendientes} pendiente${poPendientes > 1 ? "s" : ""} online` : ""}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {activeTab === "historial" && (
-            <>
-              <Button variant="outline" size="sm" onClick={exportCSV}>
-                <Download className="w-4 h-4 mr-2" />Exportar
-              </Button>
-              <Link href="/admin/ventas/carga-manual">
-                <Button variant="outline" size="sm"><FileText className="w-4 h-4 mr-2" />Carga manual</Button>
-              </Link>
-              <Link href="/admin/ventas/cambios">
-                <Button variant="outline" size="sm">Cambios</Button>
-              </Link>
-              <Link href="/admin/ventas">
-                <Button size="sm">Nueva venta</Button>
-              </Link>
-            </>
-          )}
+          <Button variant="outline" size="sm" onClick={exportCSV}>
+            <Download className="w-4 h-4 mr-2" />Exportar
+          </Button>
+          <Link href="/admin/ventas/carga-manual">
+            <Button variant="outline" size="sm"><FileText className="w-4 h-4 mr-2" />Carga manual</Button>
+          </Link>
+          <Link href="/admin/ventas/hoja-ruta">
+            <Button variant="outline" size="sm"><Truck className="w-4 h-4 mr-2" />Entregas y Ruta</Button>
+          </Link>
+          <Link href="/admin/ventas">
+            <Button size="sm"><Plus className="w-4 h-4 mr-2" />Nueva venta</Button>
+          </Link>
         </div>
       </div>
 
-      {/* Main Tabs */}
-      <div className="bg-muted rounded-xl p-1 inline-flex gap-1">
-        <button
-          onClick={() => setActiveTab("historial")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            activeTab === "historial"
-              ? "bg-background shadow text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Historial de Ventas
-        </button>
-        <button
-          onClick={() => setActiveTab("pedidos")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-            activeTab === "pedidos"
-              ? "bg-background shadow text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Globe className="w-4 h-4" />
-          Pedidos Online
-          {poPendientes > 0 && (
-            <span className="bg-amber-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-              {poPendientes}
-            </span>
-          )}
-        </button>
+      {/* Unified Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-primary" /></div>
+            <div><p className="text-xs text-muted-foreground">Total ventas</p><p className="text-xl font-bold">{filteredOrders.filter((o) => o.estado !== "cancelado").length}</p></div>
+          </CardContent>
+        </Card>
+        <Card className={`cursor-pointer transition-all ${poFilterEstado === "pendiente" ? "ring-2 ring-amber-400" : "hover:shadow-md"}`} onClick={() => setPoFilterEstado(poFilterEstado === "pendiente" ? "todos" : "pendiente")}>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center"><Clock className="w-5 h-5 text-amber-500" /></div>
+            <div><p className="text-xs text-muted-foreground">Pendientes online</p><p className="text-xl font-bold text-amber-600">{poPendientes}</p></div>
+          </CardContent>
+        </Card>
+        <Card className={`cursor-pointer transition-all ${poFilterEstado === "armado" ? "ring-2 ring-violet-400" : "hover:shadow-md"}`} onClick={() => setPoFilterEstado(poFilterEstado === "armado" ? "todos" : "armado")}>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Package className="w-5 h-5 text-violet-500" /></div>
+            <div><p className="text-xs text-muted-foreground">Pendientes entrega</p><p className="text-xl font-bold text-violet-600">{unifiedPendientes}</p></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-emerald-500" /></div>
+            <div><p className="text-xs text-muted-foreground">Total facturado</p><p className="text-xl font-bold">{formatCurrency(unifiedTotal)}</p></div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════ */}
-      {/* HISTORIAL TAB */}
-      {/* ══════════════════════════════════════════════════════════ */}
-      {activeTab === "historial" && (
-        <>
-          {/* Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-primary" /></div>
-                <div><p className="text-xs text-muted-foreground">Comprobantes</p><p className="text-xl font-bold">{ventasActivas.length}</p></div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-emerald-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Total</p><p className="text-xl font-bold">{formatCurrency(totalSum)}</p></div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center"><Truck className="w-5 h-5 text-amber-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Pendientes entrega</p><p className="text-xl font-bold">{pendientesEntrega}</p></div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><FileText className="w-5 h-5 text-violet-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Promedio por ticket</p><p className="text-xl font-bold">{ventasActivas.length > 0 ? formatCurrency(totalSum / ventasActivas.length) : "$0"}</p></div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Page nav tabs */}
-          <div className="flex gap-2 text-sm">
-            <Link href="/admin/ventas/listado">
-              <Button variant="default" size="sm" className="h-8 text-xs">Todas las Ventas</Button>
-            </Link>
-            <Link href="/admin/ventas/hoja-ruta">
-              <Button variant="outline" size="sm" className="h-8 text-xs">Entregas y Ruta</Button>
-            </Link>
-          </div>
-
-          {/* Filters */}
-          <Card>
-            <CardContent className="pt-6 space-y-4 overflow-visible">
-              <div className="flex items-end gap-4">
-                <div className="flex-1 max-w-md space-y-1.5">
-                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Buscar número / cliente..." value={searchClient} onChange={(e) => setSearchClient(e.target.value)} className="pl-9" />
-                  </div>
-                </div>
-                <Button variant={showFilters ? "default" : "outline"} className={showFilters ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-blue-600 border-blue-600 hover:bg-blue-50"} onClick={() => setShowFilters(!showFilters)}>
-                  <Filter className="w-4 h-4 mr-2" />Filtros
-                </Button>
+      {/* Unified Filters */}
+      <Card>
+        <CardContent className="pt-6 space-y-4 overflow-visible">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
+              <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Buscar numero, cliente o email..." value={searchClient} onChange={(e) => setSearchClient(e.target.value)} className="pl-9 h-9" />
               </div>
-              {showFilters && (
-                <div className="border-t pt-4 space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Origen</Label>
-                      <Select value={filterOrigen} onValueChange={(v) => setFilterOrigen(v ?? "all")}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          <SelectItem value="pos">Punto de Venta</SelectItem>
-                          <SelectItem value="tienda">Tienda Online</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Tipo de comprobante</Label>
-                      <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          <SelectItem value="Remito X">Remito X</SelectItem>
-                          <SelectItem value="Pedido Web">Pedido Web</SelectItem>
-                          <SelectItem value="Nota de Crédito B">Nota de Crédito B</SelectItem>
-                          <SelectItem value="Nota de Crédito C">Nota de Crédito C</SelectItem>
-                          <SelectItem value="Nota de Débito B">Nota de Débito B</SelectItem>
-                          <SelectItem value="Nota de Débito C">Nota de Débito C</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Forma de cobro</Label>
-                      <Select value={filterPayment} onValueChange={(v) => setFilterPayment(v ?? "all")}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas</SelectItem>
-                          <SelectItem value="Efectivo">Efectivo</SelectItem>
-                          <SelectItem value="Transferencia">Transferencia</SelectItem>
-                          <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
-                          <SelectItem value="Mixto">Mixto</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Período</Label>
-                      <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "month") as "day" | "month" | "range" | "all")}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Mensual" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          <SelectItem value="day">Dia</SelectItem>
-                          <SelectItem value="month">Mensual</SelectItem>
-                          <SelectItem value="range">Entre fechas</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  {filterMode === "day" && (
-                    <div className="flex items-center gap-3">
-                      <Label className="text-xs text-muted-foreground whitespace-nowrap">Fecha:</Label>
-                      <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-44 h-9" />
-                    </div>
-                  )}
-                  {filterMode === "month" && (
-                    <div className="flex items-center gap-3">
-                      <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
-                        <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
-                        <SelectContent>
-                          {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                      <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-24 h-9" />
-                    </div>
-                  )}
-                  {filterMode === "range" && (
-                    <div className="flex items-center gap-3">
-                      <Label className="text-xs text-muted-foreground">Desde</Label>
-                      <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-9" />
-                      <Label className="text-xs text-muted-foreground">Hasta</Label>
-                      <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-9" />
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Table */}
-          <Card>
-            <CardContent className="pt-0">
-              {loading ? (
-                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-              ) : ventas.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">No se encontraron comprobantes</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-3 px-4 font-medium">N°</th>
-                        <th className="text-left py-3 px-4 font-medium">Tipo</th>
-                        <th className="text-left py-3 px-4 font-medium">Fecha / Hora</th>
-                        <th className="text-left py-3 px-4 font-medium">Cliente</th>
-                        <th className="text-left py-3 px-4 font-medium">Forma pago</th>
-                        <th className="text-center py-3 px-4 font-medium">Entrega</th>
-                        <th className="text-center py-3 px-4 font-medium">Estado</th>
-                        <th className="text-right py-3 px-4 font-medium">Total</th>
-                        <th className="text-right py-3 px-4 font-medium">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ventas.map((v) => {
-                        const vEstado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "pendiente";
-                        const est = estadoBadge[vEstado] || estadoBadge.pendiente;
-                        return (
-                        <tr key={v.id} className={`border-b last:border-0 transition-colors ${v.estado === "anulada" ? "opacity-50 bg-red-50/50" : "hover:bg-muted/50"}`}>
-                          <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{v.numero}</td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-1.5">
-                              <Badge variant="outline" className={`text-xs font-normal ${v.origen === "tienda" ? "border-pink-300 text-pink-700 bg-pink-50" : "border-blue-300 text-blue-700 bg-blue-50"}`}>
-                                {v.origen === "tienda" ? "Tienda" : "POS"}
-                              </Badge>
-                              <Badge variant={v.tipo_comprobante.includes("Nota de Crédito") ? "destructive" : "secondary"} className="text-xs font-normal">
-                                {v.tipo_comprobante}
-                              </Badge>
-                              {v.estado === "anulada" && (
-                                <Badge variant="destructive" className="text-[10px] font-bold">ANULADA</Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-muted-foreground">
-                            <div>{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</div>
-                            {v.created_at && (
-                              <div className="text-xs text-muted-foreground/70">
-                                {new Date(v.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 font-medium">{v.clientes?.nombre || "—"}</td>
-                          <td className="py-3 px-4">
-                            <Badge variant="outline" className="text-xs font-normal">{v.forma_pago}</Badge>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {v.tipo_comprobante.includes("Nota de Crédito") ? (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            ) : (
-                              <Badge variant={v.entregado ? "default" : "secondary"} className={`text-xs ${!v.entregado ? "" : "bg-blue-100 text-blue-700 hover:bg-blue-100"}`}>
-                                {v.entregado ? "Entregado" : "Pendiente"}
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {v.tipo_comprobante.includes("Nota de Crédito") ? (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            ) : (
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
-                                {est.label}
-                              </span>
-                            )}
-                          </td>
-                          <td className={`py-3 px-4 text-right font-semibold ${v.estado === "anulada" ? "line-through text-muted-foreground" : v.tipo_comprobante.includes("Nota de Crédito") ? "text-red-500" : ""}`}>
-                            {v.tipo_comprobante.includes("Nota de Crédito") ? `-${formatCurrency(v.total)}` : formatCurrency(v.total)}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground">
-                                  <MoreHorizontal className="w-4 h-4" />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem onClick={() => openDetail(v)}>
-                                  <Eye className="w-4 h-4 mr-2" />
-                                  Ver detalle
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => preparePrint(v)}>
-                                  <Printer className="w-4 h-4 mr-2" />
-                                  Imprimir
-                                </DropdownMenuItem>
-                                {!v.entregado && !v.tipo_comprobante.includes("Nota de Crédito") && v.estado !== "anulada" && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() => marcarEntregado(v)}
-                                      disabled={actionLoading === v.id}
-                                    >
-                                      <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                                      <span className="text-green-600">Marcar entregado</span>
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-                                {v.estado !== "anulada" && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() => { setAnularVenta(v); setAnularMotivo(""); }}
-                                      className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                                    >
-                                      <Ban className="w-4 h-4 mr-2" />
-                                      Anular
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {ventas.length > 0 && (
-                    <div className="flex justify-end border-t pt-3 mt-1 px-4">
-                      <span className="text-sm text-muted-foreground mr-4">Total:</span>
-                      <span className="text-sm font-bold">{formatCurrency(totalSum)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════ */}
-      {/* PEDIDOS ONLINE TAB */}
-      {/* ══════════════════════════════════════════════════════════ */}
-      {activeTab === "pedidos" && (
-        <>
-          {/* Stats - workflow focused */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card className={`cursor-pointer transition-all ${poFilterEstado === "pendiente" ? "ring-2 ring-amber-400" : "hover:shadow-md"}`} onClick={() => setPoFilterEstado(poFilterEstado === "pendiente" ? "todos" : "pendiente")}>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center"><Clock className="w-5 h-5 text-amber-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Pendientes</p><p className="text-xl font-bold text-amber-600">{poPendientes}</p></div>
-              </CardContent>
-            </Card>
-            <Card className={`cursor-pointer transition-all ${poFilterEstado === "armado" ? "ring-2 ring-violet-400" : "hover:shadow-md"}`} onClick={() => setPoFilterEstado(poFilterEstado === "armado" ? "todos" : "armado")}>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Package className="w-5 h-5 text-violet-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Armados</p><p className="text-xl font-bold text-violet-600">{poArmados}</p></div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-emerald-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Total por entregar</p><p className="text-xl font-bold">{formatCurrency(poTotalPendiente)}</p></div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><ShoppingCart className="w-5 h-5 text-primary" /></div>
-                <div><p className="text-xs text-muted-foreground">Total pedidos</p><p className="text-xl font-bold">{poPedidos.length}</p></div>
-              </CardContent>
-            </Card>
+            </div>
+            <Button variant={showFilters ? "default" : "outline"} className={showFilters ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-blue-600 border-blue-600 hover:bg-blue-50"} onClick={() => setShowFilters(!showFilters)}>
+              <Filter className="w-4 h-4 mr-2" />Filtros
+            </Button>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-[200px] max-w-md relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por numero, cliente o email..."
-                value={poSearch}
-                onChange={(e) => setPoSearch(e.target.value)}
-                className="pl-9 h-9"
-              />
-            </div>
-            <Select value={poFilterEstado} onValueChange={(v) => setPoFilterEstado(v || "todos")}>
-              <SelectTrigger className="w-40 h-9">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="pendiente">Pendiente</SelectItem>
-                <SelectItem value="armado">Armado</SelectItem>
-                <SelectItem value="confirmado">Confirmado</SelectItem>
-                <SelectItem value="entregado">Entregado</SelectItem>
-                <SelectItem value="cancelado">Cancelado</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={poFilterEntrega} onValueChange={(v) => setPoFilterEntrega(v || "todos")}>
-              <SelectTrigger className="w-36 h-9">
-                <SelectValue placeholder="Entrega" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
-                <SelectItem value="envio">Envío</SelectItem>
-                <SelectItem value="retiro_local">Retiro</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Origin filter pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground font-semibold mr-1">ORIGEN:</span>
+            {([["todos", "Todos", ""], ["pos", "POS", "border-gray-400 text-gray-700 bg-gray-50"], ["online", "Online", "border-blue-400 text-blue-700 bg-blue-50"]] as const).map(([val, label, colors]) => (
+              <button
+                key={val}
+                onClick={() => setFilterSource(val)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                  filterSource === val
+                    ? (val === "todos" ? "bg-foreground text-background border-foreground" : colors + " ring-2 ring-offset-1 ring-current")
+                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {val === "pos" && <Store className="w-3 h-3 inline mr-1" />}
+                {val === "online" && <Globe className="w-3 h-3 inline mr-1" />}
+                {label}
+              </button>
+            ))}
+
+            <span className="text-xs text-muted-foreground font-semibold ml-4 mr-1">ESTADO:</span>
+            {([["todos", "Todos"], ["pendiente", "Pendiente"], ["armado", "Armado"], ["entregado", "Entregado"], ["cerrada", "Completado"], ["cancelado", "Cancelado"]] as const).map(([val, label]) => {
+              const eb = estadoBadge[val];
+              return (
+                <button
+                  key={val}
+                  onClick={() => setPoFilterEstado(val)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                    poFilterEstado === val
+                      ? (val === "todos" ? "bg-foreground text-background border-foreground" : (eb ? eb.bg + " " + eb.text + " ring-2 ring-offset-1 ring-current" : "bg-foreground text-background border-foreground"))
+                      : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
-          {/* Pedidos cards */}
-          {poLoading ? (
-            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : poFiltered.length === 0 ? (
-            <div className="text-center py-16">
-              <ShoppingCart className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-sm text-muted-foreground">No hay pedidos con los filtros seleccionados</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {poFiltered.map((pedido) => {
-                const est = estadoBadge[pedido.estado] || estadoBadge.pendiente;
-                const capitalPago = pedido.metodo_pago ? pedido.metodo_pago.charAt(0).toUpperCase() + pedido.metodo_pago.slice(1) : "—";
-                const estadoSteps = ["pendiente", "armado", "entregado"];
-                const currentStep = pedido.estado === "cancelado" ? -1 : estadoSteps.indexOf(pedido.estado);
-                return (
-                  <Card key={pedido.id} className={`transition-all ${pedido.estado === "cancelado" ? "opacity-50" : "hover:shadow-md"}`}>
-                    <CardContent className="p-4 sm:p-5">
-                      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                        {/* Left: Customer & order info */}
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-semibold text-base">{pedido.nombre_cliente}</span>
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
-                                  {est.label}
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{pedido.email}</span>
-                                {pedido.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{pedido.telefono}</span>}
-                                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(pedido.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} {new Date(pedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}</span>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className={`text-lg font-bold ${pedido.estado === "cancelado" ? "line-through text-muted-foreground" : ""}`}>{formatCurrency(pedido.total)}</p>
-                              <p className="text-[10px] text-muted-foreground font-mono">#{pedido.numero}</p>
-                            </div>
-                          </div>
-
-                          {/* Delivery & payment info */}
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <Badge variant="outline" className={`font-normal ${pedido.metodo_entrega === "envio" ? "border-blue-300 text-blue-700 bg-blue-50" : "border-gray-300"}`}>
-                              {pedido.metodo_entrega === "envio" ? (
-                                <><Truck className="w-3 h-3 mr-1" />Envío</>
-                              ) : (
-                                <><Store className="w-3 h-3 mr-1" />Retiro en local</>
-                              )}
-                            </Badge>
-                            {pedido.metodo_entrega === "envio" && pedido.direccion_texto && (
-                              <span className="text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[300px]">{pedido.direccion_texto}</span></span>
-                            )}
-                            <Badge variant="outline" className="font-normal">
-                              <DollarSign className="w-3 h-3 mr-1" />{capitalPago}
-                            </Badge>
-                            {pedido.items.length > 0 && (
-                              <span className="text-muted-foreground">{pedido.items.length} {pedido.items.length === 1 ? "producto" : "productos"}</span>
-                            )}
-                          </div>
-
-                          {/* Progress stepper */}
-                          {pedido.estado !== "cancelado" && (
-                            <div className="flex items-center gap-1 pt-1">
-                              {estadoSteps.map((step, i) => (
-                                <div key={step} className="flex items-center gap-1">
-                                  <div className={`w-2 h-2 rounded-full ${i <= currentStep ? "bg-primary" : "bg-gray-200"}`} />
-                                  <span className={`text-[10px] ${i <= currentStep ? "text-foreground font-medium" : "text-muted-foreground/50"}`}>
-                                    {step === "pendiente" ? "Pendiente" : step === "armado" ? "Armado" : "Entregado"}
-                                  </span>
-                                  {i < estadoSteps.length - 1 && <div className={`w-6 h-[2px] ${i < currentStep ? "bg-primary" : "bg-gray-200"}`} />}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {pedido.estado === "cancelado" && (
-                            <div className="flex items-center gap-1 pt-1">
-                              <Ban className="w-3 h-3 text-red-500" />
-                              <span className="text-[10px] text-red-500 font-medium">Pedido cancelado</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Right: Actions */}
-                        <div className="flex sm:flex-col items-center gap-1.5 shrink-0">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(pedido)} title="Ver detalle">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {pedido.estado !== "entregado" && pedido.estado !== "cancelado" && (
-                            <>
-                              {pedido.estado === "pendiente" && (
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50" onClick={() => poHandleEstadoChange(pedido, "armado")} title="Marcar armado">
-                                  <Package className="w-4 h-4" />
-                                </Button>
-                              )}
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => poHandleEstadoChange(pedido, "entregado")} title="Marcar entregado">
-                                <CheckCircle className="w-4 h-4" />
-                              </Button>
-                            </>
-                          )}
-                          {pedido.estado !== "cancelado" && (
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setPoCancelPedido(pedido)} title="Cancelar pedido">
-                              <Ban className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+          {showFilters && (
+            <div className="border-t pt-4 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Forma de cobro</Label>
+                  <Select value={filterPayment} onValueChange={(v) => setFilterPayment(v ?? "all")}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="Efectivo">Efectivo</SelectItem>
+                      <SelectItem value="Transferencia">Transferencia</SelectItem>
+                      <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
+                      <SelectItem value="Mixto">Mixto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Tipo comprobante</Label>
+                  <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="Remito X">Remito X</SelectItem>
+                      <SelectItem value="Pedido Web">Pedido Web</SelectItem>
+                      <SelectItem value="Nota de Crédito B">Nota de Crédito B</SelectItem>
+                      <SelectItem value="Nota de Crédito C">Nota de Crédito C</SelectItem>
+                      <SelectItem value="Nota de Débito B">Nota de Débito B</SelectItem>
+                      <SelectItem value="Nota de Débito C">Nota de Débito C</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Periodo</Label>
+                  <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "month") as "day" | "month" | "range" | "all")}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Mensual" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="day">Dia</SelectItem>
+                      <SelectItem value="month">Mensual</SelectItem>
+                      <SelectItem value="range">Entre fechas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {filterMode === "day" && (
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Fecha:</Label>
+                  <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-44 h-9" />
+                </div>
+              )}
+              {filterMode === "month" && (
+                <div className="flex items-center gap-3">
+                  <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
+                    <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
+                    <SelectContent>
+                      {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                  <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-24 h-9" />
+                </div>
+              )}
+              {filterMode === "range" && (
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs text-muted-foreground">Desde</Label>
+                  <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-9" />
+                  <Label className="text-xs text-muted-foreground">Hasta</Label>
+                  <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-9" />
+                </div>
+              )}
             </div>
           )}
-        </>
+        </CardContent>
+      </Card>
+
+      {/* Unified Cards */}
+      {(loading && poLoading) ? (
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-16">
+          <ShoppingCart className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
+          <p className="text-sm text-muted-foreground">No se encontraron ventas con los filtros seleccionados</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredOrders.map((order, idx) => {
+            const est = estadoBadge[order.estado] || estadoBadge.pendiente;
+            const isHistorial = order._source === "historial";
+            const pago = formatPago(order.forma_pago || order.metodo_pago);
+            const entrega = formatEntrega(order.metodo_entrega);
+            const isNC = order._tipo_comprobante?.includes("Nota de Crédito");
+            const estadoSteps = ["pendiente", "armado", "entregado"];
+            const currentStep = order.estado === "cancelado" ? -1 : estadoSteps.indexOf(order.estado);
+
+            return (
+              <Card key={`${order._source}-${order._ventaId || order.id}-${idx}`} className={`transition-all ${order.estado === "cancelado" ? "opacity-50" : "hover:shadow-md"}`}>
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                    {/* Left: Customer & order info */}
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-base">{order.nombre_cliente}</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
+                              {est.label}
+                            </span>
+                            <Badge variant="outline" className={`text-[10px] font-normal ${isHistorial ? "border-gray-300 text-gray-600 bg-gray-50" : "border-blue-300 text-blue-700 bg-blue-50"}`}>
+                              {isHistorial ? <><Store className="w-3 h-3 mr-0.5" />POS</> : <><Globe className="w-3 h-3 mr-0.5" />Online</>}
+                            </Badge>
+                            {isNC && <Badge variant="destructive" className="text-[10px]">NC</Badge>}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            {order.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{order.email}</span>}
+                            {order.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{order.telefono}</span>}
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {new Date(order.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}{" "}
+                              {order.created_at.includes("T") && new Date(order.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`text-lg font-bold ${order.estado === "cancelado" ? "line-through text-muted-foreground" : isNC ? "text-red-500" : ""}`}>
+                            {isNC ? `-${formatCurrency(order.total)}` : formatCurrency(order.total)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground font-mono">#{order.numero}</p>
+                        </div>
+                      </div>
+
+                      {/* Delivery & payment info */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {entrega && (
+                          <Badge variant="outline" className={`font-normal ${order.metodo_entrega === "envio" ? "border-blue-300 text-blue-700 bg-blue-50" : "border-gray-300"}`}>
+                            {order.metodo_entrega === "envio" ? <><Truck className="w-3 h-3 mr-1" />{entrega}</> : <><Store className="w-3 h-3 mr-1" />{entrega}</>}
+                          </Badge>
+                        )}
+                        {order.metodo_entrega === "envio" && order.direccion_texto && (
+                          <span className="text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[300px]">{order.direccion_texto}</span></span>
+                        )}
+                        {pago && (
+                          <Badge variant="outline" className="font-normal">
+                            <DollarSign className="w-3 h-3 mr-1" />{pago}
+                          </Badge>
+                        )}
+                        {isHistorial && order._tipo_comprobante && (
+                          <Badge variant="secondary" className="text-[10px] font-normal">{order._tipo_comprobante}</Badge>
+                        )}
+                        {order._vendedor && order._vendedor !== "" && (
+                          <span className="text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" />{order._vendedor}</span>
+                        )}
+                      </div>
+
+                      {/* Progress stepper */}
+                      {order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
+                        <div className="flex items-center gap-1 pt-1">
+                          {estadoSteps.map((step, i) => (
+                            <div key={step} className="flex items-center gap-1">
+                              <div className={`w-2 h-2 rounded-full ${i <= currentStep ? "bg-primary" : "bg-gray-200"}`} />
+                              <span className={`text-[10px] ${i <= currentStep ? "text-foreground font-medium" : "text-muted-foreground/50"}`}>
+                                {step === "pendiente" ? "Pendiente" : step === "armado" ? "Armado" : "Entregado"}
+                              </span>
+                              {i < estadoSteps.length - 1 && <div className={`w-6 h-[2px] ${i < currentStep ? "bg-primary" : "bg-gray-200"}`} />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {order.estado === "cancelado" && (
+                        <div className="flex items-center gap-1 pt-1">
+                          <Ban className="w-3 h-3 text-red-500" />
+                          <span className="text-[10px] text-red-500 font-medium">Cancelado</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Actions */}
+                    <div className="flex sm:flex-col items-center gap-1.5 shrink-0">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => {
+                        if (isHistorial) {
+                          const v = ventas.find((vr) => vr.id === order._ventaId);
+                          if (v) openDetail(v);
+                        } else {
+                          poOpenDetail(order);
+                        }
+                      }} title="Ver detalle">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      {isHistorial && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => {
+                          const v = ventas.find((vr) => vr.id === order._ventaId);
+                          if (v) preparePrint(v);
+                        }} title="Imprimir">
+                          <Printer className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
+                        <>
+                          {order.estado === "pendiente" && (
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50" onClick={() => {
+                              if (isHistorial) {
+                                poHandleEstadoChange(order, "armado");
+                              } else {
+                                poHandleEstadoChange(order, "armado");
+                              }
+                            }} title="Marcar armado">
+                              <Package className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => {
+                            if (isHistorial) {
+                              const v = ventas.find((vr) => vr.id === order._ventaId);
+                              if (v) marcarEntregado(v);
+                            } else {
+                              poHandleEstadoChange(order, "entregado");
+                            }
+                          }} title="Marcar entregado">
+                            <CheckCircle className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                      {order.estado !== "cancelado" && !isNC && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => {
+                          if (isHistorial) {
+                            const v = ventas.find((vr) => vr.id === order._ventaId);
+                            if (v) { setAnularVenta(v); setAnularMotivo(""); }
+                          } else {
+                            setPoCancelPedido(order);
+                          }
+                        }} title="Cancelar">
+                          <Ban className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+          {/* Total bar */}
+          {filteredOrders.length > 0 && (
+            <div className="flex justify-end pt-2 px-2">
+              <span className="text-sm text-muted-foreground mr-4">Total del periodo:</span>
+              <span className="text-sm font-bold">{formatCurrency(unifiedTotal)}</span>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════ */}
@@ -1941,7 +1867,8 @@ export default function ListadoVentasPage() {
                           onClick={async () => {
                             if (val === poSelectedPedido.estado) return;
                             if (val === "cancelado") {
-                              if (!confirm("¿Estás seguro de cancelar este pedido? Se revertirá el stock y los movimientos de caja.")) return;
+                              setPoCancelPedido(poSelectedPedido);
+                              return;
                             }
                             await poHandleEstadoChange(poSelectedPedido, val);
                             setPoSelectedPedido({ ...poSelectedPedido, estado: val });
@@ -2216,49 +2143,41 @@ export default function ListadoVentasPage() {
       {/* PO CANCEL CONFIRMATION DIALOG */}
       {/* ══════════════════════════════════════════════════════════ */}
       <Dialog open={!!poCancelPedido} onOpenChange={(open) => { if (!open) setPoCancelPedido(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="w-5 h-5" />
-              Cancelar pedido
-            </DialogTitle>
-          </DialogHeader>
-          {poCancelPedido && (
-            <div className="space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm space-y-2">
-                <p className="font-medium text-red-800">Esta acción revertirá:</p>
-                <ul className="list-disc list-inside text-red-700 space-y-1">
-                  <li>El stock de los productos será restaurado</li>
-                  <li>Se generará un egreso en caja para compensar</li>
-                  <li>Se revertirán los movimientos en cuenta corriente</li>
-                </ul>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">Pedido:</span> <span className="font-medium">#{poCancelPedido.numero}</span></div>
-                <div><span className="text-muted-foreground">Total:</span> <span className="font-bold">{formatCurrency(poCancelPedido.total)}</span></div>
-                <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{poCancelPedido.nombre_cliente}</span></div>
-                <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium">{poCancelPedido.metodo_pago}</span></div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setPoCancelPedido(null)} disabled={poCancelling}>
-                  Volver
-                </Button>
-                <Button
-                  variant="destructive"
-                  disabled={poCancelling}
-                  onClick={async () => {
-                    setPoCancelling(true);
-                    await poHandleEstadoChange(poCancelPedido, "cancelado");
-                    setPoCancelling(false);
-                    setPoCancelPedido(null);
-                  }}
-                >
-                  {poCancelling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Ban className="w-4 h-4 mr-2" />}
-                  Confirmar cancelación
-                </Button>
-              </div>
+        <DialogContent className="max-w-sm">
+          <div className="text-center pt-2">
+            <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-7 h-7 text-red-500" />
             </div>
-          )}
+            <DialogHeader className="text-center">
+              <DialogTitle className="text-center text-lg">Cancelar este pedido?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground mt-2">Se revertira el stock y los movimientos de caja</p>
+            {poCancelPedido && (
+              <>
+                <p className="font-mono font-bold mt-3 text-base">#{poCancelPedido.numero}</p>
+                <p className="text-sm text-muted-foreground">{poCancelPedido.nombre_cliente} &middot; {formatCurrency(poCancelPedido.total)}</p>
+                <div className="flex gap-2 mt-5">
+                  <Button variant="outline" className="flex-1" onClick={() => setPoCancelPedido(null)} disabled={poCancelling}>
+                    No, volver
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    disabled={poCancelling}
+                    onClick={async () => {
+                      setPoCancelling(true);
+                      await poHandleEstadoChange(poCancelPedido, "cancelado");
+                      setPoCancelling(false);
+                      setPoCancelPedido(null);
+                    }}
+                  >
+                    {poCancelling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Si, cancelar
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
