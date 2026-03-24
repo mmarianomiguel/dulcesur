@@ -578,6 +578,9 @@ export default function CheckoutPage() {
           subtotal: vSubtotal,
           costo_envio: vCostoEnvio,
           total: vTotal,
+          monto_efectivo: metodoPago === "mixto" ? mixtoEfectivo : (metodoPago === "efectivo" ? vTotal : 0),
+          monto_transferencia: metodoPago === "mixto" ? mixtoTransferencia : (metodoPago === "transferencia" ? vTotal : 0),
+          recargo_transferencia: vRecargoTransf,
           observacion: observacion || null,
         })
         .select("id")
@@ -625,6 +628,8 @@ export default function CheckoutPage() {
         descuento_porcentaje: 0,
         recargo_porcentaje: vRecargoTransf > 0 ? (config?.recargo_transferencia || 0) : 0,
         total: vTotal,
+        monto_efectivo: metodoPago === "mixto" ? mixtoEfectivo : (metodoPago === "efectivo" ? vTotal : 0),
+        monto_transferencia: metodoPago === "mixto" ? mixtoTransferencia : (metodoPago === "transferencia" ? vTotal : 0),
         estado: "pendiente",
         observacion: observacion || null,
         entregado: false,

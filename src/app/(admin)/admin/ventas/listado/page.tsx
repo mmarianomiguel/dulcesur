@@ -164,6 +164,7 @@ interface Pedido {
   _cuit?: string;
   _domicilio?: string;
   _comboIds?: Set<string>;
+  isOnline?: boolean;
   forma_pago?: string;
 }
 
@@ -373,16 +374,23 @@ export default function ListadoVentasPage() {
       descuento: item.descuento,
     }));
 
+    // For online orders, get data from pedidos_tienda for correct client info
+    let ptData: any = null;
+    if (v.origen === "tienda" || v.tipo_comprobante === "Pedido Web") {
+      const { data: pt } = await supabase.from("pedidos_tienda").select("*").eq("numero", v.numero).maybeSingle();
+      if (pt) ptData = pt;
+    }
+
     const pseudoPedido: Pedido = {
-      id: 0,
+      id: ptData?.id || 0,
       numero: v.numero,
       created_at: v.created_at || v.fecha,
       estado,
-      nombre_cliente: v.clientes?.nombre || "Consumidor Final",
-      email: "",
-      telefono: v.clientes?.telefono || "",
-      metodo_entrega: v.metodo_entrega || "",
-      direccion_texto: v.clientes?.domicilio || null,
+      nombre_cliente: ptData?.nombre_cliente || v.clientes?.nombre || "Consumidor Final",
+      email: ptData?.email || "",
+      telefono: ptData?.telefono || v.clientes?.telefono || "",
+      metodo_entrega: ptData?.metodo_entrega || v.metodo_entrega || "",
+      direccion_texto: ptData?.direccion_texto || v.clientes?.domicilio || null,
       fecha_entrega: null,
       metodo_pago: v.forma_pago,
       subtotal: v.subtotal,
@@ -402,6 +410,7 @@ export default function ListadoVentasPage() {
       _cuit: v.clientes?.cuit || "",
       _domicilio: v.clientes?.domicilio || "",
       _comboIds: comboIds,
+      isOnline: v.origen === "tienda" || v.tipo_comprobante === "Pedido Web",
     };
 
     setPoSelectedPedido(pseudoPedido);
@@ -811,7 +820,7 @@ export default function ListadoVentasPage() {
       }
     }
 
-    // Load payment breakdown
+    // Load payment breakdown - first try caja_movimientos, then fallback to stored amounts
     const pagos: { metodo: string; monto: number }[] = [];
     if (ventaId) {
       const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
@@ -819,6 +828,32 @@ export default function ListadoVentasPage() {
         const existing = pagos.find((p) => p.metodo === m.metodo_pago);
         if (existing) existing.monto += m.monto;
         else pagos.push({ metodo: m.metodo_pago, monto: m.monto });
+      }
+    }
+    // Fallback: if no caja_movimientos (online orders), read from ventas/pedidos_tienda
+    if (pagos.length === 0) {
+      // Try ventas first
+      if (ventaId) {
+        const { data: ventaData } = await supabase.from("ventas").select("monto_efectivo, monto_transferencia, forma_pago, total").eq("id", ventaId).single();
+        if (ventaData) {
+          if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ventaData.monto_efectivo });
+          if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
+          if (pagos.length === 0) {
+            // No stored amounts, use forma_pago + total
+            pagos.push({ metodo: ventaData.forma_pago || pedido.metodo_pago || "Efectivo", monto: ventaData.total || pedido.total });
+          }
+        }
+      }
+      // Also try pedidos_tienda
+      if (pagos.length === 0 && pedido.numero) {
+        const { data: ptData } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia, metodo_pago, total").eq("numero", pedido.numero).maybeSingle();
+        if (ptData) {
+          if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ptData.monto_efectivo });
+          if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+          if (pagos.length === 0) {
+            pagos.push({ metodo: ptData.metodo_pago || "Efectivo", monto: ptData.total || pedido.total });
+          }
+        }
       }
     }
     setDetailPagos(pagos);
@@ -1101,7 +1136,11 @@ export default function ListadoVentasPage() {
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     const hora = nowTimeARG();
 
-    // Only update pedidos_tienda for actual pedidos (not historial ventas)
+    // Always update pedidos_tienda by numero (works for both sources)
+    if (pedido.numero) {
+      await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("numero", pedido.numero);
+    }
+    // Also try by id for direct pedido objects
     if (pedido._source !== "historial" && pedido.id > 0) {
       await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
     }
@@ -1646,7 +1685,8 @@ export default function ListadoVentasPage() {
                           if (data) v = data as any;
                         }
                         if (v) {
-                          if (order._source === "pedidos") {
+                          // Override client data for online orders (both sources)
+                          if (order.nombre_cliente && (order._source === "pedidos" || order.isOnline)) {
                             (v as any).clientes = { nombre: order.nombre_cliente, cuit: "", domicilio: order.direccion_texto || "", telefono: order.telefono || "", email: order.email || "" };
                           }
                           preparePrint(v);
@@ -1900,6 +1940,9 @@ export default function ListadoVentasPage() {
                             }
                             await poHandleEstadoChange(poSelectedPedido, val);
                             setPoSelectedPedido({ ...poSelectedPedido, estado: val });
+                            // Refresh lists so cards update
+                            fetchPedidos();
+                            fetchVentas();
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                             poSelectedPedido.estado === val
@@ -2086,8 +2129,8 @@ export default function ListadoVentasPage() {
                       if (data) v = data as VentaRow;
                     }
                     if (v) {
-                      // Override client data with pedido data for online orders
-                      if (poSelectedPedido._source === "pedidos" && poSelectedPedido.nombre_cliente) {
+                      // Override client data with pedido data for online orders (both sources)
+                      if (poSelectedPedido.nombre_cliente && (poSelectedPedido._source === "pedidos" || poSelectedPedido.isOnline)) {
                         (v as any).clientes = {
                           nombre: poSelectedPedido.nombre_cliente,
                           cuit: (poSelectedPedido as any)._cuit || "",
