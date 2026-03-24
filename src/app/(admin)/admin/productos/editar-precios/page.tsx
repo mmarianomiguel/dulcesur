@@ -224,10 +224,10 @@ export default function EditarPreciosPage() {
   };
 
   const generateRoundPreview = () => {
-    const ids = selectedIds.size > 0 ? [...selectedIds] : productos.map((p) => p.id);
-    const preview = ids.map((id) => {
-      const p = productos.find((pr) => pr.id === id);
-      if (!p) return null;
+    const targetProducts = selectedIds.size > 0
+      ? productos.filter((p) => selectedIds.has(p.id))
+      : filteredProductos;
+    const preview = targetProducts.map((p) => {
       const nuevo = calcRound(p.precio, roundMultiple, roundMode);
       if (nuevo === p.precio) return null;
       return { id: p.id, nombre: p.nombre, precioActual: p.precio, precioNuevo: nuevo };
