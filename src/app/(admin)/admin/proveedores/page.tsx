@@ -53,7 +53,7 @@ const proveedorService = new BaseService<Proveedor>("proveedores");
 
 const emptyForm = { nombre: "", cuit: "", telefono: "", email: "", domicilio: "", rubro: "", observacion: "" };
 
-const emptyPagoForm = { monto: "", forma_pago: "Efectivo", compra_ids: [] as string[], observacion: "", registrar_caja: true };
+const emptyPagoForm = { monto: "", forma_pago: "Efectivo", compra_ids: [] as string[], observacion: "", registrar_caja: true, cuenta_bancaria_id: "" };
 
 export default function ProveedoresPage() {
   const [search, setSearch] = useState("");
@@ -61,6 +61,7 @@ export default function ProveedoresPage() {
   const [pagoForm, setPagoForm] = useState(emptyPagoForm);
   const [comprasPendientes, setComprasPendientes] = useState<(Compra & { proveedores?: { nombre: string } })[]>([]);
   const [ccMovimientos, setCcMovimientos] = useState<CuentaCorrienteProveedor[]>([]);
+  const [provCuentas, setProvCuentas] = useState<{ id: string; nombre: string; alias: string; cbu_cvu: string; tipo_cuenta: string; titular: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   const fetchProviders = useCallback(
@@ -84,7 +85,7 @@ export default function ProveedoresPage() {
     editDialog.onOpen();
   };
 
-  const openEdit = (p: Proveedor) => {
+  const openEdit = async (p: Proveedor) => {
     setForm({
       nombre: p.nombre,
       cuit: p.cuit || "",
@@ -95,6 +96,9 @@ export default function ProveedoresPage() {
       observacion: p.observacion || "",
     });
     editDialog.onOpen(p);
+    // Load bank accounts for this provider
+    const { data: cuentas } = await supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("proveedor_id", p.id).eq("activo", true);
+    setProvCuentas((cuentas || []) as any[]);
   };
 
   const handleSave = async () => {
@@ -240,6 +244,13 @@ export default function ProveedoresPage() {
       .eq("estado_pago", "Pendiente")
       .order("fecha", { ascending: false });
     setComprasPendientes((data || []) as any[]);
+    // Fetch bank accounts linked to this proveedor + all propia accounts
+    const { data: cuentas } = await supabase
+      .from("cuentas_bancarias")
+      .select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular")
+      .or(`proveedor_id.eq.${p.id},origen.eq.propia`)
+      .eq("activo", true);
+    setProvCuentas((cuentas || []) as any[]);
   };
 
   const toggleCompraSelection = (compraId: string) => {
@@ -270,6 +281,8 @@ export default function ProveedoresPage() {
       const provNombre = pagoDialog.data.nombre;
 
       // 1. Insert pago
+      const cuentaId = pagoForm.cuenta_bancaria_id || null;
+      const cuentaInfo = cuentaId ? provCuentas.find((c) => c.id === cuentaId) : null;
       const { error: pagoError } = await supabase.from("pagos_proveedores").insert({
         proveedor_id: provId,
         fecha: todayARG(),
@@ -277,6 +290,7 @@ export default function ProveedoresPage() {
         forma_pago: pagoForm.forma_pago,
         compra_id: pagoForm.compra_ids.length === 1 ? pagoForm.compra_ids[0] : null,
         observacion: pagoForm.observacion || null,
+        cuenta_bancaria_id: cuentaId,
       });
       if (pagoError) throw new Error(pagoError.message);
 
@@ -295,11 +309,12 @@ export default function ProveedoresPage() {
       }
 
       // 4. Register CC movement
+      const cuentaDesc = cuentaInfo ? ` → ${cuentaInfo.alias || cuentaInfo.nombre}` : "";
       await supabase.from("cuenta_corriente_proveedor").insert({
         proveedor_id: provId,
         fecha: todayARG(),
         tipo: "pago",
-        descripcion: `Pago ${pagoForm.forma_pago} - ${provNombre}${pagoForm.compra_ids.length > 0 ? ` (${pagoForm.compra_ids.length} boleta/s)` : ""}`,
+        descripcion: `Pago ${pagoForm.forma_pago}${cuentaDesc}${pagoForm.compra_ids.length > 0 ? ` (${pagoForm.compra_ids.length} boleta/s)` : ""}`,
         monto,
         saldo_resultante: newSaldo,
         referencia_tipo: "pago",
@@ -431,6 +446,58 @@ export default function ProveedoresPage() {
               <div className="space-y-2"><Label>E-mail</Label><Input value={form.email} onChange={(e) => f("email", e.target.value)} /></div>
             </div>
             <div className="space-y-2"><Label>Domicilio</Label><Input value={form.domicilio} onChange={(e) => f("domicilio", e.target.value)} /></div>
+            <div className="space-y-2"><Label>Observaciones</Label><Textarea value={form.observacion} onChange={(e) => f("observacion", e.target.value)} rows={2} placeholder="Notas, datos bancarios, etc." /></div>
+
+            {/* Cuentas bancarias del proveedor */}
+            {editDialog.data && (
+              <div className="space-y-2 border-t pt-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Cuentas bancarias / Alias</Label>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={async () => {
+                    const alias = prompt("Alias de transferencia:");
+                    if (!alias) return;
+                    const titular = prompt("Titular (opcional):") || "";
+                    await supabase.from("cuentas_bancarias").insert({
+                      nombre: `${editDialog.data!.nombre} - ${alias}`,
+                      alias,
+                      titular: titular || editDialog.data!.nombre,
+                      origen: "proveedor",
+                      proveedor_id: editDialog.data!.id,
+                      activo: true,
+                    });
+                    // Refresh cuentas
+                    const { data: cuentas } = await supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("proveedor_id", editDialog.data!.id).eq("activo", true);
+                    setProvCuentas((cuentas || []) as any[]);
+                    showAdminToast("Cuenta agregada", "success");
+                  }}>
+                    <Plus className="w-3 h-3 mr-1" /> Agregar
+                  </Button>
+                </div>
+                {provCuentas.filter((c) => c.id).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin cuentas registradas. Agregá el alias para transferencias.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {provCuentas.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between rounded-lg border p-2 text-sm">
+                        <div>
+                          <span className="font-medium">{c.alias || c.nombre}</span>
+                          {c.titular && <span className="text-xs text-muted-foreground ml-2">({c.titular})</span>}
+                        </div>
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 hover:text-red-600" onClick={async () => {
+                          if (!confirm("¿Eliminar esta cuenta?")) return;
+                          await supabase.from("cuentas_bancarias").update({ activo: false }).eq("id", c.id);
+                          setProvCuentas((prev) => prev.filter((x) => x.id !== c.id));
+                          showAdminToast("Cuenta eliminada", "success");
+                        }}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={editDialog.onClose}>Cancelar</Button>
               <Button onClick={handleSave}>{editDialog.data ? "Guardar cambios" : "Crear proveedor"}</Button>
@@ -689,6 +756,24 @@ export default function ProveedoresPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {pagoForm.forma_pago === "Transferencia" && provCuentas.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Cuenta destino</Label>
+                  <Select value={pagoForm.cuenta_bancaria_id} onValueChange={(v) => setPagoForm({ ...pagoForm, cuenta_bancaria_id: v ?? "" })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar cuenta/alias" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {provCuentas.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.alias || c.nombre} {c.titular ? `(${c.titular})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {(pagoForm.forma_pago === "Efectivo" || pagoForm.forma_pago === "Transferencia") && (
                 <label className="flex items-center gap-2 cursor-pointer">
