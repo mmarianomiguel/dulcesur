@@ -433,7 +433,7 @@ export default function CheckoutPage() {
     }
     if (metodoEntrega === "envio" && !fechaEntrega) errs.push("Seleccioná una fecha de entrega.");
     if (metodoPago === "mixto" && Math.abs(Math.round(mixtoEfectivo + mixtoTransferencia) - Math.round(subtotal + costoEnvio)) > 1) {
-      errs.push("La suma de efectivo y transferencia debe igualar el total.");
+      errs.push(`La suma de efectivo ($${mixtoEfectivo.toLocaleString("es-AR")}) y transferencia ($${mixtoTransferencia.toLocaleString("es-AR")}) debe igualar $${(subtotal + costoEnvio).toLocaleString("es-AR")}.`);
     }
 
     if (errs.length > 0) {
@@ -579,7 +579,7 @@ export default function CheckoutPage() {
           costo_envio: vCostoEnvio,
           total: vTotal,
           monto_efectivo: metodoPago === "mixto" ? mixtoEfectivo : (metodoPago === "efectivo" ? vTotal : 0),
-          monto_transferencia: metodoPago === "mixto" ? mixtoTransferencia : (metodoPago === "transferencia" ? vTotal : 0),
+          monto_transferencia: metodoPago === "mixto" ? (mixtoTransferencia + vRecargoTransf) : (metodoPago === "transferencia" ? vTotal : 0),
           recargo_transferencia: vRecargoTransf,
           observacion: observacion || null,
         })
@@ -629,7 +629,7 @@ export default function CheckoutPage() {
         recargo_porcentaje: vRecargoTransf > 0 ? (config?.recargo_transferencia || 0) : 0,
         total: vTotal,
         monto_efectivo: metodoPago === "mixto" ? mixtoEfectivo : (metodoPago === "efectivo" ? vTotal : 0),
-        monto_transferencia: metodoPago === "mixto" ? mixtoTransferencia : (metodoPago === "transferencia" ? vTotal : 0),
+        monto_transferencia: metodoPago === "mixto" ? (mixtoTransferencia + vRecargoTransf) : (metodoPago === "transferencia" ? vTotal : 0),
         estado: "pendiente",
         observacion: observacion || null,
         entregado: false,
@@ -743,11 +743,11 @@ export default function CheckoutPage() {
   if (orderNumber) {
     const isTransfer = metodoPago === "transferencia" || metodoPago === "mixto";
     const totalFinal = subtotal + costoEnvio + recargoTransf;
-    const montoTransf = metodoPago === "transferencia" ? totalFinal : metodoPago === "mixto" ? mixtoTransferencia : 0;
+    const montoTransf = metodoPago === "transferencia" ? totalFinal : metodoPago === "mixto" ? (mixtoTransferencia + recargoTransf) : 0;
 
     // Build WhatsApp message with full breakdown (no emojis - cause encoding issues)
     const pagoDetalle = metodoPago === "mixto"
-      ? `- Efectivo: $${mixtoEfectivo.toLocaleString("es-AR")}\n- Transferencia: $${mixtoTransferencia.toLocaleString("es-AR")}`
+      ? `- Efectivo: $${mixtoEfectivo.toLocaleString("es-AR")}\n- Transferencia: $${(mixtoTransferencia + recargoTransf).toLocaleString("es-AR")}${recargoTransf > 0 ? ` (inc. recargo ${config?.recargo_transferencia}%)` : ""}`
       : metodoPago === "transferencia"
       ? `- Transferencia: $${totalFinal.toLocaleString("es-AR")}`
       : `- Efectivo: $${totalFinal.toLocaleString("es-AR")}`;
@@ -830,7 +830,7 @@ export default function CheckoutPage() {
                   {mixtoTransferencia > 0 && (
                     <div className="flex items-center justify-between text-sm bg-blue-50 rounded-lg px-3 py-2">
                       <span className="text-blue-800">🏦 Transferencia</span>
-                      <span className="font-bold text-blue-900">${mixtoTransferencia.toLocaleString("es-AR")}</span>
+                      <span className="font-bold text-blue-900">${(mixtoTransferencia + recargoTransf).toLocaleString("es-AR")}</span>
                     </div>
                   )}
                 </>
@@ -1486,7 +1486,8 @@ export default function CheckoutPage() {
                     Ingresa el monto en efectivo:
                   </p>
                   <div className="rounded-xl border-2 border-orange-400 bg-orange-50/50 px-4 py-3">
-                    <p className="text-xs text-gray-500">Total a pagar: <span className="font-bold text-base text-gray-900">{formatCurrency(subtotal + costoEnvio)}</span></p>
+                    <p className="text-xs text-gray-500">Subtotal productos: <span className="font-bold text-base text-gray-900">{formatCurrency(subtotal + costoEnvio)}</span></p>
+                    {recargoTransf > 0 && <p className="text-[10px] text-green-600 mt-0.5">+ Recargo transferencia: {formatCurrency(recargoTransf)} = Total: <b>{formatCurrency(total)}</b></p>}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
