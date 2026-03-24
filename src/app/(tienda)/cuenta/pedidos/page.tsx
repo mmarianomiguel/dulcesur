@@ -496,7 +496,7 @@ export default function PedidosPage() {
                     const isMedio = item.presentacion && (item.presentacion.toLowerCase().includes("medio") || (item.unidades_por_presentacion != null && item.unidades_por_presentacion <= 0.5 && item.unidades_por_presentacion > 0));
                     const isBox = item.presentacion && item.presentacion !== "Unidad" && (item.unidades_por_presentacion || 1) > 1;
                     const isCombo = item.nombre.toLowerCase().includes("combo") || item.es_combo;
-                    const unitPrice = isMedio ? item.precio_unitario / (item.unidades_por_presentacion || 0.5) : isBox ? item.precio_unitario / (item.unidades_por_presentacion || 1) : item.precio_unitario;
+                    const displayPrice = item.precio_unitario;
                     let displayName = item.nombre
                       .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
                       .replace(/\s*\(Unidad\)$/, "")
@@ -549,8 +549,8 @@ export default function PedidosPage() {
                         )}
                       </td>
                       <td className="py-3 text-right text-gray-500">
-                        {formatPrice(unitPrice)}
-                        {(isBox || isCombo) && (item.unidades_por_presentacion || 1) > 1 && <span className="block text-[10px] text-gray-400">c/u</span>}
+                        {formatPrice(displayPrice)}
+                        {(isBox || isMedio) && <span className="block text-[10px] text-gray-400">{item.presentacion}</span>}
                       </td>
                       <td className="py-3 text-right font-semibold text-gray-900">
                         {formatPrice(item.precio_unitario * item.cantidad)}
@@ -794,7 +794,7 @@ export default function PedidosPage() {
                     const isMedioV = item.presentacion && (item.presentacion.toLowerCase().includes("medio") || (item.unidades_por_presentacion != null && item.unidades_por_presentacion <= 0.5 && item.unidades_por_presentacion > 0));
                     const isBox = item.presentacion && item.presentacion !== "Unidad" && (item.unidades_por_presentacion || 1) > 1;
                     const isCombo = (item.descripcion || "").toLowerCase().includes("combo") || item.es_combo;
-                    const unitPrice = isMedioV ? item.precio_unitario / (item.unidades_por_presentacion || 0.5) : isBox ? item.precio_unitario / (item.unidades_por_presentacion || 1) : item.precio_unitario;
+                    const displayPriceV = item.precio_unitario;
                     const displayName = (item.descripcion || "")
                       .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
                       .replace(/\s*\(Unidad\)$/, "")
@@ -843,8 +843,8 @@ export default function PedidosPage() {
                         )}
                       </td>
                       <td className="py-3 text-right text-gray-500">
-                        {formatPrice(unitPrice)}
-                        {(isBox || isCombo) && (item.unidades_por_presentacion || 1) > 1 && <span className="block text-[10px] text-gray-400">c/u</span>}
+                        {formatPrice(displayPriceV)}
+                        {(isBox || isMedioV) && item.presentacion && <span className="block text-[10px] text-gray-400">{item.presentacion}</span>}
                       </td>
                       <td className="py-3 text-right font-semibold text-gray-900">{formatPrice(item.subtotal)}</td>
                     </tr>
