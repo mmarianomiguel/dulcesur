@@ -348,15 +348,29 @@ export default function ProductoDetallePage() {
     return null;
   })() : null;
 
-  // Check if there's a box-only or volume discount hint
+  // Check if there's a box-only or volume discount hint (programmed OR implicit from price)
   const boxOnlyDiscount = producto ? (() => {
     const unitDisc = getProductDiscount(producto, "Unidad", cantidad);
     const boxPres = presentaciones.find((p) => p.cantidad > 1);
     if (!boxPres) return 0;
     const boxLabel = presLabelFn(boxPres);
     const boxDisc = getProductDiscount(producto, boxLabel, cantidad);
-    return boxDisc > 0 && unitDisc === 0 ? boxDisc : 0;
+    if (boxDisc > 0 && unitDisc === 0) return boxDisc;
+    // Implicit discount: box price < unit price × quantity
+    const unitPres = presentaciones.find((p) => p.cantidad === 1);
+    if (unitPres && unitPres.precio && boxPres.precio) {
+      const expectedPrice = unitPres.precio * boxPres.cantidad;
+      if (boxPres.precio < expectedPrice) {
+        return Math.round((1 - boxPres.precio / expectedPrice) * 100);
+      }
+    }
+    return 0;
   })() : 0;
+  const boxDiscountLabel = producto ? (() => {
+    const boxPres = presentaciones.find((p) => p.cantidad > 1);
+    if (!boxPres) return "caja";
+    return boxPres.nombre?.toLowerCase().includes("medio") ? "Medio Cartón" : `Caja x${boxPres.cantidad}`;
+  })() : "caja";
 
   // Max qty based on stock and presentation, minus what's already in cart
   const cartKey = producto ? `${producto.id}_${currentPresLabel}` : "";
@@ -620,8 +634,8 @@ export default function ProductoDetallePage() {
                 : "Precio unitario"}
             </p>
             {boxOnlyDiscount > 0 && currentPresLabel === "Unidad" && (
-              <p className="text-sm text-green-600 font-medium mt-1.5">
-                {boxOnlyDiscount}% OFF comprando por caja
+              <p className="text-sm text-emerald-600 font-medium mt-1.5">
+                📦 {boxOnlyDiscount}% OFF comprando por {boxDiscountLabel}
               </p>
             )}
             {producto.es_combo && comboComponentes.length > 0 && (() => {

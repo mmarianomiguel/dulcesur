@@ -1258,6 +1258,19 @@ function ProductosContent() {
                   }
                   return null;
                 })();
+                // Auto box discount: if box price < unit price × quantity
+                const boxDiscountHint = (() => {
+                  if (!pres || pres.length <= 1) return null;
+                  const unitPres = pres.find((p: any) => p.cantidad === 1);
+                  const boxPres = pres.find((p: any) => p.cantidad > 1);
+                  if (!unitPres || !boxPres || !unitPres.precio || !boxPres.precio) return null;
+                  const expectedPrice = unitPres.precio * boxPres.cantidad;
+                  if (boxPres.precio >= expectedPrice) return null;
+                  const savePct = Math.round((1 - boxPres.precio / expectedPrice) * 100);
+                  if (savePct < 1) return null;
+                  const label = boxPres.nombre?.toLowerCase().includes("medio") ? "Medio Cartón" : `Caja x${boxPres.cantidad}`;
+                  return { pct: savePct, label, boxPrice: boxPres.precio, unitPrice: unitPres.precio, qty: boxPres.cantidad };
+                })();
                 return (
                   <div
                     key={producto.id}
@@ -1370,6 +1383,9 @@ function ProductosContent() {
                         })()}
                         {volHint && disc === 0 && (
                           <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ {volHint.label}</p>
+                        )}
+                        {boxDiscountHint && !volHint && (
+                          <p className="text-[10px] text-emerald-600 font-medium mt-0.5">📦 {boxDiscountHint.pct}% OFF por {boxDiscountHint.label}</p>
                         )}
                       </div>
 
