@@ -783,16 +783,35 @@ export default function ListadoVentasPage() {
 
   // Open PO detail - also find linked venta for print
   const poOpenDetail = async (pedido: Pedido) => {
-    // Find linked venta by numero to get _ventaId for printing
-    let ventaId: string | undefined;
-    if (pedido.numero) {
+    let ventaId = pedido._ventaId;
+    let items = pedido.items;
+
+    // Find linked venta
+    if (!ventaId && pedido.numero) {
       const { data: linkedVenta } = await supabase.from("ventas").select("id, cliente_id, clientes(nombre, cuit, domicilio, telefono)").eq("numero", pedido.numero).single();
-      if (linkedVenta) {
-        ventaId = linkedVenta.id;
+      if (linkedVenta) ventaId = linkedVenta.id;
+    }
+
+    // Load items if empty (historial orders have empty items in allOrders)
+    if (items.length === 0 && ventaId) {
+      const { data: vitems } = await supabase.from("venta_items").select("*").eq("venta_id", ventaId).order("created_at");
+      if (vitems) {
+        items = vitems.map((item: any) => ({
+          producto_id: item.producto_id || "",
+          nombre: item.descripcion?.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)$/, "") || "",
+          presentacion: item.presentacion || "Unidad",
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          subtotal: item.subtotal,
+          unidades_por_presentacion: item.unidades_por_presentacion || 1,
+          codigo: item.codigo,
+          descuento: item.descuento,
+        }));
       }
     }
-    setPoSelectedPedido({ ...pedido, _source: "pedidos", _ventaId: ventaId } as any);
-    setPoEditItems(pedido.items.map((i) => ({ ...i })));
+
+    setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId } as any);
+    setPoEditItems(items.map((i) => ({ ...i })));
     setPoHasChanges(false);
     setPoDetailOpen(true);
   };
@@ -1600,24 +1619,24 @@ export default function ListadoVentasPage() {
 
                     {/* Right: Actions */}
                     <div className="flex sm:flex-col items-center gap-1.5 shrink-0">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => {
-                        if (isHistorial) {
-                          const v = ventas.find((vr) => vr.id === order._ventaId);
-                          if (v) openDetail(v);
-                        } else {
-                          poOpenDetail(order);
-                        }
-                      }} title="Ver detalle">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(order)} title="Ver detalle">
                         <Eye className="w-4 h-4" />
                       </Button>
-                      {isHistorial && (
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => {
-                          const v = ventas.find((vr) => vr.id === order._ventaId);
-                          if (v) preparePrint(v);
-                        }} title="Imprimir">
-                          <Printer className="w-4 h-4" />
-                        </Button>
-                      )}
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={async () => {
+                        let v = ventas.find((vr) => vr.id === order._ventaId);
+                        if (!v) {
+                          const { data } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", order.numero).single();
+                          if (data) v = data as any;
+                        }
+                        if (v) {
+                          if (order._source === "pedidos") {
+                            (v as any).clientes = { nombre: order.nombre_cliente, cuit: "", domicilio: order.direccion_texto || "", telefono: order.telefono || "", email: order.email || "" };
+                          }
+                          preparePrint(v);
+                        }
+                      }} title="Imprimir">
+                        <Printer className="w-4 h-4" />
+                      </Button>
                       {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
                         <>
                           {order.estado === "pendiente" && (
@@ -1890,7 +1909,7 @@ export default function ListadoVentasPage() {
                 )}
 
                 {/* Cuenta de transferencia */}
-                {((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && (
+                {(((poSelectedPedido as any).forma_pago || "") + " " + (poSelectedPedido.metodo_pago || "")).toLowerCase().includes("transferencia") && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -1917,10 +1936,14 @@ export default function ListadoVentasPage() {
                             type="button"
                             onClick={async () => {
                               const alias = cb.alias || cb.nombre;
-                              await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("id", poSelectedPedido.id);
-                              if ((poSelectedPedido as any)._source !== "historial") {
-                                await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
+                              // Update venta by _ventaId or by numero
+                              if ((poSelectedPedido as any)._ventaId) {
+                                await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("id", (poSelectedPedido as any)._ventaId);
+                              } else {
+                                await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
                               }
+                              // Always update pedidos_tienda too
+                              await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
                               setPoSelectedPedido({ ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cb.id } as any);
                               setShowCuentaSelector(false);
                             }}
