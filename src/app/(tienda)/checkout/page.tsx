@@ -832,30 +832,27 @@ export default function CheckoutPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-8">
         {/* ===== LEFT COLUMN ===== */}
         <div className="space-y-6">
-          {/* Login prompt if not logged in */}
+          {/* Login REQUIRED if not logged in */}
           {!clienteId && (
-            <div className="bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 rounded-2xl p-5 sm:p-6">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center shrink-0">
-                  <User className="h-5 w-5 text-pink-600" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-base font-bold text-gray-900">¿Ya tenés cuenta?</h2>
-                  <p className="text-sm text-gray-600 mt-1">Iniciá sesión para completar tu pedido más rápido con tus datos y direcciones guardadas.</p>
-                  <div className="flex gap-3 mt-4">
-                    <a href="/cuenta" className="bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
-                      Iniciar sesión
-                    </a>
-                    <a href="/cuenta" className="border border-pink-300 text-pink-700 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-pink-50 transition-colors">
-                      Crear cuenta
-                    </a>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-3">O completá los datos abajo para comprar sin cuenta</p>
-                </div>
+            <div className="bg-white border-2 border-pink-200 rounded-2xl p-6 sm:p-8 text-center">
+              <div className="w-16 h-16 bg-pink-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <User className="h-8 w-8 text-pink-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Iniciá sesión para comprar</h2>
+              <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">Para completar tu pedido necesitás tener una cuenta. Así podemos guardar tus datos, direcciones y el historial de tus compras.</p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
+                <a href="/cuenta" className="bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-8 py-3 rounded-xl transition-colors">
+                  Iniciar sesión
+                </a>
+                <a href="/cuenta" className="border-2 border-pink-300 text-pink-700 text-sm font-semibold px-8 py-3 rounded-xl hover:bg-pink-50 transition-colors">
+                  Crear cuenta nueva
+                </a>
               </div>
             </div>
           )}
 
+          {/* Only show form if logged in */}
+          {clienteId && (<>
           {/* 1. Información de Contacto */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
@@ -863,7 +860,7 @@ export default function CheckoutPage() {
                 <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
               </div>
               <h2 className="text-base sm:text-lg font-bold text-gray-900">Información de Contacto</h2>
-              {clienteId && <span className="ml-auto text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">✓ Datos cargados</span>}
+              <span className="ml-auto text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">✓ Datos cargados</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1214,6 +1211,7 @@ export default function CheckoutPage() {
             )}
           </div>
           )}
+          </>)}
         </div>
 
         {/* ===== RIGHT COLUMN - Resumen del Pedido ===== */}
@@ -1507,20 +1505,26 @@ export default function CheckoutPage() {
             )}
 
             {/* Confirm button */}
-            <button
-              onClick={handleConfirm}
-              disabled={submitting || (metodoEntrega === "retiro" && !!config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) || (metodoEntrega === "envio" && !!config && subtotal < config.monto_minimo_envio)}
-              className="mt-5 w-full bg-pink-600 hover:bg-pink-700 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : (
-                "Crear Pedido"
-              )}
-            </button>
+            {clienteId ? (
+              <button
+                onClick={handleConfirm}
+                disabled={submitting || (metodoEntrega === "retiro" && !!config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) || (metodoEntrega === "envio" && !!config && subtotal < config.monto_minimo_envio)}
+                className="mt-5 w-full bg-pink-600 hover:bg-pink-700 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  "Crear Pedido"
+                )}
+              </button>
+            ) : (
+              <a href="/cuenta" className="mt-5 w-full bg-pink-600 hover:bg-pink-700 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 block text-center">
+                Iniciar sesión para comprar
+              </a>
+            )}
 
             {/* Trust badge */}
             <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-gray-400">
