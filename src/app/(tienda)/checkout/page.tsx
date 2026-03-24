@@ -1178,33 +1178,40 @@ export default function CheckoutPage() {
             </div>
 
             {availableDates.length > 0 ? (
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {availableDates.map((d) => (
-                  <button
-                    key={d.value}
-                    onClick={() => setFechaEntrega(d.value)}
-                    className={`flex-shrink-0 flex flex-col items-center px-4 py-3 rounded-xl border-2 transition min-w-[72px] relative ${
-                      fechaEntrega === d.value
-                        ? "border-pink-500 bg-pink-50"
-                        : "border-gray-200 hover:border-pink-300"
-                    }`}
-                  >
-                    {d.isToday && (
-                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-pink-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full leading-none">
-                        hoy
-                      </span>
-                    )}
-                    <span className={`text-xs font-medium ${fechaEntrega === d.value ? "text-pink-600" : "text-gray-500"}`}>
-                      {d.dayAbbr}
-                    </span>
-                    <span className={`text-xl font-bold ${fechaEntrega === d.value ? "text-pink-600" : "text-gray-900"}`}>
-                      {d.dayNum}
-                    </span>
-                    <span className={`text-xs ${fechaEntrega === d.value ? "text-pink-500" : "text-gray-400"}`}>
-                      {d.monthAbbr}
-                    </span>
-                  </button>
-                ))}
+              <div className="flex gap-2.5 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+                {availableDates.map((d) => {
+                  const isSelected = fechaEntrega === d.value;
+                  return (
+                    <button
+                      key={d.value}
+                      onClick={() => setFechaEntrega(d.value)}
+                      className={`flex-shrink-0 flex flex-col items-center rounded-xl border-2 transition min-w-[76px] overflow-hidden ${
+                        isSelected
+                          ? "border-pink-500 shadow-md shadow-pink-100"
+                          : "border-gray-200 hover:border-pink-300"
+                      }`}
+                    >
+                      {/* Day name header */}
+                      <div className={`w-full text-center py-1.5 text-xs font-semibold ${
+                        d.isToday && isSelected ? "bg-pink-500 text-white"
+                        : d.isToday ? "bg-pink-100 text-pink-600"
+                        : isSelected ? "bg-pink-50 text-pink-600"
+                        : "bg-gray-50 text-gray-500"
+                      }`}>
+                        {d.isToday ? "Hoy" : d.dayAbbr}
+                      </div>
+                      {/* Number + month */}
+                      <div className="px-4 py-2.5 flex flex-col items-center">
+                        <span className={`text-2xl font-bold leading-none ${isSelected ? "text-pink-600" : "text-gray-900"}`}>
+                          {d.dayNum}
+                        </span>
+                        <span className={`text-[11px] mt-1 ${isSelected ? "text-pink-500" : "text-gray-400"}`}>
+                          {d.monthAbbr}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-gray-500">No hay fechas de entrega disponibles.</p>
