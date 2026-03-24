@@ -1289,7 +1289,11 @@ export default function ListadoVentasPage() {
 
     const fromPedidos: Pedido[] = poPedidos.map((p) => ({ ...p, _source: "pedidos" as const }));
 
-    return [...fromHistorial, ...fromPedidos].sort((a, b) =>
+    // Deduplicate: if a pedido online has same numero as historial venta, keep only the online one
+    const onlineNumeros = new Set(fromPedidos.map((p) => p.numero));
+    const deduped = fromHistorial.filter((h) => !onlineNumeros.has(h.numero));
+
+    return [...deduped, ...fromPedidos].sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [ventas, poPedidos, vendedores]);
