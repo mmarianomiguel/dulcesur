@@ -2071,7 +2071,7 @@ export default function ProductosPage() {
 
           {editingProduct && (
             <div className="flex border-b bg-muted/20 px-6">
-              {[["info","Informaci\u00f3n"],["precios","Precios"],["descuentos","Descuentos"],["stock","Stock"],["historial","Historial"]].map(([key, label]) => (
+              {[["info","Información"],["precios","Precios"],["descuentos","Descuentos"],["stock","Stock"],["historial","Historial"]].map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setEditTab(key)}
                   className={`px-4 py-2.5 text-xs font-medium transition-all border-b-2 -mb-px ${editTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                   {label}
@@ -2973,14 +2973,14 @@ export default function ProductosPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="border rounded-xl p-4 space-y-2">
-                    <Label className="text-xs text-muted-foreground">Stock m\u00ednimo</Label>
+                    <Label className="text-xs text-muted-foreground">Stock mínimo</Label>
                     <Input type="number" min="0" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: Math.max(0, Number(e.target.value)) })} className="h-10 text-lg font-semibold text-center" />
                     <p className="text-[11px] text-muted-foreground text-center">Alerta cuando el stock baje de este valor</p>
                   </div>
                   <div className="border rounded-xl p-4 space-y-2">
-                    <Label className="text-xs text-muted-foreground">Stock m\u00e1ximo</Label>
+                    <Label className="text-xs text-muted-foreground">Stock máximo</Label>
                     <Input type="number" min="0" value={form.stock_maximo} onChange={(e) => setForm({ ...form, stock_maximo: Math.max(0, Number(e.target.value)) })} className="h-10 text-lg font-semibold text-center" />
-                    <p className="text-[11px] text-muted-foreground text-center">Capacidad m\u00e1xima de almacenamiento</p>
+                    <p className="text-[11px] text-muted-foreground text-center">Capacidad máxima de almacenamiento</p>
                   </div>
                 </div>
 
@@ -2995,12 +2995,12 @@ export default function ProductosPage() {
                   ) : form.stock <= form.stock_minimo ? (
                     <div className="flex items-center gap-2 text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
                       <AlertTriangle className="w-4 h-4" />
-                      <span className="text-sm font-medium">Stock bajo &mdash; por debajo del m\u00ednimo ({form.stock_minimo})</span>
+                      <span className="text-sm font-medium">Stock bajo — por debajo del mínimo ({form.stock_minimo})</span>
                     </div>
                   ) : form.stock_maximo > 0 && form.stock >= form.stock_maximo ? (
                     <div className="flex items-center gap-2 text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
                       <Package className="w-4 h-4" />
-                      <span className="text-sm font-medium">Stock al m\u00e1ximo</span>
+                      <span className="text-sm font-medium">Stock al máximo</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
@@ -3024,7 +3024,7 @@ export default function ProductosPage() {
                       {form.stock_minimo > 0 && (
                         <div className="relative h-0">
                           <div className="absolute top-[-14px] text-[9px] text-orange-500 font-medium" style={{ left: `${Math.min(100, (form.stock_minimo / form.stock_maximo) * 100)}%`, transform: "translateX(-50%)" }}>
-                            \u25BC {form.stock_minimo}
+                            ▼ {form.stock_minimo}
                           </div>
                         </div>
                       )}
@@ -3035,7 +3035,7 @@ export default function ProductosPage() {
                 {/* Box breakdown */}
                 {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).length > 0 && (
                   <div className="border rounded-xl p-4">
-                    <p className="text-xs text-muted-foreground mb-3">Desglose por presentaci\u00f3n</p>
+                    <p className="text-xs text-muted-foreground mb-3">Desglose por presentación</p>
                     <div className="space-y-2">
                       {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).map((box, i) => {
                         const stockCajas = box.cantidad > 0 ? Math.floor(form.stock / box.cantidad) : 0;
@@ -3128,7 +3128,7 @@ export default function ProductosPage() {
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <Clock className="w-10 h-10 mb-3 opacity-30" />
                     <p className="text-sm font-medium">Sin historial de precios</p>
-                    <p className="text-xs mt-1">Los cambios de precio se registrar\u00e1n aqu\u00ed</p>
+                    <p className="text-xs mt-1">Los cambios de precio se registrarán aquí</p>
                   </div>
                 )}
               </div>
