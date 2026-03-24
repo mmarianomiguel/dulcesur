@@ -778,9 +778,17 @@ export default function ListadoVentasPage() {
     return true;
   });
 
-  // Open PO detail
-  const poOpenDetail = (pedido: Pedido) => {
-    setPoSelectedPedido({ ...pedido, _source: "pedidos" });
+  // Open PO detail - also find linked venta for print
+  const poOpenDetail = async (pedido: Pedido) => {
+    // Find linked venta by numero to get _ventaId for printing
+    let ventaId: string | undefined;
+    if (pedido.numero) {
+      const { data: linkedVenta } = await supabase.from("ventas").select("id, cliente_id, clientes(nombre, cuit, domicilio, telefono)").eq("numero", pedido.numero).single();
+      if (linkedVenta) {
+        ventaId = linkedVenta.id;
+      }
+    }
+    setPoSelectedPedido({ ...pedido, _source: "pedidos", _ventaId: ventaId } as any);
     setPoEditItems(pedido.items.map((i) => ({ ...i })));
     setPoHasChanges(false);
     setPoDetailOpen(true);
@@ -2111,9 +2119,12 @@ export default function ListadoVentasPage() {
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={async () => {
                     let v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
-                    if (!v && poSelectedPedido.numero) {
-                      // For pedidos online, find linked venta by numero
-                      const { data } = await supabase.from("ventas").select("*").eq("numero", poSelectedPedido.numero).single();
+                    if (!v && (poSelectedPedido._ventaId || poSelectedPedido.numero)) {
+                      // For pedidos online, find linked venta with full client data
+                      const q = poSelectedPedido._ventaId
+                        ? supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).single()
+                        : supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).single();
+                      const { data } = await q;
                       if (data) v = data as VentaRow;
                     }
                     if (v) { setPoDetailOpen(false); preparePrint(v); }
