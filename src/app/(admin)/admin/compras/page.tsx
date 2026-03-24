@@ -253,9 +253,12 @@ export default function ComprasPage() {
   };
 
   /* ── add product to items ── */
+  const [searchPresentaciones, setSearchPresentaciones] = useState<Record<string, { nombre: string; cantidad: number; costo: number; precio: number }[]>>({});
 
-  const addProduct = (product: ProductSearch) => {
+  const addProduct = (product: ProductSearch, presQty?: number, presCosto?: number) => {
     if (items.some((i) => i.producto_id === product.id)) return;
+    const cantidad = presQty || 1;
+    const costoUnit = presCosto || product.costo;
     setItems((prev) => [
       ...prev,
       {
@@ -264,17 +267,31 @@ export default function ComprasPage() {
         nombre: product.nombre,
         imagen_url: product.imagen_url,
         stock_actual: product.stock,
-        cantidad: 1,
-        costo_unitario: product.costo,
+        cantidad,
+        costo_unitario: costoUnit,
         costo_original: product.costo,
         precio_original: product.precio,
-        subtotal: product.costo,
+        subtotal: costoUnit * cantidad,
       },
     ]);
     setProductSearch("");
     setProductResults([]);
     setProductSearchOpen(false);
   };
+
+  // Load presentaciones when search results change
+  useEffect(() => {
+    if (productResults.length === 0) return;
+    const ids = productResults.map((p) => p.id);
+    supabase.from("presentaciones").select("producto_id, nombre, cantidad, costo, precio").in("producto_id", ids).then(({ data }) => {
+      const map: Record<string, any[]> = {};
+      (data || []).forEach((pr: any) => {
+        if (!map[pr.producto_id]) map[pr.producto_id] = [];
+        map[pr.producto_id].push(pr);
+      });
+      setSearchPresentaciones(map);
+    });
+  }, [productResults]);
 
   /* ── item editing ── */
 
@@ -674,54 +691,79 @@ export default function ComprasPage() {
 
         {/* Product search dialog */}
         <Dialog open={productSearchOpen} onOpenChange={setProductSearchOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Agregar producto</DialogTitle></DialogHeader>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Agregar producto a la compra</DialogTitle></DialogHeader>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 ref={productSearchRef}
-                placeholder="Buscar por nombre o codigo..."
+                placeholder="Buscar por nombre o código..."
                 value={productSearch}
                 onChange={(e) => handleProductSearch(e.target.value)}
-                className="pl-9"
+                className="pl-9 h-11"
                 autoFocus
               />
               {searchingProducts && (
                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
               )}
             </div>
-            <div className="space-y-1 max-h-72 overflow-y-auto">
+            <div className="space-y-2 max-h-80 overflow-y-auto">
               {productResults.map((p) => {
                 const alreadyAdded = items.some((i) => i.producto_id === p.id);
+                const pres = searchPresentaciones[p.id] || [];
+                const boxPres = pres.find((pr) => pr.cantidad > 1);
+                const boxLabel = boxPres ? (boxPres.nombre?.toLowerCase().includes("medio") ? "Medio Cartón" : `Caja x${boxPres.cantidad}`) : null;
                 return (
-                  <button
+                  <div
                     key={p.id}
-                    className={`w-full text-left p-2.5 rounded-lg hover:bg-muted transition-colors text-sm flex items-center gap-3 ${alreadyAdded ? "opacity-40 cursor-not-allowed" : ""}`}
-                    onClick={() => !alreadyAdded && addProduct(p)}
-                    disabled={alreadyAdded}
+                    className={`rounded-xl border p-3 transition-colors ${alreadyAdded ? "opacity-40 bg-muted" : "hover:border-primary/30 hover:bg-primary/5"}`}
                   >
-                    <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {p.imagen_url ? (
-                        <img src={p.imagen_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <ImageIcon className="w-4 h-4 text-muted-foreground/40" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{p.codigo}</span>
-                        <span className="font-medium truncate">{p.nombre}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {p.imagen_url ? (
+                          <img src={p.imagen_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <ImageIcon className="w-5 h-5 text-muted-foreground/30" />
+                        )}
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        Stock: {p.stock} | Costo: {formatCurrency(p.costo)} | Precio: {formatCurrency(p.precio)}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{p.nombre}</div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                          <span className="font-mono">{p.codigo}</span>
+                          <span>·</span>
+                          <span>Stock: <strong className={p.stock <= 0 ? "text-red-500" : ""}>{p.stock}</strong></span>
+                          <span>·</span>
+                          <span>Costo: {formatCurrency(p.costo)}</span>
+                        </div>
                       </div>
+                      {alreadyAdded && <Badge variant="secondary" className="text-[10px] flex-shrink-0">Ya agregado</Badge>}
                     </div>
-                    {alreadyAdded && <Badge variant="secondary" className="text-[10px]">Agregado</Badge>}
-                  </button>
+                    {!alreadyAdded && (
+                      <div className="flex gap-2 mt-2.5 pl-14">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs flex-1"
+                          onClick={() => addProduct(p)}
+                        >
+                          + Unidad
+                        </Button>
+                        {boxPres && (
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs flex-1"
+                            onClick={() => addProduct(p, boxPres.cantidad, boxPres.costo > 0 ? Math.round(boxPres.costo / boxPres.cantidad) : p.costo)}
+                          >
+                            + {boxLabel} ({boxPres.cantidad} un.)
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
               {productSearch.length >= 2 && productResults.length === 0 && !searchingProducts && (
-                <p className="text-center py-6 text-sm text-muted-foreground">Sin resultados</p>
+                <p className="text-center py-8 text-sm text-muted-foreground">Sin resultados para &quot;{productSearch}&quot;</p>
               )}
             </div>
           </DialogContent>
