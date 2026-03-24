@@ -137,6 +137,7 @@ export default function ProductosPage() {
   const [showDiscountForm, setShowDiscountForm] = useState(false);
   const [discountForm, setDiscountForm] = useState({ nombre: "", porcentaje: 5, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
   const [savingDiscount, setSavingDiscount] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProductoWithRelations | null>(null);
   const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -787,18 +788,21 @@ export default function ProductosPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     const product = products.find((p) => p.id === id);
-    if (!product) return;
-    if (!window.confirm(`¿Estás seguro de eliminar "${product.nombre}"?`)) return;
+    if (product) setDeleteTarget(product);
+  };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await supabase.from("productos").update({ activo: false, visibilidad: "oculto" }).eq("id", id);
+      await supabase.from("productos").update({ activo: false, visibilidad: "oculto" }).eq("id", deleteTarget.id);
       showAdminToast("Producto eliminado correctamente", "success");
       fetchProducts();
     } catch (err: any) {
       showAdminToast(err.message || "Error al eliminar producto", "error");
     }
+    setDeleteTarget(null);
   };
 
   const handleDuplicate = async (p: ProductoWithRelations) => {
@@ -2939,6 +2943,32 @@ export default function ProductosPage() {
 
       {/* History Dialog */}
       {/* Price History Dialog */}
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden">
+          <div className="bg-red-50 px-6 pt-6 pb-4 flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-3">
+              <AlertTriangle className="w-7 h-7 text-red-500" />
+            </div>
+            <DialogHeader className="p-0 space-y-1">
+              <DialogTitle className="text-lg font-bold text-red-900">Confirmar eliminación</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-red-700 mt-2">¿Estás seguro de que querés eliminar este producto?</p>
+          </div>
+          <div className="px-6 py-4 space-y-3">
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-sm font-semibold">{deleteTarget?.nombre}</p>
+              <p className="text-xs text-muted-foreground">Código: {deleteTarget?.codigo}</p>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">El producto se desactivará y dejará de ser visible.</p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+              <Button variant="destructive" className="flex-1" onClick={confirmDelete}>Sí, eliminar</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={phDialogOpen} onOpenChange={setPhDialogOpen}>
         <DialogContent className="max-w-xl max-h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
           <div className="px-6 py-4 border-b bg-gradient-to-r from-violet-50 to-purple-50">
