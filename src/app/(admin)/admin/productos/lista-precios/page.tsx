@@ -250,10 +250,13 @@ export default function ListaPreciosPage() {
       return all;
     }
 
-    const [dbProducts, presentaciones] = await Promise.all([
-      fetchAllRows("productos", "*, categorias(nombre), subcategorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
+    const [dbProducts, presentaciones, subcategorias] = await Promise.all([
+      fetchAllRows("productos", "*, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
       fetchAllRows("presentaciones", "*"),
+      fetchAllRows("subcategorias", "id, nombre"),
     ]);
+    const subcatMap: Record<string, string> = {};
+    for (const sc of subcategorias) subcatMap[sc.id] = sc.nombre;
 
     const presMap = new Map<string, DBPresentacion[]>();
     presentaciones.forEach((p: DBPresentacion) => {
@@ -298,7 +301,7 @@ export default function ListaPreciosPage() {
         aumento: isRecent,
         id: p.id,
         categoria: dbCategoria || clasificacion.categoria,
-        subcategoria: (p as any).subcategorias?.nombre || clasificacion.subcategoria,
+        subcategoria: (p.subcategoria_id && subcatMap[p.subcategoria_id]) || clasificacion.subcategoria,
         fechaActualizacion: fechaAct,
       };
     });
@@ -637,20 +640,28 @@ export default function ListaPreciosPage() {
         const fmtP = (n: number) => `$${n.toLocaleString("es-AR")}`;
 
         const drawHeader = () => {
-          if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 8, 18, 18); } catch {} }
+          // Logo larger
+          if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 6, 25, 25); } catch {} }
+          // Title next to logo
+          const titleX = logoBase64 ? lm + 30 : lm;
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(16);
-          pdf.text("LISTA DE PRECIOS", pageW / 2, 15, { align: "center" });
-          pdf.setFontSize(10);
+          pdf.setFontSize(18);
+          pdf.text("LISTA DE PRECIOS", titleX, 16);
+          pdf.setFontSize(11);
           pdf.setFont("helvetica", "normal");
-          pdf.text(empresaNombre, pageW / 2, 21, { align: "center" });
+          pdf.setTextColor(80);
+          pdf.text(empresaNombre, titleX, 22);
           pdf.setFontSize(8);
-          pdf.setTextColor(100);
-          pdf.text(`Última actualización: ${today}`, pageW / 2, 26, { align: "center" });
+          pdf.setTextColor(120);
+          pdf.text(`Última actualización: ${today}`, titleX, 27);
           pdf.setTextColor(0);
-          pdf.setDrawColor(200);
-          pdf.setLineWidth(0.5);
-          pdf.line(lm, 30, rm, 30);
+          // Thick separator
+          pdf.setDrawColor(180);
+          pdf.setLineWidth(0.8);
+          pdf.line(lm, 32, rm, 32);
+          pdf.setLineWidth(0.2);
+          pdf.setDrawColor(220);
+          pdf.line(lm, 33, rm, 33);
         };
 
         const drawTableHeader = (y: number) => {
@@ -706,7 +717,7 @@ export default function ListaPreciosPage() {
         };
 
         drawHeader();
-        let yPos = drawTableHeader(36);
+        let yPos = drawTableHeader(39);
 
         if (listaGroupMode === "none") {
           // Simple flat list
@@ -761,10 +772,12 @@ export default function ListaPreciosPage() {
               yPos = checkPage(yPos);
               pdf.setFont("helvetica", "bold");
               pdf.setFontSize(7);
-              pdf.setTextColor(80);
-              pdf.text(`  └ ${sub}`, lm + 4, yPos);
+              pdf.setTextColor(100);
+              pdf.setDrawColor(230);
+              pdf.line(lm + 6, yPos + 1, lm + 6 + pdf.getTextWidth(sub) + 4, yPos + 1);
+              pdf.text(sub, lm + 8, yPos);
               pdf.setTextColor(0);
-              yPos += 4;
+              yPos += 5;
               pdf.setFont("helvetica", "normal");
               pdf.setFontSize(6.5);
               groups[cat][sub].forEach((p, idx) => {
