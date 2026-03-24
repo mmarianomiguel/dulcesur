@@ -14,7 +14,7 @@ const currencyFormatterDecimals = new Intl.NumberFormat("es-AR", {
 export function formatCurrency(value: number, decimals = false): string {
   return decimals
     ? currencyFormatterDecimals.format(value)
-    : currencyFormatter.format(value);
+    : currencyFormatter.format(Math.round(value));
 }
 
 // ─── Dates ───

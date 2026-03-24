@@ -1864,7 +1864,7 @@ export default function ListadoVentasPage() {
                           return me ? <span className="font-medium">{me}</span> : null;
                         })()}
                       </div>
-                      {poSelectedPedido.direccion_texto && (
+                      {poSelectedPedido.direccion_texto && poSelectedPedido.metodo_entrega === "envio" && (
                         <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3 mt-0.5 shrink-0" />{poSelectedPedido.direccion_texto}</p>
                       )}
                       {poSelectedPedido.fecha_entrega && (

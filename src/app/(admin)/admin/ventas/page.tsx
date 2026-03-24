@@ -1354,6 +1354,10 @@ export default function VentasPage() {
           observacion: despacho,
           metodo_entrega: deliveryMethod === "delivery" ? "envio" : "retiro",
           lista_precio_id: listaPrecioId || null,
+          ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
+            cuenta_transferencia_id: cuentaBancariaId,
+            cuenta_transferencia_alias: cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.alias || cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.nombre || null,
+          } : {}),
         })
         .select()
         .single();
