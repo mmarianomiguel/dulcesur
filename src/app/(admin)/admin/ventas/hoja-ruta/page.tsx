@@ -137,7 +137,7 @@ export default function HojaDeRutaPage() {
         "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida)"
       )
       .eq("entregado", false)
-      .eq("metodo_entrega", "envio")
+      .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
       .neq("estado", "anulada")
       .order("created_at", { ascending: false });
 
@@ -396,6 +396,12 @@ export default function HojaDeRutaPage() {
 
     // Update venta forma_pago to reflect actual payment
     await supabase.from("ventas").update({ forma_pago: payMetodo }).eq("id", payVenta.id);
+
+    // Auto-mark as delivered if full amount was paid
+    if (saldoPendiente <= 0) {
+      await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", payVenta.id);
+      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", payVenta.numero);
+    }
 
     setPaySaving(false);
     setPayDialogOpen(false);
@@ -1313,7 +1319,7 @@ export default function HojaDeRutaPage() {
 
                 <div className="flex justify-end gap-2 pt-1">
                   <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancelar</Button>
-                  <Button onClick={handleRegistrarPago} disabled={paySaving || totalPagando <= 0}>
+                  <Button onClick={handleRegistrarPago} disabled={paySaving || totalPagando <= 0 || (saldoPendiente > 0 && !payVenta.cliente_id)}>
                     {paySaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     Confirmar Cobro — {formatCurrency(Math.min(totalPagando, debe))}
                   </Button>

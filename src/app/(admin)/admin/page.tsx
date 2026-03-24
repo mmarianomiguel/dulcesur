@@ -376,7 +376,7 @@ export default function DashboardPage() {
 
     const months: { name: string; ventas: number; egresos: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(); d.setMonth(d.getMonth() - i);
+      const d = new Date(todayARG() + "T12:00:00"); d.setMonth(d.getMonth() - i);
       const year = d.getFullYear(); const month = d.getMonth() + 1;
       const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
       const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;

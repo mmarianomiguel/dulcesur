@@ -1001,8 +1001,12 @@ export default function ListadoVentasPage() {
       }
 
       const nuevoSubtotal = poEditItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0);
-      const nuevoTotal = nuevoSubtotal + (poSelectedPedido.costo_envio || 0);
       const isHistorial = poSelectedPedido._source === "historial";
+      const descPct = (poSelectedPedido as any)._descuento_porcentaje || 0;
+      const recPct = (poSelectedPedido as any)._recargo_porcentaje || 0;
+      const nuevoTotal = isHistorial
+        ? Math.round(nuevoSubtotal * (1 - descPct / 100) * (1 + recPct / 100))
+        : nuevoSubtotal + (poSelectedPedido.costo_envio || 0) + ((poSelectedPedido as any).recargo_transferencia || 0);
       const refLabel = isHistorial ? `Edición Venta #${poSelectedPedido.numero}` : `Edición Pedido Web #${poSelectedPedido.numero}`;
 
       // Update pedido_tienda_items (only for PO source)
@@ -1290,7 +1294,7 @@ export default function ListadoVentasPage() {
 
   const allOrders = useMemo(() => {
     const fromHistorial: Pedido[] = ventas.map((v) => {
-      const estado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado || "cerrada";
+      const estado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado === "cerrada" ? "cerrada" : v.estado || "pendiente";
       return {
         id: 0,
         numero: v.numero,
@@ -2258,7 +2262,7 @@ export default function ListadoVentasPage() {
               total: printVenta.total,
               subtotal: printVenta.subtotal,
               descuento: Math.round(printVenta.subtotal * (printVenta.descuento_porcentaje || 0) / 100),
-              recargo: Math.round(printVenta.subtotal * (printVenta.recargo_porcentaje || 0) / 100),
+              recargo: Math.round((printVenta.subtotal - Math.round(printVenta.subtotal * (printVenta.descuento_porcentaje || 0) / 100)) * (printVenta.recargo_porcentaje || 0) / 100),
               transferSurcharge: 0,
               tipoComprobante: printVenta.tipo_comprobante,
               formaPago: printVenta.forma_pago,
