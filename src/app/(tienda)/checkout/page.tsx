@@ -164,6 +164,7 @@ export default function CheckoutPage() {
 
   // Config
   const [config, setConfig] = useState<TiendaConfig | null>(null);
+  const [whatsappUrl, setWhatsappUrl] = useState("");
 
   // Saldo pendiente
   const [saldoPendiente, setSaldoPendiente] = useState(0);
@@ -211,6 +212,9 @@ export default function CheckoutPage() {
         costo_envio: data.costo_envio ?? 0,
       };
       setConfig(cfg);
+      // Load WhatsApp URL from footer_config
+      const fc = (data as any)?.footer_config;
+      if (fc?.whatsapp_url) setWhatsappUrl(fc.whatsapp_url);
       const dates = getAvailableDates(cfg.dias_entrega, cfg.dias_max_programacion, cfg.hora_corte);
       setAvailableDates(dates);
       if (dates.length > 0) {
@@ -784,9 +788,9 @@ export default function CheckoutPage() {
           </div>
 
           {/* WhatsApp button for transfers */}
-          {isTransfer && (
+          {isTransfer && whatsappUrl && (
             <a
-              href={`https://wa.me/5491134567890?text=${waMsg}`}
+              href={`${whatsappUrl}${whatsappUrl.includes("?") ? "&" : "?"}text=${waMsg}`}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full flex items-center justify-center gap-3 bg-[#25D366] hover:bg-[#20BD5A] text-white py-3.5 rounded-xl font-semibold transition mb-4 text-sm"
