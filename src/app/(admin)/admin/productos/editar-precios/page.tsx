@@ -1150,11 +1150,11 @@ export default function EditarPreciosPage() {
                           {massTarget === "costo" && (
                             <>
                               <TableCell className="text-right tabular-nums">
-                                {formatCurrency(item.currentCosto)}
+                                {formatCurrency(item.currentCosto, true)}
                               </TableCell>
                               <TableCell className="text-center text-muted-foreground">&rarr;</TableCell>
                               <TableCell className="text-right tabular-nums font-medium">
-                                {formatCurrency(item.newCosto)}
+                                {formatCurrency(item.newCosto, true)}
                               </TableCell>
                             </>
                           )}
