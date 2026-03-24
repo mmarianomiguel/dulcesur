@@ -1994,8 +1994,9 @@ export default function ListadoVentasPage() {
                               await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
                               setPoSelectedPedido({ ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cb.id } as any);
                               setShowCuentaSelector(false);
+                              showAdminToast(`Cuenta asignada: ${alias}`, "success");
                             }}
-                            className="w-full text-left rounded-lg border p-2.5 hover:bg-blue-100 transition flex items-center justify-between"
+                            className="w-full text-left rounded-lg border p-2.5 hover:bg-blue-50 hover:border-blue-300 transition flex items-center justify-between"
                           >
                             <div>
                               <span className="text-sm font-medium">{cb.nombre}</span>
