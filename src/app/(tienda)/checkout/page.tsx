@@ -810,10 +810,13 @@ export default function CheckoutPage() {
 
       {/* Errors */}
       {errors.length > 0 && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
-          {errors.map((e, i) => (
-            <p key={i} className="text-sm text-red-600">{e}</p>
-          ))}
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+          <span className="text-red-500 mt-0.5 shrink-0">⚠️</span>
+          <div>
+            <p className="text-sm font-semibold text-red-800 mb-1">Revisá los siguientes campos:</p>
+            {errors.map((e, i) => (
+              <p key={i} className="text-sm text-red-600">• {e}</p>
+            ))}
           {stockFixes && (
             <button
               onClick={adjustCart}
@@ -822,12 +825,37 @@ export default function CheckoutPage() {
               Ajustar carrito automáticamente
             </button>
           )}
+          </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-8">
         {/* ===== LEFT COLUMN ===== */}
         <div className="space-y-6">
+          {/* Login prompt if not logged in */}
+          {!clienteId && (
+            <div className="bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 rounded-2xl p-5 sm:p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center shrink-0">
+                  <User className="h-5 w-5 text-pink-600" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-base font-bold text-gray-900">¿Ya tenés cuenta?</h2>
+                  <p className="text-sm text-gray-600 mt-1">Iniciá sesión para completar tu pedido más rápido con tus datos y direcciones guardadas.</p>
+                  <div className="flex gap-3 mt-4">
+                    <a href="/cuenta" className="bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
+                      Iniciar sesión
+                    </a>
+                    <a href="/cuenta" className="border border-pink-300 text-pink-700 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-pink-50 transition-colors">
+                      Crear cuenta
+                    </a>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-3">O completá los datos abajo para comprar sin cuenta</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 1. Información de Contacto */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
@@ -835,6 +863,7 @@ export default function CheckoutPage() {
                 <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
               </div>
               <h2 className="text-base sm:text-lg font-bold text-gray-900">Información de Contacto</h2>
+              {clienteId && <span className="ml-auto text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">✓ Datos cargados</span>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1014,16 +1043,19 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                {/* No addresses message */}
-                {savedAddresses.length === 0 && !showNewAddress && (
-                  <div className="text-center py-4 text-sm text-gray-500 bg-gray-50 rounded-xl">
-                    <p>No tenés direcciones guardadas.</p>
-                    <p className="text-xs mt-1">Podés agregar una desde <a href="/cuenta/direcciones" className="text-pink-600 hover:underline font-medium">Mi cuenta → Direcciones</a></p>
-                  </div>
+                {/* Add new address button */}
+                {!showNewAddress && (
+                  <button
+                    onClick={() => setShowNewAddress(true)}
+                    className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-300 text-sm text-pink-600 font-medium hover:border-pink-400 hover:bg-pink-50 transition"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {savedAddresses.length === 0 ? "Agregar dirección de envío" : "Agregar otra dirección"}
+                  </button>
                 )}
 
-                {/* New address form - hidden, use Mi Cuenta instead */}
-                {false && showNewAddress && (
+                {/* New address form */}
+                {showNewAddress && (
                   <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                     <p className="text-sm font-medium text-gray-700">Nueva dirección</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
