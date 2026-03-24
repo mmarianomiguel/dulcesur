@@ -1293,6 +1293,8 @@ export default function ListadoVentasPage() {
   };
 
   const allOrders = useMemo(() => {
+    // Don't compute until both sources are loaded to avoid flash
+    if (loading || poLoading) return [];
     const fromHistorial: Pedido[] = ventas.map((v) => {
       const estado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado === "cerrada" ? "cerrada" : v.estado || "pendiente";
       return {
@@ -1336,7 +1338,7 @@ export default function ListadoVentasPage() {
     return [...deduped, ...fromPedidos].sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
-  }, [ventas, poPedidos, vendedores]);
+  }, [ventas, poPedidos, vendedores, loading, poLoading]);
 
   const filteredOrders = useMemo(() => {
     return allOrders.filter((o) => {
@@ -1673,11 +1675,11 @@ export default function ListadoVentasPage() {
                             v = ventas.find((vr) => vr.numero === order.numero);
                           }
                           if (!v) {
-                            const { data } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email), venta_items(*)").eq("numero", order.numero).order("created_at", { ascending: false }).limit(1).single();
-                            if (data) v = data as any;
+                            const { data: rows } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", order.numero).order("created_at", { ascending: false }).limit(1);
+                            if (rows && rows.length > 0) v = rows[0] as any;
                           }
                           if (v) {
-                            if (order.nombre_cliente && (order._source === "pedidos" || order.isOnline)) {
+                            if (order.nombre_cliente && (order._source === "pedidos" || (order as any).isOnline)) {
                               (v as any).clientes = { nombre: order.nombre_cliente, cuit: "", domicilio: order.direccion_texto || "", telefono: order.telefono || "", email: order.email || "" };
                             }
                             preparePrint(v);
@@ -2119,12 +2121,12 @@ export default function ListadoVentasPage() {
                   <Button variant="outline" size="sm" onClick={async () => {
                     try {
                       let v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
+                      if (!v) v = ventas.find((vr) => vr.numero === poSelectedPedido.numero);
                       if (!v && (poSelectedPedido._ventaId || poSelectedPedido.numero)) {
-                        const q = poSelectedPedido._ventaId
-                          ? supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).maybeSingle()
-                          : supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).order("created_at", { ascending: false }).limit(1).single();
-                        const { data } = await q;
-                        if (data) v = data as VentaRow;
+                        const { data: rows } = poSelectedPedido._ventaId
+                          ? await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).limit(1)
+                          : await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).order("created_at", { ascending: false }).limit(1);
+                        if (rows && rows.length > 0) v = rows[0] as VentaRow;
                       }
                       if (v) {
                         if (poSelectedPedido.nombre_cliente && (poSelectedPedido._source === "pedidos" || poSelectedPedido.isOnline)) {
