@@ -1300,6 +1300,18 @@ function ProductosContent() {
                             </span>
                           );
                         }
+                        // Volume discount hint badge
+                        if (volHint) return (
+                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            {volHint.pct}% OFF x{volHint.minQty}+
+                          </span>
+                        );
+                        // "New" badge
+                        if (producto.created_at && (Date.now() - new Date(producto.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000) return (
+                          <span className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            NUEVO
+                          </span>
+                        );
                         return null;
                       })()}
                       {producto.stock <= 0 ? (

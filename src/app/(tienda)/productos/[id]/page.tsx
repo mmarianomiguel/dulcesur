@@ -37,6 +37,7 @@ interface Producto {
   marcas: { nombre: string } | null;
   updated_at?: string;
   fecha_actualizacion?: string;
+  created_at?: string;
 }
 
 interface ComboComponente {
@@ -835,6 +836,18 @@ export default function ProductoDetallePage() {
                 const qty = relQty[rel.id] ?? 1;
                 const relDiscount = getProductDiscount(rel, presLabel);
                 const relDiscountedPrice = relDiscount > 0 ? Math.round(price * (1 - relDiscount / 100)) : price;
+                // Check for volume discount hint
+                const relVolHint = (() => {
+                  for (const d of activeDiscounts) {
+                    if (!d.cantidad_minima || d.cantidad_minima <= 0) continue;
+                    const applies = d.aplica_a === "todos" || (d.aplica_a === "productos" && (d.productos_ids || []).includes(rel.id)) || (d.aplica_a === "categorias" && ((d.categorias_ids || []).includes(rel.categoria_id)));
+                    if (!applies) continue;
+                    return { minQty: d.cantidad_minima, pct: d.porcentaje };
+                  }
+                  return null;
+                })();
+                // Check if product is "new" (created < 7 days ago)
+                const isNew = rel.created_at && (Date.now() - new Date(rel.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
 
                 return (
                   <div
@@ -842,10 +855,20 @@ export default function ProductoDetallePage() {
                     className="flex-shrink-0 w-[160px] sm:w-[180px] md:w-[200px] lg:w-[calc(20%-12.8px)] snap-start rounded-2xl border border-gray-100 bg-white overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow"
                   >
                     <Link href={`/productos/${rel.id}`}>
-                      <div className="aspect-square bg-gray-100 overflow-hidden relative">
+                      <div className="aspect-square bg-gray-100 overflow-hidden relative group">
                         {relDiscount > 0 && (
-                          <span className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          <span className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
                             -{relDiscount}%
+                          </span>
+                        )}
+                        {!relDiscount && relVolHint && (
+                          <span className="absolute top-2 left-2 z-10 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow">
+                            -{relVolHint.pct}% x{relVolHint.minQty}+
+                          </span>
+                        )}
+                        {isNew && !relDiscount && !relVolHint && (
+                          <span className="absolute top-2 left-2 z-10 bg-blue-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow">
+                            NUEVO
                           </span>
                         )}
                         {rel.imagen_url ? (
@@ -853,7 +876,7 @@ export default function ProductoDetallePage() {
                             src={rel.imagen_url}
                             alt={rel.nombre}
                             fill
-                            className="object-contain p-4"
+                            className="object-contain p-4 group-hover:scale-110 transition-transform duration-300"
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center text-gray-300 text-xs">
