@@ -194,6 +194,7 @@ export default function ListaPreciosPage() {
   const [showConfig, setShowConfig] = useState(false);
   const [configTab, setConfigTab] = useState<ConfigTab>("general");
   const [showStylePicker, setShowStylePicker] = useState(false);
+  const [listaGroupMode, setListaGroupMode] = useState<"none" | "categoria" | "subcategoria">("categoria");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
@@ -630,106 +631,160 @@ export default function ListaPreciosPage() {
       if (style === "lista") {
         // ── Lista General de Precios ──
         const empresaNombre = "DULCESUR";
-        const lm = 12; // left margin
+        const lm = 12;
         const rm = pageW - 12;
         const colW = rm - lm;
-
-        // Header
-        if (logoBase64) {
-          try { pdf.addImage(logoBase64, "PNG", lm, 8, 18, 18); } catch {}
-        }
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(16);
-        pdf.text(`LISTA DE PRECIOS`, pageW / 2, 15, { align: "center" });
-        pdf.setFontSize(10);
-        pdf.setFont("helvetica", "normal");
-        pdf.text(empresaNombre, pageW / 2, 21, { align: "center" });
-        pdf.setFontSize(8);
-        pdf.setTextColor(100);
-        pdf.text(`Última actualización: ${today}`, pageW / 2, 26, { align: "center" });
-        pdf.setTextColor(0);
-
-        // Separator
-        pdf.setDrawColor(200);
-        pdf.setLineWidth(0.5);
-        pdf.line(lm, 30, rm, 30);
-
-        // Table header
-        let yPos = 36;
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(7);
-        pdf.setFillColor(240, 240, 240);
-        pdf.rect(lm, yPos - 3, colW, 6, "F");
-        pdf.text("PRODUCTO", lm + 2, yPos);
-        pdf.text("MARCA", lm + 78, yPos);
-        pdf.text("UNIDAD", lm + 108, yPos);
-        pdf.text("CAJA", lm + 133, yPos);
-        pdf.text("DTO.", lm + 158, yPos);
-        pdf.text("ACTUALIZ.", rm - 2, yPos, { align: "right" });
-        yPos += 5;
-
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(6.5);
         const fmtP = (n: number) => `$${n.toLocaleString("es-AR")}`;
 
-        selectedProducts.forEach((p, idx) => {
-          if (yPos > pageH - 25) {
-            pdf.addPage();
-            yPos = 15;
-            // Re-draw header on new page
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(7);
-            pdf.setFillColor(240, 240, 240);
-            pdf.rect(lm, yPos - 3, colW, 6, "F");
-            pdf.text("PRODUCTO", lm + 2, yPos);
-            pdf.text("MARCA", lm + 78, yPos);
-            pdf.text("UNIDAD", lm + 108, yPos);
-            pdf.text("CAJA", lm + 133, yPos);
-            pdf.text("DTO.", lm + 158, yPos);
-            pdf.text("ACTUALIZ.", rm - 2, yPos, { align: "right" });
-            yPos += 5;
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(6.5);
-          }
+        const drawHeader = () => {
+          if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 8, 18, 18); } catch {} }
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(16);
+          pdf.text("LISTA DE PRECIOS", pageW / 2, 15, { align: "center" });
+          pdf.setFontSize(10);
+          pdf.setFont("helvetica", "normal");
+          pdf.text(empresaNombre, pageW / 2, 21, { align: "center" });
+          pdf.setFontSize(8);
+          pdf.setTextColor(100);
+          pdf.text(`Última actualización: ${today}`, pageW / 2, 26, { align: "center" });
+          pdf.setTextColor(0);
+          pdf.setDrawColor(200);
+          pdf.setLineWidth(0.5);
+          pdf.line(lm, 30, rm, 30);
+        };
 
-          // Alternating row background
-          if (idx % 2 === 0) {
+        const drawTableHeader = (y: number) => {
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(7);
+          pdf.setFillColor(240, 240, 240);
+          pdf.rect(lm, y - 3, colW, 6, "F");
+          pdf.text("PRODUCTO", lm + 2, y);
+          pdf.text("MARCA", lm + 72, y);
+          pdf.text("UNIDAD", lm + 100, y);
+          pdf.text("CAJA (Qty)", lm + 125, y);
+          pdf.text("DTO.", lm + 155, y);
+          pdf.text("ACTUALIZ.", rm - 2, y, { align: "right" });
+          return y + 5;
+        };
+
+        const drawProduct = (p: Product, y: number, rowIdx: number) => {
+          if (rowIdx % 2 === 0) {
             pdf.setFillColor(250, 250, 250);
-            pdf.rect(lm, yPos - 3, colW, 5, "F");
+            pdf.rect(lm, y - 3, colW, 5, "F");
           }
-
-          const nombre = p.nombre.length > 45 ? p.nombre.substring(0, 42) + "..." : p.nombre;
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(6.5);
+          const nombre = p.nombre.length > 40 ? p.nombre.substring(0, 37) + "..." : p.nombre;
           const unitPrice = p.enOferta && p.precioOferta > 0 ? p.precioOferta : p.precioUnitario;
           const boxPrice = p.precioCaja > 0 ? p.precioCaja : 0;
+          const boxQty = p.unidadesCaja > 0 ? p.unidadesCaja : 0;
           const hasDiscount = p.enOferta && p.precioOferta > 0 && p.precioOferta < p.precioUnitario;
           const discPct = hasDiscount ? Math.round((1 - p.precioOferta / p.precioUnitario) * 100) : 0;
           const fechaAct = p.fechaActualizacion ? new Date(p.fechaActualizacion).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "—";
 
-          pdf.text(nombre, lm + 2, yPos);
-          pdf.text(p.marca || "—", lm + 78, yPos);
-          pdf.text(fmtP(unitPrice), lm + 108, yPos);
-          pdf.text(boxPrice > 0 ? fmtP(boxPrice) : "—", lm + 133, yPos);
+          pdf.text(nombre, lm + 2, y);
+          pdf.text(p.marca || "—", lm + 72, y);
+          pdf.text(fmtP(unitPrice), lm + 100, y);
+          pdf.text(boxPrice > 0 ? `${fmtP(boxPrice)} (${boxQty})` : "—", lm + 125, y);
           if (discPct > 0) {
             pdf.setTextColor(220, 50, 50);
-            pdf.text(`-${discPct}%`, lm + 158, yPos);
+            pdf.text(`-${discPct}%`, lm + 155, y);
             pdf.setTextColor(0);
           } else {
-            pdf.text("—", lm + 158, yPos);
+            pdf.text("—", lm + 155, y);
           }
-          pdf.text(fechaAct, rm - 2, yPos, { align: "right" });
-          yPos += 5;
-        });
+          pdf.text(fechaAct, rm - 2, y, { align: "right" });
+          return y + 5;
+        };
 
-        // Footer
-        yPos = pageH - 18;
+        const checkPage = (y: number): number => {
+          if (y > pageH - 25) {
+            pdf.addPage();
+            return drawTableHeader(15);
+          }
+          return y;
+        };
+
+        drawHeader();
+        let yPos = drawTableHeader(36);
+
+        if (listaGroupMode === "none") {
+          // Simple flat list
+          selectedProducts.forEach((p, idx) => {
+            yPos = checkPage(yPos);
+            yPos = drawProduct(p, yPos, idx);
+          });
+        } else if (listaGroupMode === "categoria") {
+          // Group by category
+          const groups: Record<string, Product[]> = {};
+          selectedProducts.forEach((p) => {
+            const cat = p.categoria || "Sin categoría";
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(p);
+          });
+          Object.keys(groups).sort().forEach((cat) => {
+            yPos = checkPage(yPos);
+            // Category header
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(8);
+            pdf.setFillColor(220, 230, 245);
+            pdf.rect(lm, yPos - 3, colW, 5.5, "F");
+            pdf.text(cat.toUpperCase(), lm + 3, yPos);
+            yPos += 6;
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(6.5);
+            groups[cat].forEach((p, idx) => {
+              yPos = checkPage(yPos);
+              yPos = drawProduct(p, yPos, idx);
+            });
+            yPos += 2;
+          });
+        } else {
+          // Group by category + subcategory
+          const groups: Record<string, Record<string, Product[]>> = {};
+          selectedProducts.forEach((p) => {
+            const cat = p.categoria || "Sin categoría";
+            const sub = p.subcategoria || "General";
+            if (!groups[cat]) groups[cat] = {};
+            if (!groups[cat][sub]) groups[cat][sub] = [];
+            groups[cat][sub].push(p);
+          });
+          Object.keys(groups).sort().forEach((cat) => {
+            yPos = checkPage(yPos);
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(8);
+            pdf.setFillColor(220, 230, 245);
+            pdf.rect(lm, yPos - 3, colW, 5.5, "F");
+            pdf.text(cat.toUpperCase(), lm + 3, yPos);
+            yPos += 6;
+            Object.keys(groups[cat]).sort().forEach((sub) => {
+              yPos = checkPage(yPos);
+              pdf.setFont("helvetica", "bold");
+              pdf.setFontSize(7);
+              pdf.setTextColor(80);
+              pdf.text(`  └ ${sub}`, lm + 4, yPos);
+              pdf.setTextColor(0);
+              yPos += 4;
+              pdf.setFont("helvetica", "normal");
+              pdf.setFontSize(6.5);
+              groups[cat][sub].forEach((p, idx) => {
+                yPos = checkPage(yPos);
+                yPos = drawProduct(p, yPos, idx);
+              });
+              yPos += 1;
+            });
+            yPos += 2;
+          });
+        }
+
+        // Footer on last page
+        const footY = pageH - 18;
         pdf.setDrawColor(200);
-        pdf.line(lm, yPos, rm, yPos);
-        yPos += 5;
+        pdf.line(lm, footY, rm, footY);
         pdf.setFontSize(7);
         pdf.setTextColor(100);
-        const contacto = config.webUrl || "www.dulcesur.com";
-        pdf.text(`${empresaNombre} | ${contacto}`, lm + 2, yPos);
-        pdf.text(`${selectedProducts.length} productos | Pág ${pdf.getNumberOfPages()}`, rm - 2, yPos, { align: "right" });
+        pdf.text(`${empresaNombre} | ${config.webUrl || "www.dulcesur.com"}`, lm + 2, footY + 5);
+        pdf.text(`${selectedProducts.length} productos | Pág ${pdf.getNumberOfPages()}`, rm - 2, footY + 5, { align: "right" });
         pdf.setTextColor(0);
       }
 
@@ -1087,20 +1142,37 @@ export default function ListaPreciosPage() {
               </button>
 
               {/* Lista General */}
-              <button onClick={() => generatePDF("lista")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left col-span-2">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
+              <div className="col-span-2 border-2 border-border rounded-xl p-4 space-y-3">
+                <div className="border border-border rounded-lg p-3 bg-accent/30">
                   <p className="text-[6px] font-bold text-center mb-1">LISTA DE PRECIOS - DULCESUR</p>
                   <div className="space-y-0.5">
                     <div className="flex justify-between text-[4px] border-b border-border pb-0.5">
-                      <span className="font-bold w-1/3">Producto</span><span className="font-bold w-1/6 text-right">Precio</span><span className="font-bold w-1/6 text-right">Caja</span><span className="font-bold w-1/6 text-right">Dto.</span>
+                      <span className="font-bold w-1/3">Producto</span><span className="font-bold w-1/6 text-right">Precio</span><span className="font-bold w-1/6 text-right">Caja (Qty)</span><span className="font-bold w-1/6 text-right">Dto.</span>
                     </div>
-                    <div className="flex justify-between text-[4px]"><span className="w-1/3">Chocolate 200g</span><span className="w-1/6 text-right">$1.200</span><span className="w-1/6 text-right">$12.000</span><span className="w-1/6 text-right text-green-600">-10%</span></div>
-                    <div className="flex justify-between text-[4px]"><span className="w-1/3">Galletitas 315g</span><span className="w-1/6 text-right">$850</span><span className="w-1/6 text-right">$10.200</span><span className="w-1/6 text-right">—</span></div>
+                    <div className="flex justify-between text-[4px]"><span className="w-1/3">Chocolate 200g</span><span className="w-1/6 text-right">$1.200</span><span className="w-1/6 text-right">$12.000 (10)</span><span className="w-1/6 text-right text-green-600">-10%</span></div>
+                    <div className="flex justify-between text-[4px]"><span className="w-1/3">Galletitas 315g</span><span className="w-1/6 text-right">$850</span><span className="w-1/6 text-right">$10.200 (12)</span><span className="w-1/6 text-right">—</span></div>
                   </div>
                 </div>
                 <p className="font-semibold text-sm">📋 Lista General de Precios</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Tabla completa con presentaciones, descuentos y fecha de última actualización</p>
-              </button>
+                <p className="text-xs text-muted-foreground">Con presentaciones, descuentos y fecha de actualización</p>
+
+                {/* Agrupación */}
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-muted-foreground">Agrupar:</span>
+                  {([["none", "Sin agrupar"], ["categoria", "Por categoría"], ["subcategoria", "Cat + Subcat"]] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setListaGroupMode(val)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition border ${listaGroupMode === val ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:border-primary/50"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => generatePDF("lista")} className="w-full bg-primary text-primary-foreground rounded-lg py-2 text-sm font-semibold hover:bg-primary/90 transition">
+                  Generar Lista PDF
+                </button>
+              </div>
             </div>
           </div>
         </div>
