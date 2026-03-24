@@ -143,18 +143,19 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
             alt="Preview"
             className="w-24 h-24 rounded-lg object-cover border"
           />
-          <div className="flex gap-1 mt-2">
+          <div className="flex flex-col gap-1 mt-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="w-full justify-center text-xs h-7"
               disabled={uploading}
               onClick={() => inputRef.current?.click()}
             >
               {uploading ? (
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
               ) : (
-                <Upload className="w-4 h-4 mr-1" />
+                <Upload className="w-3.5 h-3.5 mr-1" />
               )}
               Cambiar
             </Button>
@@ -162,10 +163,10 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
               type="button"
               variant="ghost"
               size="sm"
-              className="text-muted-foreground"
+              className="w-full justify-center text-xs h-7 text-muted-foreground"
               onClick={() => onChange("")}
             >
-              <X className="w-4 h-4 mr-1" />
+              <X className="w-3.5 h-3.5 mr-1" />
               Quitar
             </Button>
           </div>
