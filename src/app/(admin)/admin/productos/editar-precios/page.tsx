@@ -405,7 +405,7 @@ export default function EditarPreciosPage() {
       const currentPrecio = priceChanges[id] ?? prod.precio;
       const margin = currentCosto > 0 ? (currentPrecio - currentCosto) / currentCosto : 0;
       const newPrecio = Math.round(val * (1 + margin));
-      setCostoChanges((prev) => ({ ...prev, [id]: Math.round(val) }));
+      setCostoChanges((prev) => ({ ...prev, [id]: Math.round(val * 100) / 100 }));
       setPriceChanges((prev) => ({ ...prev, [id]: newPrecio }));
     } else if (editingField === "margen") {
       // Set margin and recalculate precio from costo
@@ -908,7 +908,7 @@ export default function EditarPreciosPage() {
                           <Input
                             autoFocus
                             type="number"
-                            step={field === "margen" ? "0.1" : "1"}
+                            step={field === "margen" ? "0.1" : field === "costo" ? "0.01" : "1"}
                             value={editingValue}
                             onChange={(e) => setEditingValue(e.target.value)}
                             onKeyDown={(e) => {
