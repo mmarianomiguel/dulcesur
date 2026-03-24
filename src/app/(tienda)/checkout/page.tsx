@@ -507,7 +507,7 @@ export default function CheckoutPage() {
       .in("id", productIds);
     const { data: dbPresentaciones } = await supabase
       .from("presentaciones")
-      .select("producto_id, nombre, cantidad, precio_venta")
+      .select("producto_id, nombre, cantidad, precio")
       .in("producto_id", productIds);
     // Fetch active discounts
     const hoyCheck = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -522,9 +522,14 @@ export default function CheckoutPage() {
     for (const p of dbProducts || []) prodPriceMap[p.id] = p.precio;
     const presPriceMap: Record<string, number> = {};
     for (const pr of dbPresentaciones || []) {
-      presPriceMap[`${pr.producto_id}_${pr.nombre}`] = pr.precio_venta;
+      const basePrice = prodPriceMap[pr.producto_id] || 0;
+      // If pres price equals base product price and qty > 1, it's stored as unit price → multiply
+      const realPrice = (pr.precio > 0 && pr.cantidad > 1 && pr.precio === basePrice)
+        ? pr.precio * pr.cantidad
+        : (pr.precio > 0 ? pr.precio : basePrice * Math.max(1, pr.cantidad));
+      presPriceMap[`${pr.producto_id}_${pr.nombre}`] = realPrice;
       // Also map by "Caja (xN)" format
-      if (pr.cantidad > 1) presPriceMap[`${pr.producto_id}_Caja (x${pr.cantidad})`] = pr.precio_venta;
+      if (pr.cantidad > 1) presPriceMap[`${pr.producto_id}_Caja (x${pr.cantidad})`] = realPrice;
     }
 
     for (const item of items) {
