@@ -648,11 +648,11 @@ export default function CheckoutPage() {
           return {
             venta_id: venta.id,
             producto_id: item.id.split("_")[0],
-            descripcion: `${item.nombre} (${item.presentacion || "Unidad"})`,
+            descripcion: item.nombre.includes(item.presentacion || "") ? item.nombre : `${item.nombre} (${item.presentacion || "Unidad"})`,
             cantidad: item.cantidad,
             precio_unitario: item.precio,
             subtotal: item.precio * item.cantidad,
-            unidad_medida: "Un",
+            unidad_medida: presUnitsVal > 1 ? `x${presUnitsVal} un` : "Un",
             presentacion: item.presentacion || "Unidad",
             unidades_por_presentacion: presUnitsVal,
           };
