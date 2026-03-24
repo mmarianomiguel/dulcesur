@@ -1345,35 +1345,16 @@ export default function CheckoutPage() {
                 </button>
               </div>
 
-              {/* Bank account info for transferencia or mixto */}
-              {(metodoPago === "transferencia" || metodoPago === "mixto") && cuentasBancarias.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-gray-900 text-white text-[10px] flex items-center justify-center font-bold">1</span>
-                    Selecciona a qué cuenta transferirás:
-                  </p>
-                  {cuentasBancarias.map((cb) => (
-                    <button
-                      key={cb.id}
-                      type="button"
-                      onClick={() => setSelectedCuentaId(cb.id)}
-                      className={`w-full text-left rounded-xl border-2 p-4 transition ${
-                        selectedCuentaId === cb.id
-                          ? "border-pink-500 bg-pink-50/50"
-                          : "border-gray-200 hover:border-pink-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <Building className={`w-4 h-4 ${selectedCuentaId === cb.id ? "text-pink-600" : "text-gray-400"}`} />
-                        <span className="font-semibold text-sm text-gray-900">{cb.nombre}</span>
-                        <span className="text-[10px] bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">Billetera</span>
-                      </div>
-                      <div className="text-xs text-gray-500 space-y-0.5 pl-6">
-                        {cb.alias && <p>Alias: {cb.alias}</p>}
-                        {cb.cbu_cvu && <p>CBU: {cb.cbu_cvu}</p>}
-                      </div>
-                    </button>
-                  ))}
+              {/* Transfer info message */}
+              {(metodoPago === "transferencia" || metodoPago === "mixto") && (
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <Building className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900">Datos de transferencia</p>
+                      <p className="text-xs text-blue-700 mt-1">Una vez confirmado tu pedido, te enviaremos por WhatsApp los datos bancarios (alias/CBU) para realizar la transferencia.</p>
+                    </div>
+                  </div>
                 </div>
               )}
 

@@ -244,6 +244,8 @@ export default function ListadoVentasPage() {
   const [poEditItems, setPoEditItems] = useState<PedidoItem[]>([]);
   const [poSaving, setPoSaving] = useState(false);
   const [poHasChanges, setPoHasChanges] = useState(false);
+  const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
+  const [showCuentaSelector, setShowCuentaSelector] = useState(false);
 
   // PO Cancel confirmation
   const [poCancelPedido, setPoCancelPedido] = useState<Pedido | null>(null);
@@ -300,6 +302,9 @@ export default function ListadoVentasPage() {
   }, [filterOrigen, filterType, filterPayment, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
 
   useEffect(() => { fetchVentas(); }, [fetchVentas]);
+  useEffect(() => {
+    supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre").then(({ data }) => setCuentasBancarias(data || []));
+  }, []);
 
   useEffect(() => {
     supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data }) => setVendedores(data || []));
@@ -1908,6 +1913,10 @@ export default function ListadoVentasPage() {
                         if (!v) return;
                         poHandleEstadoChange(poSelectedPedido, v);
                         setPoSelectedPedido({ ...poSelectedPedido, estado: v });
+                        // Prompt to assign account when confirming transfer orders
+                        if (v === "confirmado" && ((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && !(poSelectedPedido as any).cuenta_transferencia_alias) {
+                          setShowCuentaSelector(true);
+                        }
                       }}
                     >
                       <SelectTrigger className="w-52 h-9">
@@ -1922,6 +1931,57 @@ export default function ListadoVentasPage() {
                         <SelectItem value="cancelado">❌ Cancelado</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {/* Cuenta de transferencia */}
+                {((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-blue-800">💳 Cuenta de transferencia:</span>
+                        {(poSelectedPedido as any).cuenta_transferencia_alias ? (
+                          <span className="text-sm font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded">{(poSelectedPedido as any).cuenta_transferencia_alias}</span>
+                        ) : (
+                          <span className="text-xs text-blue-600 italic">Sin asignar</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCuentaSelector(!showCuentaSelector)}
+                        className="text-xs text-blue-700 hover:text-blue-900 font-medium underline"
+                      >
+                        {(poSelectedPedido as any).cuenta_transferencia_alias ? "Cambiar" : "Asignar cuenta"}
+                      </button>
+                    </div>
+                    {showCuentaSelector && (
+                      <div className="mt-3 space-y-1.5">
+                        {cuentasBancarias.length > 0 ? cuentasBancarias.map((cb) => (
+                          <button
+                            key={cb.id}
+                            type="button"
+                            onClick={async () => {
+                              const alias = cb.alias || cb.nombre;
+                              await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("id", poSelectedPedido.id);
+                              if ((poSelectedPedido as any)._source !== "historial") {
+                                await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
+                              }
+                              setPoSelectedPedido({ ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cb.id } as any);
+                              setShowCuentaSelector(false);
+                            }}
+                            className="w-full text-left rounded-lg border p-2.5 hover:bg-blue-100 transition flex items-center justify-between"
+                          >
+                            <div>
+                              <span className="text-sm font-medium">{cb.nombre}</span>
+                              <span className="text-xs text-gray-500 ml-2">{cb.origen === "proveedor" ? "(Proveedor)" : "(Propia)"}</span>
+                              {cb.alias && <p className="text-xs text-gray-500">Alias: <span className="font-mono font-medium text-gray-700">{cb.alias}</span></p>}
+                            </div>
+                          </button>
+                        )) : (
+                          <p className="text-xs text-gray-500">No hay cuentas cargadas. Agregá una en Configuración.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
