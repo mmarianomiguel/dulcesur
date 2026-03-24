@@ -586,6 +586,8 @@ export default function ClientesPage() {
       saldoNuevo: currentSaldo,
     });
 
+    logAudit({ action: "CREATE", module: "clientes", entityId: cobroClient.id, userName: currentUser?.nombre || "Admin", after: { cobro: cobroMonto, formaPago: cobroFormaPago, cliente: cobroClient.nombre } });
+
     setSaving(false);
     setCobroOpen(false);
     fetchClients();
