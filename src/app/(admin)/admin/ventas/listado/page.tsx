@@ -1905,32 +1905,38 @@ export default function ListadoVentasPage() {
 
                 {/* Estado de preparación / entrega */}
                 {!isCancelled && (
-                  <div className="flex items-center gap-3">
-                    <Label className="text-sm font-medium">Estado de entrega:</Label>
-                    <Select
-                      value={poSelectedPedido.estado}
-                      onValueChange={(v) => {
-                        if (!v) return;
-                        poHandleEstadoChange(poSelectedPedido, v);
-                        setPoSelectedPedido({ ...poSelectedPedido, estado: v });
-                        // Prompt to assign account when confirming transfer orders
-                        if (v === "confirmado" && ((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && !(poSelectedPedido as any).cuenta_transferencia_alias) {
-                          setShowCuentaSelector(true);
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="w-52 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cerrada">✅ Completada (POS)</SelectItem>
-                        <SelectItem value="pendiente">⏳ Pendiente de preparar</SelectItem>
-                        <SelectItem value="armado">📦 Armado / Preparado</SelectItem>
-                        <SelectItem value="confirmado">✔️ Confirmado para entrega</SelectItem>
-                        <SelectItem value="entregado">🚚 Entregado al cliente</SelectItem>
-                        <SelectItem value="cancelado">❌ Cancelado</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Estado de entrega:</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {([
+                        ["cerrada", "✅ Completada", "bg-gray-100 text-gray-700 border-gray-300"],
+                        ["pendiente", "⏳ Pendiente", "bg-amber-50 text-amber-700 border-amber-300"],
+                        ["armado", "📦 Armado", "bg-violet-50 text-violet-700 border-violet-300"],
+                        ["confirmado", "✔️ Confirmado", "bg-blue-50 text-blue-700 border-blue-300"],
+                        ["entregado", "🚚 Entregado", "bg-emerald-50 text-emerald-700 border-emerald-300"],
+                        ["cancelado", "❌ Cancelado", "bg-red-50 text-red-700 border-red-300"],
+                      ] as const).map(([val, label, colors]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => {
+                            if (val === poSelectedPedido.estado) return;
+                            poHandleEstadoChange(poSelectedPedido, val);
+                            setPoSelectedPedido({ ...poSelectedPedido, estado: val });
+                            if (val === "confirmado" && ((poSelectedPedido as any).forma_pago || "").toLowerCase().includes("transferencia") && !(poSelectedPedido as any).cuenta_transferencia_alias) {
+                              setShowCuentaSelector(true);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                            poSelectedPedido.estado === val
+                              ? colors + " ring-2 ring-offset-1 ring-current"
+                              : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
