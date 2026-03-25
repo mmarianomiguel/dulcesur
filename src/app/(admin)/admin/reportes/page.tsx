@@ -64,7 +64,7 @@ export default function ReportesPage() {
   // Stock report
   const [productos, setProductos] = useState<{ id: string; nombre: string; codigo: string; stock: number; precio: number; costo: number; categoria_id: string | null; subcategoria_id: string | null; marca_id: string | null; }[]>([]);
   const [categorias, setCategorias] = useState<{ id: string; nombre: string }[]>([]);
-  const [subcategorias, setSubcategorias] = useState<{ id: string; nombre: string }[]>([]);
+  const [subcategorias, setSubcategorias] = useState<{ id: string; nombre: string; categoria_id: string }[]>([]);
   const [marcas, setMarcas] = useState<{ id: string; nombre: string }[]>([]);
   const [stockFilterCat, setStockFilterCat] = useState("");
   const [stockFilterSubcat, setStockFilterSubcat] = useState("");
@@ -162,7 +162,7 @@ export default function ReportesPage() {
   useEffect(() => {
     Promise.all([
       supabase.from("categorias").select("id, nombre").order("nombre"),
-      supabase.from("subcategorias").select("id, nombre").order("nombre"),
+      supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
       supabase.from("marcas").select("id, nombre").order("nombre"),
     ]).then(([{ data: cats }, { data: subcats }, { data: mrs }]) => {
       setCategorias(cats || []);
