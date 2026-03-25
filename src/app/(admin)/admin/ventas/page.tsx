@@ -740,28 +740,31 @@ export default function VentasPage() {
       };
       values[changedField] = changedValue;
 
+      // Recalculate total with surcharge based on current transfer value
+      const currentTransfer = values["transferencia"] || 0;
+      const surcharge = currentTransfer * (porcentajeTransferencia / 100);
+      const effectiveTotal = baseTotal + surcharge;
+
       // Find the last active field that is NOT the changed field
       const others = active.filter((f) => f !== changedField);
       if (others.length === 0) return;
 
       if (others.length === 1) {
-        // Two methods: auto-fill the other
         const otherKey = others[0];
-        const remaining = total - changedValue;
-        if (otherKey === "efectivo") setMixtoEfectivo(Math.max(0, remaining));
-        if (otherKey === "transferencia") setMixtoTransferencia(Math.max(0, remaining));
-        if (otherKey === "corriente") setMixtoCuentaCorriente(Math.max(0, remaining));
+        const remaining = effectiveTotal - changedValue;
+        if (otherKey === "efectivo") setMixtoEfectivo(Math.max(0, Math.round(remaining * 100) / 100));
+        if (otherKey === "transferencia") setMixtoTransferencia(Math.max(0, Math.round(remaining * 100) / 100));
+        if (otherKey === "corriente") setMixtoCuentaCorriente(Math.max(0, Math.round(remaining * 100) / 100));
       } else {
-        // Three methods: auto-fill the last one
         const lastOther = others[others.length - 1];
         const sumOthers = others.slice(0, -1).reduce((s, k) => s + values[k], 0);
-        const remaining = total - changedValue - sumOthers;
-        if (lastOther === "efectivo") setMixtoEfectivo(Math.max(0, remaining));
-        if (lastOther === "transferencia") setMixtoTransferencia(Math.max(0, remaining));
-        if (lastOther === "corriente") setMixtoCuentaCorriente(Math.max(0, remaining));
+        const remaining = effectiveTotal - changedValue - sumOthers;
+        if (lastOther === "efectivo") setMixtoEfectivo(Math.max(0, Math.round(remaining * 100) / 100));
+        if (lastOther === "transferencia") setMixtoTransferencia(Math.max(0, Math.round(remaining * 100) / 100));
+        if (lastOther === "corriente") setMixtoCuentaCorriente(Math.max(0, Math.round(remaining * 100) / 100));
       }
     },
-    [total, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente, mixtoToggleEfectivo, mixtoToggleTransferencia, mixtoToggleCuentaCorriente]
+    [baseTotal, porcentajeTransferencia, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente, mixtoToggleEfectivo, mixtoToggleTransferencia, mixtoToggleCuentaCorriente]
   );
 
   const handleMixtoInputChange = (field: string, value: number, setter: (v: number) => void) => {
@@ -2252,8 +2255,8 @@ export default function VentasPage() {
                 {/* Assigned indicator */}
                 {mixtoActiveMethods.length >= 2 && (
                   <div className="flex items-center justify-between text-xs">
-                    <span className={mixtoSum >= baseTotal ? "text-emerald-600 font-medium" : "text-amber-600 font-medium"}>
-                      Asignado: {formatCurrency(mixtoSum)} / {formatCurrency(baseTotal)}
+                    <span className={Math.abs(mixtoRemaining) < 1 ? "text-emerald-600 font-medium" : "text-amber-600 font-medium"}>
+                      Asignado: {formatCurrency(mixtoSum)} / {formatCurrency(total)}
                     </span>
                     {mixtoRemaining > 0.01 && (
                       <span className="text-amber-600 font-medium">Falta: {formatCurrency(mixtoRemaining)}</span>

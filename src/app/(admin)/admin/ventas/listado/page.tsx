@@ -1978,34 +1978,48 @@ export default function ListadoVentasPage() {
                     </div>
                     {showCuentaSelector && (
                       <div className="mt-3 space-y-1.5">
-                        {cuentasBancarias.length > 0 ? cuentasBancarias.map((cb) => (
+                        {cuentasBancarias.length > 0 ? cuentasBancarias.map((cb) => {
+                          const isSelected = (poSelectedPedido as any)._pendingCuentaId === cb.id;
+                          return (
+                            <button
+                              key={cb.id}
+                              type="button"
+                              onClick={() => {
+                                setPoSelectedPedido({ ...poSelectedPedido, _pendingCuentaId: cb.id, _pendingCuentaAlias: cb.alias || cb.nombre } as any);
+                              }}
+                              className={`w-full text-left rounded-lg border p-2.5 transition flex items-center justify-between ${isSelected ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200" : "hover:bg-blue-50 hover:border-blue-300"}`}
+                            >
+                              <div>
+                                <span className="text-sm font-medium">{cb.nombre}</span>
+                                <span className="text-xs text-gray-500 ml-2">{cb.origen === "proveedor" ? "(Proveedor)" : "(Propia)"}</span>
+                                {cb.alias && <p className="text-xs text-gray-500">Alias: <span className="font-mono font-medium text-gray-700">{cb.alias}</span></p>}
+                              </div>
+                              {isSelected && <span className="text-blue-600 text-xs font-semibold">Seleccionada</span>}
+                            </button>
+                          );
+                        }) : (
+                          <p className="text-xs text-gray-500">No hay cuentas cargadas. Agregá una en Configuración.</p>
+                        )}
+                        {(poSelectedPedido as any)._pendingCuentaId && (
                           <button
-                            key={cb.id}
                             type="button"
                             onClick={async () => {
-                              const alias = cb.alias || cb.nombre;
-                              // Update venta by _ventaId or by numero
+                              const cbId = (poSelectedPedido as any)._pendingCuentaId;
+                              const alias = (poSelectedPedido as any)._pendingCuentaAlias;
                               if ((poSelectedPedido as any)._ventaId) {
-                                await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("id", (poSelectedPedido as any)._ventaId);
+                                await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("id", (poSelectedPedido as any)._ventaId);
                               } else {
-                                await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
+                                await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
                               }
-                              // Always update pedidos_tienda too
-                              await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
-                              setPoSelectedPedido({ ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cb.id } as any);
+                              await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
+                              setPoSelectedPedido({ ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cbId, _pendingCuentaId: undefined, _pendingCuentaAlias: undefined } as any);
                               setShowCuentaSelector(false);
                               showAdminToast(`Cuenta asignada: ${alias}`, "success");
                             }}
-                            className="w-full text-left rounded-lg border p-2.5 hover:bg-blue-50 hover:border-blue-300 transition flex items-center justify-between"
+                            className="w-full mt-2 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
                           >
-                            <div>
-                              <span className="text-sm font-medium">{cb.nombre}</span>
-                              <span className="text-xs text-gray-500 ml-2">{cb.origen === "proveedor" ? "(Proveedor)" : "(Propia)"}</span>
-                              {cb.alias && <p className="text-xs text-gray-500">Alias: <span className="font-mono font-medium text-gray-700">{cb.alias}</span></p>}
-                            </div>
+                            Guardar cuenta
                           </button>
-                        )) : (
-                          <p className="text-xs text-gray-500">No hay cuentas cargadas. Agregá una en Configuración.</p>
                         )}
                       </div>
                     )}
