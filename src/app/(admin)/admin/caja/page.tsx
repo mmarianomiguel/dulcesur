@@ -365,7 +365,7 @@ export default function CajaPage() {
         : null;
 
     const [{ data: movs }, { data: vts }] = await Promise.all([
-      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at").eq("fecha", fecha).order("hora", { ascending: false }),
+      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("fecha", fecha).order("hora", { ascending: false }),
       supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, clientes(nombre)").eq("fecha", fecha).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
     ]);
 
@@ -521,6 +521,7 @@ export default function CajaPage() {
   const {
     ventasEfectivo,
     ventasTransferencia,
+    transferenciaPorCuenta,
     ventasCuentaCorriente,
     totalVentas,
     depositos,
@@ -542,6 +543,15 @@ export default function CajaPage() {
 
     const ventasEfectivo = movPorMetodo("Efectivo");
     const ventasTransferencia = movPorMetodo("Transferencia");
+
+    // Group transfers by bank account
+    const transferenciaPorCuenta: Record<string, number> = {};
+    movements
+      .filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
+      .forEach((m) => {
+        const cuenta = (m as any).cuenta_bancaria || "Sin asignar";
+        transferenciaPorCuenta[cuenta] = (transferenciaPorCuenta[cuenta] || 0) + m.monto;
+      });
     // CC: pure CC ventas + mixto CC portion (total - caja_movimientos for that sale)
     const ventasCuentaCorriente = ventasPorMetodo("Cuenta Corriente")
       + ventas.filter((v) => v.forma_pago === "Mixto").reduce((acc, v) => {
@@ -579,6 +589,7 @@ export default function CajaPage() {
     return {
       ventasEfectivo,
       ventasTransferencia,
+      transferenciaPorCuenta,
       ventasCuentaCorriente,
       totalVentas,
       depositos,
@@ -900,12 +911,25 @@ export default function CajaPage() {
               { label: "Cuenta Corriente", value: ventasCuentaCorriente, icon: Wallet },
             ].map((item) => (
               <Card key={item.label}>
-                <CardContent className="pt-4 pb-4 flex items-center gap-3">
-                  <item.icon className="w-5 h-5 text-muted-foreground shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground truncate">{item.label}</p>
-                    <p className="text-base font-semibold">{formatCurrency(item.value)}</p>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center gap-3">
+                    <item.icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground truncate">{item.label}</p>
+                      <p className="text-base font-semibold">{formatCurrency(item.value)}</p>
+                    </div>
                   </div>
+                  {/* Desglose de transferencias por cuenta bancaria */}
+                  {item.label === "Transferencia" && ventasTransferencia > 0 && Object.keys(transferenciaPorCuenta).length > 0 && (
+                    <div className="mt-2 pt-2 border-t space-y-1">
+                      {Object.entries(transferenciaPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
+                        <div key={cuenta} className="flex justify-between text-[11px]">
+                          <span className="text-muted-foreground truncate">{cuenta}</span>
+                          <span className="font-medium shrink-0 ml-2">{formatCurrency(monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

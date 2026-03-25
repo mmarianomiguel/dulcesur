@@ -2027,10 +2027,18 @@ export default function ListadoVentasPage() {
                             onClick={async () => {
                               const cbId = (poSelectedPedido as any)._pendingCuentaId;
                               const alias = (poSelectedPedido as any)._pendingCuentaAlias;
-                              if ((poSelectedPedido as any)._ventaId) {
-                                await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("id", (poSelectedPedido as any)._ventaId);
+                              const ventaId = (poSelectedPedido as any)._ventaId;
+                              if (ventaId) {
+                                await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("id", ventaId);
+                                // Also update caja_movimientos so caja page shows which bank account
+                                await supabase.from("caja_movimientos").update({ cuenta_bancaria: alias }).eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("metodo_pago", "Transferencia");
                               } else {
                                 await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
+                                // Find venta id to update caja_movimientos
+                                const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).maybeSingle();
+                                if (v) {
+                                  await supabase.from("caja_movimientos").update({ cuenta_bancaria: alias }).eq("referencia_id", v.id).eq("referencia_tipo", "venta").eq("metodo_pago", "Transferencia");
+                                }
                               }
                               await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
                               const updated = { ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cbId, _pendingCuentaId: undefined, _pendingCuentaAlias: undefined } as any;
