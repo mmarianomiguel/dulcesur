@@ -357,8 +357,8 @@ export default function PedidosPage() {
 
   // Debt summary component
   const DebtSummary = () => {
-    const deudasPedidos = pedidos.filter((p) => p.venta && p.venta.saldo_pendiente > 0).map((p) => ({ numero: p.venta!.numero, tipo: p.venta!.tipo_comprobante, monto: p.venta!.saldo_pendiente }));
-    const deudasPOS = ventasPOS.filter((v) => v.saldo_pendiente > 0).map((v) => ({ numero: v.numero, tipo: v.tipo_comprobante, monto: v.saldo_pendiente }));
+    const deudasPedidos = pedidos.filter((p) => p.venta && p.venta.saldo_pendiente > 0 && p.venta.estado !== "anulada").map((p) => ({ numero: p.venta!.numero, tipo: p.venta!.tipo_comprobante, monto: p.venta!.saldo_pendiente }));
+    const deudasPOS = ventasPOS.filter((v) => v.saldo_pendiente > 0 && v.estado !== "anulada").map((v) => ({ numero: v.numero, tipo: v.tipo_comprobante, monto: v.saldo_pendiente }));
     const deudas = [...deudasPedidos, ...deudasPOS];
     const totalDeuda = deudas.reduce((s, d) => s + d.monto, 0);
     if (totalDeuda <= 0) return null;
@@ -732,6 +732,18 @@ export default function PedidosPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
                   {v.tipo_comprobante}
                 </span>
+                {v.estado === "anulada" && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                    Cancelada
+                  </span>
+                )}
+                {v.entregado && v.estado !== "anulada" && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Entregado
+                  </span>
+                )}
                 {hasNC && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600">
                     <AlertCircle className="w-3 h-3" />
