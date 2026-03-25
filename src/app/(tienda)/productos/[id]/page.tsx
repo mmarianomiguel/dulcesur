@@ -582,10 +582,12 @@ export default function ProductoDetallePage() {
           </h1>
 
           {producto.es_combo && (
-            <span className="inline-flex items-center gap-1.5 mt-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
-              <Layers className="w-3.5 h-3.5" />
-              COMBO
-            </span>
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1.5 bg-pink-50 text-pink-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-pink-200">
+                <Layers className="w-3.5 h-3.5" />
+                Producto combo
+              </span>
+            </div>
           )}
 
           {/* Price */}
@@ -977,17 +979,22 @@ export default function ProductoDetallePage() {
                       {(() => {
                         const selPres = pres && pres[presIdx];
                         const unitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
-                        const relLabel = getRelLabel(rel);
-                        // Check how many are already in cart for this product+presentation
-                        const cartKey = `${rel.id}_${relLabel}`;
-                        let inCart = 0;
+                        // Calculate total units of this product across all presentations in cart
+                        let totalUnitsInCart = 0;
                         try {
                           const stored = localStorage.getItem("carrito");
-                          const cart = stored ? JSON.parse(stored) : [];
-                          const found = cart.find((c: any) => c.id === cartKey || (relLabel === "Unidad" && c.id === rel.id));
-                          if (found) inCart = found.cantidad || 0;
+                          const cart: any[] = stored ? JSON.parse(stored) : [];
+                          cart.forEach((c) => {
+                            if (c.id === rel.id || c.id?.startsWith(`${rel.id}_`)) {
+                              totalUnitsInCart += (c.cantidad || 0) * (c.unidades_por_presentacion || 1);
+                            }
+                          });
                         } catch {}
-                        const maxQty = Math.max(0, Math.floor(rel.stock / unitsPerPres) - inCart);
+                        // Also use reactive cartQtys as fallback trigger for re-render
+                        const _reactiveCheck = Object.keys(cartQtys).length;
+                        void _reactiveCheck;
+                        const availableUnits = Math.max(0, rel.stock - totalUnitsInCart);
+                        const maxQty = Math.floor(availableUnits / unitsPerPres);
                         const outOfStock = rel.stock <= 0 || maxQty <= 0;
                         return (
                           <div className="mt-auto pt-3 flex items-center gap-1.5">
