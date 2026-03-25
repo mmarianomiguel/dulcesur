@@ -967,33 +967,45 @@ export default function ProductoDetallePage() {
                       )}
 
                       {/* Qty + Add */}
-                      <div className="mt-auto pt-3 flex items-center gap-1.5">
-                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                          <button
-                            onClick={() => setRelQty((prev) => ({ ...prev, [rel.id]: Math.max(1, (prev[rel.id] ?? 1) - 1) }))}
-                            className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-7 text-center text-xs font-medium">{qty}</span>
-                          <button
-                            onClick={() => setRelQty((prev) => ({ ...prev, [rel.id]: (prev[rel.id] ?? 1) + 1 }))}
-                            className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => {
-                            const finalPrice = relDiscount > 0 ? relDiscountedPrice : price;
-                            addToCart(rel, finalPrice, getRelLabel(rel), qty, relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined);
-                            setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
-                          }}
-                          className="flex-1 bg-pink-600 hover:bg-pink-700 text-white text-xs py-2 rounded-lg font-semibold transition-colors"
-                        >
-                          Agregar {formatCurrency((relDiscount > 0 ? relDiscountedPrice : price) * qty)}
-                        </button>
-                      </div>
+                      {(() => {
+                        const selPres = pres && pres[presIdx];
+                        const unitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
+                        const maxQty = Math.max(1, Math.floor(rel.stock / unitsPerPres));
+                        const outOfStock = rel.stock <= 0;
+                        return (
+                          <div className="mt-auto pt-3 flex items-center gap-1.5">
+                            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                              <button
+                                onClick={() => setRelQty((prev) => ({ ...prev, [rel.id]: Math.max(1, (prev[rel.id] ?? 1) - 1) }))}
+                                disabled={outOfStock}
+                                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="w-7 text-center text-xs font-medium">{outOfStock ? 0 : qty}</span>
+                              <button
+                                onClick={() => setRelQty((prev) => ({ ...prev, [rel.id]: Math.min(maxQty, (prev[rel.id] ?? 1) + 1) }))}
+                                disabled={outOfStock || qty >= maxQty}
+                                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (outOfStock) return;
+                                const finalPrice = relDiscount > 0 ? relDiscountedPrice : price;
+                                addToCart(rel, finalPrice, getRelLabel(rel), Math.min(qty, maxQty), relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined);
+                                setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
+                              }}
+                              disabled={outOfStock}
+                              className={`flex-1 text-xs py-2 rounded-lg font-semibold transition-colors ${outOfStock ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-pink-600 hover:bg-pink-700 text-white"}`}
+                            >
+                              {outOfStock ? "Sin stock" : `Agregar ${formatCurrency((relDiscount > 0 ? relDiscountedPrice : price) * qty)}`}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
