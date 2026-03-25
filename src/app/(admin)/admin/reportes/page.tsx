@@ -55,6 +55,8 @@ export default function ReportesPage() {
 
   // Caja movimientos for Mixto splitting
   const [cajaMovimientos, setCajaMovimientos] = useState<{ referencia_id: string; referencia_tipo: string; metodo_pago: string; monto: number }[]>([]);
+  // Presentation costs for profit calculation
+  const [presCostMap, setPresCostMap] = useState<Record<string, Record<number, number>>>({});
 
   // Compras report
   const [compras, setCompras] = useState<CompraRow[]>([]);
@@ -142,6 +144,17 @@ export default function ReportesPage() {
       ]);
       setVentaItems((items || []) as any[]);
       setCajaMovimientos((movs || []) as any[]);
+      // Load presentation costs for profit calculation
+      const pIds = [...new Set((items || []).map((i: any) => i.producto_id).filter(Boolean))];
+      if (pIds.length > 0) {
+        const { data: presData } = await supabase.from("presentaciones").select("producto_id, cantidad, costo").in("producto_id", pIds);
+        const pMap: Record<string, Record<number, number>> = {};
+        for (const p of presData || []) {
+          if (!pMap[p.producto_id]) pMap[p.producto_id] = {};
+          if (p.costo > 0) pMap[p.producto_id][p.cantidad] = p.costo;
+        }
+        setPresCostMap(pMap);
+      }
     } else {
       setVentaItems([]);
       setCajaMovimientos([]);
@@ -219,10 +232,13 @@ export default function ReportesPage() {
   const ganancia = useMemo(() => ventaItems.reduce((a, item: any) => {
     const costoU = item.productos?.costo || 0;
     const unidadesPres = getUnidadesPres(item);
+    // Use presentation-specific cost if available, fallback to unitario × units
+    const presCosts = presCostMap[item.producto_id];
+    const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
     const descPct = Number(item.descuento) || 0;
     const precioVenta = item.precio_unitario * (1 - descPct / 100);
-    return a + (precioVenta - costoU * unidadesPres) * item.cantidad;
-  }, 0), [ventaItems]);
+    return a + (precioVenta - costoPres) * item.cantidad;
+  }, 0), [ventaItems, presCostMap]);
 
   // Split Mixto into Efectivo + Transferencia + CC using caja_movimientos
   const ventasPorPago = useMemo(() => {
@@ -312,11 +328,13 @@ export default function ReportesPage() {
     return ventaItems.filter((item) => filteredIds.has(item.venta_id)).reduce((a, item: any) => {
       const costoU = item.productos?.costo || 0;
       const unidadesPres = getUnidadesPres(item);
+      const presCosts = presCostMap[item.producto_id];
+      const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
       const descPct = Number(item.descuento) || 0;
       const precioVenta = item.precio_unitario * (1 - descPct / 100);
-      return a + (precioVenta - costoU * unidadesPres) * item.cantidad;
+      return a + (precioVenta - costoPres) * item.cantidad;
     }, 0);
-  }, [filteredVentas, ventaItems]);
+  }, [filteredVentas, ventaItems, presCostMap]);
 
   const toggleExpand = (id: string) => {
     setExpandedVentas((prev) => {
@@ -329,9 +347,11 @@ export default function ReportesPage() {
   const calcItemProfit = (item: VentaItemDetail) => {
     const costoU = item.productos?.costo || 0;
     const unidadesPres = getUnidadesPres(item);
+    const presCosts = presCostMap[(item as any).producto_id];
+    const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
     const descPct = Number((item as any).descuento) || 0;
     const precioVenta = item.precio_unitario * (1 - descPct / 100);
-    return (precioVenta - costoU * unidadesPres) * item.cantidad;
+    return (precioVenta - costoPres) * item.cantidad;
   };
 
   const calcVentaProfit = (ventaId: string) => {

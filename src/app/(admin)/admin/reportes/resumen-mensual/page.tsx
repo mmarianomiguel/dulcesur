@@ -87,16 +87,33 @@ export default function ResumenMensualPage() {
     if (vList.length > 0) {
       const ids = vList.map((v: any) => v.id);
       const { data: items } = await supabase.from("venta_items")
-        .select("cantidad, precio_unitario, unidades_por_presentacion, presentacion, descuento, productos(costo)")
+        .select("cantidad, precio_unitario, unidades_por_presentacion, presentacion, descuento, producto_id, productos(costo)")
         .in("venta_id", ids);
+
+      // Load presentation costs for accurate profit calculation
+      const productIds = [...new Set((items || []).map((i: any) => i.producto_id).filter(Boolean))];
+      let presCostMap: Record<string, Record<number, number>> = {}; // productId -> { cantidad -> costo }
+      if (productIds.length > 0) {
+        const { data: presData } = await supabase.from("presentaciones")
+          .select("producto_id, cantidad, costo")
+          .in("producto_id", productIds);
+        for (const p of presData || []) {
+          if (!presCostMap[p.producto_id]) presCostMap[p.producto_id] = {};
+          if (p.costo > 0) presCostMap[p.producto_id][p.cantidad] = p.costo;
+        }
+      }
+
       let sinCosto = 0;
       const g = (items || []).reduce((a: number, item: any) => {
-        const costoU = item.productos?.costo || 0;
-        if (!costoU) sinCosto++;
+        const costoUnitario = item.productos?.costo || 0;
+        if (!costoUnitario) sinCosto++;
         const u = getU(item);
+        // Try to get presentation-specific cost, fallback to unitario × units
+        const presCosts = presCostMap[item.producto_id];
+        const costoPresentacion = presCosts?.[u] || (costoUnitario * u);
         const descPct = Number(item.descuento) || 0;
         const precioVenta = item.precio_unitario * (1 - descPct / 100);
-        return a + (precioVenta - costoU * u) * item.cantidad;
+        return a + (precioVenta - costoPresentacion) * item.cantidad;
       }, 0);
       setGanancia(g);
       setItemsSinCosto(sinCosto);
