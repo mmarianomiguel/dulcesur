@@ -46,6 +46,7 @@ interface Producto {
   imagen_url: string | null;
   activo: boolean;
   stock: number;
+  es_combo?: boolean;
   categorias?: Categoria | null;
   precio_anterior?: number | null;
   fecha_actualizacion?: string | null;
@@ -315,11 +316,13 @@ function CategoriasDestacadasBlock({
 function ProductosDestacadosBlock({
   config,
   productos,
+  presMap,
   loading,
   agregarAlCarrito,
 }: {
   config: Record<string, any>;
   productos: Producto[];
+  presMap: Record<string, any[]>;
   loading: boolean;
   agregarAlCarrito: (p: Producto, qty: number) => void;
 }) {
@@ -334,6 +337,7 @@ function ProductosDestacadosBlock({
   }).slice(0, maxItems);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
   const [diasNuevo, setDiasNuevo] = useState(7);
 
   useEffect(() => {
@@ -399,7 +403,12 @@ function ProductosDestacadosBlock({
                       )}
                       {/* Badges */}
                       <div className="absolute top-2 left-2 flex flex-col gap-1">
-                        {nuevo && !sinStock && (
+                        {prod.es_combo && (
+                          <span className="bg-gradient-to-r from-pink-500 to-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            COMBO
+                          </span>
+                        )}
+                        {nuevo && !sinStock && !prod.es_combo && (
                           <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
                             Nuevo
                           </span>
@@ -417,17 +426,33 @@ function ProductosDestacadosBlock({
                       <p className="text-sm font-medium text-gray-800 line-clamp-2 mt-1.5 min-h-[2.5rem]">
                         {prod.nombre}
                       </p>
-                      <div className="mt-2">
-                        {(() => {
-                          const pa = prod.precio_anterior;
-                          const dateStr = prod.fecha_actualizacion || prod.updated_at;
-                          const showChange = pa && pa > 0 && pa !== prod.precio && dateStr &&
-                            (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3;
-                          return (
-                            <p className="text-xl font-bold text-gray-900">{formatPrice(prod.precio)}</p>
-                          );
-                        })()}
-                      </div>
+                      {/* Presentation pills */}
+                      {(() => {
+                        const pres = presMap[prod.id];
+                        const presIdx = selectedPres[prod.id] ?? 0;
+                        const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
+                        const price = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
+                        return (
+                          <>
+                            {pres && pres.length > 1 && (
+                              <div className="flex gap-1 mt-2 flex-wrap">
+                                {pres.sort((a: any, b: any) => a.cantidad - b.cantidad).map((pr: any, idx: number) => (
+                                  <button
+                                    key={pr.id}
+                                    onClick={(e) => { e.preventDefault(); setSelectedPres((p) => ({ ...p, [prod.id]: idx })); }}
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition ${
+                                      presIdx === idx ? "bg-pink-600 text-white border-pink-600" : "bg-white text-gray-500 border-gray-200"
+                                    }`}
+                                  >
+                                    {pr.nombre || (pr.cantidad === 1 ? "Unidad" : `Caja x${pr.cantidad}`)}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            <p className="text-xl font-bold text-gray-900 mt-2">{formatPrice(price)}</p>
+                          </>
+                        );
+                      })()}
                     </div>
                   </Link>
 
@@ -442,34 +467,44 @@ function ProductosDestacadosBlock({
                       </button>
                     ) : (
                       <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                        {(() => {
+                        const pres = presMap[prod.id];
+                        const presIdx = selectedPres[prod.id] ?? 0;
+                        const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
+                        const price = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
+                        const presUnits = activePres ? activePres.cantidad : 1;
+                        const maxQty = Math.max(1, Math.floor(prod.stock / presUnits));
+                        return (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                                <button
+                                  onClick={() => setQty(prod.id, qty - 1)}
+                                  className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span className="w-7 text-center text-sm font-medium tabular-nums">{qty}</span>
+                                <button
+                                  onClick={() => setQty(prod.id, Math.min(qty + 1, maxQty))}
+                                  disabled={qty >= maxQty}
+                                  className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-30"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                              <span className="text-sm font-bold text-gray-900">{formatPrice(price * qty)}</span>
+                            </div>
                             <button
-                              onClick={() => setQty(prod.id, qty - 1)}
-                              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"
+                              onClick={() => { agregarAlCarrito(prod, qty); setQty(prod.id, 1); }}
+                              className="w-full bg-pink-600 hover:bg-pink-700 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
                             >
-                              <Minus className="w-3 h-3" />
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              Agregar
                             </button>
-                            <span className="w-7 text-center text-sm font-medium tabular-nums">
-                              {qty}
-                            </span>
-                            <button
-                              onClick={() => setQty(prod.id, Math.min(qty + 1, prod.stock))}
-                              disabled={qty >= prod.stock}
-                              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-30"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <span className="text-sm font-bold text-gray-900">{formatPrice(prod.precio * qty)}</span>
-                        </div>
-                        <button
-                          onClick={() => { agregarAlCarrito(prod, qty); setQty(prod.id, 1); }}
-                          className="w-full bg-pink-600 hover:bg-pink-700 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
-                        >
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          Agregar
-                        </button>
+                          </>
+                        );
+                      })()}
                       </div>
                     )}
                   </div>
@@ -629,6 +664,7 @@ export default function TiendaPage() {
   const [bloques, setBloques] = useState<Bloque[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [presMap, setPresMap] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -694,7 +730,17 @@ export default function TiendaPage() {
         }
 
         const { data: prods } = await query.limit(maxItems);
-        if (prods) setProductos(prods);
+        if (prods) {
+          setProductos(prods);
+          // Load presentations for these products
+          const ids = prods.map((p: any) => p.id);
+          if (ids.length > 0) {
+            const { data: presData } = await supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku").in("producto_id", ids).order("cantidad");
+            const map: Record<string, any[]> = {};
+            (presData || []).forEach((p: any) => { if (!map[p.producto_id]) map[p.producto_id] = []; map[p.producto_id].push(p); });
+            setPresMap(map);
+          }
+        }
       }
 
       setLoading(false);
@@ -766,6 +812,7 @@ export default function TiendaPage() {
             key={bloque.id}
             config={config}
             productos={productos}
+            presMap={presMap}
             loading={loading}
             agregarAlCarrito={agregarAlCarrito}
           />
