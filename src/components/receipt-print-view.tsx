@@ -328,17 +328,22 @@ export function ReceiptPrintView({
           </div>
         </div>
 
-        {/* Payment + CC — compact inline rows */}
+        {/* Payment + CC — right-aligned layout */}
         {hasPaymentOrCC && (
-          <div style={{ padding: "4px 4px 2px", fontSize: `${fs - 1}px`, borderBottom: "1px solid #000" }}>
-            {/* Payment detail */}
+          <div style={{ padding: "4px 0 2px", fontSize: `${fs - 1}px`, borderBottom: "1px solid #000" }}>
+            {/* Abonó / Adeuda line */}
+            {showDesglose && totalPagado > 0 && (sale.pagoCuentaCorriente ?? 0) > 0 && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "3px", fontSize: `${fs}px` }}>
+                <span>Abonó <span style={{ fontWeight: "bold" }}>{fmtCur(Math.round(totalPagado))}</span></span>
+                <span>|</span>
+                <span>Adeuda <span style={{ fontWeight: "bold" }}>{fmtCur(Math.round(sale.pagoCuentaCorriente || 0))}</span></span>
+              </div>
+            )}
+
+            {/* Payment methods */}
             {paymentParts.length > 0 && (
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "4px", marginBottom: "2px" }}>
-                <span style={{ fontWeight: "bold" }}>Pago:</span>
-                <span>{paymentParts.join(" + ")}</span>
-                {showDesglose && totalPagado > 0 && (sale.pagoCuentaCorriente ?? 0) > 0 && (
-                  <span style={{ marginLeft: "6px" }}>(Abonado {fmtCur(Math.round(totalPagado))} — Adeuda {fmtCur(Math.round(sale.pagoCuentaCorriente || 0))})</span>
-                )}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "4px", marginBottom: "2px", fontSize: `${fs - 1}px` }}>
+                <span>{paymentParts.join(" · ")}</span>
               </div>
             )}
 
@@ -349,44 +354,47 @@ export function ReceiptPrintView({
               </div>
             )}
 
-            {/* Cuenta Corriente — desglose claro */}
+            {/* Saldo a favor aplicado */}
+            {sale.cobroSaldoMonto != null && sale.cobroSaldoMonto > 0 && sale.saldoAnterior < 0 && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "4px", marginBottom: "2px", fontSize: `${fs - 1}px` }}>
+                <span>(inc. saldo a favor {fmtCur(Math.round(sale.cobroSaldoMonto))})</span>
+              </div>
+            )}
+
+            {/* Cuenta Corriente — right-aligned block */}
             {showSaldo && (() => {
               const anterior = Math.round(sale.saldoAnterior);
               const ccVenta = Math.round(sale.pagoCuentaCorriente || 0);
-              const totalAdeudado = anterior + ccVenta;
               const cobro = Math.round(sale.cobroSaldoMonto || 0);
               const saldoFinal = Math.round(sale.saldoNuevo);
-              const rowStyle = { display: "flex", justifyContent: "space-between", fontSize: `${fs - 1}px`, marginBottom: "1px" };
+              const ccWidth = "260px";
+              const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", fontSize: `${fs - 1}px`, marginBottom: "1px" };
               return (
-                <div style={{ borderTop: "1px solid #000", padding: "3px 4px 0", marginTop: "2px" }}>
-                  <div style={{ fontWeight: "bold", fontSize: `${fs - 1}px`, marginBottom: "3px" }}>CUENTA CORRIENTE</div>
-                  <div style={rowStyle}>
-                    <span>Saldo anterior</span>
-                    <span>{anterior > 0 ? fmtCur(anterior) : anterior < 0 ? `${fmtCur(Math.abs(anterior))} a favor` : "$0"}</span>
-                  </div>
-                  {ccVenta > 0 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
+                  <div style={{ width: ccWidth, borderTop: "1px solid #000", paddingTop: "3px" }}>
+                    <div style={{ fontWeight: "bold", fontSize: `${fs - 1}px`, marginBottom: "3px" }}>CUENTA CORRIENTE</div>
                     <div style={rowStyle}>
-                      <span>+ Esta venta (CC)</span>
-                      <span>{fmtCur(ccVenta)}</span>
+                      <span>Saldo anterior</span>
+                      <span>{anterior > 0 ? fmtCur(anterior) : anterior < 0 ? `${fmtCur(Math.abs(anterior))} a favor` : "$0"}</span>
                     </div>
-                  )}
-                  {(anterior > 0 || ccVenta > 0) && (cobro > 0 || ccVenta > 0) && (
-                    <div style={{ ...rowStyle, fontWeight: "bold" }}>
-                      <span>Total adeudado</span>
-                      <span>{fmtCur(totalAdeudado)}</span>
+                    {ccVenta > 0 && (
+                      <div style={rowStyle}>
+                        <span>+ Esta venta</span>
+                        <span>{fmtCur(ccVenta)}</span>
+                      </div>
+                    )}
+                    {cobro > 0 && (
+                      <div style={rowStyle}>
+                        <span>Cobro en esta venta</span>
+                        <span>-{fmtCur(cobro)}</span>
+                      </div>
+                    )}
+                    <div style={{ borderTop: "1px solid #000", marginTop: "2px", paddingTop: "2px", display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: `${fs}px` }}>
+                      <span>SALDO</span>
+                      <span style={{ textDecoration: saldoFinal > 0 ? "underline" : "none" }}>
+                        {saldoFinal > 0 ? fmtCur(saldoFinal) : saldoFinal < 0 ? `${fmtCur(Math.abs(saldoFinal))} a favor` : "$0"}
+                      </span>
                     </div>
-                  )}
-                  {cobro > 0 && (
-                    <div style={rowStyle}>
-                      <span>Cobro en esta venta</span>
-                      <span>-{fmtCur(cobro)}</span>
-                    </div>
-                  )}
-                  <div style={{ borderTop: "1px solid #000", marginTop: "2px", paddingTop: "2px", display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: `${fs}px` }}>
-                    <span>SALDO</span>
-                    <span style={{ textDecoration: saldoFinal > 0 ? "underline" : "none" }}>
-                      {saldoFinal > 0 ? fmtCur(saldoFinal) : saldoFinal < 0 ? `${fmtCur(Math.abs(saldoFinal))} a favor` : "$0"}
-                    </span>
                   </div>
                 </div>
               );
