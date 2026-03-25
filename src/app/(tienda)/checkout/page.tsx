@@ -602,12 +602,10 @@ export default function CheckoutPage() {
         cantidad: item.cantidad,
         precio_unitario: item.precio,
         subtotal: item.precio * item.cantidad,
+        unidades_por_presentacion: item.unidades_por_presentacion || 1,
       }));
 
-      const { error: itemsError } = await supabase
-        .from("pedido_tienda_items")
-        .insert(itemRows);
-
+      const { error: itemsError } = await supabase.from("pedido_tienda_items").insert(itemRows);
       if (itemsError) throw itemsError;
 
       // Also create a venta record so it appears in the admin sales listing
@@ -723,6 +721,47 @@ export default function CheckoutPage() {
           setSubmitting(false);
           return;
         }
+      }
+
+      // Create caja_movimientos for the payment
+      const cajaFecha = hoy;
+      const cajaHora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+      const cajaEntries: any[] = [];
+      if (metodoPago === "efectivo") {
+        cajaEntries.push({
+          fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
+          descripcion: `Pedido Web #${numero}`,
+          metodo_pago: "Efectivo", monto: vTotal,
+          referencia_id: venta.id, referencia_tipo: "venta",
+        });
+      } else if (metodoPago === "transferencia") {
+        cajaEntries.push({
+          fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
+          descripcion: `Pedido Web #${numero}`,
+          metodo_pago: "Transferencia", monto: vTotal,
+          referencia_id: venta.id, referencia_tipo: "venta",
+        });
+      } else if (metodoPago === "mixto") {
+        if (mixtoEfectivo > 0) {
+          cajaEntries.push({
+            fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
+            descripcion: `Pedido Web #${numero} (Efectivo)`,
+            metodo_pago: "Efectivo", monto: mixtoEfectivo,
+            referencia_id: venta.id, referencia_tipo: "venta",
+          });
+        }
+        const montoTransf = mixtoTransferencia + vRecargoTransf;
+        if (montoTransf > 0) {
+          cajaEntries.push({
+            fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
+            descripcion: `Pedido Web #${numero} (Transferencia)`,
+            metodo_pago: "Transferencia", monto: montoTransf,
+            referencia_id: venta.id, referencia_tipo: "venta",
+          });
+        }
+      }
+      if (cajaEntries.length > 0) {
+        await supabase.from("caja_movimientos").insert(cajaEntries);
       }
 
       localStorage.removeItem("carrito");

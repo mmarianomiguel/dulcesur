@@ -1506,8 +1506,8 @@ export default function VentasPage() {
           const mixtoEntries: { metodo: string; monto: number }[] = [];
           if (mixtoEfectivo > 0) mixtoEntries.push({ metodo: "Efectivo", monto: mixtoEfectivo });
           if (mixtoTransferencia > 0) {
-            // Don't add surcharge again - it's already included in the total calculation
-            mixtoEntries.push({ metodo: "Transferencia", monto: mixtoTransferencia });
+            // Include transfer surcharge in the caja entry (it's what the client actually transfers)
+            mixtoEntries.push({ metodo: "Transferencia", monto: mixtoTransferencia + transferSurcharge });
           }
           if (mixtoCuentaCorriente > 0) mixtoEntries.push({ metodo: "Cuenta Corriente", monto: mixtoCuentaCorriente });
 
