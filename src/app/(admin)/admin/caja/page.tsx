@@ -230,7 +230,7 @@ export default function CajaPage() {
     setVentaDetailOpen(true);
     const [{ data: items }, { data: movs }] = await Promise.all([
       supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
-      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, referencia_id, referencia_tipo, created_at").eq("referencia_id", v.id).order("created_at"),
+      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("referencia_id", v.id).order("created_at"),
     ]);
     setVentaDetailItems(items || []);
     setVentaDetailMovs(movs || []);
@@ -1592,11 +1592,21 @@ export default function CajaPage() {
           subtotal: item.subtotal,
           unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
         }))}
-        pagos={ventaDetailMovs.filter((m: any) => m.tipo === "ingreso").map((m: any) => ({
-          metodo: m.metodo_pago,
-          monto: Math.abs(m.monto),
-          cuenta_bancaria: m.cuenta_bancaria || null,
-        }))}
+        pagos={(() => {
+          const ingresos = ventaDetailMovs.filter((m: any) => m.tipo === "ingreso").map((m: any) => ({
+            metodo: m.metodo_pago,
+            monto: Math.abs(m.monto),
+            cuenta_bancaria: m.cuenta_bancaria || null,
+          }));
+          if (ingresos.length > 0) return ingresos;
+          // Fallback: build from venta stored amounts
+          if (!ventaDetail) return [];
+          const pagos: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
+          if ((ventaDetail as any).monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: (ventaDetail as any).monto_efectivo });
+          if ((ventaDetail as any).monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: (ventaDetail as any).monto_transferencia });
+          if (pagos.length === 0 && ventaDetail.forma_pago) pagos.push({ metodo: ventaDetail.forma_pago, monto: ventaDetail.total });
+          return pagos;
+        })()}
 
       />
     </div>
