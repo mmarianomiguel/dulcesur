@@ -1568,21 +1568,12 @@ export default function CajaPage() {
           subtotal: item.subtotal,
           unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
         }))}
-        footerExtra={ventaDetail?.forma_pago === "Mixto" && ventaDetailMovs.length > 0 ? (
-          <div className="space-y-1 p-2.5 bg-muted/50 rounded-lg min-w-[200px]">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase">Pago Mixto</p>
-            {ventaDetailMovs.filter((m: any) => m.tipo === "ingreso").map((m: any, i: number) => {
-              const desc = (m.descripcion || "").toLowerCase();
-              const isDebt = desc.includes("cobro") || desc.includes("saldo") || desc.includes("deuda");
-              return (
-                <div key={i} className="flex justify-between text-xs gap-3">
-                  <span className="text-muted-foreground">{m.metodo_pago}{isDebt && <span className="ml-1 text-amber-600">(Saldo ant.)</span>}</span>
-                  <span className="font-medium">{formatCurrency(Math.abs(m.monto))}</span>
-                </div>
-              );
-            })}
-          </div>
-        ) : undefined}
+        pagos={ventaDetailMovs.filter((m: any) => m.tipo === "ingreso").map((m: any) => ({
+          metodo: m.metodo_pago,
+          monto: Math.abs(m.monto),
+          cuenta_bancaria: m.cuenta_bancaria || null,
+        }))}
+
       />
     </div>
   );

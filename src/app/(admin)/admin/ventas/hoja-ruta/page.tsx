@@ -107,6 +107,7 @@ export default function HojaDeRutaPage() {
   const [loading, setLoading] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailVenta, setDetailVenta] = useState<VentaRow | null>(null);
+  const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [orden, setOrden] = useState<Record<string, number>>({});
   const [filterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
   const [search, setSearch] = useState("");
@@ -284,9 +285,16 @@ export default function HojaDeRutaPage() {
     setVentas((prev) => prev.filter((v) => v.id !== id));
   };
 
-  const handleViewDetail = (venta: VentaRow) => {
+  const handleViewDetail = async (venta: VentaRow) => {
     setDetailVenta(venta);
+    setDetailPagos([]);
     setDetailOpen(true);
+    const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+    if (movs && movs.length > 0) {
+      setDetailPagos(movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
+    } else if (venta.forma_pago) {
+      setDetailPagos([{ metodo: venta.forma_pago, monto: venta.total }]);
+    }
   };
 
   // Payment dialog state
@@ -1212,6 +1220,7 @@ export default function HojaDeRutaPage() {
           subtotal: item.subtotal,
           unidad_medida: item.unidad_medida,
         })) || []}
+        pagos={detailPagos}
       />
 
       {/* Payment Dialog */}

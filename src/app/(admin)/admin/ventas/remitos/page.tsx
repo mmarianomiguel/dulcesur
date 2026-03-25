@@ -89,6 +89,7 @@ export default function RemitosPage() {
   const [detailRemito, setDetailRemito] = useState<RemitoRow | null>(null);
   const [detailItems, setDetailItems] = useState<VentaItemRow[]>([]);
   const [detailComboIds, setDetailComboIds] = useState<Set<string>>(new Set());
+  const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([]);
@@ -180,6 +181,15 @@ export default function RemitosPage() {
       setDetailComboIds(cIds);
     } else {
       setDetailComboIds(new Set());
+    }
+
+    // Load payment breakdown
+    setDetailPagos([]);
+    const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", r.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+    if (movs && movs.length > 0) {
+      setDetailPagos(movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
+    } else if (r.forma_pago) {
+      setDetailPagos([{ metodo: r.forma_pago, monto: r.total }]);
     }
 
     setDetailOpen(true);
@@ -536,6 +546,7 @@ export default function RemitosPage() {
           subtotal: item.subtotal,
           unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
         }))}
+        pagos={detailPagos}
         onPrint={detailRemito ? () => { setDetailOpen(false); preparePrint(detailRemito); } : undefined}
         footerExtra={detailRemito ? (
           <Button variant="outline" size="sm" onClick={() => { setDetailOpen(false); exportPDF(detailRemito); }}>

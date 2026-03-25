@@ -170,6 +170,7 @@ export default function DashboardPage() {
   const [diasEntrega, setDiasEntrega] = useState<string[]>([]);
   const [pedidoDetailOpen, setPedidoDetailOpen] = useState(false);
   const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
+  const [pedidoDetailPagos, setPedidoDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // ─── Combo data for preview ───
@@ -809,7 +810,23 @@ export default function DashboardPage() {
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Ver detalle"
-                                onClick={() => { setPedidoDetail(p); setPedidoDetailOpen(true); }}>
+                                onClick={async () => {
+                                  setPedidoDetail(p);
+                                  setPedidoDetailPagos([]);
+                                  setPedidoDetailOpen(true);
+                                  // Load payment breakdown from caja_movimientos
+                                  const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", p.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+                                  if (movs && movs.length > 0) {
+                                    setPedidoDetailPagos(movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
+                                  } else {
+                                    // Fallback from stored amounts
+                                    const pagos: { metodo: string; monto: number }[] = [];
+                                    if ((p as any).monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: (p as any).monto_efectivo });
+                                    if ((p as any).monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: (p as any).monto_transferencia });
+                                    if (pagos.length === 0 && p.forma_pago) pagos.push({ metodo: p.forma_pago, monto: p.total });
+                                    setPedidoDetailPagos(pagos);
+                                  }
+                                }}>
                                 <Eye className="w-3.5 h-3.5" />
                               </Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Imprimir remito"
@@ -970,6 +987,7 @@ export default function DashboardPage() {
           subtotal: item.subtotal,
           unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
         })) || []}
+        pagos={pedidoDetailPagos}
         onPrint={pedidoDetail ? () => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); } : undefined}
         footerExtra={pedidoDetail ? (
           <div className="flex gap-2">

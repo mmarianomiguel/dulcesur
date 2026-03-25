@@ -99,16 +99,23 @@ function cleanDesc(desc: string) {
 }
 
 // ─── Component ───
+export interface VentaDetailPago {
+  metodo: string;
+  monto: number;
+  cuenta_bancaria?: string | null;
+}
+
 interface VentaDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   data: VentaDetailData | null;
   items: VentaDetailItem[];
+  pagos?: VentaDetailPago[];
   onPrint?: () => void;
   footerExtra?: React.ReactNode;
 }
 
-export function VentaDetailDialog({ open, onOpenChange, data, items, onPrint, footerExtra }: VentaDetailDialogProps) {
+export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPrint, footerExtra }: VentaDetailDialogProps) {
   if (!data) return null;
 
   const isPedidoWeb = data.origen === "pedidos";
@@ -198,7 +205,27 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, onPrint, fo
                     {new Date(data.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">Pago: {pago}</p>
+                {/* Payment breakdown */}
+                {pagos && pagos.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">Detalle de pago:</p>
+                    {pagos.map((p, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          {p.metodo}
+                          {p.cuenta_bancaria && <span className="text-[10px] ml-1">→ {p.cuenta_bancaria}</span>}
+                        </span>
+                        <span className="font-semibold">{formatCurrency(p.monto)}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between text-xs border-t pt-1">
+                      <span className="font-bold">Total</span>
+                      <span className="font-bold">{formatCurrency(data.total)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Pago: {pago}</p>
+                )}
                 {(() => {
                   const fp = ((data.forma_pago || "") + " " + (data.metodo_pago || "")).toLowerCase();
                   const hasTransfer = fp.includes("transferencia") || fp.includes("mixto");
