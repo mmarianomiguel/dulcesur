@@ -791,13 +791,13 @@ export default function ReportesPage() {
                 {stockSubcatOpen && !stockFilterSubcat && (
                   <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                     <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setStockFilterSubcat(""); setStockSubcatSearch(""); setStockSubcatOpen(false); }}>Todas</button>
-                    {subcategorias.filter((s) => s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).map((s) => (
+                    {subcategorias.filter((s) => (!stockFilterCat || s.categoria_id === stockFilterCat) && s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).map((s) => (
                       <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                         onClick={() => { setStockFilterSubcat(s.id); setStockSubcatSearch(""); setStockSubcatOpen(false); }}>
                         {s.nombre}
                       </button>
                     ))}
-                    {subcategorias.filter((s) => s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).length === 0 && (
+                    {subcategorias.filter((s) => (!stockFilterCat || s.categoria_id === stockFilterCat) && s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).length === 0 && (
                       <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                     )}
                   </div>
