@@ -2110,25 +2110,29 @@ export default function VentasPage() {
                 </button>
               </div>
               {cuentasBancarias.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Cuenta destino</p>
-                  <Select value={cuentaBancariaId} onValueChange={(v) => setCuentaBancariaId(v ?? "")}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Seleccionar cuenta">
-                        {(() => {
-                          const sel = cuentasBancarias.find((cb) => cb.id === cuentaBancariaId);
-                          return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}${sel.origen === "proveedor" ? " · Prov." : ""}` : "Seleccionar cuenta";
-                        })()}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cuentasBancarias.map((cb) => (
-                        <SelectItem key={cb.id} value={cb.id}>
-                          {cb.nombre}{cb.alias ? ` (${cb.alias})` : ""}{cb.origen === "proveedor" ? " · Prov." : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cuentasBancarias.map((cb) => {
+                      const selected = cuentaBancariaId === cb.id;
+                      return (
+                        <button
+                          key={cb.id}
+                          onClick={() => setCuentaBancariaId(selected ? "" : cb.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                            selected
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                              : "bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:bg-emerald-50"
+                          }`}
+                        >
+                          <span className="font-semibold">{cb.alias || cb.nombre}</span>
+                          {cb.origen === "proveedor" && (
+                            <span className={`ml-1 text-[9px] ${selected ? "text-emerald-100" : "text-gray-400"}`}>Prov.</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -2240,25 +2244,29 @@ export default function VentasPage() {
 
                 {/* Bank account selector for transferencia */}
                 {mixtoToggleTransferencia && cuentasBancarias.length > 0 && (
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Cuenta destino</p>
-                    <Select value={cuentaBancariaId} onValueChange={(v) => setCuentaBancariaId(v ?? "")}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Seleccionar cuenta">
-                          {(() => {
-                            const sel = cuentasBancarias.find((cb) => cb.id === cuentaBancariaId);
-                            return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}${sel.origen === "proveedor" ? " · Prov." : ""}` : "Seleccionar cuenta";
-                          })()}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cuentasBancarias.map((cb) => (
-                          <SelectItem key={cb.id} value={cb.id}>
-                            {cb.nombre}{cb.alias ? ` (${cb.alias})` : ""}{cb.origen === "proveedor" ? " · Prov." : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cuentasBancarias.map((cb) => {
+                        const selected = cuentaBancariaId === cb.id;
+                        return (
+                          <button
+                            key={cb.id}
+                            onClick={() => setCuentaBancariaId(selected ? "" : cb.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                              selected
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                                : "bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:bg-emerald-50"
+                            }`}
+                          >
+                            <span className="font-semibold">{cb.alias || cb.nombre}</span>
+                            {cb.origen === "proveedor" && (
+                              <span className={`ml-1 text-[9px] ${selected ? "text-emerald-100" : "text-gray-400"}`}>Prov.</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
