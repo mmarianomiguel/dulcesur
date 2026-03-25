@@ -412,7 +412,9 @@ export default function CheckoutPage() {
 
   const handleConfirm = async () => {
     const errs: string[] = [];
+    if (items.length === 0) { errs.push("Tu carrito está vacío."); setErrors(errs); return; }
     if (!nombre) errs.push("El nombre es obligatorio.");
+    if (!telefono || telefono.replace(/\D/g, "").length < 6) errs.push("Ingresá un teléfono válido (mínimo 6 dígitos).");
     if (!email) errs.push("El email es obligatorio.");
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push("Ingresá un email válido.");
     if (metodoEntrega === "retiro" && config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) {
@@ -1078,7 +1080,7 @@ export default function CheckoutPage() {
                   <input
                     type="tel"
                     value={telefono}
-                    onChange={(e) => setTelefono(e.target.value)}
+                    onChange={(e) => setTelefono(e.target.value.replace(/[^\d\s\-+()]/g, ""))}
                     className={`${inputClass} pl-10`}
                     placeholder="+54 9 ..."
                   />

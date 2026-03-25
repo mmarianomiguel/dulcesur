@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { showAdminToast } from "@/components/admin-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -486,9 +487,13 @@ export default function DashboardPage() {
 
   const handleMarkArmado = async (venta: PedidoVenta) => {
     setActionLoading(venta.id);
-    await supabase.from("pedidos_tienda").update({ estado: "armado" }).eq("numero", venta.numero);
-    await supabase.from("ventas").update({ estado: "armado" }).eq("id", venta.id);
-    setPedidoEstadoMap((prev) => ({ ...prev, [venta.numero]: "armado" }));
+    const { error: e1 } = await supabase.from("pedidos_tienda").update({ estado: "armado" }).eq("numero", venta.numero);
+    const { error: e2 } = await supabase.from("ventas").update({ estado: "armado" }).eq("id", venta.id);
+    if (e1 || e2) {
+      showAdminToast("Error al marcar como armado", "error");
+    } else {
+      setPedidoEstadoMap((prev) => ({ ...prev, [venta.numero]: "armado" }));
+    }
     setActionLoading(null);
   };
 
