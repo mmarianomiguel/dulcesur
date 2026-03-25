@@ -1015,7 +1015,8 @@ export default function ProductoDetallePage() {
                               onClick={() => {
                                 if (outOfStock) return;
                                 const finalPrice = relDiscount > 0 ? relDiscountedPrice : price;
-                                addToCart(rel, finalPrice, getRelLabel(rel), Math.min(qty, maxQty), relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined);
+                                const relUnitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
+                                addToCart(rel, finalPrice, getRelLabel(rel), Math.min(qty, maxQty), relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined, relUnitsPerPres);
                                 setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
                               }}
                               disabled={outOfStock}
