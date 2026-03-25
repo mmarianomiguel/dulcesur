@@ -79,6 +79,7 @@ export default function FacturacionLotePage() {
       .select("*, clientes(id, nombre, cuit, tipo_factura)")
       .eq("tipo_comprobante", "Remito X")
       .eq("facturado", false)
+      .neq("estado", "anulada")
       .order("fecha", { ascending: false });
 
     if (filterCliente !== "all") query = query.eq("cliente_id", filterCliente);

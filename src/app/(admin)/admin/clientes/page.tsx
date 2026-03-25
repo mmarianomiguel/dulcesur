@@ -375,10 +375,11 @@ export default function ClientesPage() {
     // Tab Compras: all sales
     const { data: ventas } = await supabase
       .from("ventas")
-      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
+      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
       .eq("cliente_id", clienteId)
       .gte("fecha", desde)
       .lte("fecha", hasta)
+      .neq("estado", "anulada")
       .order("created_at", { ascending: false });
 
     const compras: any[] = [];

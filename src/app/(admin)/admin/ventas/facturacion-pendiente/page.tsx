@@ -75,6 +75,7 @@ export default function FacturacionPendientePage() {
       .select("*, clientes(id, nombre, cuit, tipo_factura)")
       .eq("tipo_comprobante", "Remito X")
       .eq("facturado", false)
+      .neq("estado", "anulada")
       .order("fecha", { ascending: false });
 
     if (dateFrom) query = query.gte("fecha", dateFrom);
