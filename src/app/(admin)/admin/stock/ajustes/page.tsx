@@ -39,6 +39,19 @@ interface AjusteRow {
   subtotal: number;
   motivo: string;
   comentario: string;
+  presentacion?: string;
+  unidades_por_presentacion?: number;
+  cajas?: number;
+  sueltas?: number;
+}
+
+interface PresData {
+  id: string;
+  producto_id: string;
+  nombre: string;
+  cantidad: number;
+  costo: number;
+  precio: number;
 }
 
 interface Ajuste {
@@ -50,10 +63,10 @@ interface Ajuste {
 }
 
 const MOTIVOS_GLOBALES = [
-  "Definir el motivo por artículo",
   "Mercadería defectuosa",
   "Mercadería vencida",
   "Consumo interno",
+  "Venta al costo",
   "Robo interno",
   "Robo por agentes externos",
   "Diferencia de inventario",
@@ -132,6 +145,7 @@ export default function AjustesStockPage() {
   const [detailItems, setDetailItems] = useState<any[]>([]);
 
   const codigoInputRef = useRef<HTMLInputElement>(null);
+  const [presMap, setPresMap] = useState<Record<string, PresData[]>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -156,6 +170,11 @@ export default function AjustesStockPage() {
     ]);
     setAjustes((aj as Ajuste[]) || []);
     setProductos((prods as Producto[]) || []);
+    // Load presentations
+    const { data: presData } = await supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, costo, precio").gt("cantidad", 1);
+    const pm: Record<string, PresData[]> = {};
+    (presData || []).forEach((p: any) => { if (!pm[p.producto_id]) pm[p.producto_id] = []; pm[p.producto_id].push(p); });
+    setPresMap(pm);
     setLoading(false);
   }, [filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo]);
 
@@ -185,13 +204,18 @@ export default function AjustesStockPage() {
     setDialogOpen(true);
   };
 
-  const addProduct = (p: Producto) => {
+  const addProduct = (p: Producto, pres?: PresData) => {
     const motivo = motivoGlobal === MOTIVOS_GLOBALES[0] ? "" : motivoGlobal;
+    const upp = pres ? pres.cantidad : 1;
+    const presLabel = pres ? pres.nombre : "Unidad";
+    const costo = pres ? (pres.costo || p.costo * upp) : (p.costo || 0);
+    const key = `${p.id}_${presLabel}`;
     setRows((prev) => {
-      const existing = prev.findIndex((r) => r.producto_id === p.id);
+      const existing = prev.findIndex((r) => r.producto_id === p.id && (r.presentacion || "Unidad") === presLabel);
       if (existing >= 0) {
         const next = [...prev];
-        next[existing] = { ...next[existing], cantidad: next[existing].cantidad + 1, subtotal: (next[existing].cantidad + 1) * next[existing].costo };
+        const newQty = next[existing].cantidad + 1;
+        next[existing] = { ...next[existing], cantidad: newQty, subtotal: newQty * next[existing].costo };
         return next;
       }
       return [...prev, {
@@ -199,11 +223,13 @@ export default function AjustesStockPage() {
         codigo: p.codigo,
         nombre: p.nombre,
         cantidad: 1,
-        unidad: p.unidad_medida || "UN",
-        costo: p.costo || 0,
-        subtotal: p.costo || 0,
+        unidad: pres ? `x${upp} un` : (p.unidad_medida || "UN"),
+        costo,
+        subtotal: costo,
         motivo,
         comentario: "",
+        presentacion: presLabel,
+        unidades_por_presentacion: upp,
       }];
     });
     setSearchOpen(false);
@@ -246,12 +272,14 @@ export default function AjustesStockPage() {
 
     if (ajuste) {
       for (const row of rows) {
-        if (row.cantidad <= 0) continue; // Skip invalid quantities
+        if (row.cantidad <= 0) continue;
         const prod = productos.find((p) => p.id === row.producto_id);
         if (!prod) continue;
+        const upp = row.unidades_por_presentacion || 1;
+        const totalUnits = row.cantidad * upp;
         const stockAntes = prod.stock;
-        const stockDespues = Math.max(0, stockAntes - row.cantidad);
-        const motivo = row.motivo || motivoGlobal;
+        const stockDespues = Math.max(0, stockAntes - totalUnits);
+        const motivo = motivoGlobal;
 
         await supabase.from("ajuste_stock_items").insert({
           ajuste_id: ajuste.id,
@@ -268,9 +296,9 @@ export default function AjustesStockPage() {
           tipo: "ajuste",
           cantidad_antes: stockAntes,
           cantidad_despues: stockDespues,
-          cantidad: row.cantidad,
+          cantidad: totalUnits,
           referencia: `Ajuste de stock - ${motivo}`,
-          descripcion: `${motivo}${row.comentario ? `: ${row.comentario}` : ""}`,
+          descripcion: `${motivo}${row.presentacion && row.presentacion !== "Unidad" ? ` (${row.cantidad} ${row.presentacion})` : ""}${row.comentario ? ` — ${row.comentario}` : ""}`,
           usuario,
           orden_id: ajuste.id,
         });
@@ -669,29 +697,49 @@ export default function AjustesStockPage() {
             />
           </div>
           <div className="space-y-2 max-h-80 overflow-y-auto">
-            {filteredSearch.slice(0, 20).map((p) => (
-              <button
-                key={p.id}
-                onClick={() => addProduct(p)}
-                className="w-full rounded-xl border p-3 transition-colors hover:border-primary/30 hover:bg-primary/5 text-left flex items-center gap-3"
-              >
-                <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {(p as any).imagen_url ? (
-                    <img src={(p as any).imagen_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <Package className="w-5 h-5 text-muted-foreground/30" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{p.nombre}</div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                    <span className="font-mono">{p.codigo}</span>
-                    <span>·</span>
-                    <span>Stock: <strong className={p.stock <= 0 ? "text-red-500" : ""}>{p.stock}</strong></span>
+            {filteredSearch.slice(0, 20).map((p) => {
+              const pres = presMap[p.id];
+              return (
+                <div key={p.id} className="rounded-xl border p-3 transition-colors hover:border-primary/30 hover:bg-primary/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {(p as any).imagen_url ? (
+                        <img src={(p as any).imagen_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Package className="w-5 h-5 text-muted-foreground/30" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{p.nombre}</div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                        <span className="font-mono">{p.codigo}</span>
+                        <span>·</span>
+                        <span>Stock: <strong className={p.stock <= 0 ? "text-red-500" : ""}>{p.stock}</strong></span>
+                        <span>·</span>
+                        <span>Costo: {formatCurrency(p.costo)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => { addProduct(p); setSearchOpen(false); setProductSearch(""); }}
+                      className="flex-1 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted transition"
+                    >
+                      + Unidad
+                    </button>
+                    {pres && pres.map((pr) => (
+                      <button
+                        key={pr.id}
+                        onClick={() => { addProduct(p, pr); setSearchOpen(false); setProductSearch(""); }}
+                        className="flex-1 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition"
+                      >
+                        + {pr.nombre} ({pr.cantidad} un.)
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </button>
-            ))}
+              );
+            })}
             {filteredSearch.length === 0 && (
               <p className="text-center py-6 text-sm text-muted-foreground">Sin resultados</p>
             )}
