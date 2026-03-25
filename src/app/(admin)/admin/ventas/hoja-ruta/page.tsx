@@ -271,19 +271,18 @@ export default function HojaDeRutaPage() {
     const venta = ventas.find((v) => v.id === id);
     if (!venta) return;
 
-    // Check if there's unpaid balance
     const pagado = pagadoPorVenta[id] || 0;
     const pendiente = Math.max(0, venta.total - pagado);
+    const clienteNombre = venta.clientes?.nombre || "el cliente";
+    const formatMoney = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
 
     if (pendiente > 0) {
-      const clienteNombre = venta.clientes?.nombre || "el cliente";
-      const formatMoney = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
-
+      // Has unpaid balance
       if (venta.cliente_id) {
-        // Client exists — offer to add to CC
         const ok = confirm(
-          `${clienteNombre} tiene un saldo pendiente de ${formatMoney(pendiente)}.\n\n` +
-          `¿Marcar como entregado y cargar ${formatMoney(pendiente)} a su cuenta corriente?`
+          `⚠️ ${clienteNombre} tiene un saldo pendiente de ${formatMoney(pendiente)}.\n\n` +
+          `Si confirmás, se cargará ${formatMoney(pendiente)} a su cuenta corriente como deuda.\n\n` +
+          `¿Marcar como entregado?`
         );
         if (!ok) return;
 
@@ -304,14 +303,20 @@ export default function HojaDeRutaPage() {
           venta_id: venta.id,
         });
       } else {
-        // No client linked — just warn
         const ok = confirm(
-          `Este pedido tiene ${formatMoney(pendiente)} sin cobrar.\n\n` +
+          `⚠️ Este pedido tiene ${formatMoney(pendiente)} sin cobrar.\n\n` +
           `No tiene cliente asignado, no se puede cargar a cuenta corriente.\n\n` +
           `¿Marcar como entregado de todas formas?`
         );
         if (!ok) return;
       }
+    } else {
+      // Fully paid — still ask for confirmation
+      const ok = confirm(
+        `✅ Pedido #${venta.numero} de ${clienteNombre} por ${formatMoney(venta.total)} (pago completo).\n\n` +
+        `¿Marcar como entregado?`
+      );
+      if (!ok) return;
     }
 
     const { error } = await supabase
