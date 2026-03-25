@@ -546,6 +546,9 @@ export default function ReportesPage() {
                         <td className="py-2 px-3 text-right font-semibold">{fc(v.total)}</td>
                         <td className={`py-2 px-3 text-right font-semibold ${ventaProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                           {fc(ventaProfit)}
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            {v.total > 0 ? `${((ventaProfit / v.total) * 100).toFixed(1)}%` : "—"}
+                          </span>
                         </td>
                       </tr>
                       {isExpanded && items.length > 0 && (
