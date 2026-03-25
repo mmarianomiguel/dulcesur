@@ -538,14 +538,14 @@ export default function ComprasPage() {
 
       setSaving(false);
 
+      resetForm();
+      setMode("list");
+      fetchData();
+
       if (preciosActualizados.length > 0) {
         setPreciosModificados(preciosActualizados);
         setShowPreciosDialog(true);
       }
-
-      resetForm();
-      setMode("list");
-      fetchData();
     } catch (err) {
       console.error("Unexpected error:", err);
       setSaveError("Error inesperado al guardar la compra.");
@@ -1149,114 +1149,6 @@ export default function ComprasPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Post-purchase: modified prices dialog */}
-        <Dialog open={showPreciosDialog} onOpenChange={setShowPreciosDialog}>
-          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                Precios actualizados ({preciosModificados.length})
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Los siguientes productos actualizaron su precio de venta manteniendo el margen:
-              </p>
-              <div className="rounded-lg border divide-y max-h-60 overflow-y-auto">
-                {preciosModificados.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2.5 text-sm">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{p.nombre}</p>
-                      <p className="text-[10px] text-muted-foreground font-mono">{p.codigo}</p>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground line-through">{formatCurrency(p.precioAnterior)}</p>
-                        <p className="font-bold text-primary">{formatCurrency(p.precioNuevo)}</p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.precioNuevo > p.precioAnterior ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>
-                        {p.precioNuevo > p.precioAnterior ? "+" : ""}{Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
-                <Button variant="outline" className="flex-1 gap-2" onClick={() => {
-                  // Generate price tags PDF
-                  const { jsPDF } = require("jspdf");
-                  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-                  const w = pdf.internal.pageSize.getWidth();
-                  const h = pdf.internal.pageSize.getHeight();
-                  const cols = 3;
-                  const rows = 4;
-                  const tagW = (w - 20) / cols;
-                  const tagH = (h - 20) / rows;
-                  let col = 0, row = 0;
-
-                  for (const p of preciosModificados) {
-                    if (row >= rows) { pdf.addPage(); row = 0; col = 0; }
-                    const x = 10 + col * tagW;
-                    const y = 10 + row * tagH;
-                    // Border
-                    pdf.setDrawColor(200);
-                    pdf.setLineDashPattern([2, 2], 0);
-                    pdf.rect(x, y, tagW, tagH);
-                    pdf.setLineDashPattern([], 0);
-                    // Product name
-                    pdf.setFontSize(10);
-                    pdf.setFont("helvetica", "bold");
-                    const nameLines = pdf.splitTextToSize(p.nombre, tagW - 8);
-                    pdf.text(nameLines.slice(0, 2), x + tagW / 2, y + 10, { align: "center" });
-                    // Code
-                    pdf.setFontSize(7);
-                    pdf.setFont("helvetica", "normal");
-                    pdf.setTextColor(120);
-                    pdf.text(p.codigo || "", x + tagW / 2, y + 20, { align: "center" });
-                    pdf.setTextColor(0);
-                    // Price
-                    pdf.setFontSize(28);
-                    pdf.setFont("helvetica", "bold");
-                    const fmtPrice = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(p.precioNuevo);
-                    pdf.text(fmtPrice, x + tagW / 2, y + tagH - 10, { align: "center" });
-
-                    col++;
-                    if (col >= cols) { col = 0; row++; }
-                  }
-                  pdf.save(`Carteles_Precios_${todayString()}.pdf`);
-                  showAdminToast("PDF de carteles generado", "success");
-                }}>
-                  <Printer className="w-4 h-4" />
-                  Imprimir carteles de precio
-                </Button>
-                <Button variant="outline" className="flex-1 gap-2" onClick={() => {
-                  // Export price list
-                  const ws = XLSX.utils.json_to_sheet(preciosModificados.map((p) => ({
-                    "Código": p.codigo,
-                    "Producto": p.nombre,
-                    "Precio Anterior": p.precioAnterior,
-                    "Precio Nuevo": p.precioNuevo,
-                    "Diferencia": p.precioNuevo - p.precioAnterior,
-                    "% Cambio": Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100),
-                    "Costo Anterior": p.costoAnterior,
-                    "Costo Nuevo": p.costoNuevo,
-                  })));
-                  ws["!cols"] = [{ wch: 16 }, { wch: 35 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
-                  const wb = XLSX.utils.book_new();
-                  XLSX.utils.book_append_sheet(wb, ws, "Precios");
-                  XLSX.writeFile(wb, `Lista_Precios_Actualizados_${todayString()}.xlsx`);
-                  showAdminToast("Lista de precios exportada", "success");
-                }}>
-                  <Download className="w-4 h-4" />
-                  Exportar lista de precios
-                </Button>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={() => setShowPreciosDialog(false)}>Cerrar</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     );
   }
@@ -1286,9 +1178,31 @@ export default function ComprasPage() {
               {new Date(detailCompra.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="text-2xl font-bold">{formatCurrency(detailCompra.total)}</p>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+              // Load current prices of products in this purchase
+              const productIds = detailItems.map((i) => i.producto_id).filter(Boolean);
+              if (productIds.length === 0) return;
+              const { data: prods } = await supabase.from("productos").select("id, codigo, nombre, precio").in("id", productIds);
+              if (!prods || prods.length === 0) return;
+              const lista = prods.map((p) => ({
+                nombre: p.nombre,
+                codigo: p.codigo || "",
+                precioAnterior: 0,
+                precioNuevo: p.precio,
+                costoAnterior: 0,
+                costoNuevo: 0,
+              }));
+              setPreciosModificados(lista);
+              setShowPreciosDialog(true);
+            }}>
+              <Printer className="w-3.5 h-3.5" />
+              Carteles de precio
+            </Button>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-2xl font-bold">{formatCurrency(detailCompra.total)}</p>
+            </div>
           </div>
         </div>
 
@@ -1531,6 +1445,106 @@ export default function ComprasPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Prices dialog - accessible from any mode */}
+      <Dialog open={showPreciosDialog} onOpenChange={setShowPreciosDialog}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              Precios ({preciosModificados.length} productos)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Productos con precios actualizados:
+            </p>
+            <div className="rounded-lg border divide-y max-h-60 overflow-y-auto">
+              {preciosModificados.map((p, i) => (
+                <div key={i} className="flex items-center justify-between px-3 py-2.5 text-sm">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{p.nombre}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">{p.codigo}</p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      {p.precioAnterior > 0 && <p className="text-xs text-muted-foreground line-through">{formatCurrency(p.precioAnterior)}</p>}
+                      <p className="font-bold text-primary">{formatCurrency(p.precioNuevo)}</p>
+                    </div>
+                    {p.precioAnterior > 0 && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.precioNuevo > p.precioAnterior ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>
+                        {p.precioNuevo > p.precioAnterior ? "+" : ""}{Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
+              <Button variant="outline" className="flex-1 gap-2" onClick={() => {
+                const { jsPDF } = require("jspdf");
+                const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                const pw = pdf.internal.pageSize.getWidth();
+                const ph = pdf.internal.pageSize.getHeight();
+                const cols = 3, maxRows = 4;
+                const tagW = (pw - 20) / cols;
+                const tagH = (ph - 20) / maxRows;
+                let col = 0, row = 0;
+                for (const p of preciosModificados) {
+                  if (row >= maxRows) { pdf.addPage(); row = 0; col = 0; }
+                  const x = 10 + col * tagW;
+                  const y = 10 + row * tagH;
+                  pdf.setDrawColor(200);
+                  pdf.setLineDashPattern([2, 2], 0);
+                  pdf.rect(x, y, tagW, tagH);
+                  pdf.setLineDashPattern([], 0);
+                  pdf.setFontSize(10);
+                  pdf.setFont("helvetica", "bold");
+                  pdf.setTextColor(0);
+                  const nameLines = pdf.splitTextToSize(p.nombre, tagW - 8);
+                  pdf.text(nameLines.slice(0, 2), x + tagW / 2, y + 10, { align: "center" });
+                  pdf.setFontSize(7);
+                  pdf.setFont("helvetica", "normal");
+                  pdf.setTextColor(120);
+                  pdf.text(p.codigo || "", x + tagW / 2, y + 20, { align: "center" });
+                  pdf.setTextColor(0);
+                  pdf.setFontSize(28);
+                  pdf.setFont("helvetica", "bold");
+                  const fmtPrice = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(p.precioNuevo);
+                  pdf.text(fmtPrice, x + tagW / 2, y + tagH - 10, { align: "center" });
+                  col++;
+                  if (col >= cols) { col = 0; row++; }
+                }
+                pdf.save(`Carteles_Precios_${todayString()}.pdf`);
+                showAdminToast("PDF de carteles generado", "success");
+              }}>
+                <Printer className="w-4 h-4" />
+                Imprimir carteles de precio
+              </Button>
+              <Button variant="outline" className="flex-1 gap-2" onClick={() => {
+                const ws = XLSX.utils.json_to_sheet(preciosModificados.map((p) => ({
+                  "Código": p.codigo,
+                  "Producto": p.nombre,
+                  ...(p.precioAnterior > 0 ? { "Precio Anterior": p.precioAnterior } : {}),
+                  "Precio": p.precioNuevo,
+                  ...(p.precioAnterior > 0 ? { "Diferencia": p.precioNuevo - p.precioAnterior, "% Cambio": Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100) } : {}),
+                })));
+                ws["!cols"] = [{ wch: 16 }, { wch: 35 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 }];
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Precios");
+                XLSX.writeFile(wb, `Lista_Precios_${todayString()}.xlsx`);
+                showAdminToast("Lista de precios exportada", "success");
+              }}>
+                <Download className="w-4 h-4" />
+                Exportar lista de precios
+              </Button>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => setShowPreciosDialog(false)}>Cerrar</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
