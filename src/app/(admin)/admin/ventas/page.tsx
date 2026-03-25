@@ -1911,7 +1911,7 @@ export default function VentasPage() {
                               const numCajas = item.qty / boxQty;
                               return (
                                 <Badge variant="secondary" className="mt-1 text-[10px] bg-indigo-50 text-indigo-600 border-indigo-200">
-                                  = {numCajas} {numCajas === 1 ? boxPres.nombre : (boxPres.nombre.replace(/^Caja/, "Cajas"))} ({boxQty} un.)
+                                  = {numCajas} {boxPres.nombre} ({boxQty} un.)
                                   {boxPres.codigo && <span className="ml-1 text-muted-foreground">• {boxPres.codigo}</span>}
                                 </Badge>
                               );
@@ -2608,7 +2608,7 @@ export default function VentasPage() {
                               : "bg-primary/10 text-primary hover:bg-primary/20"
                           }`}
                         >
-                          Caja x{pr.cantidad} - {formatCurrency(pr.precio)}
+                          {pr.nombre || `Caja x${pr.cantidad}`} - {formatCurrency(pr.precio)}
                         </button>
                       ))}
                     </div>
@@ -3518,11 +3518,11 @@ export default function VentasPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900">{issue.item.description}</p>
                       <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-                        <span>Facturando: <strong className="text-red-600">{issue.unidadesFacturadas} {issue.item.presentacion !== "Unidad" ? (issue.unidadesFacturadas === 1 ? issue.item.presentacion : issue.item.presentacion.replace(/^Caja/, "Cajas")) : "Un."}</strong></span>
-                        <span>Disponible: <strong className="text-amber-600">{issue.stockDisponible} {issue.item.presentacion !== "Unidad" ? (issue.stockDisponible === 1 ? issue.item.presentacion : issue.item.presentacion.replace(/^Caja/, "Cajas")) : "Un."}</strong></span>
+                        <span>Facturando: <strong className="text-red-600">{issue.unidadesFacturadas} {issue.item.presentacion !== "Unidad" ? (issue.unidadesFacturadas === 1 ? issue.item.presentacion : issue.item.presentacion) : "Un."}</strong></span>
+                        <span>Disponible: <strong className="text-amber-600">{issue.stockDisponible} {issue.item.presentacion !== "Unidad" ? (issue.stockDisponible === 1 ? issue.item.presentacion : issue.item.presentacion) : "Un."}</strong></span>
                       </div>
                       {checked && maxInPres > 0 && (
-                        <p className="text-[11px] text-emerald-600 mt-1">Se ajustará a {maxInPres} {issue.item.presentacion !== "Unidad" ? (maxInPres === 1 ? issue.item.presentacion : issue.item.presentacion.replace(/^Caja/, "Cajas")) : "Un."}</p>
+                        <p className="text-[11px] text-emerald-600 mt-1">Se ajustará a {maxInPres} {issue.item.presentacion !== "Unidad" ? (maxInPres === 1 ? issue.item.presentacion : issue.item.presentacion) : "Un."}</p>
                       )}
                       {checked && maxInPres <= 0 && stockUnits > 0 && presUnit > 1 && (
                         <p className="text-[11px] text-emerald-600 mt-1">Se pasará a {stockUnits} unidades sueltas</p>
