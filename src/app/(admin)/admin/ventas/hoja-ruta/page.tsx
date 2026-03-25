@@ -354,12 +354,19 @@ export default function HojaDeRutaPage() {
   const [paySaving, setPaySaving] = useState(false);
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([]);
 
-  // Load bank accounts
+  // Load bank accounts from DB (fallback to localStorage)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("cuentas_bancarias");
-      if (stored) setCuentasBancarias(JSON.parse(stored));
-    } catch (err) { console.error("Error in delivery:", err); }
+    (async () => {
+      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("activo", true).order("nombre");
+      if (data && data.length > 0) {
+        setCuentasBancarias(data as CuentaBancaria[]);
+      } else {
+        try {
+          const stored = localStorage.getItem("cuentas_bancarias");
+          if (stored) setCuentasBancarias(JSON.parse(stored));
+        } catch {}
+      }
+    })();
   }, []);
 
   const openPayDialog = (v: VentaRow) => {
