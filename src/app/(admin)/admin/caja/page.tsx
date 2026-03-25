@@ -619,18 +619,27 @@ export default function CajaPage() {
       }
     }
 
-    // CC: pure CC ventas + mixto CC portion (total - caja_movimientos for that sale)
+    // CC: pure CC ventas + mixto CC portion (only when CC was explicitly used)
     const ventasCuentaCorriente = ventasPorMetodo("Cuenta Corriente")
       + ventas.filter((v) => v.forma_pago === "Mixto").reduce((acc, v) => {
-        const otherMovs = movements
-          .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso")
-          .reduce((a, m) => a + m.monto, 0);
-        // For ventas sin movimientos, use stored amounts
+        // Check if this mixto sale has a CC component in caja_movimientos
+        const hasCCMov = movements.some((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso" && m.metodo_pago === "Cuenta Corriente");
+        if (hasCCMov) {
+          // CC amount = sum of CC movements
+          return acc + movements
+            .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso" && m.metodo_pago === "Cuenta Corriente")
+            .reduce((a, m) => a + m.monto, 0);
+        }
+        // For ventas sin movimientos: only count CC if stored amounts don't cover the total
+        // AND the client has cuenta corriente (monto_cc explicitly stored or derived)
         const storedEfectivo = (v as any).monto_efectivo || 0;
         const storedTransf = (v as any).monto_transferencia || 0;
-        const ccPart = otherMovs > 0
-          ? v.total - otherMovs  // Has caja entries: CC = total - paid
-          : v.total - storedEfectivo - storedTransf;  // No caja entries: use stored amounts
+        const storedCC = (v as any).monto_cuenta_corriente || 0;
+        if (storedCC > 0) return acc + storedCC;
+        // If efectivo + transferencia >= total, no CC portion (the diff is rounding/recargo)
+        if (storedEfectivo + storedTransf >= v.total * 0.98) return acc;
+        // Otherwise the gap is CC
+        const ccPart = v.total - storedEfectivo - storedTransf;
         return acc + (ccPart > 0 ? Math.round(ccPart) : 0);
       }, 0);
     const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
