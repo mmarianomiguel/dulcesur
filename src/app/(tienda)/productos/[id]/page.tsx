@@ -626,9 +626,17 @@ export default function ProductoDetallePage() {
             })()}
             <p className="text-sm text-gray-500 mt-1">
               {currentPres && currentPres.cantidad > 1
-                ? `Por caja (${currentPres.cantidad} unidades)`
+                ? currentLabel
                 : "Precio unitario"}
             </p>
+            {currentPres && currentPres.cantidad > 1 && (() => {
+              const unitPrice = Math.round(discountedPrice / currentPres.cantidad);
+              return (
+                <p className="text-sm text-emerald-600 font-medium mt-1">
+                  {formatCurrency(unitPrice)} c/u
+                </p>
+              );
+            })()}
             {boxOnlyDiscount > 0 && currentPresLabel === "Unidad" && (
               <p className="text-sm text-emerald-600 font-medium mt-1.5">
                 📦 {boxOnlyDiscount}% OFF comprando por {boxDiscountLabel}
