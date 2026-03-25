@@ -83,9 +83,9 @@ interface ClienteDireccion {
 interface CuentaBancaria {
   id: string;
   nombre: string;
-  tipo: string;
-  cbu_cvu: string;
-  alias: string;
+  tipo_cuenta?: string;
+  cbu_cvu?: string;
+  alias?: string;
   origen?: string;
 }
 
@@ -369,7 +369,7 @@ export default function VentasPage() {
   useEffect(() => {
     (async () => {
       // Load bank accounts from DB (own + provider accounts)
-      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, tipo, cbu_cvu, alias, origen").eq("activo", true).order("nombre");
+      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, tipo_cuenta, cbu_cvu, alias, origen").eq("activo", true).order("nombre");
       if (data && data.length > 0) {
         setCuentasBancarias(data as CuentaBancaria[]);
       } else {
