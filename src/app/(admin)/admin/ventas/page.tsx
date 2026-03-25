@@ -2542,81 +2542,67 @@ export default function VentasPage() {
               autoFocus
             />
           </div>
-          <div className="space-y-1 max-h-[400px] overflow-y-auto">
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
             {filteredProducts.slice(0, 50).map((p, idx) => {
               const pres = presentacionesMap[p.id] || [];
-              // Check if search matches a specific presentation code
               const matchedPres = productSearch.length >= 2
                 ? pres.find((pr) => (pr.codigo || "").toLowerCase() === productSearch.toLowerCase())
                 : undefined;
               const highlighted = idx === searchHighlight;
+              const boxVariants = pres.filter((pr) => pr.nombre !== "Unidad" && pr.cantidad !== 1);
+              const isComboP = !!(p as any).es_combo;
+              const comboComponents = isComboP ? (comboItemsMap[p.id] || []) : [];
+              const effectiveStock = isComboP && comboComponents.length > 0
+                ? Math.min(...comboComponents.map((c) => Math.floor(c.stock / c.cantidad)))
+                : isComboP ? null : p.stock;
+              const unitDisc = getProductDiscount(p, "Unidad");
               return (
-                <div key={p.id} className={`border rounded-lg overflow-hidden ${highlighted ? "ring-2 ring-primary border-primary" : ""}`}
+                <div
+                  key={p.id}
                   ref={highlighted ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+                  className={`rounded-xl border p-3 transition-colors ${highlighted ? "ring-2 ring-primary border-primary bg-muted/50" : "hover:border-primary/30 hover:bg-primary/5"}`}
+                  onMouseEnter={() => { fetchPresentaciones(p.id); setSearchHighlight(idx); }}
                 >
                   <button
-                    onClick={() => {
-                      if (pres.length === 0) fetchPresentaciones(p.id);
-                      tryAddItem(p);
-                    }}
-                    onMouseEnter={() => { fetchPresentaciones(p.id); setSearchHighlight(idx); }}
-                    className={`w-full flex items-center justify-between p-3 transition-colors text-left ${highlighted ? "bg-muted" : "hover:bg-muted"}`}
+                    onClick={() => { if (pres.length === 0) fetchPresentaciones(p.id); tryAddItem(p); }}
+                    className="w-full flex items-center gap-3 text-left"
                   >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium">{p.nombre}</p>
-                        {(p as any).es_combo && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700">
-                            COMBO
-                          </span>
-                        )}
-                        {(() => {
-                          const unitDisc = getProductDiscount(p, "Unidad");
-                          return unitDisc > 0 ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-100 text-orange-700">
-                              -{unitDisc}%
-                            </span>
-                          ) : null;
-                        })()}
-                      </div>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        {p.codigo}
-                      </p>
+                    <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {p.imagen_url ? (
+                        <img src={p.imagen_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Package className="w-5 h-5 text-muted-foreground/30" />
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold">{formatCurrency(matchedPres ? matchedPres.precio : p.precio)}</p>
-                      {(() => {
-                        const isComboP = !!(p as any).es_combo;
-                        const comboComponents = isComboP ? (comboItemsMap[p.id] || []) : [];
-                        const effectiveStock = isComboP && comboComponents.length > 0
-                          ? Math.min(...comboComponents.map((c) => Math.floor(c.stock / c.cantidad)))
-                          : isComboP ? null : p.stock;
-                        const displayStock = effectiveStock === null ? null :
-                          matchedPres && Number(matchedPres.cantidad) > 1 && !isComboP
-                            ? `${Math.floor((effectiveStock / Number(matchedPres.cantidad)) * 10) / 10} ${matchedPres.nombre.toLowerCase()}`
-                            : effectiveStock;
-                        return (
-                          <p className={`text-xs font-mono ${(effectiveStock ?? 1) <= 0 ? "text-red-500 font-semibold" : "text-muted-foreground"}`}>
-                            {effectiveStock === null ? "Stock: cargando..." : `Stock: ${displayStock}`}
-                          </p>
-                        );
-                      })()}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-sm truncate">{p.nombre}</span>
+                        {isComboP && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700 shrink-0">COMBO</span>}
+                        {unitDisc > 0 && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-100 text-orange-700 shrink-0">-{unitDisc}%</span>}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                        <span className="font-mono">{p.codigo}</span>
+                        <span>·</span>
+                        <span>Stock: <strong className={(effectiveStock ?? 1) <= 0 ? "text-red-500" : ""}>{effectiveStock === null ? "..." : effectiveStock}</strong></span>
+                        <span>·</span>
+                        <span className="font-semibold text-foreground">{formatCurrency(matchedPres ? matchedPres.precio : p.precio)}</span>
+                      </div>
                     </div>
                   </button>
-                  {pres.filter((pr) => pr.nombre !== "Unidad" && pr.cantidad !== 1).length > 0 && (
-                    <div className="border-t bg-muted/30 px-3 py-1.5 flex gap-2 flex-wrap">
-                      {pres.filter((pr) => pr.nombre !== "Unidad" && pr.cantidad !== 1).map((pr) => (
-                        <button
+                  {boxVariants.length > 0 && (
+                    <div className="flex gap-2 mt-2.5 pl-14">
+                      <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => tryAddItem(p)}>
+                        + Unidad
+                      </Button>
+                      {boxVariants.map((pr) => (
+                        <Button
                           key={pr.id}
+                          size="sm"
+                          className={`h-8 text-xs flex-1 ${matchedPres?.id === pr.id ? "ring-2 ring-primary" : ""}`}
                           onClick={() => tryAddItem(p, pr)}
-                          className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
-                            matchedPres?.id === pr.id
-                              ? "bg-primary text-primary-foreground ring-2 ring-primary"
-                              : "bg-primary/10 text-primary hover:bg-primary/20"
-                          }`}
                         >
-                          {pr.nombre || `Caja x${pr.cantidad}`} - {formatCurrency(pr.precio)}
-                        </button>
+                          + {pr.nombre || `Caja x${pr.cantidad}`} ({pr.cantidad} un.)
+                        </Button>
                       ))}
                     </div>
                   )}

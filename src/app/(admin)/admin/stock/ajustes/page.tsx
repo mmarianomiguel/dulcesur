@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Plus, Search, Loader2, AlertTriangle, X, PackageSearch,
+  Plus, Search, Loader2, AlertTriangle, X, PackageSearch, Package,
 } from "lucide-react";
 import { todayARG, currentMonthPadded } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
@@ -668,18 +668,28 @@ export default function AjustesStockPage() {
               autoFocus
             />
           </div>
-          <div className="space-y-1 max-h-72 overflow-y-auto">
+          <div className="space-y-2 max-h-80 overflow-y-auto">
             {filteredSearch.slice(0, 20).map((p) => (
               <button
                 key={p.id}
                 onClick={() => addProduct(p)}
-                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-muted transition-colors text-left"
+                className="w-full rounded-xl border p-3 transition-colors hover:border-primary/30 hover:bg-primary/5 text-left flex items-center gap-3"
               >
-                <div>
-                  <p className="text-sm font-medium">{p.nombre}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{p.codigo}</p>
+                <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {p.imagen_url ? (
+                    <img src={p.imagen_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="w-5 h-5 text-muted-foreground/30" />
+                  )}
                 </div>
-                <span className="text-xs text-muted-foreground">Stock: {p.stock}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{p.nombre}</div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    <span className="font-mono">{p.codigo}</span>
+                    <span>·</span>
+                    <span>Stock: <strong className={p.stock <= 0 ? "text-red-500" : ""}>{p.stock}</strong></span>
+                  </div>
+                </div>
               </button>
             ))}
             {filteredSearch.length === 0 && (
