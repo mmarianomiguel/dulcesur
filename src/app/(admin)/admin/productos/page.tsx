@@ -53,6 +53,7 @@ import {
   TrendingUp,
   ArrowUp,
   ArrowDown,
+  EyeOff,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ImageUpload } from "@/components/image-upload";
@@ -1699,6 +1700,30 @@ export default function ProductosPage() {
                 <Filter className="w-4 h-4" />
                 Filtros
               </Button>
+              {outOfStock > 0 && (
+                <Button
+                  variant="outline"
+                  className="gap-2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                  onClick={async () => {
+                    if (!confirm(`¿Ocultar ${outOfStock} productos sin stock de la tienda?`)) return;
+                    const sinStock = products.filter((p) => {
+                      const effectiveStock = p.es_combo && comboStockMap[p.id] !== undefined ? comboStockMap[p.id] : p.stock;
+                      return effectiveStock <= 0 && p.visibilidad !== "oculto";
+                    });
+                    if (sinStock.length === 0) { showAdminToast("No hay productos visibles sin stock", "info"); return; }
+                    const ids = sinStock.map((p) => p.id);
+                    for (let i = 0; i < ids.length; i += 50) {
+                      const batch = ids.slice(i, i + 50);
+                      await supabase.from("productos").update({ visibilidad: "oculto" }).in("id", batch);
+                    }
+                    setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, visibilidad: "oculto" } : p));
+                    showAdminToast(`${sinStock.length} productos ocultos de la tienda`, "success");
+                  }}
+                >
+                  <EyeOff className="w-4 h-4" />
+                  Ocultar sin stock ({outOfStock})
+                </Button>
+              )}
             </div>
           </div>
 
