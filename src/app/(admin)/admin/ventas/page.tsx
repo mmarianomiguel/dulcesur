@@ -165,6 +165,7 @@ export default function VentasPage() {
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([]);
   const [cuentaBancariaId, setCuentaBancariaId] = useState("");
   const [cuentaSelectorOpen, setCuentaSelectorOpen] = useState(false);
+  const [vendedorSelectorOpen, setVendedorSelectorOpen] = useState(false);
 
   // mixto
   const [mixtoEfectivo, setMixtoEfectivo] = useState(0);
@@ -2060,18 +2061,26 @@ export default function VentasPage() {
           {sellers.length > 0 && (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Vendedor</p>
-              <Select value={vendedorId} onValueChange={(v) => setVendedorId(v ?? "")}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Seleccionar vendedor">
-                    {sellers.find((s) => s.id === vendedorId)?.nombre || "Seleccionar vendedor"}
-                  </SelectValue>
-                </SelectTrigger>
-              <SelectContent>
-                {sellers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {(() => {
+                const sel = sellers.find((s) => s.id === vendedorId);
+                return sel ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-50 border border-violet-200">
+                    <div className="w-6 h-6 rounded-full bg-violet-200 flex items-center justify-center text-[10px] font-bold text-violet-700 flex-shrink-0">
+                      {sel.nombre?.charAt(0)?.toUpperCase()}
+                    </div>
+                    <span className="text-xs font-semibold text-violet-800 flex-1">{sel.nombre}</span>
+                    <button onClick={() => setVendedorId("")} className="p-0.5 rounded-full hover:bg-violet-200 text-violet-500"><X className="w-3 h-3" /></button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setVendedorSelectorOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 text-xs text-gray-500 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50/50 transition"
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Seleccionar vendedor
+                  </button>
+                );
+              })()}
             </div>
           )}
 
@@ -2918,6 +2927,39 @@ export default function VentasPage() {
       </Dialog>
 
       {/* Transfer surcharge config dialog */}
+      {/* Vendedor Selector Modal */}
+      <Dialog open={vendedorSelectorOpen} onOpenChange={setVendedorSelectorOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <User className="w-5 h-5" />
+              Seleccionar vendedor
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {sellers.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => { setVendedorId(s.id); setVendedorSelectorOpen(false); }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-violet-400 hover:bg-violet-50/50 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center text-sm font-bold text-violet-700 flex-shrink-0">
+                  {s.nombre?.charAt(0)?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 group-hover:text-violet-700">{s.nombre}</p>
+                  {s.email && <p className="text-[11px] text-gray-400">{s.email}</p>}
+                  {s.rol && <p className="text-[10px] text-gray-400 capitalize">{s.rol}</p>}
+                </div>
+                <div className="w-5 h-5 rounded-full border-2 border-gray-200 group-hover:border-violet-500 flex items-center justify-center flex-shrink-0">
+                  {vendedorId === s.id && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Bank Account Selector Modal */}
       <Dialog open={cuentaSelectorOpen} onOpenChange={setCuentaSelectorOpen}>
         <DialogContent className="max-w-sm">
