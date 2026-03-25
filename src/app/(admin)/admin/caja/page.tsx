@@ -541,8 +541,22 @@ export default function CajaPage() {
         .filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === metodo)
         .reduce((a, m) => a + m.monto, 0);
 
-    const ventasEfectivo = movPorMetodo("Efectivo");
-    const ventasTransferencia = movPorMetodo("Transferencia");
+    // Build set of venta IDs that have caja_movimientos entries
+    const ventasConMovimientos = new Set(
+      movements.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id)
+    );
+    // Ventas without caja_movimientos (typically online orders)
+    const ventasSinMov = ventas.filter((v) => !ventasConMovimientos.has(v.id));
+
+    // Efectivo: from caja_movimientos + ventas sin movimientos
+    const ventasEfectivo = movPorMetodo("Efectivo")
+      + ventasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
+      + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
+
+    // Transferencia: from caja_movimientos + ventas sin movimientos
+    const ventasTransferencia = movPorMetodo("Transferencia")
+      + ventasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
+      + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
 
     // Group transfers by bank account
     const transferenciaPorCuenta: Record<string, number> = {};
@@ -552,13 +566,29 @@ export default function CajaPage() {
         const cuenta = (m as any).cuenta_bancaria || "Sin asignar";
         transferenciaPorCuenta[cuenta] = (transferenciaPorCuenta[cuenta] || 0) + m.monto;
       });
+    // Also include ventas sin movimientos in bank account grouping
+    for (const v of ventasSinMov) {
+      const montoTransf = v.forma_pago === "Transferencia" ? v.total
+        : v.forma_pago === "Mixto" ? ((v as any).monto_transferencia || 0)
+        : 0;
+      if (montoTransf > 0) {
+        const cuenta = (v as any).cuenta_transferencia_alias || "Sin asignar";
+        transferenciaPorCuenta[cuenta] = (transferenciaPorCuenta[cuenta] || 0) + montoTransf;
+      }
+    }
+
     // CC: pure CC ventas + mixto CC portion (total - caja_movimientos for that sale)
     const ventasCuentaCorriente = ventasPorMetodo("Cuenta Corriente")
       + ventas.filter((v) => v.forma_pago === "Mixto").reduce((acc, v) => {
         const otherMovs = movements
           .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso")
           .reduce((a, m) => a + m.monto, 0);
-        const ccPart = v.total - otherMovs;
+        // For ventas sin movimientos, use stored amounts
+        const storedEfectivo = (v as any).monto_efectivo || 0;
+        const storedTransf = (v as any).monto_transferencia || 0;
+        const ccPart = otherMovs > 0
+          ? v.total - otherMovs  // Has caja entries: CC = total - paid
+          : v.total - storedEfectivo - storedTransf;  // No caja entries: use stored amounts
         return acc + (ccPart > 0 ? Math.round(ccPart) : 0);
       }, 0);
     const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
@@ -1579,7 +1609,9 @@ export default function CajaPage() {
           domicilio: (ventaDetail as any).clientes?.domicilio || undefined,
           cuit: (ventaDetail as any).clientes?.cuit || undefined,
           vendedor: (ventaDetail as any).vendedor_id ? sellersMap[(ventaDetail as any).vendedor_id] || undefined : undefined,
-          origen: "historial",
+          cuenta_transferencia_alias: (ventaDetail as any).cuenta_transferencia_alias || null,
+          metodo_entrega: (ventaDetail as any).metodo_entrega || undefined,
+          origen: (ventaDetail as any).origen === "tienda" ? "pedidos" : "historial",
         } : null}
         items={ventaDetailItems.map((item: any) => ({
           id: item.id,
