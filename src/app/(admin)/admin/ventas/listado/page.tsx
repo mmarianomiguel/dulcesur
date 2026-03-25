@@ -2033,7 +2033,10 @@ export default function ListadoVentasPage() {
                                 await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
                               }
                               await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
-                              setPoSelectedPedido({ ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cbId, _pendingCuentaId: undefined, _pendingCuentaAlias: undefined } as any);
+                              const updated = { ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cbId, _pendingCuentaId: undefined, _pendingCuentaAlias: undefined } as any;
+                              setPoSelectedPedido(updated);
+                              // Also update the pedidos list so closing and reopening keeps the change
+                              setPoPedidos((prev) => prev.map((p) => p.numero === poSelectedPedido.numero ? { ...p, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cbId } : p));
                               setShowCuentaSelector(false);
                               showAdminToast(`Cuenta asignada: ${alias}`, "success");
                             }}
