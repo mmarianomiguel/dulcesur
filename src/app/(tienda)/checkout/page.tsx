@@ -181,11 +181,7 @@ export default function CheckoutPage() {
       const prodId = item.id.split("_")[0];
       const prod = stockFixes[prodId];
       if (!prod) return item;
-      const presUnits = item.unidades_por_presentacion || (() => {
-        const match = item.id.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
-        const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-        return isMedio ? 0.5 : match ? Number(match[1]) : 1;
-      })();
+      const presUnits = item.unidades_por_presentacion || 1;
       const maxQty = Math.floor(prod.stock / presUnits);
       if (item.cantidad > maxQty) return { ...item, cantidad: maxQty };
       return item;
@@ -477,11 +473,7 @@ export default function CheckoutPage() {
       const prodId = item.id.split("_")[0];
       const prod = stockMap[prodId];
       if (!prod) continue;
-      const presUnits = item.unidades_por_presentacion || (() => {
-        const match = item.id.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
-        const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-        return isMedio ? 0.5 : match ? Number(match[1]) : 1;
-      })();
+      const presUnits = item.unidades_por_presentacion || 1;
       const unitsNeeded = item.cantidad * presUnits;
       if (unitsNeeded > prod.stock) {
         const disponible = Math.floor(prod.stock / presUnits);
@@ -657,8 +649,7 @@ export default function CheckoutPage() {
       if (venta) {
         const ventaItemRows = items.map((item) => {
           const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-          const boxMatch = item.id.match(/Caja \(x(\d+)\)/);
-          const presUnitsVal = isMedio ? 0.5 : boxMatch ? Number(boxMatch[1]) : 1;
+          const presUnitsVal = item.unidades_por_presentacion || (isMedio ? 0.5 : 1);
           return {
             venta_id: venta.id,
             producto_id: item.id.split("_")[0],
@@ -677,11 +668,7 @@ export default function CheckoutPage() {
         // Update stock atomically (prevents race conditions with concurrent sales)
         const stockItems = items.map((item) => {
           const prodId = item.id.split("_")[0];
-          const presUnits = item.unidades_por_presentacion || (() => {
-            const match = item.id.match(/[Cc]aja\s*\(?x?(\d+)\)?/);
-            const isMedioCarton = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-            return isMedioCarton ? 0.5 : match ? Number(match[1]) : 1;
-          })();
+          const presUnits = item.unidades_por_presentacion || 1;
           return {
             producto_id: prodId,
             cantidad: item.cantidad * presUnits,

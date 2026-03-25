@@ -209,6 +209,11 @@ export default function ReportesPage() {
     let u = Number(item.unidades_por_presentacion) || 1;
     const presTxt = ((item as any).presentacion || "").toLowerCase();
     if (presTxt.includes("medio") && u === 1) u = 0.5;
+    // Fallback: if unidades_por_presentacion is 1 but presentacion says otherwise, extract from name
+    if (u === 1 && presTxt && presTxt !== "unidad") {
+      const match = presTxt.match(/x\s*(\d+)/);
+      if (match) u = Number(match[1]);
+    }
     return u;
   };
   const ganancia = useMemo(() => ventaItems.reduce((a, item: any) => {
