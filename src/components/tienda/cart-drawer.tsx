@@ -17,6 +17,7 @@ interface CartItem {
   imagen_url?: string;
   precio_original?: number;
   descuento?: number;
+  unidades_por_presentacion?: number;
 }
 
 interface CartContextType {
@@ -146,47 +147,48 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 }
 
 function CartDrawer() {
-  const { items, isOpen, closeCart, updateQuantity, removeItem, subtotal, itemCount } =
+  const { items, isOpen, closeCart, clearCart, updateQuantity, removeItem, subtotal, itemCount } =
     useCart();
 
-  // Fetch stock for products in cart
+  // Fetch stock for products in cart (refreshes every 15s while open)
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
   useEffect(() => {
     if (!isOpen || items.length === 0) return;
-    const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
-    supabase
-      .from("productos")
-      .select("id, stock")
-      .in("id", productIds)
-      .then(({ data }) => {
-        if (data) {
-          const map: Record<string, number> = {};
-          data.forEach((p: { id: string; stock: number }) => { map[p.id] = p.stock; });
-          setStockMap(map);
-        }
-      });
+    const fetchStock = () => {
+      const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
+      supabase
+        .from("productos")
+        .select("id, stock")
+        .in("id", productIds)
+        .then(({ data }) => {
+          if (data) {
+            const map: Record<string, number> = {};
+            data.forEach((p: { id: string; stock: number }) => { map[p.id] = p.stock; });
+            setStockMap(map);
+          }
+        });
+    };
+    fetchStock();
+    // Refresh stock every 15 seconds while drawer is open
+    const interval = setInterval(fetchStock, 15000);
+    return () => clearInterval(interval);
   }, [isOpen, items]);
 
   function getMaxQty(item: CartItem) {
     const prodId = item.id.split("_")[0];
     const totalStock = stockMap[prodId];
-    if (totalStock === undefined) return item.cantidad;
-    // Get units per presentation from cart key
-    const match = item.id.match(/Caja \(x(\d+)\)/);
-    const presUnits = match ? Number(match[1]) : 1;
-    // Total units used by OTHER items of same product
-    const otherUnits = items
-      .filter((i) => i.id !== item.id && i.id.startsWith(prodId + "_"))
-      .reduce((sum, i) => {
-        if (i.id.includes("Medio Cartón")) return sum + i.cantidad * 0.5;
-        const m = i.id.match(/Caja \(x(\d+)\)/);
-        return sum + i.cantidad * (m ? Number(m[1]) : 1);
-      }, 0);
-    // Also count items with just prodId (no underscore)
-    const sameIdNoSuffix = items
-      .filter((i) => i.id === prodId && item.id !== prodId)
-      .reduce((sum, i) => sum + i.cantidad, 0);
-    const available = totalStock - otherUnits - sameIdNoSuffix;
+    if (totalStock === undefined) return item.cantidad; // Stock loading — keep current, can't increase
+    const presUnits = item.unidades_por_presentacion || 1;
+    // Total units used by ALL items of same product (including this one excluded below)
+    let otherUnitsTotal = 0;
+    items.forEach((i) => {
+      if (i.id === item.id) return; // skip self
+      const iProdId = i.id.split("_")[0];
+      if (iProdId === prodId) {
+        otherUnitsTotal += (i.cantidad || 0) * (i.unidades_por_presentacion || 1);
+      }
+    });
+    const available = totalStock - otherUnitsTotal;
     return Math.max(0, Math.floor(available / presUnits));
   }
 
@@ -219,12 +221,22 @@ function CartDrawer() {
               </span>
             )}
           </div>
-          <button
-            onClick={closeCart}
-            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
-          >
-            <X className="h-4 w-4 text-gray-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <button
+                onClick={() => { if (confirm("¿Vaciar todo el carrito?")) clearCart(); }}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+              >
+                Vaciar
+              </button>
+            )}
+            <button
+              onClick={closeCart}
+              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <X className="h-4 w-4 text-gray-500" />
+            </button>
+          </div>
         </div>
 
         {/* Items */}
@@ -268,7 +280,7 @@ function CartDrawer() {
                     <span className="line-clamp-2 text-sm font-medium text-gray-800">
                       {item.nombre}
                     </span>
-                    {item.presentacion && (
+                    {item.presentacion && !item.nombre?.includes(item.presentacion) && item.presentacion !== "Unidad" && (
                       <span className="mt-0.5 text-xs text-gray-400">
                         {item.presentacion}
                       </span>
