@@ -724,17 +724,12 @@ export default function CheckoutPage() {
       }
 
       // Create caja_movimientos for the payment
+      // Register transfer payments in caja immediately (money already transferred)
+      // Efectivo is NOT registered here — it's registered when admin delivers/collects
       const cajaFecha = hoy;
       const cajaHora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
       const cajaEntries: any[] = [];
-      if (metodoPago === "efectivo") {
-        cajaEntries.push({
-          fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-          descripcion: `Pedido Web #${numero}`,
-          metodo_pago: "Efectivo", monto: vTotal,
-          referencia_id: venta.id, referencia_tipo: "venta",
-        });
-      } else if (metodoPago === "transferencia") {
+      if (metodoPago === "transferencia") {
         cajaEntries.push({
           fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
           descripcion: `Pedido Web #${numero}`,
@@ -742,14 +737,7 @@ export default function CheckoutPage() {
           referencia_id: venta.id, referencia_tipo: "venta",
         });
       } else if (metodoPago === "mixto") {
-        if (mixtoEfectivo > 0) {
-          cajaEntries.push({
-            fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-            descripcion: `Pedido Web #${numero} (Efectivo)`,
-            metodo_pago: "Efectivo", monto: mixtoEfectivo,
-            referencia_id: venta.id, referencia_tipo: "venta",
-          });
-        }
+        // Only register transfer portion — efectivo is collected on delivery
         const montoTransf = mixtoTransferencia + vRecargoTransf;
         if (montoTransf > 0) {
           cajaEntries.push({
@@ -760,6 +748,7 @@ export default function CheckoutPage() {
           });
         }
       }
+      // Efectivo puro: no caja entry — se registra al entregar desde hoja de ruta/dashboard
       if (cajaEntries.length > 0) {
         await supabase.from("caja_movimientos").insert(cajaEntries);
       }
