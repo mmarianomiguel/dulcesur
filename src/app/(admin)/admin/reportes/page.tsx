@@ -571,6 +571,9 @@ export default function ReportesPage() {
                                       <tr key={idx} className="border-b border-muted/50 last:border-0">
                                         <td className="py-1.5 px-4 pl-12">
                                           {item.productos?.nombre || item.descripcion}
+                                          {(item as any).presentacion && (item as any).presentacion !== "Unidad" && (
+                                            <span className="ml-1.5 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{(item as any).presentacion}</span>
+                                          )}
                                           {descPct > 0 && <span className="ml-1 text-[10px] text-orange-600">(-{descPct}%)</span>}
                                         </td>
                                         <td className="py-1.5 px-3 text-center">{item.cantidad}</td>
