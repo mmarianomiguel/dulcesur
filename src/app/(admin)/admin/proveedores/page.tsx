@@ -1,7 +1,7 @@
 "use client";
 
 import { showAdminToast } from "@/components/admin-toast";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,7 @@ export default function ProveedoresPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [pagoForm, setPagoForm] = useState(emptyPagoForm);
+  const importRef = useRef<HTMLInputElement>(null);
   const [comprasPendientes, setComprasPendientes] = useState<(Compra & { proveedores?: { nombre: string } })[]>([]);
   const [ccMovimientos, setCcMovimientos] = useState<CuentaCorrienteProveedor[]>([]);
   const [provCuentas, setProvCuentas] = useState<{ id: string; nombre: string; alias: string; cbu_cvu: string; tipo_cuenta: string; titular: string }[]>([]);
@@ -377,6 +378,80 @@ export default function ProveedoresPage() {
 
   const f = (key: keyof typeof form, value: string) => setForm({ ...form, [key]: value });
 
+  const handleImportProveedores = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws);
+      if (rows.length === 0) { showAdminToast("El archivo está vacío", "error"); return; }
+
+      const normalize = (key: string) => key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const getVal = (row: Record<string, any>, ...keys: string[]) => {
+        for (const k of Object.keys(row)) {
+          const nk = normalize(k);
+          for (const target of keys) { if (nk === normalize(target) || nk.includes(normalize(target))) return String(row[k] || "").trim(); }
+        }
+        return "";
+      };
+
+      let imported = 0, updated = 0, failed = 0;
+      for (const row of rows) {
+        const nombre = getVal(row, "nombre", "proveedor");
+        if (!nombre) { failed++; continue; }
+
+        const payload: Record<string, any> = {
+          nombre,
+          razon_social: getVal(row, "razon social") || null,
+          cuit: getVal(row, "cuit") || null,
+          condicion_iva: getVal(row, "condicion iva", "iva") || null,
+          codigo_proveedor: getVal(row, "codigo", "cod") || null,
+          rubro: getVal(row, "rubro") || null,
+          telefono: getVal(row, "telefono", "tel") || null,
+          telefono2: getVal(row, "telefono 2", "tel2") || null,
+          email: getVal(row, "email", "correo", "mail") || null,
+          web: getVal(row, "web", "sitio", "pagina") || null,
+          domicilio: getVal(row, "domicilio", "direccion") || null,
+          localidad: getVal(row, "localidad", "ciudad") || null,
+          provincia: getVal(row, "provincia") || null,
+          contacto_nombre: getVal(row, "contacto") || null,
+          contacto_cargo: getVal(row, "cargo contacto", "cargo") || null,
+          dias_entrega: getVal(row, "dias entrega") || null,
+          plazo_pago: getVal(row, "plazo pago", "plazo") || null,
+          observacion: getVal(row, "observacion", "notas") || null,
+          activo: true,
+        };
+
+        // Match by CUIT or name
+        let existingId: string | null = null;
+        if (payload.cuit) {
+          const { data: byCuit } = await supabase.from("proveedores").select("id").eq("cuit", payload.cuit).eq("activo", true).maybeSingle();
+          if (byCuit) existingId = byCuit.id;
+        }
+        if (!existingId) {
+          const { data: byName } = await supabase.from("proveedores").select("id").eq("nombre", nombre).eq("activo", true).maybeSingle();
+          if (byName) existingId = byName.id;
+        }
+
+        if (existingId) {
+          await supabase.from("proveedores").update(payload).eq("id", existingId);
+          updated++;
+        } else {
+          await supabase.from("proveedores").insert(payload);
+          imported++;
+        }
+      }
+
+      showAdminToast(`Importación: ${imported} nuevos, ${updated} actualizados${failed > 0 ? `, ${failed} omitidos` : ""}`, "success");
+      refetch();
+    } catch (err: any) {
+      showAdminToast("Error al importar: " + (err.message || "Error"), "error");
+    }
+  };
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <PageHeader
@@ -386,15 +461,40 @@ export default function ProveedoresPage() {
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => {
               const ws = XLSX.utils.json_to_sheet(providers.map((p: any) => ({
-                Nombre: p.nombre, "Razón Social": p.razon_social || "", CUIT: p.cuit || "", Rubro: p.rubro || "",
-                Teléfono: p.telefono || "", Email: p.email || "", Domicilio: p.domicilio || "",
-                Localidad: p.localidad || "", Provincia: p.provincia || "",
-                Contacto: p.contacto_nombre || "", "Días Entrega": p.dias_entrega || "",
-                "Plazo Pago": p.plazo_pago || "", Saldo: p.saldo || 0,
+                "Nombre": p.nombre,
+                "Razón Social": p.razon_social || "",
+                "CUIT": p.cuit || "",
+                "Condición IVA": p.condicion_iva || "",
+                "Código": p.codigo_proveedor || "",
+                "Rubro": p.rubro || "",
+                "Teléfono": p.telefono || "",
+                "Teléfono 2": p.telefono2 || "",
+                "Email": p.email || "",
+                "Web": p.web || "",
+                "Domicilio": p.domicilio || "",
+                "Localidad": p.localidad || "",
+                "Provincia": p.provincia || "",
+                "Contacto": p.contacto_nombre || "",
+                "Cargo Contacto": p.contacto_cargo || "",
+                "Días Entrega": p.dias_entrega || "",
+                "Plazo Pago": p.plazo_pago || "",
+                "Saldo": p.saldo || 0,
+                "Observación": p.observacion || "",
               })));
+              ws["!cols"] = [
+                { wch: 28 }, { wch: 30 }, { wch: 14 }, { wch: 22 }, { wch: 10 },
+                { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 28 }, { wch: 20 },
+                { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 20 }, { wch: 16 },
+                { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 30 },
+              ];
               const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Proveedores");
-              XLSX.writeFile(wb, "proveedores.xlsx");
+              XLSX.writeFile(wb, `Proveedores_${todayARG()}.xlsx`);
+              showAdminToast(`${providers.length} proveedores exportados`, "success");
             }}><Download className="w-4 h-4 mr-1" />Exportar</Button>
+            <Button variant="outline" size="sm" onClick={() => importRef.current?.click()}>
+              <FileText className="w-4 h-4 mr-1" />Importar
+            </Button>
+            <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportProveedores} />
             <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo proveedor</Button>
           </div>
         }

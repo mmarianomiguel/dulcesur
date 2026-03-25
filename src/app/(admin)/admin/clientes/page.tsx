@@ -612,6 +612,7 @@ export default function ClientesPage() {
       return {
         "Código": (c as any).codigo_cliente || "",
         "Nombre": c.nombre,
+        "DNI": c.numero_documento || "",
         "CUIT": c.cuit || "",
         "Situacion IVA": c.situacion_iva,
         "Tipo Factura": c.tipo_factura || "",
@@ -632,10 +633,25 @@ export default function ClientesPage() {
     });
     const ws = XLSX.utils.json_to_sheet(rows);
     ws["!cols"] = [
-      { wch: 10 }, { wch: 30 }, { wch: 14 }, { wch: 22 }, { wch: 12 },
-      { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 16 }, { wch: 28 },
-      { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 16 },
-      { wch: 20 }, { wch: 12 }, { wch: 30 },
+      { wch: 10 }, // Código
+      { wch: 30 }, // Nombre
+      { wch: 12 }, // DNI
+      { wch: 14 }, // CUIT
+      { wch: 22 }, // Sit IVA
+      { wch: 12 }, // Tipo Factura
+      { wch: 30 }, // Razon Social
+      { wch: 30 }, // Domicilio
+      { wch: 30 }, // Dom Fiscal
+      { wch: 16 }, // Telefono
+      { wch: 28 }, // Email
+      { wch: 16 }, // Provincia
+      { wch: 16 }, // Localidad
+      { wch: 10 }, // CP
+      { wch: 16 }, // Barrio
+      { wch: 16 }, // Zona
+      { wch: 20 }, // Vendedor
+      { wch: 12 }, // Saldo
+      { wch: 30 }, // Observacion
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Clientes");
@@ -690,6 +706,7 @@ export default function ClientesPage() {
         if (!nombre) { failed++; continue; }
 
         const codigo = getVal(row, "codigo", "cod");
+        const dni = getVal(row, "dni", "numero documento", "documento");
         const cuit = getVal(row, "cuit");
         const sitIva = getVal(row, "situacion iva", "iva") || "Consumidor final";
         const tipoFactura = getVal(row, "tipo factura");
@@ -710,6 +727,7 @@ export default function ClientesPage() {
           nombre,
           situacion_iva: sitIva,
           codigo_cliente: codigo || null,
+          numero_documento: dni || null,
           cuit: cuit || null,
           tipo_factura: tipoFactura || null,
           razon_social: razonSocial || null,
