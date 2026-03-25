@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { showAdminToast } from "@/components/admin-toast";
 import { todayARG, nowTimeARG, currentMonthPadded } from "@/lib/formatters";
 import type { Proveedor } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,7 +39,11 @@ import {
   AlertCircle,
   ImageIcon,
   X,
+  TrendingUp,
+  Printer,
+  Download,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logAudit } from "@/lib/audit";
 
@@ -92,6 +97,7 @@ interface CompraItem {
   costo_original: number;
   precio_original: number;
   subtotal: number;
+  actualizarPrecio: boolean;
 }
 
 /* ───────── helpers ───────── */
@@ -149,6 +155,10 @@ export default function ComprasPage() {
   // Confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [actualizarPrecios, setActualizarPrecios] = useState(true);
+
+  // Post-purchase: modified prices dialog
+  const [showPreciosDialog, setShowPreciosDialog] = useState(false);
+  const [preciosModificados, setPreciosModificados] = useState<{ nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[]>([]);
 
   // Product search for adding items
   const [productSearch, setProductSearch] = useState("");
@@ -290,6 +300,7 @@ export default function ComprasPage() {
         costo_original: product.costo,
         precio_original: product.precio,
         subtotal: costoUnit * cantidad,
+        actualizarPrecio: true,
       },
     ]);
     setProductSearch("");
@@ -347,6 +358,8 @@ export default function ComprasPage() {
     setSaving(true);
     setSaveError("");
     setShowConfirmDialog(false);
+
+    const preciosActualizados: { nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[] = [];
 
     try {
       let numero = numeroCompra.trim();
@@ -449,8 +462,8 @@ export default function ComprasPage() {
         });
 
         // Update cost and price if modified
-        if (item.costo_unitario !== item.costo_original && item.costo_original > 0) {
-          if (actualizarPrecios) {
+        if (item.costo_unitario !== item.costo_original) {
+          if (item.actualizarPrecio && item.costo_original > 0) {
             const marginRatio = item.precio_original / item.costo_original;
             const newPrecio = Math.round(item.costo_unitario * marginRatio);
             await supabase
@@ -461,6 +474,14 @@ export default function ComprasPage() {
                 fecha_actualizacion: todayString(),
               })
               .eq("id", item.producto_id);
+            preciosActualizados.push({
+              nombre: item.nombre,
+              codigo: item.codigo,
+              precioAnterior: item.precio_original,
+              precioNuevo: newPrecio,
+              costoAnterior: item.costo_original,
+              costoNuevo: item.costo_unitario,
+            });
           } else {
             await supabase
               .from("productos")
@@ -470,14 +491,6 @@ export default function ComprasPage() {
               })
               .eq("id", item.producto_id);
           }
-        } else if (item.costo_unitario !== item.costo_original) {
-          await supabase
-            .from("productos")
-            .update({
-              costo: item.costo_unitario,
-              fecha_actualizacion: todayString(),
-            })
-            .eq("id", item.producto_id);
         }
       }
 
@@ -524,6 +537,12 @@ export default function ComprasPage() {
       });
 
       setSaving(false);
+
+      if (preciosActualizados.length > 0) {
+        setPreciosModificados(preciosActualizados);
+        setShowPreciosDialog(true);
+      }
+
       resetForm();
       setMode("list");
       fetchData();
@@ -799,6 +818,26 @@ export default function ComprasPage() {
                 </p>
               </div>
             ) : (
+              <>
+                {/* Price update controls */}
+                {items.some((i) => i.costo_unitario !== i.costo_original && i.costo_original > 0) && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-blue-50 rounded-lg mb-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-medium text-blue-800">
+                        {items.filter((i) => i.costo_unitario !== i.costo_original && i.actualizarPrecio).length} de{" "}
+                        {items.filter((i) => i.costo_unitario !== i.costo_original).length} productos actualizarán precio
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-blue-700" onClick={() => setItems((prev) => prev.map((i) => i.costo_unitario !== i.costo_original ? { ...i, actualizarPrecio: true } : i))}>
+                        Marcar todos
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-blue-700" onClick={() => setItems((prev) => prev.map((i) => i.costo_unitario !== i.costo_original ? { ...i, actualizarPrecio: false } : i))}>
+                        Desmarcar todos
+                      </Button>
+                    </div>
+                  </div>
+                )}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -814,6 +853,7 @@ export default function ComprasPage() {
                       <th className="text-right py-3 px-3 font-medium">Costo Caja</th>
                       <th className="text-right py-3 px-3 font-medium">Subtotal</th>
                       <th className="text-center py-3 px-3 font-medium">Mod.</th>
+                      <th className="text-center py-3 px-2 font-medium">Actualizar PVP</th>
                       <th className="w-10"></th>
                     </tr>
                   </thead>
@@ -902,6 +942,31 @@ export default function ComprasPage() {
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
+                          <td className="py-2 px-2 text-center">
+                            {costoChanged && item.costo_original > 0 ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.actualizarPrecio}
+                                    onChange={(e) => {
+                                      setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarPrecio: e.target.checked } : it));
+                                    }}
+                                    className="w-3.5 h-3.5 rounded border-gray-300 accent-primary"
+                                  />
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {item.actualizarPrecio ? (
+                                      <>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(Math.round(item.costo_unitario * (item.precio_original / item.costo_original)))}</span></>
+                                    ) : (
+                                      <span>Mantener {formatCurrency(item.precio_original)}</span>
+                                    )}
+                                  </span>
+                                </label>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </td>
                           <td className="py-2 px-2">
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => removeItem(idx)}>
                               <Trash2 className="w-3.5 h-3.5" />
@@ -931,6 +996,7 @@ export default function ComprasPage() {
                   </div>
                 </div>
               </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -1001,25 +1067,28 @@ export default function ComprasPage() {
                 </div>
               </div>
 
-              {/* Price changes */}
-              {items.some((i) => i.costo_unitario !== i.costo_original) && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={actualizarPrecios}
-                      onChange={(e) => setActualizarPrecios(e.target.checked)}
-                      className="w-4 h-4 rounded border-border mt-0.5 accent-amber-600"
-                    />
-                    <span className="text-sm text-amber-900">
-                      <strong>Actualizar precios de venta</strong> manteniendo el margen
-                      <span className="block text-xs text-amber-700 mt-0.5">
-                        {items.filter((i) => i.costo_unitario !== i.costo_original).length} producto(s) con costo modificado
-                      </span>
-                    </span>
-                  </label>
-                </div>
-              )}
+              {/* Price changes summary */}
+              {items.some((i) => i.costo_unitario !== i.costo_original) && (() => {
+                const modified = items.filter((i) => i.costo_unitario !== i.costo_original);
+                const willUpdate = modified.filter((i) => i.actualizarPrecio && i.costo_original > 0);
+                const willKeep = modified.filter((i) => !i.actualizarPrecio || i.costo_original <= 0);
+                return (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1.5">
+                    <p className="text-sm font-semibold text-amber-900">Precios de venta</p>
+                    {willUpdate.length > 0 && (
+                      <p className="text-xs text-amber-700">
+                        <span className="font-semibold text-primary">{willUpdate.length}</span> producto(s) actualizarán precio (manteniendo margen)
+                      </p>
+                    )}
+                    {willKeep.length > 0 && (
+                      <p className="text-xs text-amber-700">
+                        <span className="font-semibold">{willKeep.length}</span> producto(s) mantendrán su precio actual
+                      </p>
+                    )}
+                    <p className="text-[10px] text-amber-600">Podés cambiar esto desde la columna &quot;Actualizar PVP&quot; en la tabla</p>
+                  </div>
+                );
+              })()}
 
               {/* Payment section */}
               <div className="space-y-3 border-t pt-4">
@@ -1075,6 +1144,115 @@ export default function ComprasPage() {
                   {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Confirmar compra — {formatCurrency(totalCompra)}
                 </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Post-purchase: modified prices dialog */}
+        <Dialog open={showPreciosDialog} onOpenChange={setShowPreciosDialog}>
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                Precios actualizados ({preciosModificados.length})
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Los siguientes productos actualizaron su precio de venta manteniendo el margen:
+              </p>
+              <div className="rounded-lg border divide-y max-h-60 overflow-y-auto">
+                {preciosModificados.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-2.5 text-sm">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{p.nombre}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">{p.codigo}</p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground line-through">{formatCurrency(p.precioAnterior)}</p>
+                        <p className="font-bold text-primary">{formatCurrency(p.precioNuevo)}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.precioNuevo > p.precioAnterior ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>
+                        {p.precioNuevo > p.precioAnterior ? "+" : ""}{Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
+                <Button variant="outline" className="flex-1 gap-2" onClick={() => {
+                  // Generate price tags PDF
+                  const { jsPDF } = require("jspdf");
+                  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                  const w = pdf.internal.pageSize.getWidth();
+                  const h = pdf.internal.pageSize.getHeight();
+                  const cols = 3;
+                  const rows = 4;
+                  const tagW = (w - 20) / cols;
+                  const tagH = (h - 20) / rows;
+                  let col = 0, row = 0;
+
+                  for (const p of preciosModificados) {
+                    if (row >= rows) { pdf.addPage(); row = 0; col = 0; }
+                    const x = 10 + col * tagW;
+                    const y = 10 + row * tagH;
+                    // Border
+                    pdf.setDrawColor(200);
+                    pdf.setLineDashPattern([2, 2], 0);
+                    pdf.rect(x, y, tagW, tagH);
+                    pdf.setLineDashPattern([], 0);
+                    // Product name
+                    pdf.setFontSize(10);
+                    pdf.setFont("helvetica", "bold");
+                    const nameLines = pdf.splitTextToSize(p.nombre, tagW - 8);
+                    pdf.text(nameLines.slice(0, 2), x + tagW / 2, y + 10, { align: "center" });
+                    // Code
+                    pdf.setFontSize(7);
+                    pdf.setFont("helvetica", "normal");
+                    pdf.setTextColor(120);
+                    pdf.text(p.codigo || "", x + tagW / 2, y + 20, { align: "center" });
+                    pdf.setTextColor(0);
+                    // Price
+                    pdf.setFontSize(28);
+                    pdf.setFont("helvetica", "bold");
+                    const fmtPrice = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(p.precioNuevo);
+                    pdf.text(fmtPrice, x + tagW / 2, y + tagH - 10, { align: "center" });
+
+                    col++;
+                    if (col >= cols) { col = 0; row++; }
+                  }
+                  pdf.save(`Carteles_Precios_${todayString()}.pdf`);
+                  showAdminToast("PDF de carteles generado", "success");
+                }}>
+                  <Printer className="w-4 h-4" />
+                  Imprimir carteles de precio
+                </Button>
+                <Button variant="outline" className="flex-1 gap-2" onClick={() => {
+                  // Export price list
+                  const ws = XLSX.utils.json_to_sheet(preciosModificados.map((p) => ({
+                    "Código": p.codigo,
+                    "Producto": p.nombre,
+                    "Precio Anterior": p.precioAnterior,
+                    "Precio Nuevo": p.precioNuevo,
+                    "Diferencia": p.precioNuevo - p.precioAnterior,
+                    "% Cambio": Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100),
+                    "Costo Anterior": p.costoAnterior,
+                    "Costo Nuevo": p.costoNuevo,
+                  })));
+                  ws["!cols"] = [{ wch: 16 }, { wch: 35 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, "Precios");
+                  XLSX.writeFile(wb, `Lista_Precios_Actualizados_${todayString()}.xlsx`);
+                  showAdminToast("Lista de precios exportada", "success");
+                }}>
+                  <Download className="w-4 h-4" />
+                  Exportar lista de precios
+                </Button>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={() => setShowPreciosDialog(false)}>Cerrar</Button>
               </div>
             </div>
           </DialogContent>
