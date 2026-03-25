@@ -977,8 +977,18 @@ export default function ProductoDetallePage() {
                       {(() => {
                         const selPres = pres && pres[presIdx];
                         const unitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
-                        const maxQty = Math.max(1, Math.floor(rel.stock / unitsPerPres));
-                        const outOfStock = rel.stock <= 0;
+                        const relLabel = getRelLabel(rel);
+                        // Check how many are already in cart for this product+presentation
+                        const cartKey = `${rel.id}_${relLabel}`;
+                        let inCart = 0;
+                        try {
+                          const stored = localStorage.getItem("carrito");
+                          const cart = stored ? JSON.parse(stored) : [];
+                          const found = cart.find((c: any) => c.id === cartKey || (relLabel === "Unidad" && c.id === rel.id));
+                          if (found) inCart = found.cantidad || 0;
+                        } catch {}
+                        const maxQty = Math.max(0, Math.floor(rel.stock / unitsPerPres) - inCart);
+                        const outOfStock = rel.stock <= 0 || maxQty <= 0;
                         return (
                           <div className="mt-auto pt-3 flex items-center gap-1.5">
                             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
@@ -989,7 +999,7 @@ export default function ProductoDetallePage() {
                               >
                                 <Minus className="w-3 h-3" />
                               </button>
-                              <span className="w-7 text-center text-xs font-medium">{outOfStock ? 0 : qty}</span>
+                              <span className="w-7 text-center text-xs font-medium">{outOfStock ? 0 : Math.min(qty, maxQty || 1)}</span>
                               <button
                                 onClick={() => setRelQty((prev) => ({ ...prev, [rel.id]: Math.min(maxQty, (prev[rel.id] ?? 1) + 1) }))}
                                 disabled={outOfStock || qty >= maxQty}
