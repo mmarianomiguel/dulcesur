@@ -477,8 +477,12 @@ export default function ListadoVentasPage() {
             });
           }
         } else {
-          // Regular product
-          const upp = item.unidades_por_presentacion || 1;
+          // Regular product - fallback: parse units from presentacion name if unidades_por_presentacion is wrong
+          let upp = item.unidades_por_presentacion || 1;
+          if (upp === 1 && item.presentacion && item.presentacion !== "Unidad") {
+            const match = item.presentacion.toLowerCase().match(/x\s*(\d+)/);
+            if (match) upp = Number(match[1]);
+          }
           const unitsToRestore = item.cantidad * upp;
           const newStock = prod.stock + unitsToRestore;
           const { error: updErr } = await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
@@ -966,13 +970,22 @@ export default function ListadoVentasPage() {
         }
       };
 
+      const getUpp = (item: any) => {
+        let u = item.unidades_por_presentacion || 1;
+        if (u === 1 && item.presentacion && item.presentacion !== "Unidad") {
+          const match = item.presentacion.toLowerCase().match(/x\s*(\d+)/);
+          if (match) u = Number(match[1]);
+        }
+        return u;
+      };
+
       // Return stock from original items (positive = freed)
       for (const orig of originalItems) {
-        addStockDiff(orig.producto_id, orig.cantidad, orig.unidades_por_presentacion || 1);
+        addStockDiff(orig.producto_id, orig.cantidad, getUpp(orig));
       }
       // Deduct stock from new items (negative = consumed)
       for (const item of poEditItems) {
-        addStockDiff(item.producto_id, -item.cantidad, item.unidades_por_presentacion || 1);
+        addStockDiff(item.producto_id, -item.cantidad, getUpp(item));
       }
       // stockDiffs > 0 means units freed -> return stock
       // stockDiffs < 0 means units consumed -> decrement stock
@@ -1170,7 +1183,11 @@ export default function ListadoVentasPage() {
     if (nuevoEstado === "cancelado" && estadoAnterior !== "cancelado") {
       for (const item of pedido.items) {
         if (!item.producto_id) continue;
-        const upp = item.unidades_por_presentacion || 1;
+        let upp = item.unidades_por_presentacion || 1;
+        if (upp === 1 && item.presentacion && item.presentacion !== "Unidad") {
+          const match = item.presentacion.toLowerCase().match(/x\s*(\d+)/);
+          if (match) upp = Number(match[1]);
+        }
         const unitsToRestore = item.cantidad * upp;
         const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
         if (!prod) continue;
@@ -1243,7 +1260,11 @@ export default function ListadoVentasPage() {
     if (estadoAnterior === "cancelado" && nuevoEstado !== "cancelado") {
       for (const item of pedido.items) {
         if (!item.producto_id) continue;
-        const upp = item.unidades_por_presentacion || 1;
+        let upp = item.unidades_por_presentacion || 1;
+        if (upp === 1 && item.presentacion && item.presentacion !== "Unidad") {
+          const match = item.presentacion.toLowerCase().match(/x\s*(\d+)/);
+          if (match) upp = Number(match[1]);
+        }
         const unitsToDecrement = item.cantidad * upp;
         const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
         if (!prod) continue;

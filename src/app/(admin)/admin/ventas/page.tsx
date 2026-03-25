@@ -2572,8 +2572,8 @@ export default function VentasPage() {
                     className="w-full flex items-center gap-3 text-left"
                   >
                     <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {p.imagen_url ? (
-                        <img src={p.imagen_url} alt="" className="w-full h-full object-cover" />
+                      {(p as any).imagen_url ? (
+                        <img src={(p as any).imagen_url} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <Package className="w-5 h-5 text-muted-foreground/30" />
                       )}

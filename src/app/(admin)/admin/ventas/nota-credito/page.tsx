@@ -440,7 +440,12 @@ export default function NotaCreditoPage() {
           comp.stock = newStock;
         }
       } else {
-        const unitsToReturn = item.qty * (item.unidades_por_presentacion || 1);
+        let upp = item.unidades_por_presentacion || 1;
+        if (upp === 1 && item.presentacion && item.presentacion !== "Unidad") {
+          const match = item.presentacion.toLowerCase().match(/x\s*(\d+)/);
+          if (match) upp = Number(match[1]);
+        }
+        const unitsToReturn = item.qty * upp;
         const newStock = prod.stock + unitsToReturn;
         await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
         await supabase.from("stock_movimientos").insert({
@@ -1055,8 +1060,8 @@ export default function NotaCreditoPage() {
               <button key={p.id} onClick={() => addItem(p)}
                 className="w-full rounded-xl border p-3 transition-colors hover:border-primary/30 hover:bg-primary/5 text-left flex items-center gap-3">
                 <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {p.imagen_url ? (
-                    <img src={p.imagen_url} alt="" className="w-full h-full object-cover" />
+                  {(p as any).imagen_url ? (
+                    <img src={(p as any).imagen_url} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <Package className="w-5 h-5 text-muted-foreground/30" />
                   )}
