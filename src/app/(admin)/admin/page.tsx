@@ -497,6 +497,34 @@ export default function DashboardPage() {
       comboItems: comboItemsMap[item.producto_id || ""] || [],
     }));
 
+    // Fetch payment breakdown from caja_movimientos
+    let pagoEf = 0, pagoTr = 0, pagoCC = 0;
+    const { data: movs } = await supabase.from("caja_movimientos")
+      .select("metodo_pago, monto, tipo")
+      .eq("referencia_id", venta.id)
+      .eq("referencia_tipo", "venta");
+    for (const m of movs || []) {
+      if (m.tipo === "ingreso") {
+        if (m.metodo_pago === "Efectivo") pagoEf += m.monto;
+        else if (m.metodo_pago === "Transferencia") pagoTr += m.monto;
+        else if (m.metodo_pago === "Cuenta Corriente") pagoCC += m.monto;
+      }
+    }
+    // Fallback: if no caja_movimientos, try pedidos_tienda
+    if (pagoEf === 0 && pagoTr === 0 && pagoCC === 0) {
+      const { data: pedido } = await supabase.from("pedidos_tienda")
+        .select("monto_efectivo, monto_transferencia, recargo_transferencia")
+        .eq("numero", venta.numero)
+        .single();
+      if (pedido) {
+        pagoEf = pedido.monto_efectivo || 0;
+        pagoTr = pedido.monto_transferencia || 0;
+      }
+    }
+
+    // Fetch client saldo
+    const saldoActual = cliente?.saldo || 0;
+
     const sale: ReceiptSale = {
       numero: venta.numero,
       total: venta.total,
@@ -514,8 +542,11 @@ export default function DashboardPage() {
       vendedor: "Pedido Online",
       items: saleItems,
       fecha: new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }),
-      saldoAnterior: 0,
-      saldoNuevo: 0,
+      saldoAnterior: saldoActual,
+      saldoNuevo: saldoActual,
+      pagoEfectivo: pagoEf || undefined,
+      pagoTransferencia: pagoTr || undefined,
+      pagoCuentaCorriente: pagoCC || undefined,
     };
     setPrintSale(sale);
   };
