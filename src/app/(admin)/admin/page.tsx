@@ -247,7 +247,7 @@ export default function DashboardPage() {
   const fetchPedidosOnline = useCallback(async () => {
     const { data: ventasOnline } = await supabase
       .from("ventas")
-      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, producto_id, codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
+      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, cuenta_transferencia_alias, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, producto_id, codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
       .eq("origen", "tienda")
       .eq("entregado", false)
       .neq("estado", "anulada")
@@ -781,6 +781,14 @@ export default function DashboardPage() {
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
                             <Badge variant="outline" className="text-[10px] font-normal">{p.forma_pago}</Badge>
+                            {(() => {
+                              const fp = (p.forma_pago || "").toLowerCase();
+                              const hasTransfer = fp.includes("transferencia") || fp.includes("mixto");
+                              if (hasTransfer && !(p as any).cuenta_transferencia_alias) {
+                                return <Badge variant="outline" className="text-[10px] font-normal ml-1 border-amber-300 bg-amber-50 text-amber-700">Sin cuenta</Badge>;
+                              }
+                              return null;
+                            })()}
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -947,6 +955,7 @@ export default function DashboardPage() {
           telefono: pedidoDetail.clientes?.telefono || undefined,
           domicilio: [pedidoDetail.clientes?.domicilio, pedidoDetail.clientes?.localidad].filter(Boolean).join(", ") || undefined,
           fecha_entrega: pedidoEntregaMap[pedidoDetail.numero] || null,
+          cuenta_transferencia_alias: (pedidoDetail as any).cuenta_transferencia_alias || null,
           origen: "pedidos",
           comboIds: comboProductIds,
         } : null}

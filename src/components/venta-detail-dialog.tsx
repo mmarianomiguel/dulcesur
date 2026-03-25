@@ -22,6 +22,8 @@ import {
   Package,
   Globe,
   Printer,
+  AlertTriangle,
+  Banknote,
 } from "lucide-react";
 
 // ─── Types ───
@@ -65,6 +67,8 @@ export interface VentaDetailData {
   direccion_texto?: string | null;
   fecha_entrega?: string | null;
   vendedor?: string;
+  // Transfer account
+  cuenta_transferencia_alias?: string | null;
   // Source
   origen?: "historial" | "pedidos" | "pos";
   // Combo product IDs
@@ -195,6 +199,22 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, onPrint, fo
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">Pago: {pago}</p>
+                {(() => {
+                  const fp = ((data.forma_pago || "") + " " + (data.metodo_pago || "")).toLowerCase();
+                  const hasTransfer = fp.includes("transferencia") || fp.includes("mixto");
+                  if (!hasTransfer) return null;
+                  return data.cuenta_transferencia_alias ? (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Banknote className="w-3 h-3" />
+                      Cuenta: <span className="font-medium text-foreground">{data.cuenta_transferencia_alias}</span>
+                    </p>
+                  ) : (
+                    <p className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
+                      <AlertTriangle className="w-3 h-3" />
+                      Falta asignar cuenta bancaria
+                    </p>
+                  );
+                })()}
                 {data.vendedor && data.vendedor !== "—" && (
                   <p className="text-xs text-muted-foreground">Vendedor: {data.vendedor}</p>
                 )}
