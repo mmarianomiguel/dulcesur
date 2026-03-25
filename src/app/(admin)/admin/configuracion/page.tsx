@@ -63,6 +63,7 @@ interface CuentaBancaria {
   alias: string;
   titular?: string;
   origen?: string;
+  logo_url?: string | null;
 }
 
 function loadReceiptConfig(): ReceiptConfig {
@@ -111,7 +112,7 @@ export default function ConfiguracionPage() {
   const [rcfg, setRcfg] = useState<ReceiptConfig>(defaultReceiptConfig);
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
   const [editingCuenta, setEditingCuenta] = useState<CuentaBancaria | null>(null);
-  const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "" });
+  const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "", logo_url: "" });
   const [proveedoresList, setProveedoresList] = useState<{ id: string; nombre: string }[]>([]);
   const [showCuentaForm, setShowCuentaForm] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("empresa");
@@ -785,7 +786,7 @@ export default function ConfiguracionPage() {
                             <div className="flex gap-1">
                               <Button variant="ghost" size="sm" onClick={() => {
                                 setEditingCuenta(c);
-                                setCuentaForm({ nombre: c.nombre, tipo: c.tipo, cbu_cvu: c.cbu_cvu, alias: c.alias, origen: c.origen || "propia", titular: c.titular || "", proveedor_id: (c as any).proveedor_id || "" });
+                                setCuentaForm({ nombre: c.nombre, tipo: c.tipo, cbu_cvu: c.cbu_cvu, alias: c.alias, origen: c.origen || "propia", titular: c.titular || "", proveedor_id: (c as any).proveedor_id || "", logo_url: c.logo_url || "" });
                                 setShowCuentaForm(true);
                               }}>
                                 <Pencil className="w-3.5 h-3.5" />
@@ -858,6 +859,35 @@ export default function ConfiguracionPage() {
                           <Label>CBU / CVU (opcional)</Label>
                           <Input placeholder="22 dígitos" value={cuentaForm.cbu_cvu} onChange={(ev) => setCuentaForm({ ...cuentaForm, cbu_cvu: ev.target.value })} />
                         </div>
+                        <div className="space-y-1.5">
+                          <Label>Logo (opcional)</Label>
+                          <div className="flex items-center gap-3">
+                            {cuentaForm.logo_url ? (
+                              <div className="relative w-10 h-10 rounded-lg border overflow-hidden bg-white flex-shrink-0">
+                                <img src={cuentaForm.logo_url} alt="" className="w-full h-full object-contain p-0.5" />
+                                <button type="button" onClick={() => setCuentaForm({ ...cuentaForm, logo_url: "" })} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[8px] flex items-center justify-center hover:bg-red-600">×</button>
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg border border-dashed border-gray-300 flex items-center justify-center flex-shrink-0 text-gray-300">
+                                <Image className="w-4 h-4" />
+                              </div>
+                            )}
+                            <label className="flex-1 cursor-pointer">
+                              <span className="text-xs text-primary hover:underline">{cuentaForm.logo_url ? "Cambiar" : "Subir logo"}</span>
+                              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const formData = new FormData();
+                                formData.append("file", file);
+                                try {
+                                  const res = await fetch("/api/upload", { method: "POST", body: formData });
+                                  const data = await res.json();
+                                  if (data.url) setCuentaForm({ ...cuentaForm, logo_url: data.url });
+                                } catch {}
+                              }} />
+                            </label>
+                          </div>
+                        </div>
                         <div className="space-y-1">
                           <Label>Tipo de cuenta</Label>
                           <Select value={cuentaForm.tipo} onValueChange={(v) => setCuentaForm({ ...cuentaForm, tipo: v ?? "" })}>
@@ -871,24 +901,24 @@ export default function ConfiguracionPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "" }); }}>
+                        <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "", logo_url: "" }); }}>
                           Cancelar
                         </Button>
                         <Button size="sm" disabled={!cuentaForm.nombre} onClick={async () => {
                           if (editingCuenta) {
                             await supabase.from("cuentas_bancarias").update({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null, updated_at: new Date().toISOString(),
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null, logo_url: cuentaForm.logo_url || null, updated_at: new Date().toISOString(),
                             }).eq("id", editingCuenta.id);
                             setCuentas(cuentas.map((c) => c.id === editingCuenta.id ? { ...c, ...cuentaForm } : c));
                           } else {
                             const { data: newCuenta } = await supabase.from("cuentas_bancarias").insert({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null,
+                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null, logo_url: cuentaForm.logo_url || null,
                             }).select("id").single();
                             if (newCuenta) setCuentas([...cuentas, { id: newCuenta.id, ...cuentaForm }]);
                           }
                           setShowCuentaForm(false);
                           setEditingCuenta(null);
-                          setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "" });
+                          setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "", logo_url: "" });
                         }}>
                           <Check className="w-4 h-4 mr-1" />
                           {editingCuenta ? "Actualizar" : "Agregar"}

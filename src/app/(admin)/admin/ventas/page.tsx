@@ -87,6 +87,7 @@ interface CuentaBancaria {
   cbu_cvu?: string;
   alias?: string;
   origen?: string;
+  logo_url?: string | null;
 }
 
 interface ComboItemRef {
@@ -369,7 +370,7 @@ export default function VentasPage() {
   useEffect(() => {
     (async () => {
       // Load bank accounts from DB (own + provider accounts)
-      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, tipo_cuenta, cbu_cvu, alias, origen").eq("activo", true).order("nombre");
+      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, tipo_cuenta, cbu_cvu, alias, origen, logo_url").eq("activo", true).order("nombre");
       if (data && data.length > 0) {
         setCuentasBancarias(data as CuentaBancaria[]);
       } else {
@@ -2119,15 +2120,18 @@ export default function VentasPage() {
                         <button
                           key={cb.id}
                           onClick={() => setCuentaBancariaId(selected ? "" : cb.id)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                             selected
                               ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
                               : "bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:bg-emerald-50"
                           }`}
                         >
+                          {cb.logo_url && (
+                            <img src={cb.logo_url} alt="" className="w-5 h-5 rounded object-contain" />
+                          )}
                           <span className="font-semibold">{cb.alias || cb.nombre}</span>
                           {cb.origen === "proveedor" && (
-                            <span className={`ml-1 text-[9px] ${selected ? "text-emerald-100" : "text-gray-400"}`}>Prov.</span>
+                            <span className={`text-[9px] ${selected ? "text-emerald-100" : "text-gray-400"}`}>Prov.</span>
                           )}
                         </button>
                       );
