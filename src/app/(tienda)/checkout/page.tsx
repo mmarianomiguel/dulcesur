@@ -664,15 +664,47 @@ export default function CheckoutPage() {
         if (ventaItemsError) throw ventaItemsError;
 
         // Update stock atomically (prevents race conditions with concurrent sales)
-        const stockItems = items.map((item) => {
+        // For combos: expand to component products instead of decrementing the combo itself
+        const comboProductIds = (stockData || []).filter((p: any) => p.es_combo).map((p: any) => p.id);
+        let comboComponentsMap: Record<string, { producto_id: string; cantidad: number; nombre: string }[]> = {};
+        if (comboProductIds.length > 0) {
+          const { data: ciData } = await supabase
+            .from("combo_items")
+            .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre)")
+            .in("combo_id", comboProductIds);
+          for (const ci of (ciData || []) as any[]) {
+            if (!comboComponentsMap[ci.combo_id]) comboComponentsMap[ci.combo_id] = [];
+            comboComponentsMap[ci.combo_id].push({
+              producto_id: ci.productos?.id,
+              cantidad: ci.cantidad,
+              nombre: ci.productos?.nombre || "",
+            });
+          }
+        }
+
+        const stockItems: { producto_id: string; cantidad: number; descripcion: string }[] = [];
+        for (const item of items) {
           const prodId = item.id.split("_")[0];
           const presUnits = item.unidades_por_presentacion || 1;
-          return {
-            producto_id: prodId,
-            cantidad: item.cantidad * presUnits,
-            descripcion: `Venta Web - ${item.nombre} (${item.presentacion || "Unidad"})`,
-          };
-        });
+          const comboComponents = comboComponentsMap[prodId];
+          if (comboComponents && comboComponents.length > 0) {
+            // Combo: decrement each component
+            for (const comp of comboComponents) {
+              stockItems.push({
+                producto_id: comp.producto_id,
+                cantidad: item.cantidad * comp.cantidad,
+                descripcion: `Venta Web combo ${item.nombre} - ${comp.nombre}`,
+              });
+            }
+          } else {
+            // Regular product
+            stockItems.push({
+              producto_id: prodId,
+              cantidad: item.cantidad * presUnits,
+              descripcion: `Venta Web - ${item.nombre} (${item.presentacion || "Unidad"})`,
+            });
+          }
+        }
 
         const { data: stockResult, error: stockError } = await supabase.rpc("decrementar_stock_venta", {
           p_items: stockItems,
