@@ -1654,6 +1654,15 @@ export default function ListadoVentasPage() {
                             <DollarSign className="w-3 h-3 mr-1" />{pago}
                           </Badge>
                         )}
+                        {/* Warning: transfer without bank account */}
+                        {((order.forma_pago || order.metodo_pago || "").toLowerCase().includes("transferencia") ||
+                          (order.forma_pago || order.metodo_pago || "").toLowerCase().includes("mixto")) &&
+                          !(order as any).cuenta_transferencia_alias && order.estado !== "cancelado" && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                            <AlertTriangle className="w-3 h-3" />
+                            Sin cuenta
+                          </span>
+                        )}
                         {isHistorial && order._tipo_comprobante && (
                           <Badge variant="secondary" className="text-[10px] font-normal">{order._tipo_comprobante}</Badge>
                         )}

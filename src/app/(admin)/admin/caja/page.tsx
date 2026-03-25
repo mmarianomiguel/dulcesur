@@ -36,6 +36,7 @@ import {
   History,
   Eye,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
@@ -221,6 +222,10 @@ export default function CajaPage() {
 
   // Sale detail for viewing
   const [ventaDetailOpen, setVentaDetailOpen] = useState(false);
+  const [cajaCuentasBancarias, setCajaCuentasBancarias] = useState<{ id: string; nombre: string; alias: string }[]>([]);
+  useEffect(() => {
+    supabase.from("cuentas_bancarias").select("id, nombre, alias").eq("activo", true).order("nombre").then(({ data }) => setCajaCuentasBancarias(data || []));
+  }, []);
   const [ventaDetail, setVentaDetail] = useState<Venta | null>(null);
   const [ventaDetailItems, setVentaDetailItems] = useState<any[]>([]);
   const [ventaDetailMovs, setVentaDetailMovs] = useState<any[]>([]);
@@ -1060,6 +1065,12 @@ export default function CajaPage() {
                               <Badge variant="secondary" className="text-xs font-normal">
                                 {v.forma_pago}
                               </Badge>
+                              {(v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") && !(v as any).cuenta_transferencia_alias && (
+                                <span className="ml-1 inline-flex items-center gap-0.5 text-[9px] text-amber-600 font-medium bg-amber-50 border border-amber-200 px-1 py-0 rounded">
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  Sin cuenta
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 px-4 text-right font-semibold text-emerald-600">
                               {formatCurrency(v.total)}
@@ -1709,7 +1720,27 @@ export default function CajaPage() {
           if (pagos.length === 0 && ventaDetail.forma_pago) pagos.push({ metodo: ventaDetail.forma_pago, monto: ventaDetail.total });
           return pagos;
         })()}
-
+        footerExtra={ventaDetail && (ventaDetail.forma_pago === "Transferencia" || ventaDetail.forma_pago === "Mixto") && !(ventaDetail as any).cuenta_transferencia_alias && cajaCuentasBancarias.length > 0 ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-amber-600 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Asignar cuenta:</span>
+            {cajaCuentasBancarias.map((cb) => (
+              <button
+                key={cb.id}
+                onClick={async () => {
+                  const alias = cb.alias || cb.nombre;
+                  await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("id", ventaDetail.id);
+                  await supabase.from("caja_movimientos").update({ cuenta_bancaria: alias }).eq("referencia_id", ventaDetail.id).eq("referencia_tipo", "venta").eq("metodo_pago", "Transferencia");
+                  setVentaDetail({ ...ventaDetail, cuenta_transferencia_alias: alias } as any);
+                  refetchVentas();
+                  showAdminToast(`Cuenta asignada: ${alias}`, "success");
+                }}
+                className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium transition"
+              >
+                {cb.alias || cb.nombre}
+              </button>
+            ))}
+          </div>
+        ) : undefined}
       />
     </div>
   );
