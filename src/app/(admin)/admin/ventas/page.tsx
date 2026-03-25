@@ -51,6 +51,7 @@ import {
   Eye,
   ScanBarcode,
   AlertCircle,
+  Package,
 } from "lucide-react";
 
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
