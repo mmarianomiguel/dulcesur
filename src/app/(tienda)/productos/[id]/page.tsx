@@ -86,15 +86,24 @@ export default function ProductoDetallePage() {
   const [restricted, setRestricted] = useState(false);
   const { permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
 
-  // Sync cart quantities
+  // Sync cart quantities — track total UNITS per product (across all presentations)
+  const [cartUnitsByProduct, setCartUnitsByProduct] = useState<Record<string, number>>({});
   useEffect(() => {
     function syncCart() {
       const stored = localStorage.getItem("carrito");
-      let carrito: { id: string; cantidad: number }[];
+      let carrito: any[];
       try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
       const map: Record<string, number> = {};
-      carrito.forEach((item) => map[item.id] = (map[item.id] || 0) + item.cantidad);
+      const unitsMap: Record<string, number> = {};
+      carrito.forEach((item: any) => {
+        map[item.id] = (map[item.id] || 0) + (item.cantidad || 0);
+        // Extract product ID from cart key (format: "productId_presLabel" or just "productId")
+        const productId = (item.id || "").includes("_") ? item.id.split("_")[0] : item.id;
+        const totalUnits = (item.cantidad || 0) * (item.unidades_por_presentacion || 1);
+        unitsMap[productId] = (unitsMap[productId] || 0) + totalUnits;
+      });
       setCartQtys(map);
+      setCartUnitsByProduct(unitsMap);
     }
     syncCart();
     window.addEventListener("cart-updated", syncCart);
@@ -375,16 +384,8 @@ export default function ProductoDetallePage() {
   // Max qty based on stock and presentation, minus what's already in cart
   const cartKey = producto ? `${producto.id}_${currentPresLabel}` : "";
   const inCart = cartQtys[cartKey] || 0;
-  // Total units in cart for this product (all presentations)
-  const totalUnitsInCart = producto ? Object.entries(cartQtys).reduce((sum, [key, qty]) => {
-    if (key.startsWith(producto.id + "_")) {
-      const presName = key.substring(producto.id.length + 1);
-      const pres = presentaciones.find((p) => presLabelFn(p) === presName);
-      const units = pres ? pres.cantidad : 1;
-      return sum + qty * units;
-    }
-    return sum;
-  }, 0) : 0;
+  // Total units in cart for this product (all presentations) — from reactive state
+  const totalUnitsInCart = producto ? (cartUnitsByProduct[producto.id] || 0) : 0;
   const comboStock = producto?.es_combo && comboComponentes.length > 0
     ? Math.min(...comboComponentes.map((c) => Math.floor(c.stock / c.cantidad)))
     : null;
@@ -979,20 +980,8 @@ export default function ProductoDetallePage() {
                       {(() => {
                         const selPres = pres && pres[presIdx];
                         const unitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
-                        // Calculate total units of this product across all presentations in cart
-                        let totalUnitsInCart = 0;
-                        try {
-                          const stored = localStorage.getItem("carrito");
-                          const cart: any[] = stored ? JSON.parse(stored) : [];
-                          cart.forEach((c) => {
-                            if (c.id === rel.id || c.id?.startsWith(`${rel.id}_`)) {
-                              totalUnitsInCart += (c.cantidad || 0) * (c.unidades_por_presentacion || 1);
-                            }
-                          });
-                        } catch {}
-                        // Also use reactive cartQtys as fallback trigger for re-render
-                        const _reactiveCheck = Object.keys(cartQtys).length;
-                        void _reactiveCheck;
+                        // Use reactive state for total units in cart (updates on cart-updated event)
+                        const totalUnitsInCart = cartUnitsByProduct[rel.id] || 0;
                         const availableUnits = Math.max(0, rel.stock - totalUnitsInCart);
                         const maxQty = Math.floor(availableUnits / unitsPerPres);
                         const outOfStock = rel.stock <= 0 || maxQty <= 0;
