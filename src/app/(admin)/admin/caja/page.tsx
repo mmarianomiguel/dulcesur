@@ -366,7 +366,7 @@ export default function CajaPage() {
 
     const [{ data: movs }, { data: vts }] = await Promise.all([
       supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("fecha", fecha).order("hora", { ascending: false }),
-      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, clientes(nombre)").eq("fecha", fecha).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
+      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").eq("fecha", fecha).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
     ]);
 
     // Filter by turno time range using Date comparison
@@ -473,6 +473,48 @@ export default function CajaPage() {
       pdf.text(fmtCur(tvts.reduce((a, v) => a + v.total, 0)), w - margin, y, { align: "right" });
       y += 8;
     }
+
+    // Payment method breakdown
+    pdf.setDrawColor(200);
+    pdf.line(margin, y, w - margin, y);
+    y += 5;
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Desglose por Método de Pago", margin, y);
+    y += 7;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+
+    // Calculate per-method using same logic as live view
+    const pdfVentasConMov = new Set(
+      tmovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id)
+    );
+    const pdfVentasSinMov = tvts.filter((v) => !pdfVentasConMov.has(v.id));
+    const pdfMovEfectivo = tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
+    const pdfMovTransf = tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
+
+    if (pdfMovEfectivo > 0) { pdf.text("Efectivo", margin + 5, y); pdf.text(fmtCur(pdfMovEfectivo), w - margin, y, { align: "right" }); y += 5; }
+    if (pdfMovTransf > 0) {
+      pdf.text("Transferencia", margin + 5, y); pdf.text(fmtCur(pdfMovTransf), w - margin, y, { align: "right" }); y += 5;
+      // Per-account breakdown
+      const pdfPorCuenta: Record<string, number> = {};
+      tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
+        .forEach((m) => { const c = (m as any).cuenta_bancaria || "Sin asignar"; pdfPorCuenta[c] = (pdfPorCuenta[c] || 0) + m.monto; });
+      for (const v of pdfVentasSinMov) {
+        const mt = v.forma_pago === "Transferencia" ? v.total : v.forma_pago === "Mixto" ? ((v as any).monto_transferencia || 0) : 0;
+        if (mt > 0) { const c = (v as any).cuenta_transferencia_alias || "Sin asignar"; pdfPorCuenta[c] = (pdfPorCuenta[c] || 0) + mt; }
+      }
+      pdf.setFontSize(9);
+      for (const [cuenta, monto] of Object.entries(pdfPorCuenta).sort((a, b) => b[1] - a[1])) {
+        pdf.text(`→ ${cuenta}`, margin + 10, y); pdf.text(fmtCur(monto), w - margin, y, { align: "right" }); y += 4;
+      }
+      pdf.setFontSize(10);
+    }
+    y += 5;
 
     // Movimientos
     pdf.setDrawColor(200);
@@ -1244,16 +1286,49 @@ export default function CajaPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Transferencias breakdown */}
+                  {/* Desglose por método de pago */}
                   {(() => {
-                    const transfMovs = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia");
-                    const totalTransf = transfMovs.reduce((a, m) => a + m.monto, 0);
-                    if (totalTransf === 0) return null;
+                    const hVentasConMov = new Set(histMovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id));
+                    const hVentasSinMov = histVentas.filter((v) => !hVentasConMov.has(v.id));
+                    const hEfectivo = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
+                      + hVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
+                      + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
+                    const hTransf = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
+                      + hVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
+                      + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
+                    // Per-account
+                    const hPorCuenta: Record<string, number> = {};
+                    histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
+                      .forEach((m) => { const c = (m as any).cuenta_bancaria || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + m.monto; });
+                    for (const v of hVentasSinMov) {
+                      const mt = v.forma_pago === "Transferencia" ? v.total : v.forma_pago === "Mixto" ? ((v as any).monto_transferencia || 0) : 0;
+                      if (mt > 0) { const c = (v as any).cuenta_transferencia_alias || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + mt; }
+                    }
+                    if (hEfectivo === 0 && hTransf === 0) return null;
                     return (
                       <div>
-                        <h4 className="text-sm font-semibold mb-2">Transferencias</h4>
-                        <div className="rounded-lg border p-3 bg-blue-50 dark:bg-blue-950/20">
-                          <p className="font-bold text-lg">{formatCurrency(totalTransf)}</p>
+                        <h4 className="text-sm font-semibold mb-2">Desglose por Método</h4>
+                        <div className="rounded-lg border p-3 space-y-2">
+                          {hEfectivo > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Efectivo</span>
+                              <span className="font-semibold">{formatCurrency(hEfectivo)}</span>
+                            </div>
+                          )}
+                          {hTransf > 0 && (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Transferencia</span>
+                                <span className="font-semibold">{formatCurrency(hTransf)}</span>
+                              </div>
+                              {Object.entries(hPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
+                                <div key={cuenta} className="flex justify-between text-xs pl-3">
+                                  <span className="text-muted-foreground">→ {cuenta}</span>
+                                  <span className="font-medium">{formatCurrency(monto)}</span>
+                                </div>
+                              ))}
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -1430,25 +1505,13 @@ export default function CajaPage() {
                         <span className="text-muted-foreground">Transferencia</span>
                         <span>{formatCurrency(ventasTransferencia)}</span>
                       </div>
-                      {/* Desglose por banco */}
-                      {(() => {
-                        const transfMovs = movements.filter(
-                          (m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia"
-                        );
-                        const porBanco: Record<string, number> = {};
-                        transfMovs.forEach((m) => {
-                          const banco = m.cuenta_bancaria || "Sin especificar";
-                          porBanco[banco] = (porBanco[banco] || 0) + m.monto;
-                        });
-                        const bancos = Object.entries(porBanco);
-                        if (bancos.length <= 1 && bancos[0]?.[0] === "Sin especificar") return null;
-                        return bancos.map(([banco, monto]) => (
-                          <div key={banco} className="flex justify-between pl-3 text-xs">
-                            <span className="text-muted-foreground">→ {banco}</span>
-                            <span>{formatCurrency(monto)}</span>
-                          </div>
-                        ));
-                      })()}
+                      {/* Desglose por cuenta bancaria */}
+                      {Object.keys(transferenciaPorCuenta).length > 0 && Object.entries(transferenciaPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
+                        <div key={cuenta} className="flex justify-between pl-3 text-xs">
+                          <span className="text-muted-foreground">→ {cuenta}</span>
+                          <span>{formatCurrency(monto)}</span>
+                        </div>
+                      ))}
                     </>
                   )}
                   {ventasCuentaCorriente > 0 && (
