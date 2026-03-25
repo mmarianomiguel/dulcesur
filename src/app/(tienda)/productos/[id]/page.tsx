@@ -581,6 +581,13 @@ export default function ProductoDetallePage() {
             {producto.nombre}
           </h1>
 
+          {producto.es_combo && (
+            <span className="inline-flex items-center gap-1.5 mt-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+              <Layers className="w-3.5 h-3.5" />
+              COMBO
+            </span>
+          )}
+
           {/* Price */}
           <div className="mt-4">
             <div className="flex items-center gap-3">
