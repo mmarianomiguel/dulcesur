@@ -328,9 +328,7 @@ export default function ReportesPage() {
 
   const calcItemProfit = (item: VentaItemDetail) => {
     const costoU = item.productos?.costo || 0;
-    let unidadesPres = Number(item.unidades_por_presentacion) || 1;
-    const presTxt = ((item as any).presentacion || "").toLowerCase();
-    if (presTxt.includes("medio") && unidadesPres === 1) unidadesPres = 0.5;
+    const unidadesPres = getUnidadesPres(item);
     const descPct = Number((item as any).descuento) || 0;
     const precioVenta = item.precio_unitario * (1 - descPct / 100);
     return (precioVenta - costoU * unidadesPres) * item.cantidad;
