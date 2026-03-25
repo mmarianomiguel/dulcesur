@@ -71,18 +71,32 @@ export default function ResumenMensualPage() {
       .gte("fecha", start).lt("fecha", end);
     setTotalCompras((compras || []).reduce((a: number, c: any) => a + c.total, 0));
 
+    // Helper: get units per presentation with fallback
+    const getU = (item: any) => {
+      let u = Number(item.unidades_por_presentacion) || 1;
+      const presTxt = (item.presentacion || "").toLowerCase();
+      if (presTxt.includes("medio") && u === 1) u = 0.5;
+      if (u === 1 && presTxt && presTxt !== "unidad") {
+        const match = presTxt.match(/x\s*(\d+)/);
+        if (match) u = Number(match[1]);
+      }
+      return u;
+    };
+
     // Ganancia from venta_items
     if (vList.length > 0) {
       const ids = vList.map((v: any) => v.id);
       const { data: items } = await supabase.from("venta_items")
-        .select("cantidad, precio_unitario, unidades_por_presentacion, productos(costo)")
+        .select("cantidad, precio_unitario, unidades_por_presentacion, presentacion, descuento, productos(costo)")
         .in("venta_id", ids);
       let sinCosto = 0;
       const g = (items || []).reduce((a: number, item: any) => {
         const costoU = item.productos?.costo || 0;
         if (!costoU) sinCosto++;
-        const u = Number(item.unidades_por_presentacion) || 1;
-        return a + (item.precio_unitario - costoU * u) * item.cantidad;
+        const u = getU(item);
+        const descPct = Number(item.descuento) || 0;
+        const precioVenta = item.precio_unitario * (1 - descPct / 100);
+        return a + (precioVenta - costoU * u) * item.cantidad;
       }, 0);
       setGanancia(g);
       setItemsSinCosto(sinCosto);
@@ -203,15 +217,16 @@ export default function ResumenMensualPage() {
     if (vList.length > 0) {
       const ids = vList.map((v: any) => v.id);
       const { data: rentItems } = await supabase.from("venta_items")
-        .select("descripcion, cantidad, precio_unitario, descuento, subtotal, productos(costo)")
+        .select("descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, productos(costo)")
         .in("venta_id", ids);
       const prodRent: Record<string, { nombre: string; vendido: number; costo: number }> = {};
       for (const item of rentItems || []) {
         const nombre = (item as any).descripcion || "Sin nombre";
         const costoU = (item as any).productos?.costo ?? 0;
         const qty = (item as any).cantidad || 0;
+        const u = getU(item);
         const venta = (item as any).subtotal || 0;
-        const costoTotal = costoU * qty;
+        const costoTotal = costoU * u * qty;
         if (!prodRent[nombre]) prodRent[nombre] = { nombre, vendido: 0, costo: 0 };
         prodRent[nombre].vendido += venta;
         prodRent[nombre].costo += costoTotal;
