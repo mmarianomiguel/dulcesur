@@ -287,9 +287,10 @@ export default function CuentaPage() {
                     </label>
                     <input
                       type="tel"
+                      inputMode="numeric"
                       placeholder="11 1234-5678"
                       value={regTelefono}
-                      onChange={(e) => setRegTelefono(e.target.value)}
+                      onChange={(e) => setRegTelefono(e.target.value.replace(/[^0-9\s\-+]/g, ""))}
                       className={inputClass}
                     />
                   </div>
@@ -299,9 +300,10 @@ export default function CuentaPage() {
                     </label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       placeholder="12345678"
                       value={regDni}
-                      onChange={(e) => setRegDni(e.target.value)}
+                      onChange={(e) => setRegDni(e.target.value.replace(/\D/g, ""))}
                       className={inputClass}
                     />
                   </div>
@@ -341,9 +343,10 @@ export default function CuentaPage() {
                           </label>
                           <input
                             type="text"
+                            inputMode="numeric"
                             placeholder="1000"
                             value={regCodigoPostal}
-                            onChange={(e) => setRegCodigoPostal(e.target.value)}
+                            onChange={(e) => setRegCodigoPostal(e.target.value.replace(/\D/g, ""))}
                             className={inputClass}
                           />
                         </div>

@@ -1707,7 +1707,7 @@ export default function ProductosPage() {
                   onClick={async () => {
                     if (!confirm(`¿Ocultar ${outOfStock} productos sin stock de la tienda?`)) return;
                     const sinStock = products.filter((p) => {
-                      const effectiveStock = p.es_combo && comboStockMap[p.id] !== undefined ? comboStockMap[p.id] : p.stock;
+                      const effectiveStock = (p as any).es_combo && comboStockMap[p.id] !== undefined ? comboStockMap[p.id] : p.stock;
                       return effectiveStock <= 0 && p.visibilidad !== "oculto";
                     });
                     if (sinStock.length === 0) { showAdminToast("No hay productos visibles sin stock", "info"); return; }

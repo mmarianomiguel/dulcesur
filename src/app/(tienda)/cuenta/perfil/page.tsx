@@ -369,7 +369,7 @@ export default function PerfilPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Número de documento</label>
-                <input type="text" value={numeroDocumento} onChange={(e) => setNumeroDocumento(e.target.value)} placeholder="12345678" className={inputClass} />
+                <input type="text" inputMode="numeric" value={numeroDocumento} onChange={(e) => setNumeroDocumento(e.target.value.replace(/\D/g, ""))} placeholder="12345678" className={inputClass} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
@@ -377,7 +377,7 @@ export default function PerfilPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Teléfono</label>
-                <input type="tel" placeholder="11 1234-5678" value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputClass} />
+                <input type="tel" inputMode="numeric" placeholder="11 1234-5678" value={telefono} onChange={(e) => setTelefono(e.target.value.replace(/[^0-9\s\-+]/g, ""))} className={inputClass} />
               </div>
             </div>
           </div>
@@ -410,7 +410,7 @@ export default function PerfilPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Código postal</label>
-                  <input type="text" value={codigoPostal} onChange={(e) => setCodigoPostal(e.target.value)} placeholder="1234" className={inputClass} />
+                  <input type="text" inputMode="numeric" value={codigoPostal} onChange={(e) => setCodigoPostal(e.target.value.replace(/\D/g, ""))} placeholder="1234" className={inputClass} />
                 </div>
               </div>
 
