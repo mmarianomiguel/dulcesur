@@ -587,7 +587,7 @@ export default function CheckoutPage() {
           metodo_entrega: metodoEntrega === "retiro" ? "retiro_local" : "envio",
           direccion_id: !showNewAddress && selectedAddressId ? selectedAddressId : null,
           direccion_texto: getAddressText() || null,
-          fecha_entrega: fechaEntrega,
+          fecha_entrega: metodoEntrega === "retiro" ? null : fechaEntrega,
           metodo_pago: metodoPago,
           subtotal: vSubtotal,
           costo_envio: vCostoEnvio,
@@ -1052,7 +1052,7 @@ export default function CheckoutPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               {/* Retiro en tienda */}
               <button
-                onClick={() => setMetodoEntrega("retiro")}
+                onClick={() => { setMetodoEntrega("retiro"); setFechaEntrega(""); }}
                 className={`flex items-start gap-3 p-4 rounded-xl border-2 transition text-left ${
                   metodoEntrega === "retiro"
                     ? "border-pink-500 bg-pink-50"
