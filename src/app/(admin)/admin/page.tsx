@@ -172,6 +172,7 @@ export default function DashboardPage() {
   const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
   const [pedidoDetailPagos, setPedidoDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client" }>({ open: false, venta: null, pendiente: 0, type: "paid" });
 
   // ─── Combo data for preview ───
   const [comboProductIds, setComboProductIds] = useState<Set<string>>(new Set());
@@ -436,8 +437,47 @@ export default function DashboardPage() {
 
   // ─── Pedido actions ───
   const handleMarkDelivered = async (venta: PedidoVenta) => {
-    if (!confirm(`Marcar pedido #${venta.numero} como entregado?`)) return;
+    // Check how much is already paid in caja
+    const { data: cajaMovs } = await supabase.from("caja_movimientos")
+      .select("monto").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+    const pagado = (cajaMovs || []).reduce((s: number, m: any) => s + m.monto, 0);
+    const pendiente = Math.max(0, venta.total - pagado);
+
+    if (pendiente > 0 && !(venta as any).cliente_id) {
+      setDeliveryConfirm({ open: true, venta, pendiente, type: "no_client" });
+      return;
+    }
+    if (pendiente > 0) {
+      setDeliveryConfirm({ open: true, venta, pendiente, type: "unpaid" });
+      return;
+    }
+    setDeliveryConfirm({ open: true, venta, pendiente: 0, type: "paid" });
+  };
+
+  const confirmDelivery = async () => {
+    const { venta, pendiente, type } = deliveryConfirm;
+    if (!venta) return;
+    if (type === "no_client") {
+      setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" });
+      return;
+    }
+
     setActionLoading(venta.id);
+    setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" });
+
+    // Register efectivo payment if unpaid
+    if (type === "unpaid" && pendiente > 0) {
+      const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+      const clienteNombre = (venta as any).clientes?.nombre || "";
+      await supabase.from("caja_movimientos").insert({
+        fecha: hoy, hora, tipo: "ingreso",
+        descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`,
+        metodo_pago: "Efectivo", monto: pendiente,
+        referencia_id: venta.id, referencia_tipo: "venta",
+      });
+    }
+
     await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id);
     await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
     setPedidosOnline((prev) => prev.filter((p) => p.id !== venta.id));
@@ -1006,6 +1046,63 @@ export default function DashboardPage() {
           </div>
         ) : undefined}
       />
+
+      {/* Delivery confirmation modal */}
+      <Dialog open={deliveryConfirm.open} onOpenChange={(v) => !v && setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {deliveryConfirm.type === "paid" ? (
+                <><CheckCircle className="w-5 h-5 text-emerald-500" /> Confirmar entrega</>
+              ) : deliveryConfirm.type === "no_client" ? (
+                <><AlertTriangle className="w-5 h-5 text-red-500" /> No se puede entregar</>
+              ) : (
+                <><AlertTriangle className="w-5 h-5 text-amber-500" /> Saldo pendiente</>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {deliveryConfirm.type === "paid" && deliveryConfirm.venta && (
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
+                <p className="text-sm text-emerald-800">
+                  Pedido <span className="font-bold">#{deliveryConfirm.venta.numero}</span> de{" "}
+                  <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "cliente"}</span> por{" "}
+                  <span className="font-bold">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.venta.total)}</span>
+                </p>
+                <p className="text-xs text-emerald-600 mt-1">Pago completo — listo para entregar</p>
+              </div>
+            )}
+            {deliveryConfirm.type === "unpaid" && deliveryConfirm.venta && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2">
+                <p className="text-sm text-amber-900">
+                  <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "El cliente"}</span> tiene{" "}
+                  <span className="font-bold text-amber-700">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.pendiente)}</span> sin cobrar.
+                </p>
+                <p className="text-xs text-amber-700">Se registrará como cobro en efectivo en la caja diaria.</p>
+              </div>
+            )}
+            {deliveryConfirm.type === "no_client" && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-4 space-y-2">
+                <p className="text-sm text-red-900">
+                  Este pedido tiene <span className="font-bold">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.pendiente)}</span> sin cobrar y no tiene cliente asignado.
+                </p>
+                <p className="text-xs text-red-700">No se puede registrar la deuda. Cobrá primero o asigná un cliente.</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" })}>
+                Cancelar
+              </Button>
+              {deliveryConfirm.type !== "no_client" && (
+                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmDelivery}>
+                  <CheckCircle className="w-4 h-4 mr-1.5" />
+                  {deliveryConfirm.type === "unpaid" ? "Cobrar y entregar" : "Marcar entregado"}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Hidden print container */}
       <div ref={printRef} className="hidden">

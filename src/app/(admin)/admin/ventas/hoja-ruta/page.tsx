@@ -45,6 +45,7 @@ import {
   Map,
   List,
   Route,
+  AlertCircle,
 } from "lucide-react";
 
 interface ClienteInfo {
@@ -108,6 +109,7 @@ export default function HojaDeRutaPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailVenta, setDetailVenta] = useState<VentaRow | null>(null);
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
+  const [dlvConfirm, setDlvConfirm] = useState<{ open: boolean; id: string; pendiente: number; type: "paid" | "unpaid" | "no_client" }>({ open: false, id: "", pendiente: 0, type: "paid" });
   const [orden, setOrden] = useState<Record<string, number>>({});
   const [filterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
   const [search, setSearch] = useState("");
@@ -274,50 +276,43 @@ export default function HojaDeRutaPage() {
 
     const pagado = pagadoPorVenta[id] || 0;
     const pendiente = Math.max(0, venta.total - pagado);
-    const clienteNombre = venta.clientes?.nombre || "el cliente";
-    const formatMoney = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
 
+    if (pendiente > 0 && !venta.cliente_id) {
+      setDlvConfirm({ open: true, id, pendiente, type: "no_client" });
+      return;
+    }
     if (pendiente > 0) {
-      // Has unpaid balance
-      if (venta.cliente_id) {
-        const ok = confirm(
-          `⚠️ ${clienteNombre} tiene un saldo pendiente de ${formatMoney(pendiente)}.\n\n` +
-          `Si confirmás, se cargará ${formatMoney(pendiente)} a su cuenta corriente como deuda.\n\n` +
-          `¿Marcar como entregado?`
-        );
-        if (!ok) return;
+      setDlvConfirm({ open: true, id, pendiente, type: "unpaid" });
+      return;
+    }
+    setDlvConfirm({ open: true, id, pendiente: 0, type: "paid" });
+  };
 
-        // Add to cuenta corriente
-        const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
-        const saldoActual = freshCli?.saldo ?? venta.clientes?.saldo ?? 0;
-        const nuevoSaldo = saldoActual + pendiente;
-        await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
-        await supabase.from("cuenta_corriente").insert({
-          cliente_id: venta.cliente_id,
-          fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
-          comprobante: `Entrega #${venta.numero}`,
-          descripcion: `Saldo pendiente de entrega`,
-          debe: pendiente,
-          haber: 0,
-          saldo: nuevoSaldo,
-          forma_pago: venta.forma_pago || "Efectivo",
-          venta_id: venta.id,
-        });
-      } else {
-        alert(
-          `No se puede marcar como entregado.\n\n` +
-          `Este pedido tiene ${formatMoney(pendiente)} sin cobrar y no tiene cliente asignado.\n\n` +
-          `Registrá el cobro primero o asigná un cliente para cargar a cuenta corriente.`
-        );
-        return;
-      }
-    } else {
-      // Fully paid — still ask for confirmation
-      const ok = confirm(
-        `✅ Pedido #${venta.numero} de ${clienteNombre} por ${formatMoney(venta.total)} (pago completo).\n\n` +
-        `¿Marcar como entregado?`
-      );
-      if (!ok) return;
+  const executeDlvConfirm = async () => {
+    const { id, pendiente, type } = dlvConfirm;
+    const venta = ventas.find((v) => v.id === id);
+    if (!venta || type === "no_client") {
+      setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" });
+      return;
+    }
+    setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" });
+
+    if (type === "unpaid" && pendiente > 0 && venta.cliente_id) {
+      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
+      const saldoActual = freshCli?.saldo ?? venta.clientes?.saldo ?? 0;
+      const nuevoSaldo = saldoActual + pendiente;
+      await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
+      await supabase.from("cuenta_corriente").insert({
+        cliente_id: venta.cliente_id,
+        fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
+        comprobante: `Entrega #${venta.numero}`,
+        descripcion: `Saldo pendiente de entrega`,
+        debe: pendiente,
+        haber: 0,
+        saldo: nuevoSaldo,
+        forma_pago: venta.forma_pago || "Efectivo",
+        venta_id: venta.id,
+      });
     }
 
     const { error } = await supabase
@@ -1273,6 +1268,66 @@ export default function HojaDeRutaPage() {
         })) || []}
         pagos={detailPagos}
       />
+
+      {/* Delivery Confirmation Modal */}
+      <Dialog open={dlvConfirm.open} onOpenChange={(v) => !v && setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {dlvConfirm.type === "paid" ? (
+                <><CheckCircle className="w-5 h-5 text-emerald-500" /> Confirmar entrega</>
+              ) : dlvConfirm.type === "no_client" ? (
+                <><AlertCircle className="w-5 h-5 text-red-500" /> No se puede entregar</>
+              ) : (
+                <><AlertCircle className="w-5 h-5 text-amber-500" /> Saldo pendiente</>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const v = ventas.find((x) => x.id === dlvConfirm.id);
+            const fmtCur = (n: number) => formatCurrency(n);
+            return (
+              <div className="space-y-4">
+                {dlvConfirm.type === "paid" && v && (
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
+                    <p className="text-sm text-emerald-800">
+                      Pedido <b>#{v.numero}</b> de <b>{v.clientes?.nombre}</b> por <b>{fmtCur(v.total)}</b>
+                    </p>
+                    <p className="text-xs text-emerald-600 mt-1">Pago completo</p>
+                  </div>
+                )}
+                {dlvConfirm.type === "unpaid" && v && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2">
+                    <p className="text-sm text-amber-900">
+                      <b>{v.clientes?.nombre}</b> tiene <b className="text-amber-700">{fmtCur(dlvConfirm.pendiente)}</b> sin cobrar.
+                    </p>
+                    <p className="text-xs text-amber-700">Se cargará a su cuenta corriente como deuda.</p>
+                  </div>
+                )}
+                {dlvConfirm.type === "no_client" && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 p-4 space-y-2">
+                    <p className="text-sm text-red-900">
+                      Este pedido tiene <b>{fmtCur(dlvConfirm.pendiente)}</b> sin cobrar y no tiene cliente asignado.
+                    </p>
+                    <p className="text-xs text-red-700">No se puede registrar la deuda. Cobrá primero o asigná un cliente.</p>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" })}>
+                    Cancelar
+                  </Button>
+                  {dlvConfirm.type !== "no_client" && (
+                    <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={executeDlvConfirm}>
+                      <CheckCircle className="w-4 h-4 mr-1.5" />
+                      {dlvConfirm.type === "unpaid" ? "Cargar a CC y entregar" : "Marcar entregado"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Payment Dialog */}
       <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
