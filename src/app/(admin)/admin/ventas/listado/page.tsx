@@ -734,7 +734,8 @@ export default function ListadoVentasPage() {
     const { data } = await supabase
       .from("pedidos_tienda")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(200);
 
     if (!data) { setPoLoading(false); return; }
 
@@ -1284,8 +1285,9 @@ export default function ListadoVentasPage() {
       }
     }
 
-    await fetchPedidos();
-    await fetchVentas();
+    // Update local state instead of full refetch for speed
+    setPoPedidos((prev) => prev.map((p) => p.numero === pedido.numero ? { ...p, estado: nuevoEstado } : p));
+    setVentas((prev) => prev.map((v) => v.numero === pedido.numero ? { ...v, estado: nuevoEstado === "cancelado" ? "anulada" : nuevoEstado, entregado: nuevoEstado === "entregado" } as any : v));
   };
 
   // PO Stats

@@ -86,6 +86,7 @@ interface CuentaBancaria {
   tipo: string;
   cbu_cvu: string;
   alias: string;
+  origen?: string;
 }
 
 interface ComboItemRef {
@@ -366,10 +367,18 @@ export default function VentasPage() {
 
   // Load bank accounts from localStorage
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("cuentas_bancarias");
-      if (stored) setCuentasBancarias(JSON.parse(stored));
-    } catch (err) { console.error("Error in POS:", err); }
+    (async () => {
+      // Load bank accounts from DB (own + provider accounts)
+      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, tipo, cbu_cvu, alias, origen").eq("activo", true).order("nombre");
+      if (data && data.length > 0) {
+        setCuentasBancarias(data as CuentaBancaria[]);
+      } else {
+        try {
+          const stored = localStorage.getItem("cuentas_bancarias");
+          if (stored) setCuentasBancarias(JSON.parse(stored));
+        } catch {}
+      }
+    })();
   }, []);
 
   // Auto-print receipt when sale is finalized
@@ -2108,14 +2117,14 @@ export default function VentasPage() {
                       <SelectValue placeholder="Seleccionar cuenta">
                         {(() => {
                           const sel = cuentasBancarias.find((cb) => cb.id === cuentaBancariaId);
-                          return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}` : "Seleccionar cuenta";
+                          return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}${sel.origen === "proveedor" ? " · Prov." : ""}` : "Seleccionar cuenta";
                         })()}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {cuentasBancarias.map((cb) => (
                         <SelectItem key={cb.id} value={cb.id}>
-                          {cb.nombre}{cb.alias ? ` (${cb.alias})` : ""}
+                          {cb.nombre}{cb.alias ? ` (${cb.alias})` : ""}{cb.origen === "proveedor" ? " · Prov." : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2238,14 +2247,14 @@ export default function VentasPage() {
                         <SelectValue placeholder="Seleccionar cuenta">
                           {(() => {
                             const sel = cuentasBancarias.find((cb) => cb.id === cuentaBancariaId);
-                            return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}` : "Seleccionar cuenta";
+                            return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}${sel.origen === "proveedor" ? " · Prov." : ""}` : "Seleccionar cuenta";
                           })()}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {cuentasBancarias.map((cb) => (
                           <SelectItem key={cb.id} value={cb.id}>
-                            {cb.nombre}{cb.alias ? ` (${cb.alias})` : ""}
+                            {cb.nombre}{cb.alias ? ` (${cb.alias})` : ""}{cb.origen === "proveedor" ? " · Prov." : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
