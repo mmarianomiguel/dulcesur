@@ -118,12 +118,10 @@ function ProductosContent() {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [mobileFilters, setMobileFilters] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
-  const [categoriasShowAll, setCategoriasShowAll] = useState(false);
-  const [marcasShowAll, setMarcasShowAll] = useState(false);
   const [marcaSearch, setMarcaSearch] = useState("");
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
-  const [categoriasCollapsed, setCategoriasCollapsed] = useState(false);
-  const [marcasCollapsed, setMarcasCollapsed] = useState(false);
+  const [categoriasCollapsed, setCategoriasCollapsed] = useState(!searchParams.get("categoria"));
+  const [marcasCollapsed, setMarcasCollapsed] = useState(!searchParams.get("marca"));
   const [presentacionesMap, setPresentacionesMap] = useState<Record<string, { nombre: string; cantidad: number; precio: number }[]>>({});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>([]);
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({}); // productId -> presentacion index
@@ -743,7 +741,7 @@ function ProductosContent() {
               Categorias
             </h4>
             <span className="text-[10px] bg-gray-100 text-gray-400 rounded-full px-1.5 py-0.5 font-medium">
-              {categorias.length}
+              {categorias.filter((c) => (c.count || 0) > 0).length}
             </span>
           </div>
           <ChevronDown
@@ -758,7 +756,7 @@ function ProductosContent() {
             {/* "Todas" option */}
             <button
               onClick={() => updateParams({ categoria: null, subcategoria: null })}
-              className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+              className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
             >
               <RadioCircle selected={!categoriaId} />
               <span className={`text-sm ${!categoriaId ? "font-semibold text-pink-600" : "text-gray-600"}`}>
@@ -769,8 +767,8 @@ function ProductosContent() {
               </span>
             </button>
 
-            <div className={categoriasShowAll ? "max-h-[200px] overflow-y-auto space-y-0.5" : "space-y-0.5"}>
-            {(categoriasShowAll ? filtrarCategorias(categorias) : filtrarCategorias(categorias).slice(0, 5)).map((cat) => {
+            <div className="max-h-[300px] overflow-y-auto space-y-0.5">
+            {filtrarCategorias(categorias).filter((c) => (c.count || 0) > 0).map((cat) => {
               const isSelected = categoriaId === cat.id;
               const isExpanded = expandedCats.has(cat.id);
               const catSubs = allSubcategorias.filter(
@@ -863,14 +861,6 @@ function ProductosContent() {
             })}
             </div>
 
-            {categorias.length > 5 && (
-              <button
-                onClick={() => setCategoriasShowAll(!categoriasShowAll)}
-                className="text-sm text-pink-600 hover:text-pink-700 font-medium mt-2 px-2"
-              >
-                {categoriasShowAll ? "Ver menos" : "Ver más"}
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -890,7 +880,7 @@ function ProductosContent() {
                   Marcas
                 </h4>
                 <span className="text-[10px] bg-gray-100 text-gray-400 rounded-full px-1.5 py-0.5 font-medium">
-                  {marcas.length}
+                  {marcas.filter((m) => (m.count || 0) > 0).length}
                 </span>
               </div>
               <ChevronDown
@@ -901,20 +891,19 @@ function ProductosContent() {
             </button>
 
             {!marcasCollapsed && (() => {
+              const marcasConStock = marcas.filter((m) => (m.count || 0) > 0);
               const filteredMarcas = marcaSearch
-                ? marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase()))
-                : marcas;
+                ? marcasConStock.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase()))
+                : marcasConStock;
               return (
               <div className="space-y-1">
-                {marcas.length > 8 && (
-                  <input
-                    type="text"
-                    placeholder="Buscar marca..."
-                    value={marcaSearch}
-                    onChange={(e) => { setMarcaSearch(e.target.value); setMarcasShowAll(true); }}
-                    className="w-full px-3 py-1.5 rounded-lg bg-gray-50 border-0 text-xs focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400 mb-1"
-                  />
-                )}
+                <input
+                  type="text"
+                  placeholder="Buscar marca..."
+                  value={marcaSearch}
+                  onChange={(e) => setMarcaSearch(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg bg-gray-50 border-0 text-xs focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400 mb-1"
+                />
                 {!marcaSearch && (
                 <button
                   onClick={() => updateParams({ marca: null })}
@@ -925,13 +914,13 @@ function ProductosContent() {
                     Todas las marcas
                   </span>
                   <span className="text-gray-400 text-sm ml-auto">
-                    ({marcas.reduce((sum, m) => sum + (m.count || 0), 0)})
+                    ({marcasConStock.reduce((sum, m) => sum + (m.count || 0), 0)})
                   </span>
                 </button>
                 )}
 
-                <div className={(marcasShowAll || marcaSearch) ? "max-h-[200px] overflow-y-auto space-y-0.5" : "space-y-0.5"}>
-                {((marcasShowAll || marcaSearch) ? filteredMarcas : filteredMarcas.slice(0, 5)).map((marca) => {
+                <div className="max-h-[280px] overflow-y-auto space-y-0.5">
+                {filteredMarcas.map((marca) => {
                   const isSelected = marcaParam === marca.id;
                   return (
                     <button
@@ -953,16 +942,10 @@ function ProductosContent() {
                     </button>
                   );
                 })}
-                </div>
-
-                {!marcaSearch && filteredMarcas.length > 5 && (
-                  <button
-                    onClick={() => setMarcasShowAll(!marcasShowAll)}
-                    className="text-sm text-pink-600 hover:text-pink-700 font-medium mt-2 px-2"
-                  >
-                    {marcasShowAll ? "Ver menos" : "Ver más"}
-                  </button>
+                {filteredMarcas.length === 0 && (
+                  <p className="text-xs text-gray-400 px-2 py-2">No se encontraron marcas</p>
                 )}
+                </div>
               </div>
               );
             })()}
