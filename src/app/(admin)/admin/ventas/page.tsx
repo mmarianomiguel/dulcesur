@@ -311,17 +311,20 @@ export default function VentasPage() {
       .lte("fecha_inicio", todayARG());
     setActiveDiscounts((descuentosData || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= todayARG()));
 
-    // Pre-load all presentaciones for search by code
-    const { data: allPres } = await supabase.from("presentaciones").select("*");
-    if (allPres) {
-      const map: Record<string, Presentacion[]> = {};
-      for (const raw of allPres) {
+    // Pre-load all presentaciones for search by code (paginated to avoid 1000 row limit)
+    const map: Record<string, Presentacion[]> = {};
+    let presPage = 0;
+    while (true) {
+      const { data: batch } = await supabase.from("presentaciones").select("*").range(presPage * 1000, (presPage + 1) * 1000 - 1);
+      if (!batch || batch.length === 0) break;
+      for (const raw of batch) {
         const pr = { ...raw, codigo: raw.sku || "" } as Presentacion;
         if (!map[pr.producto_id]) map[pr.producto_id] = [];
         map[pr.producto_id].push(pr);
       }
-      setPresentacionesMap(map);
+      presPage++;
     }
+    setPresentacionesMap(map);
 
     // Load receipt config from localStorage + empresa data
     try {
