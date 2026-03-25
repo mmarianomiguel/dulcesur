@@ -1249,7 +1249,7 @@ function ProductosContent() {
                   if (boxPres.precio >= expectedPrice) return null;
                   const savePct = Math.round((1 - boxPres.precio / expectedPrice) * 100);
                   if (savePct < 1) return null;
-                  const label = boxPres.nombre?.toLowerCase().includes("medio") ? "Medio Cartón" : `Caja x${boxPres.cantidad}`;
+                  const label = boxPres.nombre || `Caja x${boxPres.cantidad}`;
                   return { pct: savePct, label, boxPrice: boxPres.precio, unitPrice: unitPres.precio, qty: boxPres.cantidad };
                 })();
                 return (
@@ -1381,7 +1381,7 @@ function ProductosContent() {
                             return a.pr.cantidad - b.pr.cantidad;
                           }).map(({ pr, idx }) => {
                             const isActive = activeIdx === idx;
-                            const label = pr.cantidad === 1 ? "Unidad" : (pr.cantidad <= 0.5 || (pr.nombre && pr.nombre.toLowerCase().includes("medio"))) ? "Medio Cartón" : `Caja x${pr.cantidad}`;
+                            const label = presLabel(pr);
                             const presDisabled = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad)))) <= 0;
                             return (
                               <button
@@ -1541,7 +1541,7 @@ function ProductosContent() {
                               return a.pr.cantidad - b.pr.cantidad;
                             }).map(({ pr, idx }) => {
                               const isActive = (selectedPres[producto.id] ?? 0) === idx;
-                              const label = pr.cantidad === 1 ? "Unidad" : (pr.cantidad <= 0.5 || (pr.nombre && pr.nombre.toLowerCase().includes("medio"))) ? "Medio Cartón" : `Caja x${pr.cantidad}`;
+                              const label = presLabel(pr);
                               const presDisabled = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad)))) <= 0;
                               return (
                                 <button

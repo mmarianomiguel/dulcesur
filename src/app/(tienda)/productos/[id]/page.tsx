@@ -366,7 +366,7 @@ export default function ProductoDetallePage() {
   const boxDiscountLabel = producto ? (() => {
     const boxPres = presentaciones.find((p) => p.cantidad > 1);
     if (!boxPres) return "caja";
-    return boxPres.nombre?.toLowerCase().includes("medio") ? "Medio Cartón" : `Caja x${boxPres.cantidad}`;
+    return boxPres.nombre || `Caja x${boxPres.cantidad}`;
   })() : "caja";
 
   // Max qty based on stock and presentation, minus what's already in cart
@@ -375,10 +375,9 @@ export default function ProductoDetallePage() {
   // Total units in cart for this product (all presentations)
   const totalUnitsInCart = producto ? Object.entries(cartQtys).reduce((sum, [key, qty]) => {
     if (key.startsWith(producto.id + "_")) {
-      // Figure out units per item from the key
-      if (key.includes("Medio Cartón")) return sum + qty * 0.5;
-      const match = key.match(/Caja \(x(\d+)\)/);
-      const units = match ? Number(match[1]) : 1;
+      const presName = key.substring(producto.id.length + 1);
+      const pres = presentaciones.find((p) => presLabelFn(p) === presName);
+      const units = pres ? pres.cantidad : 1;
       return sum + qty * units;
     }
     return sum;
