@@ -1125,13 +1125,16 @@ export default function CheckoutPage() {
                 </div>
               </button>
 
-              {/* Envío a domicilio */}
+              {/* Envío a domicilio — only for logged-in clients */}
               <button
-                onClick={() => setMetodoEntrega("envio")}
+                onClick={() => clienteId ? setMetodoEntrega("envio") : undefined}
+                disabled={!clienteId}
                 className={`flex items-start gap-3 p-4 rounded-xl border-2 transition text-left ${
-                  metodoEntrega === "envio"
-                    ? "border-pink-500 bg-pink-50"
-                    : "border-gray-200 hover:border-pink-300"
+                  !clienteId
+                    ? "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
+                    : metodoEntrega === "envio"
+                      ? "border-pink-500 bg-pink-50"
+                      : "border-gray-200 hover:border-pink-300"
                 }`}
               >
                 <div
@@ -1149,7 +1152,11 @@ export default function CheckoutPage() {
                     <p className="font-semibold text-gray-900 text-sm">Envío a domicilio</p>
                   </div>
                   <p className="text-xs text-gray-500">Recibilo en tu dirección</p>
-                  <p className="text-xs font-semibold text-green-600 mt-1">Envío sin cargo</p>
+                  {clienteId ? (
+                    <p className="text-xs font-semibold text-green-600 mt-1">Envío sin cargo</p>
+                  ) : (
+                    <p className="text-xs font-semibold text-amber-600 mt-1">Iniciá sesión para envío a domicilio</p>
+                  )}
                 </div>
               </button>
             </div>

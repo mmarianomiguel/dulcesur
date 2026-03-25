@@ -140,6 +140,7 @@ export default function HojaDeRutaPage() {
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
       .neq("estado", "anulada")
+      .not("cliente_id", "is", null)
       .order("created_at", { ascending: false });
 
     // If not showing all pending, filter by selected date only
@@ -303,12 +304,12 @@ export default function HojaDeRutaPage() {
           venta_id: venta.id,
         });
       } else {
-        const ok = confirm(
-          `⚠️ Este pedido tiene ${formatMoney(pendiente)} sin cobrar.\n\n` +
-          `No tiene cliente asignado, no se puede cargar a cuenta corriente.\n\n` +
-          `¿Marcar como entregado de todas formas?`
+        alert(
+          `No se puede marcar como entregado.\n\n` +
+          `Este pedido tiene ${formatMoney(pendiente)} sin cobrar y no tiene cliente asignado.\n\n` +
+          `Registrá el cobro primero o asigná un cliente para cargar a cuenta corriente.`
         );
-        if (!ok) return;
+        return;
       }
     } else {
       // Fully paid — still ask for confirmation

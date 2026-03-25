@@ -406,7 +406,7 @@ export default function ProductoDetallePage() {
     maxQty <= 5 ? "text-orange-500" :
     "text-green-600";
 
-  function addToCart(prod: Producto, price: number, presLabel: string, qty: number, precioOriginal?: number, descuento?: number, unidadesPres?: number) {
+  function addToCart(prod: Producto, price: number, presLabel: string, qty: number, precioOriginal?: number, descuento?: number, unidadesPres?: number, overrideStock?: number) {
     const stored = localStorage.getItem("carrito");
     let carrito: any[];
     try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
@@ -415,6 +415,8 @@ export default function ProductoDetallePage() {
     const existing = carrito.find((item: any) => item.id === cartKey || (presLabel === "Unidad" && item.id === prod.id));
     if (existing && existing.id !== cartKey) existing.id = cartKey;
     const units = unidadesPres || 1;
+    // Use effective stock (for combos, stock comes from components, not productos.stock)
+    const realStock = overrideStock ?? prod.stock;
     // Calculate TOTAL units of this product already in cart (ALL presentations)
     let totalUnitsAlreadyInCart = 0;
     carrito.forEach((item: any) => {
@@ -422,7 +424,7 @@ export default function ProductoDetallePage() {
         totalUnitsAlreadyInCart += (item.cantidad || 0) * (item.unidades_por_presentacion || 1);
       }
     });
-    const availableUnits = Math.max(0, prod.stock - totalUnitsAlreadyInCart);
+    const availableUnits = Math.max(0, realStock - totalUnitsAlreadyInCart);
     const maxCanAdd = Math.floor(availableUnits / units);
     if (maxCanAdd <= 0) {
       showToast("Ya tenés el máximo disponible en el carrito", "error");
@@ -464,7 +466,7 @@ export default function ProductoDetallePage() {
     }
     const disc = getProductDiscount(producto, presLabel, cantidad);
     const price = disc > 0 ? Math.round(currentPrice * (1 - disc / 100)) : currentPrice;
-    addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined, presQty);
+    addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined, presQty, effectiveStock);
     setCantidad(1);
   }
 
@@ -1016,7 +1018,7 @@ export default function ProductoDetallePage() {
                                 if (outOfStock) return;
                                 const finalPrice = relDiscount > 0 ? relDiscountedPrice : price;
                                 const relUnitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
-                                addToCart(rel, finalPrice, getRelLabel(rel), Math.min(qty, maxQty), relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined, relUnitsPerPres);
+                                addToCart(rel, finalPrice, getRelLabel(rel), Math.min(qty, maxQty), relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined, relUnitsPerPres, rel.stock);
                                 setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
                               }}
                               disabled={outOfStock}
