@@ -382,11 +382,11 @@ export default function ConfiguracionPage() {
                               <p className="text-xs text-muted-foreground capitalize">{u.rol}</p>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm">Editar</Button>
+                          <Button variant="outline" size="sm" onClick={() => window.location.href = "/admin/usuarios"}>Editar</Button>
                         </div>
                       ))}
                     </div>
-                    <Button variant="outline" className="mt-4" size="sm"><User className="w-4 h-4 mr-2" />Agregar usuario</Button>
+                    <Button variant="outline" className="mt-4" size="sm" onClick={() => window.location.href = "/admin/usuarios"}><User className="w-4 h-4 mr-2" />Administrar usuarios</Button>
                   </CardContent>
                 </Card>
               </div>
@@ -838,11 +838,17 @@ export default function ConfiguracionPage() {
                           <div className="space-y-1">
                             <Label>Proveedor vinculado</Label>
                             <Select value={cuentaForm.proveedor_id} onValueChange={(v) => setCuentaForm({ ...cuentaForm, proveedor_id: v ?? "" })}>
-                              <SelectTrigger><SelectValue placeholder="Seleccionar proveedor..." /></SelectTrigger>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar proveedor...">
+                                  {proveedoresList.find((p) => p.id === cuentaForm.proveedor_id)?.nombre || "Seleccionar proveedor..."}
+                                </SelectValue>
+                              </SelectTrigger>
                               <SelectContent>
-                                {proveedoresList.map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-                                ))}
+                                <div className="max-h-60 overflow-y-auto">
+                                  {proveedoresList.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                                  ))}
+                                </div>
                               </SelectContent>
                             </Select>
                           </div>
