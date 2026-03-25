@@ -311,14 +311,11 @@ export default function ProductoDetallePage() {
   const presQty = currentPres ? Number(currentPres.cantidad) : 1;
 
   function presLabelFn(p: { cantidad: number; nombre?: string }): string {
-    if (p.cantidad === 1) return "Unidad";
-    if (p.cantidad <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio"))) return "Medio Cartón";
-    return `Caja (x${p.cantidad})`;
+    return p.nombre || (p.cantidad === 1 ? "Unidad" : `Caja x${p.cantidad}`);
   }
   function presLabelLong(p: { cantidad: number; nombre?: string }): string {
-    if (p.cantidad === 1) return "Unidad";
-    if (p.cantidad <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio"))) return "Medio Cartón";
-    return `Caja (${p.cantidad} unidades)`;
+    if (p.nombre) return p.cantidad !== 1 ? `${p.nombre} (${p.cantidad} unidades)` : p.nombre;
+    return p.cantidad === 1 ? "Unidad" : `Caja (${p.cantidad} unidades)`;
   }
 
   const currentLabel = currentPres ? presLabelLong(currentPres) : "Unidad";
@@ -683,7 +680,7 @@ export default function ProductoDetallePage() {
                       }`}
                     >
                       {isUnit ? <Layers className="w-4 h-4" /> : <Box className="w-4 h-4" />}
-                      {isUnit ? "Unidad" : (p.cantidad <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio"))) ? "Medio Cartón" : `Caja (x${p.cantidad})`}
+                      {presLabelFn(p)}
                       {disabled && <span className="text-[10px] font-normal ml-1">(sin stock)</span>}
                     </button>
                   );

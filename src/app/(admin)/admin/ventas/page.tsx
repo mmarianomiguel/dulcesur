@@ -2004,7 +2004,7 @@ export default function VentasPage() {
                         return item.qty > stockEnPres ? (
                           <div className="flex items-center gap-1 px-3 lg:px-5 pb-1 text-amber-600">
                             <AlertTriangle className="w-3 h-3 shrink-0" />
-                            <span className="text-[10px] lg:text-xs">Stock disponible: {stockEnPres}{item.unidades_por_presentacion > 1 ? ` ${stockEnPres === 1 ? item.presentacion : item.presentacion.replace(/^Caja/, "Cajas")}` : " Un."}</span>
+                            <span className="text-[10px] lg:text-xs">Stock disponible: {stockEnPres}{item.unidades_por_presentacion > 1 ? ` ${item.presentacion}` : " Un."}</span>
                           </div>
                         ) : null;
                       })()}

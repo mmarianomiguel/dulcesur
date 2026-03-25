@@ -513,9 +513,7 @@ function ProductosContent() {
   }
 
   function presLabel(p: { cantidad: number; nombre?: string }): string {
-    if (p.cantidad === 1) return "Unidad";
-    if (p.cantidad <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio"))) return "Medio Cartón";
-    return `Caja (x${p.cantidad})`;
+    return p.nombre || (p.cantidad === 1 ? "Unidad" : `Caja x${p.cantidad}`);
   }
 
   function getActivePresLabel(producto: Producto) {

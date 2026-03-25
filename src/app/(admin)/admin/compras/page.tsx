@@ -730,7 +730,7 @@ export default function ComprasPage() {
                 const alreadyAdded = items.some((i) => i.producto_id === p.id);
                 const pres = searchPresentaciones[p.id] || [];
                 const boxPres = pres.find((pr) => pr.cantidad > 1);
-                const boxLabel = boxPres ? (boxPres.nombre?.toLowerCase().includes("medio") ? "Medio Cartón" : `Caja x${boxPres.cantidad}`) : null;
+                const boxLabel = boxPres?.nombre || null;
                 return (
                   <div
                     key={p.id}
