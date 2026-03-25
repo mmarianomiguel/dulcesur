@@ -596,9 +596,14 @@ export default function CajaPage() {
       + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
 
     // Transferencia: from caja_movimientos + ventas sin movimientos
+    // For Mixto online: transferencia = total - efectivo (includes recargo)
     const ventasTransferencia = movPorMetodo("Transferencia")
       + ventasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
-      + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
+      + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => {
+        const ef = (v as any).monto_efectivo || 0;
+        const cc = (v as any).monto_cuenta_corriente || 0;
+        return a + (v.total - ef - cc);  // Everything not cash or CC goes to transfer
+      }, 0);
 
     // Group transfers by bank account
     const transferenciaPorCuenta: Record<string, number> = {};
@@ -610,8 +615,10 @@ export default function CajaPage() {
       });
     // Also include ventas sin movimientos in bank account grouping
     for (const v of ventasSinMov) {
+      const ef = (v as any).monto_efectivo || 0;
+      const cc = (v as any).monto_cuenta_corriente || 0;
       const montoTransf = v.forma_pago === "Transferencia" ? v.total
-        : v.forma_pago === "Mixto" ? ((v as any).monto_transferencia || 0)
+        : v.forma_pago === "Mixto" ? (v.total - ef - cc)
         : 0;
       if (montoTransf > 0) {
         const cuenta = (v as any).cuenta_transferencia_alias || "Sin asignar";
@@ -619,28 +626,19 @@ export default function CajaPage() {
       }
     }
 
-    // CC: pure CC ventas + mixto CC portion (only when CC was explicitly used)
+    // CC: pure CC ventas + mixto CC portion (only when CC was explicitly used via POS)
     const ventasCuentaCorriente = ventasPorMetodo("Cuenta Corriente")
       + ventas.filter((v) => v.forma_pago === "Mixto").reduce((acc, v) => {
         // Check if this mixto sale has a CC component in caja_movimientos
-        const hasCCMov = movements.some((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso" && m.metodo_pago === "Cuenta Corriente");
-        if (hasCCMov) {
-          // CC amount = sum of CC movements
-          return acc + movements
-            .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso" && m.metodo_pago === "Cuenta Corriente")
-            .reduce((a, m) => a + m.monto, 0);
-        }
-        // For ventas sin movimientos: only count CC if stored amounts don't cover the total
-        // AND the client has cuenta corriente (monto_cc explicitly stored or derived)
-        const storedEfectivo = (v as any).monto_efectivo || 0;
-        const storedTransf = (v as any).monto_transferencia || 0;
+        const ccMovTotal = movements
+          .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso" && m.metodo_pago === "Cuenta Corriente")
+          .reduce((a, m) => a + m.monto, 0);
+        if (ccMovTotal > 0) return acc + ccMovTotal;
+        // For ventas sin caja_movimientos (online orders):
+        // Online Mixto = Efectivo + Transferencia only (no CC option in checkout)
+        // Any gap between stored amounts and total is recargo rounding, NOT CC
         const storedCC = (v as any).monto_cuenta_corriente || 0;
-        if (storedCC > 0) return acc + storedCC;
-        // If efectivo + transferencia >= total, no CC portion (the diff is rounding/recargo)
-        if (storedEfectivo + storedTransf >= v.total * 0.98) return acc;
-        // Otherwise the gap is CC
-        const ccPart = v.total - storedEfectivo - storedTransf;
-        return acc + (ccPart > 0 ? Math.round(ccPart) : 0);
+        return acc + storedCC;
       }, 0);
     const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
 
