@@ -414,14 +414,21 @@ export default function ProductoDetallePage() {
     // Also check for legacy cart items without suffix
     const existing = carrito.find((item: any) => item.id === cartKey || (presLabel === "Unidad" && item.id === prod.id));
     if (existing && existing.id !== cartKey) existing.id = cartKey;
-    const currentInCart = existing ? existing.cantidad : 0;
     const units = unidadesPres || 1;
-    const maxForPres = Math.floor(prod.stock / units);
-    if (currentInCart >= maxForPres) {
+    // Calculate TOTAL units of this product already in cart (ALL presentations)
+    let totalUnitsAlreadyInCart = 0;
+    carrito.forEach((item: any) => {
+      if (item.id === prod.id || item.id?.startsWith(`${prod.id}_`)) {
+        totalUnitsAlreadyInCart += (item.cantidad || 0) * (item.unidades_por_presentacion || 1);
+      }
+    });
+    const availableUnits = Math.max(0, prod.stock - totalUnitsAlreadyInCart);
+    const maxCanAdd = Math.floor(availableUnits / units);
+    if (maxCanAdd <= 0) {
       showToast("Ya tenés el máximo disponible en el carrito", "error");
       return;
     }
-    const canAdd = Math.min(qty, maxForPres - currentInCart);
+    const canAdd = Math.min(qty, maxCanAdd);
     if (existing) {
       existing.cantidad += canAdd;
     } else {
