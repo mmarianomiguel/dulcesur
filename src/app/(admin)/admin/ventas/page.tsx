@@ -426,7 +426,8 @@ export default function VentasPage() {
   const total = baseTotal + transferSurcharge;
 
   const mixtoSum = Math.round((mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente) * 100) / 100;
-  const mixtoRemaining = formaPago === "Mixto" ? Math.round((total - mixtoSum) * 100) / 100 : 0;
+  // Compare against baseTotal (without surcharge) — surcharge is added automatically on transfer
+  const mixtoRemaining = formaPago === "Mixto" ? Math.round((baseTotal - mixtoSum) * 100) / 100 : 0;
   const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 1 && mixtoSum > 0);
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
@@ -2256,7 +2257,7 @@ export default function VentasPage() {
                 {mixtoActiveMethods.length >= 2 && (
                   <div className="flex items-center justify-between text-xs">
                     <span className={Math.abs(mixtoRemaining) < 1 ? "text-emerald-600 font-medium" : "text-amber-600 font-medium"}>
-                      Asignado: {formatCurrency(mixtoSum)} / {formatCurrency(total)}
+                      Asignado: {formatCurrency(mixtoSum)} / {formatCurrency(baseTotal)}
                     </span>
                     {mixtoRemaining > 0.01 && (
                       <span className="text-amber-600 font-medium">Falta: {formatCurrency(mixtoRemaining)}</span>
