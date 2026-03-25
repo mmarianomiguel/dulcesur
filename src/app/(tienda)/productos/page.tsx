@@ -768,12 +768,12 @@ function ProductosContent() {
             </button>
 
             <div className="max-h-[300px] overflow-y-auto space-y-0.5">
-            {filtrarCategorias(categorias).filter((c) => (c.count || 0) > 0).map((cat) => {
+            {filtrarCategorias(categorias).filter((c) => (c.count || 0) > 0).sort((a, b) => (b.count || 0) - (a.count || 0)).map((cat) => {
               const isSelected = categoriaId === cat.id;
               const isExpanded = expandedCats.has(cat.id);
               const catSubs = allSubcategorias.filter(
-                (s) => s.categoria_id === cat.id
-              );
+                (s) => s.categoria_id === cat.id && (s.count || 0) > 0
+              ).sort((a, b) => (b.count || 0) - (a.count || 0));
               const hasSubcats = catSubs.length > 0;
 
               return (
@@ -891,7 +891,7 @@ function ProductosContent() {
             </button>
 
             {!marcasCollapsed && (() => {
-              const marcasConStock = marcas.filter((m) => (m.count || 0) > 0);
+              const marcasConStock = marcas.filter((m) => (m.count || 0) > 0).sort((a, b) => (b.count || 0) - (a.count || 0));
               const filteredMarcas = marcaSearch
                 ? marcasConStock.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase()))
                 : marcasConStock;
