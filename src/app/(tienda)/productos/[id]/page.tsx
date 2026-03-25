@@ -248,6 +248,7 @@ export default function ProductoDetallePage() {
             .eq("categoria_id", prod.categoria_id)
             .eq("marca_id", prod.marca_id)
             .eq("activo", true)
+            .gt("stock", 0)
             .neq("id", id)
             .limit(MAX_RELATED);
           for (const p of sameBrandCat || []) {
@@ -262,6 +263,7 @@ export default function ProductoDetallePage() {
             .select("*, categorias(nombre), marcas(nombre)")
             .eq("subcategoria_id", prod.subcategoria_id)
             .eq("activo", true)
+            .gt("stock", 0)
             .neq("id", id)
             .limit(MAX_RELATED - related.length);
           for (const p of sameSub || []) {
@@ -276,6 +278,7 @@ export default function ProductoDetallePage() {
             .select("*, categorias(nombre), marcas(nombre)")
             .eq("categoria_id", prod.categoria_id)
             .eq("activo", true)
+            .gt("stock", 0)
             .neq("id", id)
             .limit(MAX_RELATED - related.length);
           for (const p of sameCat || []) {
