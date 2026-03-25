@@ -269,6 +269,51 @@ export default function HojaDeRutaPage() {
 
   const handleMarkDelivered = async (id: string) => {
     const venta = ventas.find((v) => v.id === id);
+    if (!venta) return;
+
+    // Check if there's unpaid balance
+    const pagado = pagadoPorVenta[id] || 0;
+    const pendiente = Math.max(0, venta.total - pagado);
+
+    if (pendiente > 0) {
+      const clienteNombre = venta.clientes?.nombre || "el cliente";
+      const formatMoney = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
+
+      if (venta.cliente_id) {
+        // Client exists — offer to add to CC
+        const ok = confirm(
+          `${clienteNombre} tiene un saldo pendiente de ${formatMoney(pendiente)}.\n\n` +
+          `¿Marcar como entregado y cargar ${formatMoney(pendiente)} a su cuenta corriente?`
+        );
+        if (!ok) return;
+
+        // Add to cuenta corriente
+        const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
+        const saldoActual = freshCli?.saldo ?? venta.clientes?.saldo ?? 0;
+        const nuevoSaldo = saldoActual + pendiente;
+        await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
+        await supabase.from("cuenta_corriente").insert({
+          cliente_id: venta.cliente_id,
+          fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
+          comprobante: `Entrega #${venta.numero}`,
+          descripcion: `Saldo pendiente de entrega`,
+          debe: pendiente,
+          haber: 0,
+          saldo: nuevoSaldo,
+          forma_pago: venta.forma_pago || "Efectivo",
+          venta_id: venta.id,
+        });
+      } else {
+        // No client linked — just warn
+        const ok = confirm(
+          `Este pedido tiene ${formatMoney(pendiente)} sin cobrar.\n\n` +
+          `No tiene cliente asignado, no se puede cargar a cuenta corriente.\n\n` +
+          `¿Marcar como entregado de todas formas?`
+        );
+        if (!ok) return;
+      }
+    }
+
     const { error } = await supabase
       .from("ventas")
       .update({ entregado: true, estado: "entregado" })
@@ -278,7 +323,7 @@ export default function HojaDeRutaPage() {
       return;
     }
     // Sync estado to linked pedido_tienda (so client sees "entregado")
-    if (venta?.numero) {
+    if (venta.numero) {
       const { error: syncErr } = await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
       if (syncErr) console.error("Error syncing pedido_tienda:", syncErr);
     }
