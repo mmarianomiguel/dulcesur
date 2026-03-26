@@ -609,7 +609,7 @@ export default function ComprasPage() {
       if (comboIds.length > 0) {
         const { data: combosOcultos } = await supabase
           .from("productos")
-          .select("id, nombre")
+          .select("id, nombre, es_combo")
           .in("id", comboIds)
           .eq("visibilidad", "oculto");
         if (combosOcultos) {
@@ -1772,41 +1772,96 @@ export default function ComprasPage() {
 
       {/* Dialog: productos ocultos que ahora tienen stock */}
       <Dialog open={showVisibilidadDialog} onOpenChange={setShowVisibilidadDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-lg flex items-center gap-2">
-              <Eye className="w-5 h-5 text-amber-500" />
-              Productos ocultos en la tienda
-            </DialogTitle>
+            <DialogTitle className="text-base">Mostrar productos en la tienda</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Los siguientes productos están ocultos en la tienda pero ahora tienen stock. ¿Querés mostrarlos?
-            </p>
-            <div className="space-y-1.5 max-h-48 overflow-y-auto">
-              {productosOcultos.map((p) => (
-                <div key={p.id} className="text-sm font-medium px-2 py-1.5 bg-amber-50 rounded border border-amber-200">
-                  {p.nombre}
+          {(() => {
+            const [selected, setSelected] = [
+              productosOcultos.filter((p) => (p as any)._selected !== false),
+              (id: string, val: boolean) => setProductosOcultos((prev) => prev.map((p) => p.id === id ? { ...p, _selected: val } as any : p)),
+            ];
+            const allSelected = productosOcultos.every((p) => (p as any)._selected !== false);
+            const noneSelected = productosOcultos.every((p) => (p as any)._selected === false);
+            const selectedIds = productosOcultos.filter((p) => (p as any)._selected !== false).map((p) => p.id);
+            const productos = productosOcultos.filter((p) => !(p as any).es_combo);
+            const combos = productosOcultos.filter((p) => (p as any).es_combo);
+
+            return (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Estos productos están ocultos pero ahora tienen stock. Seleccioná cuáles querés mostrar en la tienda.
+                </p>
+
+                {/* Select all / none */}
+                <div className="flex items-center gap-3 text-xs">
+                  <button className="text-primary hover:underline font-medium" onClick={() => setProductosOcultos((prev) => prev.map((p) => ({ ...p, _selected: true } as any)))}>
+                    Seleccionar todos
+                  </button>
+                  <span className="text-muted-foreground">·</span>
+                  <button className="text-muted-foreground hover:underline" onClick={() => setProductosOcultos((prev) => prev.map((p) => ({ ...p, _selected: false } as any)))}>
+                    Ninguno
+                  </button>
+                  <span className="ml-auto text-muted-foreground">{selectedIds.length} de {productosOcultos.length}</span>
                 </div>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => { setShowVisibilidadDialog(false); setProductosOcultos([]); }}>
-                No, dejar ocultos
-              </Button>
-              <Button
-                onClick={async () => {
-                  const ids = productosOcultos.map((p) => p.id);
-                  await supabase.from("productos").update({ visibilidad: "visible" }).in("id", ids);
-                  setShowVisibilidadDialog(false);
-                  setProductosOcultos([]);
-                  showAdminToast(`${ids.length} productos visibles en la tienda`, "success");
-                }}
-              >
-                Sí, mostrar en tienda
-              </Button>
-            </div>
-          </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-3">
+                  {/* Productos */}
+                  {productos.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Productos ({productos.length})</p>
+                      {productos.map((p) => {
+                        const checked = (p as any)._selected !== false;
+                        return (
+                          <label key={p.id} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition ${checked ? "bg-emerald-50 border-emerald-300" : "bg-gray-50 border-gray-200 opacity-60"}`}>
+                            <input type="checkbox" checked={checked} onChange={(e) => setSelected(p.id, e.target.checked)} className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                            <span className="text-sm font-medium">{p.nombre}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Combos */}
+                  {combos.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Combos ({combos.length})</p>
+                      {combos.map((p) => {
+                        const checked = (p as any)._selected !== false;
+                        return (
+                          <label key={p.id} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition ${checked ? "bg-violet-50 border-violet-300" : "bg-gray-50 border-gray-200 opacity-60"}`}>
+                            <input type="checkbox" checked={checked} onChange={(e) => setSelected(p.id, e.target.checked)} className="rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                            <span className="text-sm font-medium">{p.nombre}</span>
+                            <span className="ml-auto text-[10px] font-medium text-violet-500 bg-violet-100 px-1.5 py-0.5 rounded">COMBO</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => { setShowVisibilidadDialog(false); setProductosOcultos([]); }}>
+                    Dejar ocultos
+                  </Button>
+                  <Button
+                    disabled={noneSelected}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={async () => {
+                      if (selectedIds.length === 0) return;
+                      await supabase.from("productos").update({ visibilidad: "visible" }).in("id", selectedIds);
+                      setShowVisibilidadDialog(false);
+                      setProductosOcultos([]);
+                      showAdminToast(`${selectedIds.length} producto${selectedIds.length > 1 ? "s" : ""} visible${selectedIds.length > 1 ? "s" : ""} en la tienda`, "success");
+                    }}
+                  >
+                    <Eye className="w-4 h-4 mr-1.5" />
+                    Mostrar {selectedIds.length > 0 ? `(${selectedIds.length})` : ""}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
