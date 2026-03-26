@@ -880,10 +880,68 @@ export default function VentasPage() {
 
     const handler = (e: KeyboardEvent) => {
       const now = Date.now();
+      const tag = (e.target as HTMLElement).tagName;
+      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
       const dialogOpen = document.querySelector("[data-search-dialog]");
       if (dialogOpen) { barcodeBuffer.current = ""; return; }
 
-      // Enter: process buffer as barcode
+      const inCooldown = now < scanCooldown.current;
+
+      // During cooldown after a scan: capture ALL keys (they're the next barcode)
+      if (inCooldown && e.key.length === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        barcodeBuffer.current += e.key;
+        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+        barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ""; }, 400);
+        return;
+      }
+      if (inCooldown && e.key === "Enter" && barcodeBuffer.current.length >= 3) {
+        const code = barcodeBuffer.current;
+        barcodeBuffer.current = "";
+        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+        e.preventDefault();
+        e.stopPropagation();
+        findAndAdd(code) === "not_found" && scanNotFoundRef.current(code);
+        scanCooldown.current = now + 800;
+        (document.activeElement as HTMLElement)?.blur();
+        return;
+      }
+
+      // If user is focused on an input, let them type freely — scanner detection only via buffer
+      // We still buffer chars to detect scanner, but DON'T preventDefault
+      if (inInput && !inCooldown) {
+        if (e.key === "Enter" && barcodeBuffer.current.length >= 6) {
+          // Long buffer + Enter while in input = scanner typed into the input
+          const code = barcodeBuffer.current;
+          barcodeBuffer.current = "";
+          if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+          e.preventDefault();
+          e.stopPropagation();
+          // Clear the scanner text from the input
+          const inp = e.target as HTMLInputElement;
+          if (inp.value) inp.value = "";
+          findAndAdd(code) === "not_found" && scanNotFoundRef.current(code);
+          scanCooldown.current = now + 800;
+          inp.blur();
+          return;
+        }
+        if (e.key.length === 1) {
+          const timeSinceLast = now - lastKeyTime;
+          lastKeyTime = now;
+          const isFast = barcodeBuffer.current.length > 0 && timeSinceLast < 50;
+          if (barcodeBuffer.current.length === 0 || isFast) {
+            barcodeBuffer.current += e.key;
+          } else {
+            barcodeBuffer.current = "";
+          }
+          if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+          barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ""; }, 300);
+        }
+        return; // Let the event reach the input normally
+      }
+
+      // NOT in an input: capture everything for scanner
       if (e.key === "Enter" && barcodeBuffer.current.length >= 3) {
         const code = barcodeBuffer.current;
         barcodeBuffer.current = "";
@@ -891,65 +949,33 @@ export default function VentasPage() {
         e.preventDefault();
         e.stopPropagation();
         findAndAdd(code) === "not_found" && scanNotFoundRef.current(code);
-        // Set cooldown and blur to prevent next scan from leaking
         scanCooldown.current = now + 800;
         (document.activeElement as HTMLElement)?.blur();
         return;
       }
 
-      // Single printable char
-      if (e.key.length !== 1) return;
-
-      const tag = (e.target as HTMLElement).tagName;
-      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-      const timeSinceLast = now - lastKeyTime;
-      lastKeyTime = now;
-      const inCooldown = now < scanCooldown.current;
-      const bufLen = barcodeBuffer.current.length;
-      const isFast = bufLen > 0 && timeSinceLast < 80;
-
-      // During cooldown: capture ALL chars, they belong to the next barcode scan
-      if (inCooldown) {
+      if (e.key.length === 1) {
         e.preventDefault();
         e.stopPropagation();
-        barcodeBuffer.current += e.key;
-        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
-        barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ""; }, 400);
-        return;
-      }
-
-      // Fast sequential chars → scanner is typing
-      if (isFast) {
-        barcodeBuffer.current += e.key;
-        e.preventDefault();
-        e.stopPropagation();
+        const timeSinceLast = now - lastKeyTime;
+        lastKeyTime = now;
+        const isFast = barcodeBuffer.current.length > 0 && timeSinceLast < 100;
+        if (barcodeBuffer.current.length === 0 || isFast) {
+          barcodeBuffer.current += e.key;
+        } else {
+          barcodeBuffer.current = e.key;
+        }
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
         barcodeTimer.current = setTimeout(() => {
           const buf = barcodeBuffer.current;
           barcodeBuffer.current = "";
+          // Long buffer = barcode without Enter
           if (buf.length >= 6 && /^\d+$/.test(buf)) {
             findAndAdd(buf) === "not_found" && scanNotFoundRef.current(buf);
             scanCooldown.current = Date.now() + 800;
-            (document.activeElement as HTMLElement)?.blur();
           }
         }, 400);
-        return;
       }
-
-      // First char: buffer it but only preventDefault if NOT in an input
-      if (bufLen === 0) {
-        barcodeBuffer.current = e.key;
-        if (!inInput) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
-        barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ""; }, 400);
-        return;
-      }
-
-      // Slow typing → not a scanner, reset buffer
-      barcodeBuffer.current = "";
     };
 
     window.addEventListener("keydown", handler, true);
