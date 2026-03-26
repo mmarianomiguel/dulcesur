@@ -60,6 +60,9 @@ import {
   Globe,
   MoreHorizontal,
   Pencil,
+  ArrowLeftRight,
+  Shuffle,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -1943,56 +1946,101 @@ export default function ListadoVentasPage() {
                 </div>
 
                 {/* Registrar cobro — for retiro orders without caja entry */}
-                {poSelectedPedido.metodo_entrega === "retiro" && detailPagos.length === 0 && !isCancelled && poSelectedPedido.estado !== "cancelado" && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-emerald-800">💰 Pago pendiente (retiro en local)</p>
-                        <p className="text-xs text-emerald-600 mt-0.5">Este pedido aún no fue cobrado</p>
+                {poSelectedPedido.metodo_entrega === "retiro" && detailPagos.length === 0 && !isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
+                  const cobroMetodo = (poSelectedPedido as any)._cobroMetodo || "Efectivo";
+                  const cobroMixtoEf = (poSelectedPedido as any)._cobroMixtoEf || 0;
+                  const cobroMixtoTr = (poSelectedPedido as any)._cobroMixtoTr || 0;
+                  const setCobroField = (field: string, val: any) => setPoSelectedPedido((prev: any) => ({ ...prev, [field]: val }));
+
+                  return (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-emerald-600" />
+                        <p className="text-sm font-semibold text-emerald-800">Registrar cobro</p>
+                        <span className="ml-auto text-sm font-bold text-emerald-700">{formatCurrency(poSelectedPedido.total)}</span>
                       </div>
+
+                      {/* Payment method selector — same style as POS */}
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[
+                          { key: "Efectivo", label: "Efect.", icon: DollarSign },
+                          { key: "Transferencia", label: "Transf.", icon: ArrowLeftRight },
+                          { key: "Mixto", label: "Mixto", icon: Shuffle },
+                          { key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen },
+                        ].map(({ key, label, icon: Icon }) => (
+                          <button
+                            key={key}
+                            onClick={() => setCobroField("_cobroMetodo", key)}
+                            className={`flex flex-col items-center justify-center gap-0.5 rounded-lg border-2 p-1.5 transition-all text-[10px] font-medium ${
+                              cobroMetodo === key
+                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
+                                : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Mixto inputs */}
+                      {cobroMetodo === "Mixto" && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-gray-500">Efectivo</label>
+                            <Input type="number" value={cobroMixtoEf || ""} onChange={(e) => setCobroField("_cobroMixtoEf", Number(e.target.value))} className="h-8 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500">Transferencia</label>
+                            <Input type="number" value={cobroMixtoTr || ""} onChange={(e) => setCobroField("_cobroMixtoTr", Number(e.target.value))} className="h-8 text-sm" />
+                          </div>
+                        </div>
+                      )}
+
                       <Button
                         size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={cobroMetodo === "Mixto" && (cobroMixtoEf + cobroMixtoTr) < poSelectedPedido.total * 0.99}
                         onClick={async () => {
-                          const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "Efectivo");
-                          const metodo = fp.toLowerCase().includes("transfer") ? "Transferencia" : fp.toLowerCase().includes("mixto") ? "Mixto" : "Efectivo";
                           const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
                           const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
-                          // Find linked venta id
                           let ventaId = (poSelectedPedido as any).venta_id;
                           if (!ventaId) {
                             const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).single();
                             ventaId = v?.id;
                           }
-                          if (metodo === "Mixto") {
-                            const montoEf = (poSelectedPedido as any).monto_efectivo || 0;
-                            const montoTr = poSelectedPedido.total - montoEf;
-                            const entries: any[] = [];
-                            if (montoEf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro retiro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: montoEf, referencia_id: ventaId, referencia_tipo: "venta" });
-                            if (montoTr > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro retiro #${poSelectedPedido.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: montoTr, referencia_id: ventaId, referencia_tipo: "venta" });
-                            if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+                          const entries: any[] = [];
+                          if (cobroMetodo === "Mixto") {
+                            if (cobroMixtoEf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: ventaId, referencia_tipo: "venta" });
+                            if (cobroMixtoTr > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: ventaId, referencia_tipo: "venta" });
+                          } else if (cobroMetodo === "Cuenta Corriente") {
+                            // CC: don't create caja entry, update client saldo
+                            const clienteId = (poSelectedPedido as any).cliente_id;
+                            if (clienteId) {
+                              const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+                              const newSaldo = (cl?.saldo || 0) + poSelectedPedido.total;
+                              await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
+                              await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, tipo: "cargo", descripcion: `Cobro #${poSelectedPedido.numero}`, monto: poSelectedPedido.total, saldo: newSaldo, comprobante: poSelectedPedido.numero, referencia_id: ventaId, referencia_tipo: "venta" });
+                            }
                           } else {
-                            await supabase.from("caja_movimientos").insert({
-                              fecha: hoy, hora, tipo: "ingreso",
-                              descripcion: `Cobro retiro #${poSelectedPedido.numero}`,
-                              metodo_pago: metodo, monto: poSelectedPedido.total,
-                              referencia_id: ventaId, referencia_tipo: "venta",
-                            });
+                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}`, metodo_pago: cobroMetodo, monto: poSelectedPedido.total, referencia_id: ventaId, referencia_tipo: "venta" });
                           }
-                          // Reload pagos
+                          if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+                          // Update forma_pago on the venta
                           if (ventaId) {
+                            await supabase.from("ventas").update({ forma_pago: cobroMetodo }).eq("id", ventaId);
                             const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
                             setDetailPagos((movs || []).map((m: any) => ({ metodo: m.metodo_pago, monto: m.monto })));
                           }
-                          showAdminToast("Cobro registrado en caja", "success");
+                          showAdminToast("Cobro registrado", "success");
                         }}
                       >
                         <DollarSign className="w-4 h-4 mr-1" />
-                        Registrar cobro
+                        Confirmar cobro
                       </Button>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {poSelectedPedido.observacion && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
