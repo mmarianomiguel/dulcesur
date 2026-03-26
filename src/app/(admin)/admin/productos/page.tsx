@@ -55,6 +55,8 @@ import {
   ArrowDown,
   Eye,
   EyeOff,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ImageUpload } from "@/components/image-upload";
@@ -1798,10 +1800,25 @@ export default function ProductosPage() {
                       <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                         <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setCategory("all"); setCatSearch(""); setCatOpen(false); setPage(1); }}>Todas</button>
                         {categories.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).map((c) => (
-                          <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
-                            onClick={() => { setCategory(c.id); setCatSearch(""); setCatOpen(false); setSubcategoryFilter("all"); setPage(1); }}>
-                            {c.nombre}
-                          </button>
+                          <div key={c.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted transition-colors group">
+                            <button className="flex-1 text-left text-sm"
+                              onClick={() => { setCategory(c.id); setCatSearch(""); setCatOpen(false); setSubcategoryFilter("all"); setPage(1); }}>
+                              {c.nombre}
+                            </button>
+                            <button
+                              title={c.restringida ? "Categoría restringida — click para hacer pública" : "Categoría pública — click para restringir"}
+                              className={`p-1 rounded transition opacity-0 group-hover:opacity-100 ${c.restringida ? "opacity-100 text-amber-500 hover:text-amber-700" : "text-gray-300 hover:text-amber-500"}`}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const newVal = !c.restringida;
+                                await supabase.from("categorias").update({ restringida: newVal }).eq("id", c.id);
+                                setCategories((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, restringida: newVal } : cat));
+                                showAdminToast(newVal ? `"${c.nombre}" restringida — solo clientes autorizados` : `"${c.nombre}" pública — visible para todos`, "success");
+                              }}
+                            >
+                              {c.restringida ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
                         ))}
                         {categories.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).length === 0 && (
                           <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
