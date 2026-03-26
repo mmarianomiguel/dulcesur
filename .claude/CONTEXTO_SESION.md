@@ -1,145 +1,131 @@
-# CONTEXTO DE SESION - DulceSur/Enexpro
-## Fecha: 24/03/2026
+# Contexto de Sesión - 26 de Marzo 2026
 
----
+## Proyecto
+Enexpro - Sistema E-commerce + POS para DulceSur (mayorista/minorista)
+- **Stack**: Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, Supabase, Cloudinary
+- **Deploy**: Vercel (dulcesur.com + sistema.dulcesur.com)
+- **Dominio**: dulcesur.com apunta a Vercel (DNS en Hostinger configurados hoy)
 
-## RESUMEN GENERAL
-Sistema de facturación + POS + Ecommerce para mayorista/minorista DulceSur.
-Stack: Next.js 16 + TypeScript + Supabase + Cloudinary
-Deploy: Vercel → sistema.dulcesur.com
-Repo: https://github.com/mmarianomiguel/dulcesur
+## Lo que se hizo hoy (26/03/2026)
 
----
+### Scanner de código de barras (POS)
+- Reescrito completamente el handler del scanner
+- Usa fase de captura (`addEventListener("keydown", handler, true)`) para interceptar antes que React
+- Cooldown de 800ms después de cada escaneo para evitar contaminar inputs
+- Si estás en un input, los dígitos pasan normal (no bloquea edición de cantidad)
+- Toast verde al escanear producto + toast amarillo si no se encuentra
+- `addItem` usa `setItems((prev) => ...)` funcional para evitar stale closure al escanear rápido
 
-## LO QUE SE HIZO HOY (30+ commits)
+### Sincronización de precios Producto ↔ Presentación
+- **50 productos** tenían precios desincronizados entre tabla `productos` y `presentaciones` (Unidad)
+- Se sincronizaron todos vía API
+- **Fix permanente**: al editar producto (`handleSave`), auto-sincroniza presentación Unidad
+- **Fix en importación Excel**: también sincroniza al importar
+- **Pérdida de $2.500** en pedido de Mónica Maidana por precios viejos de Bolsas Arranque
 
-### FASES 1-4 COMPLETAS
-1. Búsqueda global (Ctrl+K) - productos, clientes, ventas
-2. Alertas stock bajo en dashboard
-3. Reimprimir último comprobante en POS
-4. Cierre de caja obligatorio
-5. Auditoría de cambios de precio (precio_historial)
-6. Límite de crédito por cliente
-7. Historial de precios visual (timeline)
-8. Cobro parcial en cuenta corriente
-9. Recibo imprimible de cobro
-10. Ranking de clientes con filtros
-11. Rentabilidad por producto
-12. Comparativa mensual
+### Pedidos tienda online - Cobro y Caja
+- **Retiro en local**: NO registra en caja al momento del pedido — se cobra desde listado/dashboard
+- **Envío**: solo registra transferencia al momento; efectivo se cobra al entregar
+- **Panel de cobro**: estilo POS (Efect./Transf./Mixto/Cta Cte) en:
+  - Listado de ventas (detalle del pedido)
+  - Dashboard (al marcar entregado)
+  - Hoja de ruta (ya existía)
+- El panel muestra **monto pendiente** (total - ya pagado en caja - CC)
+- Cuenta Corriente se suma al calcular "ya pagado" para no mostrar botón cobrar si ya está en CC
 
-### MEJORAS PRODUCTOS
-- Editar producto: costo recalcula precio manteniendo margen
-- Margen % es input editable
-- Presentaciones se sincronizan automáticamente
-- Descuentos integrados en edición de producto
-- Historial de precios visual (timeline con colores)
-- 5 pestañas: Información | Precios | Descuentos | Stock | Historial
+### POS - Pendiente de cobro
+- Nuevo toggle "Cobro al entregar" (en vez de 5to botón)
+- Cuando activo: no registra pago, estado="pendiente", metodo_entrega="envio"
+- Requiere cliente seleccionado
+- Stock SÍ se descuenta (reserva)
+- Aparece en hoja de ruta para cobrar al entregar
 
-### MEJORAS VENTAS/PEDIDOS
-- Vista unificada POS + Tienda online con filtros
-- Cards interactivas con estados clickeables
-- Desglose de pago mixto (efectivo + transferencia)
-- Asignar cuenta bancaria a pedidos con transferencia
-- Imprimir remito desde detalle
-- Estados simplificados: Pendiente → Armado → Entregado → Completado → Cancelado
+### Numeración unificada
+- Tienda online ahora usa numerador `venta` (mismo que POS)
+- Antes usaba `pedido` → causaba números duplicados (00001-00000002 repetido)
+- Próximo número: 00001-00000021
 
-### TIENDA ONLINE
-- Checkout requiere cuenta (login/registro obligatorio)
-- Descuentos por volumen visibles
-- Pantalla de éxito con botón WhatsApp
-- Botón WhatsApp envía mensaje al negocio (1162991571)
-- Fix: precio de cajas se guarda correctamente
-- "Medio Cartón" se muestra correcto para cigarros
+### Creación de clientes
+- Formulario POS idéntico al de Clientes (mismo layout, mismos campos)
+- Auto-crea cuenta de tienda online si tiene email + DNI (contraseña = DNI)
+- Vendedor por defecto: Mariano Miguel (ID: 94b3d01c-6be8-4a38-a8f0-c42b6502b19e)
+- Endpoint: `/api/auth/tienda` action `create-from-admin`
+- Clientes registrados desde la web también tienen vendedor_id = Mariano Miguel
 
-### PROVEEDORES
-- Rediseño completo con 11 campos nuevos
-- Secciones: Datos principales, Contacto, Dirección, Condiciones comerciales
-- Cuentas bancarias vinculables (alias propio o de proveedor)
-- Exportar Excel
+### Dashboard optimizado
+- Queries de 6 meses en paralelo (antes secuencial)
+- Productos + clientes + proveedores en paralelo
+- POS: combo_items + descuentos + presentaciones en paralelo
+- Pedidos retiro aparecen en tab "Hoy" (antes quedaban invisibles)
 
-### LISTA DE PRECIOS PDF
-- 3 modos de agrupación (sin cat / por cat / por subcat)
-- Columna CAJA con cantidad y descuento
-- Logo más grande, subcategorías de la DB
-- Selector de categorías a incluir/excluir
+### Vendedores - Rediseño completo
+- Vista principal: cards por vendedor con nombre, comisión %, ventas, comisión estimada
+- Selector de periodo: Hoy | Esta semana | Este mes | Personalizado
+- Click en card → detalle con tabla de ventas individuales
+- **Notas de Crédito restan** de la comisión del vendedor
+- NC hereda vendedor_id de la venta original
+- Ventas anuladas no cuentan (filtro `neq("estado", "anulada")`)
+- Ahora incluye TODAS las ventas (no solo "cerrada")
 
-### EDITAR PRECIOS
-- Edición masiva con preview
-- Redondeo a múltiplos de 5 o 10 (más cercano/arriba/abajo)
-- Costos con decimales
-- Dialog post-guardado: "¿Imprimir carteles de precios?"
-- Navega a Lista de Precios con productos pre-seleccionados
+### Productos - Mejoras
+- **Visibilidad**: badge "Oculto" clickeable en listado para hacer visible
+- **Menú "Tienda online"**: reemplaza los 2 botones feos por dropdown con opciones:
+  - Ocultar sin stock / Mostrar ocultos con stock / Mostrar ocultos sin stock / Mostrar todos
+- **Presentaciones rediseñadas**: cards con inputs grandes, margen % editable, precio por unidad en cajas
+  - Unidad representada por las 3 cards de Costo/Precio/Margen (no duplicada en presentaciones)
+  - Cajas con mismo estilo visual (3 cards Costo/Precio/Margen + extras compactos)
+- **Compras**: detecta combos ocultos que contienen productos comprados
+  - Dialog rediseñado con checkboxes, separación Productos/Combos, seleccionar todos/ninguno
+- **Historial agrupado**: movimientos de combos agrupados por orden_id en una sola card
 
-### SEGURIDAD
-- RLS: anon no puede UPDATE clientes
-- Lock optimista en saldo CC
-- Tabla cobros creada
-- UNIQUE constraint en ventas.numero (compuesto con punto_venta)
-- Headers de seguridad en middleware
+### Tienda online
+- Precio por caja: "📦 5% OFF por Caja x24" (ya existía, se mejoró)
+- Fix localStorage corrupto: carrito de web vieja era objeto, no array → validación Array.isArray
+- Footer: UUIDs de categorías corregidos
+- Mi cuenta/Pedidos/Direcciones: redirigen a login si no está logueado
+- Letra de productos en comprobantes reducida 2px
 
----
+### Fixes varios
+- Cuenta bancaria NO aparece en Mixto sin transferencia (fix Diego Surbano)
+- Boleta Mixto muestra desglose completo (efectivo + transferencia desde pedidos_tienda)
+- Medio cartón muestra 0.5 en boletas
+- Hoja de ruta: selector cuenta bancaria muestra nombre/alias, no UUID
+- Nota de crédito: selector comprobante origen muestra nombre, no UUID
+- Select dropdown z-index 200 + max-height 300px (fix para dialogs)
+- Reportes ordenados por hora (created_at desc)
+- Error handling: try-catch en dashboard fetchAll + confirmDelivery
+- cliente_id incluido en select de ventas online
 
-## IMPORTACIÓN DE DATOS (HOY)
-- Se vació la DB (productos, clientes, ventas, etc.)
-- Se importaron 1029 productos desde 2 Excels fusionados
-- 313 productos con presentación de caja
-- 29 cigarros con presentación "Medio Cartón" (cantidad 0.5)
-- 7 categorías, 40 subcategorías, 127 marcas creadas
-- 17 proveedores creados y vinculados a productos
-- 24 imágenes de cigarros subidas a Cloudinary
-- Costos actualizados con decimales (sin redondear)
+### Base de datos
+- Tabla `precio_historial` existe y funciona (6 registros)
+- Clientes de prueba eliminados (base limpia)
+- Vendedores inactivos filtrados del POS
 
-## CREDENCIALES
-- Supabase URL: https://oepqhdjuujfdlpjjktbs.supabase.co
-- Supabase Service Role: en .env
-- Cloudinary: cloud=dss3lnovd, key=875629828189924, secret=i9YlVSjAN6ZxrjyOGxtZLfdQ-HE
-- WhatsApp negocio: 1162991571
+## Pendientes / Para hacer después
+- Rediseño página de inicio tienda (usuario dijo "mejor no lo hagas" por ahora)
+- 30 productos sin imagen (upload manual)
+- Imágenes viejas en Cloudinary (carpetas "productos/" y "avatar/") NO borrar hasta que diga
+- Verificar dominio dulcesur.com en Vercel (DNS propagando)
 
----
+## Credenciales / IDs importantes
+- **Supabase URL**: oepqhdjuujfdlpjjktbs.supabase.co
+- **Cloudinary**: cloud dss3lnovd, folder "dulcesur/"
+- **Mariano Miguel ID**: 94b3d01c-6be8-4a38-a8f0-c42b6502b19e
+- **Logo negro**: https://res.cloudinary.com/dss3lnovd/image/upload/v1774505786/dulcesur/logo-dulcesur-negro.jpg
 
-## PENDIENTE PARA MAÑANA
-
-### CRÍTICO
-1. **Descuento automático por caja** - Si precio_caja < precio_unitario × cantidad → mostrar descuento automático en tienda y POS (ej: Guaymallén caja más barata que unidad × 40)
-2. **Ingreso mercadería mejorado** - Columnas Cajas + Unidades sueltas, precio caja visible, mejor buscador con presentaciones
-
-### BUGS CONOCIDOS
-3. Checkout tienda: pago mixto/transferencia puede mostrar montos incorrectos en el resumen
-4. Estados de entrega en listado: verificar que se guardan bien para pedidos online
-5. Total facturado en listado: puede flashear al cargar
-
-### MEJORAS PEDIDAS
-6. Compras/ingreso mercadería: rediseño con cajas + unidades sueltas + precio caja
-7. Confirmación de compra: más datos (items, cuenta bancaria, factura proveedor)
-8. Imágenes: faltan subir las de dulcesur.com (excepto cigarros que ya están)
-9. Tienda online: WhatsApp flotante, filtro por marca, skeleton loading, carrito mini
-10. Admin: Dashboard gráfico ventas del día, accesos rápidos, notificaciones campana
-11. Admin: Calendario entregas, alertas precios proveedor, tags productos, vista rápida
-
-### DISEÑO
-12. Rediseño checkout tienda (steps visuales)
-13. Mejor diseño de productos relacionados (swipe mobile)
-
----
-
-## ARCHIVOS CLAVE MODIFICADOS
-- src/app/(admin)/admin/productos/page.tsx - Editar producto con 5 tabs
-- src/app/(admin)/admin/productos/editar-precios/page.tsx - Edición masiva + redondeo
-- src/app/(admin)/admin/productos/lista-precios/page.tsx - PDF con agrupación
-- src/app/(admin)/admin/ventas/page.tsx - POS
-- src/app/(admin)/admin/ventas/listado/page.tsx - Historial y pedidos unificado
-- src/app/(admin)/admin/ventas/hoja-ruta/page.tsx - Hoja de ruta
-- src/app/(admin)/admin/proveedores/page.tsx - Proveedores rediseñado
-- src/app/(admin)/admin/clientes/page.tsx - Clientes con CC
-- src/app/(admin)/admin/page.tsx - Dashboard
-- src/app/(tienda)/checkout/page.tsx - Checkout tienda
-- src/app/(tienda)/producto/[slug]/page.tsx - Página de producto
-- src/components/global-search.tsx - Ctrl+K
-- src/components/image-upload.tsx - Upload imágenes
-
-## EXCEL REVISIÓN
-- C:\Users\N3yck\Desktop\DulceSur_datos_completos.xlsx (Productos + Proveedores + Clientes)
-- C:\Users\N3yck\Desktop\productos_fusion_revision.xlsx (Fusión original)
-
-## ÚLTIMO COMMIT
-d53382c - Feature: dialog post-guardado ofrece imprimir carteles de precios modificados
+## Archivos clave modificados hoy
+- `src/app/(admin)/admin/ventas/page.tsx` — POS (scanner, addItem, pendiente cobro, crear cliente)
+- `src/app/(admin)/admin/ventas/listado/page.tsx` — panel cobro, cuenta bancaria fix
+- `src/app/(admin)/admin/page.tsx` — dashboard (cobro, optimización, retiro en hoy)
+- `src/app/(admin)/admin/productos/page.tsx` — presentaciones, visibilidad, historial agrupado
+- `src/app/(admin)/admin/compras/page.tsx` — combos ocultos, dialog rediseñado
+- `src/app/(admin)/admin/vendedores/page.tsx` — rediseño completo
+- `src/app/(admin)/admin/ventas/nota-credito/page.tsx` — NC hereda vendedor, fix selector
+- `src/app/(admin)/admin/ventas/hoja-ruta/page.tsx` — cuenta bancaria nombre
+- `src/app/(tienda)/checkout/page.tsx` — retiro no registra caja, numerador unificado
+- `src/app/(tienda)/productos/page.tsx` — Array.isArray fix, precio caja
+- `src/app/api/auth/tienda/route.ts` — create-from-admin, vendedor default
+- `src/components/tienda/cart-drawer.tsx` — Array.isArray fix
+- `src/components/tienda/footer.tsx` — UUIDs categorías, links cuenta
+- `src/components/receipt-print-view.tsx` — medio cartón 0.5, font size
+- `src/components/ui/select.tsx` — z-index 200, max-height 300px
