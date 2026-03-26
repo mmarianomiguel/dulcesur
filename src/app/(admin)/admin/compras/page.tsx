@@ -592,13 +592,34 @@ export default function ComprasPage() {
 
       // Check for hidden products that now have stock
       const itemIds = items.map((i) => i.producto_id);
+      // Check hidden products (direct + combos that use these products as components)
       const { data: ocultos } = await supabase
         .from("productos")
         .select("id, nombre")
         .in("id", itemIds)
         .eq("visibilidad", "oculto");
-      if (ocultos && ocultos.length > 0) {
-        setProductosOcultos(ocultos);
+
+      // Also find hidden combos that contain any of the purchased products
+      const { data: comboLinks } = await supabase
+        .from("combo_items")
+        .select("combo_id")
+        .in("producto_id", itemIds);
+      const comboIds = [...new Set((comboLinks || []).map((c: any) => c.combo_id))];
+      let ocultosAll = [...(ocultos || [])];
+      if (comboIds.length > 0) {
+        const { data: combosOcultos } = await supabase
+          .from("productos")
+          .select("id, nombre")
+          .in("id", comboIds)
+          .eq("visibilidad", "oculto");
+        if (combosOcultos) {
+          for (const c of combosOcultos) {
+            if (!ocultosAll.some((o) => o.id === c.id)) ocultosAll.push(c);
+          }
+        }
+      }
+      if (ocultosAll.length > 0) {
+        setProductosOcultos(ocultosAll);
         setShowVisibilidadDialog(true);
       }
 
