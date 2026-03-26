@@ -1396,7 +1396,7 @@ export default function VentasPage() {
               }),
             });
             if (res.ok) {
-              showAdminToast("Acceso a tienda creado (contraseña: DNI)", "success");
+              scanFoundRef.current("Acceso a tienda creado (contraseña: DNI)");
             }
           } catch { /* silently ignore */ }
         }
