@@ -263,6 +263,13 @@ export default function VentasPage() {
     if (scanNotFoundTimer.current) clearTimeout(scanNotFoundTimer.current);
     scanNotFoundTimer.current = setTimeout(() => setScanNotFound(null), 2000);
   });
+  const [scanFound, setScanFound] = useState<string | null>(null);
+  const scanFoundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanFoundRef = useRef((name: string) => {
+    setScanFound(name);
+    if (scanFoundTimer.current) clearTimeout(scanFoundTimer.current);
+    scanFoundTimer.current = setTimeout(() => setScanFound(null), 1500);
+  });
   const [scannerEnabled, setScannerEnabled] = useState(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("pos_scanner_enabled");
@@ -846,7 +853,11 @@ export default function VentasPage() {
         const match = presList.find((pr) => pr.codigo === code);
         if (match) {
           const prod = products.find((p) => p.id === prodId);
-          if (prod) { scannerAddRef.current(prod, match); return "found"; }
+          if (prod) {
+            scannerAddRef.current(prod, match);
+            scanFoundRef.current(`${prod.nombre} (${match.nombre})`);
+            return "found";
+          }
         }
       }
       // Then search by code in products (barcode on the physical product)
@@ -856,6 +867,7 @@ export default function VentasPage() {
         const presList = presentacionesMap[product.id] || [];
         const unidadPres = presList.find((pr) => pr.nombre === "Unidad") || presList.find((pr) => Number(pr.cantidad) === 1);
         scannerAddRef.current(product, unidadPres);
+        scanFoundRef.current(product.nombre);
         return "found";
       }
       return "not_found";
@@ -3692,10 +3704,20 @@ export default function VentasPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Barcode found toast */}
+      {scanFound && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center gap-2 bg-emerald-500 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
+            <Check className="w-4 h-4 shrink-0" />
+            {scanFound}
+          </div>
+        </div>
+      )}
+
       {/* Barcode not found toast */}
       {scanNotFound && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="flex items-center gap-2 bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
+          <div className="flex items-center gap-2 bg-amber-500 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             Código no encontrado: <span className="font-mono">{scanNotFound}</span>
           </div>
