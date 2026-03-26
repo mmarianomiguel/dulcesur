@@ -525,10 +525,6 @@ export default function VentasPage() {
   };
 
   const addItem = (product: Producto, presentacion?: Presentacion) => {
-    if (items.length >= 500) {
-      setErrorModal({ open: true, message: "Máximo 500 líneas por venta. Finalizá esta y creá otra." });
-      return;
-    }
     const presName = presentacion ? presentacion.nombre : "Unidad";
     const presPrice = presentacion ? presentacion.precio : product.precio;
     const presUnits = presentacion ? presentacion.cantidad : 1;
@@ -538,15 +534,26 @@ export default function VentasPage() {
       ? Math.min(...components.map((c) => Math.floor(c.stock / c.cantidad)))
       : product.stock;
 
-    const existingIdx = items.findIndex((i) => i.producto_id === product.id && i.presentacion === presName);
-    if (existingIdx >= 0) {
-      updateQty(items[existingIdx].id, items[existingIdx].qty + 1, presName === "Unidad");
-      setSelectedItemIdx(existingIdx);
-    } else {
+    setItems((prev) => {
+      if (prev.length >= 500) {
+        setErrorModal({ open: true, message: "Máximo 500 líneas por venta. Finalizá esta y creá otra." });
+        return prev;
+      }
+      const existingIdx = prev.findIndex((i) => i.producto_id === product.id && i.presentacion === presName);
+      if (existingIdx >= 0) {
+        // Increment qty of existing item
+        const updated = prev.map((item, idx) => {
+          if (idx !== existingIdx) return item;
+          const newQty = item.qty + 1;
+          return { ...item, qty: newQty, subtotal: item.price * newQty * (1 - item.discount / 100) };
+        });
+        setSelectedItemIdx(existingIdx);
+        return updated;
+      }
       const autoDiscount = getProductDiscount(product, presName);
       const discountedSubtotal = presPrice * (1 - autoDiscount / 100);
       const newItems = [
-        ...items,
+        ...prev,
         {
           id: crypto.randomUUID(),
           producto_id: product.id,
@@ -569,9 +576,9 @@ export default function VentasPage() {
           comboItems: components,
         },
       ];
-      setItems(newItems);
       setSelectedItemIdx(newItems.length - 1);
-    }
+      return newItems;
+    });
     setSearchOpen(false);
     setProductSearch("");
   };
