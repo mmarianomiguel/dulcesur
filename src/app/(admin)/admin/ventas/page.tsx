@@ -849,7 +849,6 @@ export default function VentasPage() {
     let lastKeyTime = 0;
 
     const findAndAdd = (code: string): "found" | "not_found" => {
-      // First try presentaciones by sku (exact match, includes Caja codes like "7790...-C24")
       for (const [prodId, presList] of Object.entries(presentacionesMap)) {
         const match = presList.find((pr) => pr.codigo === code);
         if (match) {
@@ -861,10 +860,8 @@ export default function VentasPage() {
           }
         }
       }
-      // Then search by code in products (barcode on the physical product)
       const product = products.find((p) => p.codigo === code);
       if (product) {
-        // Find the Unidad presentation to use the correct price
         const presList = presentacionesMap[product.id] || [];
         const unidadPres = presList.find((pr) => pr.nombre === "Unidad") || presList.find((pr) => Number(pr.cantidad) === 1);
         scannerAddRef.current(product, unidadPres);
@@ -876,102 +873,70 @@ export default function VentasPage() {
 
     const handler = (e: KeyboardEvent) => {
       const now = Date.now();
-      const tag = (e.target as HTMLElement).tagName;
-      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-
-      // Skip scanner when search dialog is open (the dialog handles its own Enter)
       const dialogOpen = document.querySelector("[data-search-dialog]");
-      if (dialogOpen) {
-        barcodeBuffer.current = "";
-        return;
-      }
+      if (dialogOpen) { barcodeBuffer.current = ""; return; }
 
+      // Enter: process buffer as barcode
       if (e.key === "Enter" && barcodeBuffer.current.length >= 3) {
         const code = barcodeBuffer.current;
         barcodeBuffer.current = "";
+        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
         e.preventDefault();
-        const result = findAndAdd(code);
-        if (result === "found") {
-          // Set cooldown so next scan's first digits don't leak into qty inputs
-          scanCooldown.current = Date.now() + 500;
-          // Blur any focused input
-          if (inInput) {
-            const el = e.target as HTMLInputElement;
-            if (el.value) el.value = "";
-          }
-          (document.activeElement as HTMLElement)?.blur();
-        }
-        if (result === "not_found") {
-          scanCooldown.current = Date.now() + 500;
-          scanNotFoundRef.current(code);
-        }
+        e.stopPropagation();
+        findAndAdd(code) === "not_found" && scanNotFoundRef.current(code);
+        // Set cooldown and blur to prevent next scan from leaking
+        scanCooldown.current = now + 800;
+        (document.activeElement as HTMLElement)?.blur();
         return;
       }
 
-      // Buffer printable chars — scanner types fast (< 100ms between keys)
-      if (e.key.length === 1) {
-        const timeSinceLast = now - lastKeyTime;
-        lastKeyTime = now;
-        const inCooldown = now < scanCooldown.current;
-        const isScannerSpeed = barcodeBuffer.current.length > 0 && timeSinceLast < 100;
+      // Single printable char
+      if (e.key.length !== 1) return;
 
-        // During cooldown after a scan, capture ALL digits (prevent leaking into qty inputs)
-        if (inCooldown && /^\d$/.test(e.key)) {
+      const timeSinceLast = now - lastKeyTime;
+      lastKeyTime = now;
+      const inCooldown = now < scanCooldown.current;
+      const bufLen = barcodeBuffer.current.length;
+      const isFast = bufLen > 0 && timeSinceLast < 100;
+
+      // During cooldown: capture ALL chars, they belong to the next barcode scan
+      if (inCooldown) {
+        e.preventDefault();
+        e.stopPropagation();
+        barcodeBuffer.current += e.key;
+        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+        barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ""; }, 400);
+        return;
+      }
+
+      // Fast sequential chars → scanner is typing
+      if (bufLen === 0 || isFast) {
+        barcodeBuffer.current += e.key;
+        // After 2+ chars at scanner speed, prevent them from reaching inputs
+        if (isFast) {
           e.preventDefault();
-          barcodeBuffer.current += e.key;
-          if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
-          barcodeTimer.current = setTimeout(() => {
-            const buf = barcodeBuffer.current;
-            barcodeBuffer.current = "";
-            if (buf.length >= 6 && /^\d+$/.test(buf)) {
-              const result = findAndAdd(buf);
-              if (result === "found") { scanCooldown.current = Date.now() + 500; (document.activeElement as HTMLElement)?.blur(); }
-              else { scanNotFoundRef.current(buf); }
-            }
-          }, 300);
-          return;
-        }
-
-        // Always accumulate if it's the first char or scanner speed
-        if (barcodeBuffer.current.length === 0 || isScannerSpeed) {
-          barcodeBuffer.current += e.key;
-          // Prevent scanner digits from entering focused qty/search inputs
-          if ((isScannerSpeed || inCooldown) && barcodeBuffer.current.length >= 2) {
-            e.preventDefault();
-          }
-        } else {
-          // Slow typing — not a scanner. If digit outside input, treat as qty shortcut
-          const buf = barcodeBuffer.current;
-          barcodeBuffer.current = e.key;
-          if (!inInput && buf.length <= 3 && /^\d+$/.test(buf)) {
-            applyQtyFromScanRef.current(buf);
-          }
+          e.stopPropagation();
         }
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
         barcodeTimer.current = setTimeout(() => {
-          // Buffer timed out without Enter → not a barcode scan
           const buf = barcodeBuffer.current;
           barcodeBuffer.current = "";
-          // If short digits and NOT in an input, treat as quantity for selected item
-          const activeTag = (document.activeElement as HTMLElement)?.tagName;
-          const isInInput = activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT";
-          if (buf.length > 0 && buf.length <= 3 && /^\d+$/.test(buf) && !isInInput) {
-            applyQtyFromScanRef.current(buf);
-          }
-          // If it looks like a barcode that didn't get Enter (some scanners), try to find it
+          // Long buffer without Enter → some scanners don't send Enter
           if (buf.length >= 6 && /^\d+$/.test(buf)) {
-            const result = findAndAdd(buf);
-            if (result === "found") {
-              (document.activeElement as HTMLElement)?.blur();
-            } else {
-              scanNotFoundRef.current(buf);
-            }
+            findAndAdd(buf) === "not_found" && scanNotFoundRef.current(buf);
+            scanCooldown.current = Date.now() + 800;
+            (document.activeElement as HTMLElement)?.blur();
           }
-        }, 300);
+        }, 400);
+        return;
       }
+
+      // Slow typing → not a scanner, reset buffer
+      barcodeBuffer.current = "";
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+
+    window.addEventListener("keydown", handler, true);
+    return () => { window.removeEventListener("keydown", handler, true); if (barcodeTimer.current) clearTimeout(barcodeTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, scannerEnabled, presentacionesMap]);
 
