@@ -1349,6 +1349,8 @@ export default function ListadoVentasPage() {
         _cuit: v.clientes?.cuit || "",
         _domicilio: v.clientes?.domicilio || "",
         forma_pago: v.forma_pago,
+        cuenta_transferencia_alias: (v as any).cuenta_transferencia_alias || null,
+        cuenta_transferencia_id: (v as any).cuenta_transferencia_id || null,
       } as Pedido;
     });
 
