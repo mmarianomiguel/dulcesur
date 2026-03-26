@@ -2928,31 +2928,30 @@ export default function ProductosPage() {
                 )}
               </div>
 
-              {/* Presentaciones cards */}
+              {/* Presentaciones cards — Unidad is already shown in the Costo/Precio/Margen cards above */}
               <div className="space-y-3">
                 {presentaciones
                   .map((pres, idx) => ({ pres, idx }))
-                  .filter(({ pres }) => !pres._deleted)
+                  .filter(({ pres }) => !pres._deleted && !(pres.nombre === "Unidad" && pres.cantidad === 1))
                   .sort((a, b) => {
-                    if (a.pres.cantidad === 1 && b.pres.cantidad !== 1) return -1;
-                    if (a.pres.cantidad !== 1 && b.pres.cantidad === 1) return 1;
                     if (a.pres.cantidad < 1 && b.pres.cantidad >= 1) return -1;
                     if (a.pres.cantidad >= 1 && b.pres.cantidad < 1) return 1;
                     return a.pres.cantidad - b.pres.cantidad;
                   })
                   .map(({ pres, idx }) => {
-                    const isUnit = pres.nombre === "Unidad" && pres.cantidad === 1;
+                    const isUnit = false; // Unidad is filtered out above
                     const unit = getUnitPresentacion();
                     const margen = pres.costo > 0 ? ((pres.precio - pres.costo) / pres.costo) * 100 : 0;
                     const ganancia = pres.precio - pres.costo;
                     const unitPriceInBox = !isUnit && pres.cantidad > 0 ? Math.round(pres.precio / pres.cantidad) : 0;
                     return (
-                      <div key={idx} className={`border rounded-lg p-4 ${isUnit ? "bg-blue-50/50 border-blue-200" : "bg-emerald-50/50 border-emerald-200"}`}>
-                        <div className="flex items-center justify-between mb-3">
+                      <div key={idx} className="border-2 border-emerald-100 rounded-xl bg-gradient-to-b from-emerald-50/50 to-white p-4 space-y-3">
+                        {/* Header */}
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {isUnit ? <ShoppingBag className="w-4 h-4 text-blue-500" /> : <Box className="w-4 h-4 text-emerald-500" />}
-                            <span className="font-semibold text-sm">{pres.nombre || (isUnit ? "Unidad" : `Caja x${pres.cantidad}`)}</span>
-                            {!isUnit && unitPriceInBox > 0 && (
+                            <Box className="w-4 h-4 text-emerald-500" />
+                            <span className="font-semibold text-sm">{pres.nombre || `Caja x${pres.cantidad}`}</span>
+                            {unitPriceInBox > 0 && (
                               <span className="text-[11px] text-muted-foreground">({formatCurrency(unitPriceInBox)} c/u)</span>
                             )}
                           </div>
@@ -2960,103 +2959,69 @@ export default function ProductosPage() {
                             <div className={`text-xs font-semibold px-2 py-0.5 rounded ${ganancia >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
                               {pres.costo > 0 ? `${margen.toFixed(1)}% · ${formatCurrency(ganancia)}` : "—"}
                             </div>
-                            {!isUnit && (
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removePresentacion(idx)}>
-                                <X className="w-3 h-3" />
-                              </Button>
-                            )}
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removePresentacion(idx)}>
+                              <X className="w-3 h-3" />
+                            </Button>
                           </div>
                         </div>
-                        {/* Inputs grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {!isUnit && (
-                            <div className="space-y-1">
-                              <label className="text-[11px] text-muted-foreground font-medium">Unidades</label>
-                              <Input
-                                type="number"
-                                value={pres.cantidad}
-                                onChange={(e) => {
-                                  const newQty = Number(e.target.value);
-                                  updatePresentacion(idx, "cantidad", newQty);
-                                  if (unit && newQty > 0) {
-                                    const currentName = pres.nombre;
-                                    const isAutoName = !currentName || /^Caja\s*x\d*$/i.test(currentName);
-                                    if (isAutoName) {
-                                      updatePresentacion(idx, "nombre", newQty < 1 ? "Medio Carton" : `Caja x${newQty}`);
-                                    }
-                                    updatePresentacion(idx, "costo", unit.costo * newQty);
-                                    updatePresentacion(idx, "precio", unit.precio * newQty);
-                                  }
-                                }}
-                                className="h-9"
-                                step={form.unidad_medida === "Mt" ? 0.5 : 1}
-                                min={form.unidad_medida === "Mt" ? 0.5 : 1}
-                              />
+                        {/* 3 cards: Costo / Precio / Margen — same style as Unit */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="rounded-lg border border-blue-100 bg-white/80 p-2.5 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center">
+                                <span className="text-[8px] font-bold text-blue-600">C</span>
+                              </div>
+                              <label className="text-[10px] font-semibold text-blue-700">Costo (x{pres.cantidad})</label>
                             </div>
-                          )}
-                          <div className="space-y-1">
-                            <label className="text-[11px] text-muted-foreground font-medium">Costo {!isUnit && pres.cantidad > 1 ? `(x${pres.cantidad})` : ""}</label>
-                            <Input
-                              type="number" min="0"
-                              value={pres.costo}
-                              onChange={(e) => updatePresentacion(idx, "costo", Math.max(0, Number(e.target.value)))}
-                              className="h-9"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[11px] text-muted-foreground font-medium">Precio {!isUnit && pres.cantidad > 1 ? `(x${pres.cantidad})` : ""}</label>
-                            <Input
-                              type="number" min="0"
-                              value={pres.precio}
-                              onChange={(e) => updatePresentacion(idx, "precio", Math.max(0, Number(e.target.value)))}
-                              className="h-9"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[11px] text-muted-foreground font-medium">Margen %</label>
-                            <Input
-                              type="number" min="0" step="0.1"
-                              value={pres.costo > 0 ? Number(margen.toFixed(1)) : ""}
-                              onChange={(e) => {
-                                const newMargen = Number(e.target.value);
-                                if (pres.costo > 0 && newMargen >= 0) {
-                                  updatePresentacion(idx, "precio", Math.round(pres.costo * (1 + newMargen / 100)));
-                                }
-                              }}
-                              className="h-9"
-                              placeholder="—"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[11px] text-muted-foreground font-medium">Oferta</label>
-                            <Input
-                              type="number"
-                              value={pres.precio_oferta ?? ""}
-                              onChange={(e) => updatePresentacion(idx, "precio_oferta", e.target.value ? Number(e.target.value) : null)}
-                              className="h-9"
-                              placeholder="—"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[11px] text-muted-foreground font-medium">Código</label>
-                            <Input
-                              value={pres.sku}
-                              onChange={(e) => updatePresentacion(idx, "sku", e.target.value)}
-                              className="h-9 font-mono text-xs"
-                              placeholder={isUnit ? form.codigo || "Código" : form.codigo ? `${form.codigo}-C${pres.cantidad}` : "Código"}
-                            />
-                          </div>
-                          {!isUnit && (
-                            <div className="space-y-1">
-                              <label className="text-[11px] text-muted-foreground font-medium">Nombre</label>
-                              <Input
-                                value={pres.nombre}
-                                onChange={(e) => updatePresentacion(idx, "nombre", e.target.value)}
-                                className="h-9"
-                                placeholder={`Caja x${pres.cantidad}`}
-                              />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                              <Input type="number" min="0" value={pres.costo} onChange={(e) => updatePresentacion(idx, "costo", Math.max(0, Number(e.target.value)))} className="h-9 pl-5 text-sm font-semibold bg-white" />
                             </div>
-                          )}
+                          </div>
+                          <div className="rounded-lg border border-emerald-100 bg-white/80 p-2.5 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center">
+                                <span className="text-[8px] font-bold text-emerald-600">$</span>
+                              </div>
+                              <label className="text-[10px] font-semibold text-emerald-700">Precio (x{pres.cantidad})</label>
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                              <Input type="number" min="0" value={pres.precio} onChange={(e) => updatePresentacion(idx, "precio", Math.max(0, Number(e.target.value)))} className="h-9 pl-5 text-sm font-semibold bg-white" />
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-violet-100 bg-white/80 p-2.5 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded-full bg-violet-100 flex items-center justify-center">
+                                <span className="text-[8px] font-bold text-violet-600">%</span>
+                              </div>
+                              <label className="text-[10px] font-semibold text-violet-700">Margen</label>
+                            </div>
+                            <div className="relative">
+                              <Input type="number" min="0" step="0.1" value={pres.costo > 0 ? Number(margen.toFixed(1)) : ""} onChange={(e) => { const m = Number(e.target.value); if (pres.costo > 0 && m >= 0) updatePresentacion(idx, "precio", Math.round(pres.costo * (1 + m / 100))); }} className="h-9 pr-7 text-sm font-semibold bg-white" placeholder="—" />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                            </div>
+                            <p className="text-[10px] text-emerald-600 font-medium text-center">Ganancia: {formatCurrency(ganancia)}</p>
+                          </div>
+                        </div>
+                        {/* Extra fields: Unidades, Oferta, Código, Nombre */}
+                        <div className="grid grid-cols-4 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground font-medium">Unidades</label>
+                            <Input type="number" value={pres.cantidad} onChange={(e) => { const newQty = Number(e.target.value); updatePresentacion(idx, "cantidad", newQty); if (unit && newQty > 0) { const cn = pres.nombre; const auto = !cn || /^Caja\s*x\d*$/i.test(cn); if (auto) updatePresentacion(idx, "nombre", newQty < 1 ? "Medio Carton" : `Caja x${newQty}`); updatePresentacion(idx, "costo", unit.costo * newQty); updatePresentacion(idx, "precio", unit.precio * newQty); } }} className="h-8 text-xs" step={form.unidad_medida === "Mt" ? 0.5 : 1} min={form.unidad_medida === "Mt" ? 0.5 : 1} />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground font-medium">Oferta</label>
+                            <Input type="number" value={pres.precio_oferta ?? ""} onChange={(e) => updatePresentacion(idx, "precio_oferta", e.target.value ? Number(e.target.value) : null)} className="h-8 text-xs" placeholder="—" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground font-medium">Código</label>
+                            <Input value={pres.sku} onChange={(e) => updatePresentacion(idx, "sku", e.target.value)} className="h-8 text-xs font-mono" placeholder={form.codigo ? `${form.codigo}-C${pres.cantidad}` : "Código"} />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground font-medium">Nombre</label>
+                            <Input value={pres.nombre} onChange={(e) => updatePresentacion(idx, "nombre", e.target.value)} className="h-8 text-xs" placeholder={`Caja x${pres.cantidad}`} />
+                          </div>
                         </div>
                       </div>
                     );
