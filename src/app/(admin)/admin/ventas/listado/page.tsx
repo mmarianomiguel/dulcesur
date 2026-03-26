@@ -1945,11 +1945,13 @@ export default function ListadoVentasPage() {
                   </div>
                 </div>
 
-                {/* Registrar cobro — only for tienda orders with pending amount */}
-                {poSelectedPedido.isOnline && !isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
+                {/* Registrar cobro — any order with pending amount (except CC which doesn't go to caja) */}
+                {!isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
                   const pagado = detailPagos.reduce((s, p) => s + p.monto, 0);
                   const pendiente = poSelectedPedido.total - pagado;
                   if (pendiente < 1) return null; // Already fully paid
+                  const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
+                  if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null; // POS CC already handled at sale time
                   const cobroMetodo = (poSelectedPedido as any)._cobroMetodo || "Efectivo";
                   const cobroMixtoEf = (poSelectedPedido as any)._cobroMixtoEf || 0;
                   const cobroMixtoTr = (poSelectedPedido as any)._cobroMixtoTr || 0;
