@@ -1583,21 +1583,70 @@ export default function ComprasPage() {
                 Imprimir carteles de precio
               </Button>
               <Button variant="outline" className="flex-1 gap-2" onClick={() => {
-                const ws = XLSX.utils.json_to_sheet(preciosModificados.map((p) => ({
-                  "Código": p.codigo,
-                  "Producto": p.nombre,
-                  ...(p.precioAnterior > 0 ? { "Precio Anterior": p.precioAnterior } : {}),
-                  "Precio": p.precioNuevo,
-                  ...(p.precioAnterior > 0 ? { "Diferencia": p.precioNuevo - p.precioAnterior, "% Cambio": Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100) } : {}),
-                })));
-                ws["!cols"] = [{ wch: 16 }, { wch: 35 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 }];
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Precios");
-                XLSX.writeFile(wb, `Lista_Precios_${todayString()}.xlsx`);
-                showAdminToast("Lista de precios exportada", "success");
+                const { jsPDF } = require("jspdf");
+                const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                const pw = pdf.internal.pageSize.getWidth();
+                const margin = 15;
+                let y = 20;
+                const fmtCur = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+
+                // Header
+                pdf.setFontSize(16);
+                pdf.setFont("helvetica", "bold");
+                pdf.text("Lista de Precios Actualizados", margin, y);
+                y += 6;
+                pdf.setFontSize(9);
+                pdf.setFont("helvetica", "normal");
+                pdf.setTextColor(120);
+                pdf.text(`Fecha: ${new Date().toLocaleDateString("es-AR")} — ${preciosModificados.length} productos`, margin, y);
+                pdf.setTextColor(0);
+                y += 8;
+
+                // Table header
+                pdf.setFillColor(245, 245, 245);
+                pdf.rect(margin, y - 4, pw - margin * 2, 7, "F");
+                pdf.setFontSize(8);
+                pdf.setFont("helvetica", "bold");
+                pdf.text("Código", margin + 2, y);
+                pdf.text("Producto", margin + 35, y);
+                if (preciosModificados.some((p) => p.precioAnterior > 0)) {
+                  pdf.text("Anterior", pw - margin - 65, y, { align: "right" });
+                }
+                pdf.text("Nuevo", pw - margin - 30, y, { align: "right" });
+                pdf.text("Var.", pw - margin, y, { align: "right" });
+                y += 6;
+
+                // Rows
+                pdf.setFont("helvetica", "normal");
+                for (const p of preciosModificados) {
+                  if (y > 275) { pdf.addPage(); y = 20; }
+                  pdf.setFontSize(8);
+                  pdf.text((p.codigo || "—").substring(0, 18), margin + 2, y);
+                  pdf.text(p.nombre.substring(0, 40), margin + 35, y);
+                  if (p.precioAnterior > 0) {
+                    pdf.setTextColor(150);
+                    pdf.text(fmtCur(p.precioAnterior), pw - margin - 65, y, { align: "right" });
+                    pdf.setTextColor(0);
+                  }
+                  pdf.setFont("helvetica", "bold");
+                  pdf.text(fmtCur(p.precioNuevo), pw - margin - 30, y, { align: "right" });
+                  pdf.setFont("helvetica", "normal");
+                  if (p.precioAnterior > 0) {
+                    const pct = Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100);
+                    pdf.setTextColor(pct > 0 ? 220 : 0, pct > 0 ? 50 : 150, pct > 0 ? 50 : 0);
+                    pdf.text(`${pct > 0 ? "+" : ""}${pct}%`, pw - margin, y, { align: "right" });
+                    pdf.setTextColor(0);
+                  }
+                  y += 5;
+                  pdf.setDrawColor(230);
+                  pdf.line(margin, y - 2, pw - margin, y - 2);
+                }
+
+                pdf.save(`Lista_Precios_${todayString()}.pdf`);
+                showAdminToast("PDF de lista de precios generado", "success");
               }}>
                 <Download className="w-4 h-4" />
-                Exportar lista de precios
+                Lista de precios (PDF)
               </Button>
             </div>
             <div className="flex justify-end">
