@@ -110,7 +110,7 @@ export function ReceiptPrintView({
 }) {
   const fsEmpresa = config.fontSizeEmpresa || config.fontSize;
   const fsCliente = config.fontSizeCliente || config.fontSize - 1;
-  const fsProductos = config.fontSizeProductos || config.fontSize - 1;
+  const fsProductos = config.fontSizeProductos || config.fontSize - 2;
   const fsResumen = config.fontSizeResumen || config.fontSize + 6;
   const fmtCur = (v: number) =>
     new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
