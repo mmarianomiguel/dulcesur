@@ -47,6 +47,8 @@ import {
   Lock,
   Download,
   Upload,
+  Search,
+  X,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
@@ -115,6 +117,8 @@ export default function ConfiguracionPage() {
   const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "", logo_url: "" });
   const [proveedoresList, setProveedoresList] = useState<{ id: string; nombre: string }[]>([]);
   const [showCuentaForm, setShowCuentaForm] = useState(false);
+  const [provSearchText, setProvSearchText] = useState("");
+  const [provDropdownOpen, setProvDropdownOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("empresa");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -835,22 +839,50 @@ export default function ConfiguracionPage() {
                           </div>
                         </div>
                         {cuentaForm.origen === "proveedor" && (
-                          <div className="space-y-1">
+                          <div className="space-y-1 relative">
                             <Label>Proveedor vinculado</Label>
-                            <Select value={cuentaForm.proveedor_id} onValueChange={(v) => setCuentaForm({ ...cuentaForm, proveedor_id: v ?? "" })}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar proveedor...">
-                                  {proveedoresList.find((p) => p.id === cuentaForm.proveedor_id)?.nombre || "Seleccionar proveedor..."}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <div className="max-h-60 overflow-y-auto">
-                                  {proveedoresList.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                            <button
+                              type="button"
+                              onClick={() => { setProvDropdownOpen(!provDropdownOpen); setProvSearchText(""); }}
+                              className="w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm text-left hover:border-primary/50 transition"
+                            >
+                              <span className={cuentaForm.proveedor_id ? "text-foreground font-medium" : "text-muted-foreground"}>
+                                {proveedoresList.find((p) => p.id === cuentaForm.proveedor_id)?.nombre || "Buscar proveedor..."}
+                              </span>
+                              {cuentaForm.proveedor_id && (
+                                <span onClick={(e: any) => { e.stopPropagation(); setCuentaForm({ ...cuentaForm, proveedor_id: "" }); }} className="p-0.5 rounded-full hover:bg-muted cursor-pointer"><X className="w-3 h-3" /></span>
+                              )}
+                            </button>
+                            {provDropdownOpen && (
+                              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-lg border shadow-lg">
+                                <div className="p-2 border-b">
+                                  <div className="relative">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                    <Input
+                                      placeholder="Buscar proveedor..."
+                                      value={provSearchText}
+                                      onChange={(e) => setProvSearchText(e.target.value)}
+                                      className="pl-8 h-8 text-sm"
+                                      autoFocus
+                                    />
+                                  </div>
+                                </div>
+                                <div className="max-h-48 overflow-y-auto p-1">
+                                  {proveedoresList.filter((p) => p.nombre.toLowerCase().includes(provSearchText.toLowerCase())).length === 0 ? (
+                                    <p className="text-center text-sm text-muted-foreground py-4">Sin resultados</p>
+                                  ) : proveedoresList.filter((p) => p.nombre.toLowerCase().includes(provSearchText.toLowerCase())).map((p) => (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => { setCuentaForm({ ...cuentaForm, proveedor_id: p.id }); setProvDropdownOpen(false); setProvSearchText(""); }}
+                                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition ${cuentaForm.proveedor_id === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}
+                                    >
+                                      {p.nombre}
+                                    </button>
                                   ))}
                                 </div>
-                              </SelectContent>
-                            </Select>
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className="space-y-1">
