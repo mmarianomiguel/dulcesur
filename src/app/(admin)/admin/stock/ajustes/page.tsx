@@ -695,9 +695,13 @@ export default function AjustesStockPage() {
               onChange={(e) => { setProductSearch(e.target.value); setSearchHl(0); }}
               onKeyDown={(e) => {
                 const results = filteredSearch.slice(0, 20);
-                if (e.key === "ArrowDown") { e.preventDefault(); setSearchHl((h) => Math.min(h + 1, results.length - 1)); }
-                else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHl((h) => Math.max(h - 1, 0)); }
-                else if (e.key === "Enter" && results[searchHl]) { e.preventDefault(); addProduct(results[searchHl]); setSearchOpen(false); setProductSearch(""); }
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSearchHl((h) => { const next = Math.min(h + 1, results.length - 1); document.querySelector(`[data-saidx="${next}"]`)?.scrollIntoView({ block: "nearest" }); return next; });
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSearchHl((h) => { const next = Math.max(h - 1, 0); document.querySelector(`[data-saidx="${next}"]`)?.scrollIntoView({ block: "nearest" }); return next; });
+                } else if (e.key === "Enter" && results[searchHl]) { e.preventDefault(); addProduct(results[searchHl]); setSearchOpen(false); setProductSearch(""); }
               }}
               className="pl-9"
               autoFocus
@@ -708,7 +712,7 @@ export default function AjustesStockPage() {
               const pres = presMap[p.id];
               const isHl = pIdx === searchHl;
               return (
-                <div key={p.id} className={`rounded-xl border p-3 transition-colors ${isHl ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "hover:border-primary/30 hover:bg-primary/5"}`}>
+                <div key={p.id} data-saidx={pIdx} className={`rounded-xl border p-3 transition-colors ${isHl ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "hover:border-primary/30 hover:bg-primary/5"}`}>
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       {(p as any).imagen_url ? (

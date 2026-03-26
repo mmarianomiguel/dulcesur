@@ -174,7 +174,7 @@ export default function ComprasPage() {
   useEffect(() => {
     if (mode !== "new") return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F1") { e.preventDefault(); setProductSearchOpen(true); }
+      if (e.key === "F1") { e.preventDefault(); { setProductSearchOpen(true); searchProducts(""); setSearchHighlight(0); }; }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -238,8 +238,12 @@ export default function ComprasPage() {
   /* ── product search ── */
 
   const searchProducts = useCallback(async (term: string) => {
-    if (term.length < 2) {
-      setProductResults([]);
+    if (term.length < 1) {
+      // Show recent/all products when empty
+      setSearchingProducts(true);
+      const { data } = await supabase.from("productos").select("id, codigo, nombre, stock, costo, precio, imagen_url").eq("activo", true).order("nombre").limit(15);
+      setProductResults((data as ProductSearch[]) || []);
+      setSearchingProducts(false);
       return;
     }
     setSearchingProducts(true);
@@ -721,7 +725,7 @@ export default function ComprasPage() {
 
         {/* Add product button */}
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setProductSearchOpen(true)} className="gap-1.5">
+          <Button variant="outline" onClick={() => { setProductSearchOpen(true); searchProducts(""); setSearchHighlight(0); }} className="gap-1.5">
             <Plus className="w-3.5 h-3.5" />
             Agregar producto <kbd className="ml-1 border rounded px-1 py-0.5 text-[10px] bg-background">F1</kbd>
           </Button>
@@ -739,12 +743,23 @@ export default function ComprasPage() {
                 value={productSearch}
                 onChange={(e) => { handleProductSearch(e.target.value); setSearchHighlight(0); }}
                 onKeyDown={(e) => {
-                  if (e.key === "ArrowDown") { e.preventDefault(); setSearchHighlight((h) => Math.min(h + 1, productResults.length - 1)); }
-                  else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHighlight((h) => Math.max(h - 1, 0)); }
-                  else if (e.key === "Enter" && productResults[searchHighlight]) {
+                  if (e.key === "ArrowDown") {
                     e.preventDefault();
-                    const p = productResults[searchHighlight];
-                    addProduct(p);
+                    setSearchHighlight((h) => {
+                      const next = Math.min(h + 1, productResults.length - 1);
+                      document.querySelector(`[data-search-idx="${next}"]`)?.scrollIntoView({ block: "nearest" });
+                      return next;
+                    });
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setSearchHighlight((h) => {
+                      const next = Math.max(h - 1, 0);
+                      document.querySelector(`[data-search-idx="${next}"]`)?.scrollIntoView({ block: "nearest" });
+                      return next;
+                    });
+                  } else if (e.key === "Enter" && productResults[searchHighlight]) {
+                    e.preventDefault();
+                    addProduct(productResults[searchHighlight]);
                   }
                 }}
                 className="pl-9 h-11"
@@ -764,6 +779,7 @@ export default function ComprasPage() {
                 return (
                   <div
                     key={p.id}
+                    data-search-idx={pIdx}
                     className={`rounded-xl border p-3 transition-colors ${alreadyAdded ? "opacity-40 bg-muted" : isHighlighted ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "hover:border-primary/30 hover:bg-primary/5"}`}
                   >
                     <div className="flex items-center gap-3">
