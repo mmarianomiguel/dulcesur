@@ -22,21 +22,28 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000));
+      const loginPromise = supabase.auth.signInWithPassword({ email, password });
+      const { error } = await Promise.race([loginPromise, timeoutPromise]) as any;
 
       if (error) {
-        setError(error.message);
+        if (error.message === "Invalid login credentials") {
+          setError("Email o contraseña incorrectos.");
+        } else {
+          setError(error.message);
+        }
         return;
       }
 
       logAudit({ userName: email, action: "LOGIN", module: "auth", metadata: { type: "admin" } });
       router.push("/admin");
       router.refresh();
-    } catch {
-      setError("Ocurrió un error inesperado. Intente nuevamente.");
+    } catch (err: any) {
+      if (err?.message === "timeout") {
+        setError("No se pudo conectar al servidor. Verificá tu conexión e intentá de nuevo.");
+      } else {
+        setError("Ocurrió un error inesperado. Intentá nuevamente.");
+      }
     } finally {
       setLoading(false);
     }

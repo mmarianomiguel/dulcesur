@@ -72,7 +72,7 @@ export default function ToastContainer() {
                 : "toast-in 0.4s cubic-bezier(0.21,1.02,0.73,1) forwards",
             }}
           >
-            <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)] border border-gray-100 min-w-[280px] max-w-[380px]">
+            <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)] border border-gray-100 min-w-[200px] max-w-[85vw] sm:max-w-[380px]">
               <div className={`flex h-9 w-9 items-center justify-center rounded-full ${config.bg} shrink-0`}>
                 <Icon className={`h-[18px] w-[18px] ${config.text}`} />
               </div>

@@ -61,7 +61,7 @@ export default function AdminToastContainer() {
               : "admin-toast-in 0.3s ease-out forwards",
           }}
         >
-          <div className={`flex items-center gap-2.5 rounded-lg border ${borderMap[t.type]} bg-background px-4 py-3 text-sm shadow-lg min-w-[260px] max-w-[400px]`}>
+          <div className={`flex items-center gap-2.5 rounded-lg border ${borderMap[t.type]} bg-background px-4 py-3 text-sm shadow-lg min-w-[200px] max-w-[85vw] sm:max-w-[400px]`}>
             {iconMap[t.type]}
             <span className="flex-1 font-medium">{t.message}</span>
             <button
