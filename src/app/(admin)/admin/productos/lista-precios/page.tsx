@@ -38,6 +38,7 @@ interface DBProducto {
   fecha_actualizacion: string;
   categorias: { nombre: string } | null;
   marcas: { nombre: string } | null;
+  precio_anterior?: number | null;
 }
 
 interface DBPresentacion {
@@ -66,6 +67,8 @@ interface Product {
   categoria: string;
   subcategoria: string;
   fechaActualizacion: string;
+  codigo: string;
+  precioAnterior: number;
 }
 
 interface Filters {
@@ -110,7 +113,7 @@ interface PdfConfig {
   poster_mostrarPrecioUnitario: boolean;
 }
 
-type PdfStyle = "combinado" | "poster" | "lista";
+type PdfStyle = "combinado" | "poster" | "lista" | "variaciones";
 type ConfigTab = "general" | PdfStyle;
 
 const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "", fechaDesde: "", fechaHasta: "" };
@@ -304,6 +307,8 @@ export default function ListaPreciosPage() {
         categoria: dbCategoria || clasificacion.categoria,
         subcategoria: (p.subcategoria_id && subcatMap[p.subcategoria_id]) || clasificacion.subcategoria,
         fechaActualizacion: fechaAct,
+        codigo: p.codigo || "",
+        precioAnterior: p.precio_anterior || 0,
       };
     });
 
@@ -822,6 +827,87 @@ export default function ListaPreciosPage() {
         pdf.setTextColor(0);
       }
 
+      if (style === "variaciones") {
+        // Generate variations PDF — landscape with price history
+        const vPdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+        const vpw = vPdf.internal.pageSize.getWidth();
+        const vm = 10;
+        let vy = 18;
+        const fmtP2 = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+
+        // Header
+        vPdf.setFontSize(14);
+        vPdf.setFont("helvetica", "bold");
+        vPdf.text("Lista de Precios Actualizados", vm, vy);
+        vy += 5;
+        vPdf.setFontSize(8);
+        vPdf.setFont("helvetica", "normal");
+        vPdf.setTextColor(120);
+        vPdf.text(`Fecha: ${today} — ${selectedProducts.length} productos`, vm, vy);
+        vPdf.setTextColor(0);
+        vy += 7;
+
+        // Table header
+        vPdf.setFillColor(240, 240, 240);
+        vPdf.rect(vm, vy - 4, vpw - vm * 2, 6, "F");
+        vPdf.setFontSize(7);
+        vPdf.setFont("helvetica", "bold");
+        vPdf.text("Código", vm + 2, vy);
+        vPdf.text("Producto", vm + 32, vy);
+        vPdf.text("Marca", vm + 100, vy);
+        vPdf.text("Categoría", vm + 130, vy);
+        vPdf.text("Subcat.", vm + 160, vy);
+        vPdf.text("Anterior", vpw - vm - 55, vy, { align: "right" });
+        vPdf.text("Nuevo", vpw - vm - 25, vy, { align: "right" });
+        vPdf.text("Var.", vpw - vm, vy, { align: "right" });
+        vy += 5;
+
+        // Rows
+        vPdf.setFont("helvetica", "normal");
+        for (const p of selectedProducts) {
+          if (vy > 195) { vPdf.addPage(); vy = 15; }
+          vPdf.setFontSize(7);
+          vPdf.text((p.codigo || "—").substring(0, 16), vm + 2, vy);
+          vPdf.text(p.nombre.substring(0, 35), vm + 32, vy);
+          vPdf.setTextColor(100);
+          vPdf.text((p.marca || "—").substring(0, 15), vm + 100, vy);
+          vPdf.text((p.categoria || "—").substring(0, 15), vm + 130, vy);
+          vPdf.text((p.subcategoria || "—").substring(0, 15), vm + 160, vy);
+          vPdf.setTextColor(0);
+          const anterior = p.precioAnterior || p.precioUnitario;
+          const nuevo = p.precioUnitario;
+          if (anterior !== nuevo) {
+            vPdf.setTextColor(150);
+            vPdf.text(fmtP2(anterior), vpw - vm - 55, vy, { align: "right" });
+            vPdf.setTextColor(0);
+          } else {
+            vPdf.text("—", vpw - vm - 55, vy, { align: "right" });
+          }
+          vPdf.setFont("helvetica", "bold");
+          vPdf.text(fmtP2(nuevo), vpw - vm - 25, vy, { align: "right" });
+          vPdf.setFont("helvetica", "normal");
+          if (anterior > 0 && anterior !== nuevo) {
+            const pct = Math.round(((nuevo - anterior) / anterior) * 100);
+            vPdf.setTextColor(pct > 0 ? 220 : 0, pct > 0 ? 50 : 150, pct > 0 ? 50 : 0);
+            vPdf.text(`${pct > 0 ? "+" : ""}${pct}%`, vpw - vm, vy, { align: "right" });
+            vPdf.setTextColor(0);
+          } else {
+            vPdf.text("—", vpw - vm, vy, { align: "right" });
+          }
+          vy += 4.5;
+          vPdf.setDrawColor(230);
+          vPdf.line(vm, vy - 2, vpw - vm, vy - 2);
+        }
+
+        const vBlob = vPdf.output("blob");
+        const vUrl = URL.createObjectURL(vBlob);
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+        setPdfUrl(vUrl);
+        setShowPreview(true);
+        setGenerating(false);
+        return;
+      }
+
       const blob = pdf.output("blob");
       const url = URL.createObjectURL(blob);
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
@@ -1205,6 +1291,25 @@ export default function ListaPreciosPage() {
                 </div>
                 <button onClick={() => generatePDF("lista")} className="w-full bg-primary text-primary-foreground rounded-lg py-2 text-sm font-semibold hover:bg-primary/90 transition">
                   Generar Lista PDF
+                </button>
+              </div>
+
+              {/* Variaciones de precio */}
+              <div className="col-span-2 border-2 border-border rounded-xl p-4 space-y-3">
+                <div className="border border-border rounded-lg p-3 bg-accent/30">
+                  <p className="text-[6px] font-bold mb-1">Lista de Precios Actualizados</p>
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-[4px] border-b border-border pb-0.5">
+                      <span className="font-bold w-1/4">Código</span><span className="font-bold w-1/4">Producto</span><span className="font-bold w-1/6 text-right">Anterior</span><span className="font-bold w-1/6 text-right">Nuevo</span><span className="font-bold w-12 text-right">Var.</span>
+                    </div>
+                    <div className="flex justify-between text-[4px]"><span className="w-1/4">7790070</span><span className="w-1/4">Aceite 900ml</span><span className="w-1/6 text-right text-muted-foreground">$2.200</span><span className="w-1/6 text-right font-bold">$2.400</span><span className="w-12 text-right text-red-500">+9%</span></div>
+                    <div className="flex justify-between text-[4px]"><span className="w-1/4">7798066</span><span className="w-1/4">Papas 140g</span><span className="w-1/6 text-right text-muted-foreground">$1.100</span><span className="w-1/6 text-right font-bold">$1.200</span><span className="w-12 text-right text-red-500">+9%</span></div>
+                  </div>
+                </div>
+                <p className="font-semibold text-sm">📊 Variaciones de precio</p>
+                <p className="text-xs text-muted-foreground">Últimos cambios con anterior, nuevo, marca, categoría y variación %</p>
+                <button onClick={() => generatePDF("variaciones")} className="w-full bg-primary text-primary-foreground rounded-lg py-2 text-sm font-semibold hover:bg-primary/90 transition">
+                  Generar PDF Variaciones
                 </button>
               </div>
             </div>
