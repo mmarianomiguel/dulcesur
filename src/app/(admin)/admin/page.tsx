@@ -457,10 +457,14 @@ export default function DashboardPage() {
 
   // ─── Pedido actions ───
   const handleMarkDelivered = async (venta: PedidoVenta) => {
-    // Check how much is already paid in caja
-    const { data: cajaMovs } = await supabase.from("caja_movimientos")
-      .select("monto").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
-    const pagado = (cajaMovs || []).reduce((s: number, m: any) => s + m.monto, 0);
+    // Check how much is already paid in caja + cuenta corriente
+    const [{ data: cajaMovs }, { data: ccMovs }] = await Promise.all([
+      supabase.from("caja_movimientos").select("monto").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+      supabase.from("cuenta_corriente").select("debe").eq("venta_id", venta.id),
+    ]);
+    const pagadoCaja = (cajaMovs || []).reduce((s: number, m: any) => s + m.monto, 0);
+    const pagadoCC = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
+    const pagado = pagadoCaja + pagadoCC;
     const pendiente = Math.max(0, venta.total - pagado);
 
     if (pendiente > 0 && !(venta as any).cliente_id) {

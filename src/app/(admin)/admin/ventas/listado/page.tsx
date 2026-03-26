@@ -828,14 +828,21 @@ export default function ListadoVentasPage() {
       }
     }
 
-    // Load payment breakdown - first try caja_movimientos, then fallback to stored amounts
+    // Load payment breakdown - caja_movimientos + cuenta_corriente
     const pagos: { metodo: string; monto: number }[] = [];
     if (ventaId) {
-      const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+      const [{ data: movs }, { data: ccMovs }] = await Promise.all([
+        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+        supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
+      ]);
       for (const m of movs || []) {
         const existing = pagos.find((p) => p.metodo === m.metodo_pago);
         if (existing) existing.monto += m.monto;
         else pagos.push({ metodo: m.metodo_pago, monto: m.monto });
+      }
+      const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
+      if (ccTotal > 0) {
+        pagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
       }
     }
     // For Mixto online orders: enrich with pedidos_tienda to show original payment split
@@ -1674,9 +1681,8 @@ export default function ListadoVentasPage() {
                             <DollarSign className="w-3 h-3 mr-1" />{pago}
                           </Badge>
                         )}
-                        {/* Warning: transfer without bank account */}
-                        {((order.forma_pago || order.metodo_pago || "").toLowerCase().includes("transferencia") ||
-                          (order.forma_pago || order.metodo_pago || "").toLowerCase().includes("mixto")) &&
+                        {/* Warning: transfer without bank account — only for actual transfers, not Mixto without transfer */}
+                        {(order.forma_pago || order.metodo_pago || "").toLowerCase().includes("transferencia") &&
                           !(order as any).cuenta_transferencia_alias && order.estado !== "cancelado" && (
                           <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
                             <AlertTriangle className="w-3 h-3" />
