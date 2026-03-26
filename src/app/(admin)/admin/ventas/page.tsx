@@ -256,6 +256,7 @@ export default function VentasPage() {
   // barcode scanner
   const barcodeBuffer = useRef("");
   const barcodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanCooldown = useRef(0); // timestamp until which all digit keys are captured by scanner
   const [scanNotFound, setScanNotFound] = useState<string | null>(null);
   const scanNotFoundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanNotFoundRef = useRef((code: string) => {
@@ -891,7 +892,9 @@ export default function VentasPage() {
         e.preventDefault();
         const result = findAndAdd(code);
         if (result === "found") {
-          // Blur any focused input so next scan doesn't type into qty fields
+          // Set cooldown so next scan's first digits don't leak into qty inputs
+          scanCooldown.current = Date.now() + 500;
+          // Blur any focused input
           if (inInput) {
             const el = e.target as HTMLInputElement;
             if (el.value) el.value = "";
@@ -899,7 +902,7 @@ export default function VentasPage() {
           (document.activeElement as HTMLElement)?.blur();
         }
         if (result === "not_found") {
-          // Show non-invasive toast for unknown barcode
+          scanCooldown.current = Date.now() + 500;
           scanNotFoundRef.current(code);
         }
         return;
@@ -909,13 +912,31 @@ export default function VentasPage() {
       if (e.key.length === 1) {
         const timeSinceLast = now - lastKeyTime;
         lastKeyTime = now;
+        const inCooldown = now < scanCooldown.current;
         const isScannerSpeed = barcodeBuffer.current.length > 0 && timeSinceLast < 100;
+
+        // During cooldown after a scan, capture ALL digits (prevent leaking into qty inputs)
+        if (inCooldown && /^\d$/.test(e.key)) {
+          e.preventDefault();
+          barcodeBuffer.current += e.key;
+          if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+          barcodeTimer.current = setTimeout(() => {
+            const buf = barcodeBuffer.current;
+            barcodeBuffer.current = "";
+            if (buf.length >= 6 && /^\d+$/.test(buf)) {
+              const result = findAndAdd(buf);
+              if (result === "found") { scanCooldown.current = Date.now() + 500; (document.activeElement as HTMLElement)?.blur(); }
+              else { scanNotFoundRef.current(buf); }
+            }
+          }, 300);
+          return;
+        }
 
         // Always accumulate if it's the first char or scanner speed
         if (barcodeBuffer.current.length === 0 || isScannerSpeed) {
           barcodeBuffer.current += e.key;
           // Prevent scanner digits from entering focused qty/search inputs
-          if (isScannerSpeed && barcodeBuffer.current.length >= 2) {
+          if ((isScannerSpeed || inCooldown) && barcodeBuffer.current.length >= 2) {
             e.preventDefault();
           }
         } else {
