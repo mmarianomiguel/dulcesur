@@ -876,12 +876,15 @@ export default function VentasPage() {
       if (e.key === "Enter" && barcodeBuffer.current.length >= 3) {
         const code = barcodeBuffer.current;
         barcodeBuffer.current = "";
+        e.preventDefault();
         const result = findAndAdd(code);
-        if (result === "found" && inInput) {
-          e.preventDefault();
-          // Clear whatever the scanner typed into the input
-          const el = e.target as HTMLInputElement;
-          if (el.value) el.value = "";
+        if (result === "found") {
+          // Blur any focused input so next scan doesn't type into qty fields
+          if (inInput) {
+            const el = e.target as HTMLInputElement;
+            if (el.value) el.value = "";
+          }
+          (document.activeElement as HTMLElement)?.blur();
         }
         if (result === "not_found") {
           // Show non-invasive toast for unknown barcode
@@ -904,6 +907,10 @@ export default function VentasPage() {
         // Scanner types fast (< 50ms between keys). Manual typing is slower.
         if (barcodeBuffer.current.length === 0 || isScannerSpeed) {
           barcodeBuffer.current += e.key;
+          // Prevent scanner digits from entering focused qty inputs
+          if (isScannerSpeed && inInput) {
+            e.preventDefault();
+          }
         } else {
           barcodeBuffer.current = e.key;
         }
