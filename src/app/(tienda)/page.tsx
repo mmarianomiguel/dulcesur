@@ -752,7 +752,7 @@ export default function TiendaPage() {
   function agregarAlCarrito(producto: Producto, qty: number = 1) {
     const stored = localStorage.getItem("carrito");
     let carrito: CarritoItem[];
-    try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
+    try { const _p = stored ? JSON.parse(stored) : []; carrito = Array.isArray(_p) ? _p : []; } catch { carrito = []; }
 
     const cartKey = `${producto.id}_Unidad`;
     // Also check for legacy cart items without _Unidad suffix

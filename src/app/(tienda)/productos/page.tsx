@@ -132,7 +132,7 @@ function ProductosContent() {
   useEffect(() => {
     function syncCart() {
       const stored = localStorage.getItem("carrito");
-      let carrito: { id: string; cantidad: number }[]; try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
+      let carrito: { id: string; cantidad: number }[]; try { const parsed = stored ? JSON.parse(stored) : []; carrito = Array.isArray(parsed) ? parsed : []; } catch { carrito = []; }
       const map: Record<string, number> = {};
       carrito.forEach((item) => {
         const parts = item.id.split("_");
@@ -539,7 +539,7 @@ function ProductosContent() {
     const price = disc > 0 ? Math.round(basePrice * (1 - disc / 100)) : basePrice;
     const cartKey = presLabel ? `${producto.id}_${presLabel}` : producto.id;
     const stored = localStorage.getItem("carrito");
-    let carrito: any[]; try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
+    let carrito: any[]; try { const _p = stored ? JSON.parse(stored) : []; carrito = Array.isArray(_p) ? _p : []; } catch { carrito = []; }
     // Also check for legacy cart items without _Unidad suffix
     const existing = carrito.find((item: any) => item.id === cartKey || (presLabel === "Unidad" && item.id === producto.id));
     if (existing && existing.id !== cartKey) existing.id = cartKey;

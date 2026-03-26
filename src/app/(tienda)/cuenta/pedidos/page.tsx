@@ -676,7 +676,7 @@ export default function PedidosPage() {
                     e.stopPropagation();
                     const stored = localStorage.getItem("carrito");
                     let carrito: any[];
-                    try { carrito = stored ? JSON.parse(stored) : []; } catch { carrito = []; }
+                    try { const _p = stored ? JSON.parse(stored) : []; carrito = Array.isArray(_p) ? _p : []; } catch { carrito = []; }
                     for (const item of pedido.items) {
                       const existing = carrito.find((c: any) => c.nombre === item.nombre);
                       if (!existing) {
