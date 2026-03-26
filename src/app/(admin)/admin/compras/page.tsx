@@ -1044,7 +1044,7 @@ export default function ComprasPage() {
                                   />
                                   <span className="text-[10px] text-muted-foreground">
                                     {item.actualizarPrecio ? (
-                                      <>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(Math.round(item.costo_unitario * (item.precio_original / item.costo_original)))}</span></>
+                                      <>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(item.costo_original > 0 ? Math.round(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original)}</span></>
                                     ) : (
                                       <span>Mantener {formatCurrency(item.precio_original)}</span>
                                     )}

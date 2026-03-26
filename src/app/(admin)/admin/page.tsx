@@ -250,7 +250,7 @@ export default function DashboardPage() {
   const fetchPedidosOnline = useCallback(async () => {
     const { data: ventasOnline } = await supabase
       .from("ventas")
-      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, cuenta_transferencia_alias, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, producto_id, codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
+      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, cuenta_transferencia_alias, cliente_id, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, producto_id, codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
       .eq("origen", "tienda")
       .eq("entregado", false)
       .neq("estado", "anulada")
@@ -305,6 +305,7 @@ export default function DashboardPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    try {
     const { start, end } = getDateRange();
 
     // Load receipt config from localStorage
@@ -406,7 +407,11 @@ export default function DashboardPage() {
     setVentasPorCategoria(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
 
     await fetchPedidosOnline();
-    setLoading(false);
+    } catch (err) {
+      console.error("Dashboard fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [getDateRange, fetchPedidosOnline]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -469,6 +474,7 @@ export default function DashboardPage() {
   const confirmDelivery = async () => {
     const { venta, pendiente, type } = deliveryConfirm;
     if (!venta) return;
+    try {
     // no_client: still allow delivery, register payment as Efectivo
     if (type === "no_client" && pendiente > 0) {
       const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -500,7 +506,12 @@ export default function DashboardPage() {
     await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id);
     await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
     setPedidosOnline((prev) => prev.filter((p) => p.id !== venta.id));
-    setActionLoading(null);
+    } catch (err) {
+      console.error("Error confirming delivery:", err);
+      showAdminToast("Error al confirmar entrega", "error");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleMarkArmado = async (venta: PedidoVenta) => {
