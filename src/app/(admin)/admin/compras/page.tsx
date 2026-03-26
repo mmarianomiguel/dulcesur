@@ -1347,6 +1347,64 @@ export default function ComprasPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Prices dialog (also needed in detail view) */}
+        <Dialog open={showPreciosDialog} onOpenChange={setShowPreciosDialog}>
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                Precios ({preciosModificados.length} productos)
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="rounded-lg border divide-y max-h-60 overflow-y-auto">
+                {preciosModificados.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-2.5 text-sm">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{p.nombre}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">{p.codigo}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-primary">{formatCurrency(p.precioNuevo)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
+                <Button variant="outline" className="flex-1 gap-2" onClick={() => {
+                  const { jsPDF } = require("jspdf");
+                  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                  const pw2 = pdf.internal.pageSize.getWidth();
+                  const ph2 = pdf.internal.pageSize.getHeight();
+                  const cols2 = 3, maxRows2 = 4;
+                  const tagW2 = (pw2 - 20) / cols2, tagH2 = (ph2 - 20) / maxRows2;
+                  let col2 = 0, row2 = 0;
+                  for (const p of preciosModificados) {
+                    if (row2 >= maxRows2) { pdf.addPage(); row2 = 0; col2 = 0; }
+                    const x = 10 + col2 * tagW2, yp = 10 + row2 * tagH2;
+                    pdf.setDrawColor(200); pdf.setLineDashPattern([2, 2], 0); pdf.rect(x, yp, tagW2, tagH2); pdf.setLineDashPattern([], 0);
+                    pdf.setFontSize(10); pdf.setFont("helvetica", "bold"); pdf.setTextColor(0);
+                    pdf.text(pdf.splitTextToSize(p.nombre, tagW2 - 8).slice(0, 2), x + tagW2 / 2, yp + 10, { align: "center" });
+                    pdf.setFontSize(7); pdf.setFont("helvetica", "normal"); pdf.setTextColor(120);
+                    pdf.text(p.codigo || "", x + tagW2 / 2, yp + 20, { align: "center" }); pdf.setTextColor(0);
+                    pdf.setFontSize(28); pdf.setFont("helvetica", "bold");
+                    pdf.text(formatCurrency(p.precioNuevo), x + tagW2 / 2, yp + tagH2 - 10, { align: "center" });
+                    col2++; if (col2 >= cols2) { col2 = 0; row2++; }
+                  }
+                  pdf.save(`Carteles_Precios_${todayString()}.pdf`);
+                  showAdminToast("PDF de carteles generado", "success");
+                }}>
+                  <Printer className="w-4 h-4" />
+                  Imprimir carteles
+                </Button>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={() => setShowPreciosDialog(false)}>Cerrar</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
