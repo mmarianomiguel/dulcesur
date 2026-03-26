@@ -725,6 +725,15 @@ export default function ProductosPage() {
           } catch {} // Silent fail if table doesn't exist yet
         }
 
+        // Sync Unidad presentation price/cost with product
+        if (editingProduct.precio !== form.precio || editingProduct.costo !== form.costo) {
+          await supabase.from("presentaciones")
+            .update({ precio: form.precio, costo: form.costo })
+            .eq("producto_id", editingProduct.id)
+            .eq("nombre", "Unidad")
+            .eq("cantidad", 1);
+        }
+
         // Log stock movement if stock changed manually
         if (editingProduct.stock !== form.stock) {
           const diff = form.stock - editingProduct.stock;
@@ -1257,6 +1266,13 @@ export default function ProductosPage() {
               if (Object.keys(updatePayload).length > 0) {
                 updatePayload.fecha_actualizacion = new Date().toISOString();
                 await supabase.from("productos").update(updatePayload).eq("id", existing.id);
+                // Sync Unidad presentation
+                if (updatePayload.precio || updatePayload.costo) {
+                  const syncPayload: Record<string, unknown> = {};
+                  if (updatePayload.precio) syncPayload.precio = updatePayload.precio;
+                  if (updatePayload.costo) syncPayload.costo = updatePayload.costo;
+                  await supabase.from("presentaciones").update(syncPayload).eq("producto_id", existing.id).eq("nombre", "Unidad").eq("cantidad", 1);
+                }
               }
 
               // Upsert box presentation if provided
