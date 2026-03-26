@@ -841,19 +841,22 @@ export default function VentasPage() {
     let lastKeyTime = 0;
 
     const findAndAdd = (code: string): "found" | "not_found" => {
-      // Search by code in products
-      const product = products.find((p) => p.codigo === code);
-      if (product) {
-        scannerAddRef.current(product);
-        return "found";
-      }
-      // Try presentaciones by codigo
+      // First try presentaciones by sku (exact match, includes Caja codes like "7790...-C24")
       for (const [prodId, presList] of Object.entries(presentacionesMap)) {
         const match = presList.find((pr) => pr.codigo === code);
         if (match) {
           const prod = products.find((p) => p.id === prodId);
           if (prod) { scannerAddRef.current(prod, match); return "found"; }
         }
+      }
+      // Then search by code in products (barcode on the physical product)
+      const product = products.find((p) => p.codigo === code);
+      if (product) {
+        // Find the Unidad presentation to use the correct price
+        const presList = presentacionesMap[product.id] || [];
+        const unidadPres = presList.find((pr) => pr.nombre === "Unidad") || presList.find((pr) => Number(pr.cantidad) === 1);
+        scannerAddRef.current(product, unidadPres);
+        return "found";
       }
       return "not_found";
     };
