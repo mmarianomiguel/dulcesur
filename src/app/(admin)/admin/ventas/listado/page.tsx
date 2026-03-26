@@ -1942,6 +1942,58 @@ export default function ListadoVentasPage() {
                   </div>
                 </div>
 
+                {/* Registrar cobro — for retiro orders without caja entry */}
+                {poSelectedPedido.metodo_entrega === "retiro" && detailPagos.length === 0 && !isCancelled && poSelectedPedido.estado !== "cancelado" && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-emerald-800">💰 Pago pendiente (retiro en local)</p>
+                        <p className="text-xs text-emerald-600 mt-0.5">Este pedido aún no fue cobrado</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={async () => {
+                          const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "Efectivo");
+                          const metodo = fp.toLowerCase().includes("transfer") ? "Transferencia" : fp.toLowerCase().includes("mixto") ? "Mixto" : "Efectivo";
+                          const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+                          const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+                          // Find linked venta id
+                          let ventaId = (poSelectedPedido as any).venta_id;
+                          if (!ventaId) {
+                            const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).single();
+                            ventaId = v?.id;
+                          }
+                          if (metodo === "Mixto") {
+                            const montoEf = (poSelectedPedido as any).monto_efectivo || 0;
+                            const montoTr = poSelectedPedido.total - montoEf;
+                            const entries: any[] = [];
+                            if (montoEf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro retiro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: montoEf, referencia_id: ventaId, referencia_tipo: "venta" });
+                            if (montoTr > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro retiro #${poSelectedPedido.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: montoTr, referencia_id: ventaId, referencia_tipo: "venta" });
+                            if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+                          } else {
+                            await supabase.from("caja_movimientos").insert({
+                              fecha: hoy, hora, tipo: "ingreso",
+                              descripcion: `Cobro retiro #${poSelectedPedido.numero}`,
+                              metodo_pago: metodo, monto: poSelectedPedido.total,
+                              referencia_id: ventaId, referencia_tipo: "venta",
+                            });
+                          }
+                          // Reload pagos
+                          if (ventaId) {
+                            const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+                            setDetailPagos((movs || []).map((m: any) => ({ metodo: m.metodo_pago, monto: m.monto })));
+                          }
+                          showAdminToast("Cobro registrado en caja", "success");
+                        }}
+                      >
+                        <DollarSign className="w-4 h-4 mr-1" />
+                        Registrar cobro
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {poSelectedPedido.observacion && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
                     <p className="font-medium text-amber-800 text-xs mb-1">Observacion:</p>
