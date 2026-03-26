@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 import { todayARG ,  nowTimeARG } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -90,6 +91,7 @@ const emptyForm = {
   vendedor_id: "",
   zona_entrega: "",
   categorias_permitidas: [] as string[],
+  maps_url: "",
 };
 
 interface CuentaMovimiento {
@@ -276,6 +278,7 @@ export default function ClientesPage() {
       vendedor_id: (c as any).vendedor_id || "",
       zona_entrega: c.zona_entrega || "",
       categorias_permitidas: (c as any).categorias_permitidas || [],
+      maps_url: (c as any).maps_url || "",
     });
     setResetPw("");
     setResetMsg("");
@@ -317,6 +320,7 @@ export default function ClientesPage() {
       zona_entrega: form.zona_entrega || null,
       dias_entrega: selectedZona ? selectedZona.dias : null,
       categorias_permitidas: form.categorias_permitidas || [],
+      maps_url: form.maps_url || null,
     };
     if (editingClient) {
       await supabase.from("clientes").update(payload).eq("id", editingClient.id);
@@ -829,6 +833,9 @@ export default function ClientesPage() {
               </Button>
             </>
           )}
+          <Link href="/admin/clientes/mapa">
+            <Button variant="outline" size="sm" className="gap-1.5"><MapPin className="w-4 h-4" />Ver mapa</Button>
+          </Link>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo cliente</Button>
         </div>
       </div>
@@ -989,7 +996,7 @@ export default function ClientesPage() {
                               </div>
                               {client.domicilio && (
                                 <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([client.domicilio, client.localidad, client.provincia].filter(Boolean).join(", "))}`}
+                                  href={(client as any).maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([client.domicilio, client.localidad, client.provincia].filter(Boolean).join(", "))}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-xs text-blue-600 hover:underline mt-0.5 inline-flex items-center gap-1"
@@ -1875,17 +1882,28 @@ export default function ClientesPage() {
                     <Label>Domicilio</Label>
                     {form.domicilio && (
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([form.domicilio, form.localidad, form.provincia].filter(Boolean).join(", "))}`}
+                        href={form.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([form.domicilio, form.localidad, form.provincia].filter(Boolean).join(", "))}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
                       >
                         <MapPin className="w-3 h-3" />
-                        Ver en mapa
+                        Ver en mapa {form.maps_url && "(custom)"}
                       </a>
                     )}
                   </div>
                   <Input value={form.domicilio} onChange={(e) => f("domicilio", e.target.value)} />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={form.maps_url}
+                      onChange={(e) => f("maps_url", e.target.value)}
+                      placeholder="Link de Google Maps personalizado (opcional)"
+                      className="text-xs h-8"
+                    />
+                    {form.maps_url && (
+                      <button onClick={() => f("maps_url", "")} className="text-xs text-red-500 hover:text-red-700 shrink-0">Quitar</button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Teléfono</Label>
