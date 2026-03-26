@@ -555,7 +555,7 @@ export default function CheckoutPage() {
       // Get next number with retry for unique constraint
       let numero = "";
       for (let attempt = 0; attempt < 3; attempt++) {
-        const { data: numData, error: numError } = await supabase.rpc("next_numero", { p_tipo: "pedido" });
+        const { data: numData, error: numError } = await supabase.rpc("next_numero", { p_tipo: "venta" });
         if (!numData || numError) {
           if (attempt === 2) {
             setErrors([`No se pudo generar el número de pedido: ${numError?.message || "sin respuesta"}. Intentá de nuevo.`]);
