@@ -893,11 +893,13 @@ export default function VentasPage() {
       // Single printable char
       if (e.key.length !== 1) return;
 
+      const tag = (e.target as HTMLElement).tagName;
+      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
       const timeSinceLast = now - lastKeyTime;
       lastKeyTime = now;
       const inCooldown = now < scanCooldown.current;
       const bufLen = barcodeBuffer.current.length;
-      const isFast = bufLen > 0 && timeSinceLast < 100;
+      const isFast = bufLen > 0 && timeSinceLast < 80;
 
       // During cooldown: capture ALL chars, they belong to the next barcode scan
       if (inCooldown) {
@@ -910,24 +912,31 @@ export default function VentasPage() {
       }
 
       // Fast sequential chars → scanner is typing
-      if (bufLen === 0 || isFast) {
+      if (isFast) {
         barcodeBuffer.current += e.key;
-        // After 2+ chars at scanner speed, prevent them from reaching inputs
-        if (isFast) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+        e.preventDefault();
+        e.stopPropagation();
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
         barcodeTimer.current = setTimeout(() => {
           const buf = barcodeBuffer.current;
           barcodeBuffer.current = "";
-          // Long buffer without Enter → some scanners don't send Enter
           if (buf.length >= 6 && /^\d+$/.test(buf)) {
             findAndAdd(buf) === "not_found" && scanNotFoundRef.current(buf);
             scanCooldown.current = Date.now() + 800;
             (document.activeElement as HTMLElement)?.blur();
           }
         }, 400);
+        return;
+      }
+
+      // First char or slow typing
+      if (bufLen === 0) {
+        // If user is typing in an input (qty, search, etc.), let it through — don't buffer
+        if (inInput) return;
+        // Not in input: start buffering (could be start of a scan)
+        barcodeBuffer.current = e.key;
+        if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
+        barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ""; }, 400);
         return;
       }
 
