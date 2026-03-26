@@ -56,8 +56,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     function syncFromStorage() {
       try {
         const stored = localStorage.getItem("carrito");
-        if (stored) setItems(JSON.parse(stored));
-        else setItems([]);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setItems(Array.isArray(parsed) ? parsed : []);
+        } else setItems([]);
       } catch {}
     }
     syncFromStorage();
@@ -122,8 +124,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = useCallback(() => persist([]), [persist]);
 
-  const itemCount = items.reduce((sum, i) => sum + i.cantidad, 0);
-  const subtotal = items.reduce((sum, i) => sum + i.precio * i.cantidad, 0);
+  const itemCount = (items || []).reduce((sum, i) => sum + i.cantidad, 0);
+  const subtotal = (items || []).reduce((sum, i) => sum + i.precio * i.cantidad, 0);
 
   return (
     <CartContext.Provider
