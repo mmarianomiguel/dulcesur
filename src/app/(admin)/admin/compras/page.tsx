@@ -1634,54 +1634,81 @@ export default function ComprasPage() {
                 <Printer className="w-4 h-4" />
                 Imprimir carteles de precio
               </Button>
-              <Button variant="outline" className="flex-1 gap-2" onClick={() => {
+              <Button variant="outline" className="flex-1 gap-2" onClick={async () => {
+                // Load extra product data (marca, categoria, subcategoria)
+                const ids = preciosModificados.map((p) => p.producto_id).filter(Boolean);
+                let extraMap: Record<string, { marca: string; categoria: string; subcategoria: string }> = {};
+                if (ids.length > 0) {
+                  const { data: prods } = await supabase.from("productos").select("id, categorias(nombre), marcas(nombre), subcategoria_id").in("id", ids);
+                  const subIds = (prods || []).map((p: any) => p.subcategoria_id).filter(Boolean);
+                  let subMap: Record<string, string> = {};
+                  if (subIds.length > 0) {
+                    const { data: subs } = await supabase.from("subcategorias").select("id, nombre").in("id", subIds);
+                    (subs || []).forEach((s: any) => { subMap[s.id] = s.nombre; });
+                  }
+                  (prods || []).forEach((p: any) => {
+                    extraMap[p.id] = {
+                      marca: p.marcas?.nombre || "—",
+                      categoria: p.categorias?.nombre || "—",
+                      subcategoria: p.subcategoria_id ? (subMap[p.subcategoria_id] || "—") : "—",
+                    };
+                  });
+                }
+
                 const { jsPDF } = require("jspdf");
-                const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
                 const pw = pdf.internal.pageSize.getWidth();
-                const margin = 15;
-                let y = 20;
+                const margin = 10;
+                let y = 18;
                 const fmtCur = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
 
                 // Header
-                pdf.setFontSize(16);
+                pdf.setFontSize(14);
                 pdf.setFont("helvetica", "bold");
                 pdf.text("Lista de Precios Actualizados", margin, y);
-                y += 6;
-                pdf.setFontSize(9);
+                y += 5;
+                pdf.setFontSize(8);
                 pdf.setFont("helvetica", "normal");
                 pdf.setTextColor(120);
                 pdf.text(`Fecha: ${new Date().toLocaleDateString("es-AR")} — ${preciosModificados.length} productos`, margin, y);
                 pdf.setTextColor(0);
-                y += 8;
+                y += 7;
 
                 // Table header
-                pdf.setFillColor(245, 245, 245);
-                pdf.rect(margin, y - 4, pw - margin * 2, 7, "F");
-                pdf.setFontSize(8);
+                pdf.setFillColor(240, 240, 240);
+                pdf.rect(margin, y - 4, pw - margin * 2, 6, "F");
+                pdf.setFontSize(7);
                 pdf.setFont("helvetica", "bold");
                 pdf.text("Código", margin + 2, y);
-                pdf.text("Producto", margin + 35, y);
-                if (preciosModificados.some((p) => p.precioAnterior > 0)) {
-                  pdf.text("Anterior", pw - margin - 65, y, { align: "right" });
-                }
-                pdf.text("Nuevo", pw - margin - 30, y, { align: "right" });
+                pdf.text("Producto", margin + 32, y);
+                pdf.text("Marca", margin + 100, y);
+                pdf.text("Categoría", margin + 130, y);
+                pdf.text("Subcat.", margin + 160, y);
+                pdf.text("Anterior", pw - margin - 55, y, { align: "right" });
+                pdf.text("Nuevo", pw - margin - 25, y, { align: "right" });
                 pdf.text("Var.", pw - margin, y, { align: "right" });
-                y += 6;
+                y += 5;
 
                 // Rows
                 pdf.setFont("helvetica", "normal");
                 for (const p of preciosModificados) {
-                  if (y > 275) { pdf.addPage(); y = 20; }
-                  pdf.setFontSize(8);
-                  pdf.text((p.codigo || "—").substring(0, 18), margin + 2, y);
-                  pdf.text(p.nombre.substring(0, 40), margin + 35, y);
+                  if (y > 195) { pdf.addPage(); y = 15; }
+                  const extra = extraMap[p.producto_id || ""] || { marca: "—", categoria: "—", subcategoria: "—" };
+                  pdf.setFontSize(7);
+                  pdf.text((p.codigo || "—").substring(0, 16), margin + 2, y);
+                  pdf.text(p.nombre.substring(0, 35), margin + 32, y);
+                  pdf.setTextColor(100);
+                  pdf.text(extra.marca.substring(0, 15), margin + 100, y);
+                  pdf.text(extra.categoria.substring(0, 15), margin + 130, y);
+                  pdf.text(extra.subcategoria.substring(0, 15), margin + 160, y);
+                  pdf.setTextColor(0);
                   if (p.precioAnterior > 0) {
                     pdf.setTextColor(150);
-                    pdf.text(fmtCur(p.precioAnterior), pw - margin - 65, y, { align: "right" });
+                    pdf.text(fmtCur(p.precioAnterior), pw - margin - 55, y, { align: "right" });
                     pdf.setTextColor(0);
                   }
                   pdf.setFont("helvetica", "bold");
-                  pdf.text(fmtCur(p.precioNuevo), pw - margin - 30, y, { align: "right" });
+                  pdf.text(fmtCur(p.precioNuevo), pw - margin - 25, y, { align: "right" });
                   pdf.setFont("helvetica", "normal");
                   if (p.precioAnterior > 0) {
                     const pct = Math.round(((p.precioNuevo - p.precioAnterior) / p.precioAnterior) * 100);
@@ -1689,13 +1716,13 @@ export default function ComprasPage() {
                     pdf.text(`${pct > 0 ? "+" : ""}${pct}%`, pw - margin, y, { align: "right" });
                     pdf.setTextColor(0);
                   }
-                  y += 5;
+                  y += 4.5;
                   pdf.setDrawColor(230);
                   pdf.line(margin, y - 2, pw - margin, y - 2);
                 }
 
-                pdf.save(`Lista_Precios_${todayString()}.pdf`);
-                showAdminToast("PDF de lista de precios generado", "success");
+                pdf.save(`Precios_Actualizados_${todayString()}.pdf`);
+                showAdminToast("PDF generado", "success");
               }}>
                 <Download className="w-4 h-4" />
                 Lista de precios (PDF)

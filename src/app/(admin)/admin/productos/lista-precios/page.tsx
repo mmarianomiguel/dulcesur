@@ -662,7 +662,7 @@ export default function ListaPreciosPage() {
 
         const drawHeader = () => {
           // Logo larger
-          if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 6, 25, 25); } catch {} }
+          if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 8, 18, 18); } catch {} }
           // Title next to logo
           const titleX = logoBase64 ? lm + 30 : lm;
           pdf.setFont("helvetica", "bold");
@@ -693,7 +693,7 @@ export default function ListaPreciosPage() {
           pdf.text("PRODUCTO", lm + 2, y);
           pdf.text("MARCA", lm + 72, y);
           pdf.text("UNIDAD", lm + 100, y);
-          pdf.text("CAJA (Qty)", lm + 125, y);
+          pdf.text("CAJA (Cant.)", lm + 125, y);
           pdf.text("DTO.", lm + 155, y);
           pdf.text("ACTUALIZ.", rm - 2, y, { align: "right" });
           return y + 5;
@@ -1181,7 +1181,7 @@ export default function ListaPreciosPage() {
                   <p className="text-[6px] font-bold text-center mb-1">LISTA DE PRECIOS - DULCESUR</p>
                   <div className="space-y-0.5">
                     <div className="flex justify-between text-[4px] border-b border-border pb-0.5">
-                      <span className="font-bold w-1/3">Producto</span><span className="font-bold w-1/6 text-right">Precio</span><span className="font-bold w-1/6 text-right">Caja (Qty)</span><span className="font-bold w-1/6 text-right">Dto.</span>
+                      <span className="font-bold w-1/3">Producto</span><span className="font-bold w-1/6 text-right">Precio</span><span className="font-bold w-1/6 text-right">Caja (Cant.)</span><span className="font-bold w-1/6 text-right">Dto.</span>
                     </div>
                     <div className="flex justify-between text-[4px]"><span className="w-1/3">Chocolate 200g</span><span className="w-1/6 text-right">$1.200</span><span className="w-1/6 text-right">$12.000 (10)</span><span className="w-1/6 text-right text-green-600">-10%</span></div>
                     <div className="flex justify-between text-[4px]"><span className="w-1/3">Galletitas 315g</span><span className="w-1/6 text-right">$850</span><span className="w-1/6 text-right">$10.200 (12)</span><span className="w-1/6 text-right">—</span></div>
