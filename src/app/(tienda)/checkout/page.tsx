@@ -758,34 +758,35 @@ export default function CheckoutPage() {
       }
 
       // Create caja_movimientos for the payment
-      // Register transfer payments in caja immediately (money already transferred)
-      // Efectivo is NOT registered here — it's registered when admin delivers/collects
-      const cajaFecha = hoy;
-      const cajaHora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
-      const cajaEntries: any[] = [];
-      if (metodoPago === "transferencia") {
-        cajaEntries.push({
-          fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-          descripcion: `Pedido Web #${numero}`,
-          metodo_pago: "Transferencia", monto: vTotal,
-          referencia_id: venta.id, referencia_tipo: "venta",
-        });
-      } else if (metodoPago === "mixto") {
-        // Only register transfer portion — efectivo is collected on delivery
-        const montoTransf = mixtoTransferencia + vRecargoTransf;
-        if (montoTransf > 0) {
+      // Only register in caja for ENVÍO orders where transfer was already made
+      // For RETIRO orders, payment happens at the store — admin registers it when collecting
+      if (metodoEntrega !== "retiro") {
+        const cajaFecha = hoy;
+        const cajaHora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+        const cajaEntries: any[] = [];
+        if (metodoPago === "transferencia") {
           cajaEntries.push({
             fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-            descripcion: `Pedido Web #${numero} (Transferencia)`,
-            metodo_pago: "Transferencia", monto: montoTransf,
+            descripcion: `Pedido Web #${numero}`,
+            metodo_pago: "Transferencia", monto: vTotal,
             referencia_id: venta.id, referencia_tipo: "venta",
           });
+        } else if (metodoPago === "mixto") {
+          const montoTransf = mixtoTransferencia + vRecargoTransf;
+          if (montoTransf > 0) {
+            cajaEntries.push({
+              fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
+              descripcion: `Pedido Web #${numero} (Transferencia)`,
+              metodo_pago: "Transferencia", monto: montoTransf,
+              referencia_id: venta.id, referencia_tipo: "venta",
+            });
+          }
+        }
+        if (cajaEntries.length > 0) {
+          await supabase.from("caja_movimientos").insert(cajaEntries);
         }
       }
-      // Efectivo puro: no caja entry — se registra al entregar desde hoja de ruta/dashboard
-      if (cajaEntries.length > 0) {
-        await supabase.from("caja_movimientos").insert(cajaEntries);
-      }
+      // Retiro en local + Efectivo puro: no caja entry — admin registra al cobrar
 
       localStorage.removeItem("carrito");
       window.dispatchEvent(new Event("cart-updated"));
