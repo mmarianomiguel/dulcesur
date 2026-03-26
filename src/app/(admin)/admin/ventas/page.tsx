@@ -893,39 +893,48 @@ export default function VentasPage() {
         return;
       }
 
-      // Only buffer printable chars typed rapidly (scanner speed)
+      // Buffer printable chars — scanner types fast (< 100ms between keys)
       if (e.key.length === 1) {
         const timeSinceLast = now - lastKeyTime;
         lastKeyTime = now;
-        const isScannerSpeed = barcodeBuffer.current.length > 0 && timeSinceLast < 50;
+        const isScannerSpeed = barcodeBuffer.current.length > 0 && timeSinceLast < 100;
 
-        // Manual-speed digit outside an input → let keyboard shortcuts handler deal with qty
-        if (!isScannerSpeed && !inInput && /^\d$/.test(e.key) && barcodeBuffer.current.length === 0) {
-          return;
-        }
-
-        // Scanner types fast (< 50ms between keys). Manual typing is slower.
+        // Always accumulate if it's the first char or scanner speed
         if (barcodeBuffer.current.length === 0 || isScannerSpeed) {
           barcodeBuffer.current += e.key;
-          // Prevent scanner digits from entering focused qty inputs
-          if (isScannerSpeed && inInput) {
+          // Prevent scanner digits from entering focused qty/search inputs
+          if (isScannerSpeed && barcodeBuffer.current.length >= 2) {
             e.preventDefault();
           }
         } else {
+          // Slow typing — not a scanner. If digit outside input, treat as qty shortcut
+          const buf = barcodeBuffer.current;
           barcodeBuffer.current = e.key;
+          if (!inInput && buf.length <= 3 && /^\d+$/.test(buf)) {
+            applyQtyFromScanRef.current(buf);
+          }
         }
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
         barcodeTimer.current = setTimeout(() => {
           // Buffer timed out without Enter → not a barcode scan
-          // If it's 1-3 digits and NOT in an input, treat as quantity for selected item
           const buf = barcodeBuffer.current;
           barcodeBuffer.current = "";
+          // If short digits and NOT in an input, treat as quantity for selected item
           const activeTag = (document.activeElement as HTMLElement)?.tagName;
           const isInInput = activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT";
           if (buf.length > 0 && buf.length <= 3 && /^\d+$/.test(buf) && !isInInput) {
             applyQtyFromScanRef.current(buf);
           }
-        }, 250);
+          // If it looks like a barcode that didn't get Enter (some scanners), try to find it
+          if (buf.length >= 6 && /^\d+$/.test(buf)) {
+            const result = findAndAdd(buf);
+            if (result === "found") {
+              (document.activeElement as HTMLElement)?.blur();
+            } else {
+              scanNotFoundRef.current(buf);
+            }
+          }
+        }, 300);
       }
     };
     window.addEventListener("keydown", handler);
