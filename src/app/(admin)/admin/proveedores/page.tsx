@@ -1,7 +1,7 @@
 "use client";
 
 import { showAdminToast } from "@/components/admin-toast";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,6 +80,17 @@ export default function ProveedoresPage() {
     fetcher: fetchProviders,
     initialData: [],
   });
+
+  // Product count per provider
+  const [prodCountMap, setProdCountMap] = useState<Record<string, number>>({});
+  const [prodListDialog, setProdListDialog] = useState<{ open: boolean; nombre: string; productos: { nombre: string; codigo: string; precio: number; stock: number }[] }>({ open: false, nombre: "", productos: [] });
+  useEffect(() => {
+    supabase.from("producto_proveedores").select("proveedor_id").then(({ data }) => {
+      const map: Record<string, number> = {};
+      (data || []).forEach((pp: any) => { map[pp.proveedor_id] = (map[pp.proveedor_id] || 0) + 1; });
+      setProdCountMap(map);
+    });
+  }, [providers]);
 
   const editDialog = useDialog<Proveedor>();
   const pagoDialog = useDialog<Proveedor>();
@@ -533,6 +544,7 @@ export default function ProveedoresPage() {
                     <th className="text-left py-3 px-4 font-medium">CUIT</th>
                     <th className="text-left py-3 px-4 font-medium">Rubro</th>
                     <th className="text-left py-3 px-4 font-medium">Contacto</th>
+                    <th className="text-center py-3 px-4 font-medium">Productos</th>
                     <th className="text-right py-3 px-4 font-medium">Saldo</th>
                     <th className="text-right py-3 px-4 font-medium w-52">Acciones</th>
                   </tr>
@@ -545,7 +557,7 @@ export default function ProveedoresPage() {
                         {(p as any).razon_social && <div className="text-xs text-muted-foreground">{(p as any).razon_social}</div>}
                         {(p as any).codigo_proveedor && <div className="text-[10px] text-muted-foreground">Cód: {(p as any).codigo_proveedor}</div>}
                       </td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.cuit || "\u2014"}</td>
+                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.cuit || "—"}</td>
                       <td className="py-3 px-4">
                         {p.rubro && <Badge variant="secondary" className="text-xs font-normal">{p.rubro}</Badge>}
                         {(p as any).plazo_pago && <div className="text-[10px] text-muted-foreground mt-0.5">{(p as any).plazo_pago}</div>}
@@ -557,8 +569,24 @@ export default function ProveedoresPage() {
                           {(p as any).contacto_nombre && <span className="text-[10px]">Contacto: {(p as any).contacto_nombre}</span>}
                         </div>
                       </td>
+                      <td className="py-3 px-4 text-center">
+                        {(prodCountMap[p.id] || 0) > 0 ? (
+                          <button
+                            onClick={async () => {
+                              const { data } = await supabase.from("producto_proveedores").select("productos(nombre, codigo, precio, stock)").eq("proveedor_id", p.id);
+                              const prods = (data || []).map((pp: any) => pp.productos).filter(Boolean);
+                              setProdListDialog({ open: true, nombre: p.nombre, productos: prods });
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition"
+                          >
+                            {prodCountMap[p.id]} prod.
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">0</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-right">
-                        {p.saldo > 0 ? <span className="font-semibold text-orange-500">{formatCurrency(p.saldo)}</span> : <span className="text-muted-foreground">\u2014</span>}
+                        {p.saldo > 0 ? <span className="font-semibold text-orange-500">{formatCurrency(p.saldo)}</span> : <span className="text-muted-foreground">$0</span>}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-1">
@@ -965,12 +993,17 @@ export default function ProveedoresPage() {
                   <Label>Cuenta destino</Label>
                   <Select value={pagoForm.cuenta_bancaria_id} onValueChange={(v) => setPagoForm({ ...pagoForm, cuenta_bancaria_id: v ?? "" })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar cuenta/alias" />
+                      <SelectValue placeholder="Seleccionar cuenta">
+                        {(() => {
+                          const sel = provCuentas.find((c) => c.id === pagoForm.cuenta_bancaria_id);
+                          return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}${sel.titular ? ` — ${sel.titular}` : ""}` : "Seleccionar cuenta";
+                        })()}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {provCuentas.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.alias || c.nombre} {c.titular ? `(${c.titular})` : ""}
+                          {c.nombre}{c.alias ? ` (${c.alias})` : ""}{c.titular ? ` — ${c.titular}` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1000,6 +1033,35 @@ export default function ProveedoresPage() {
                 <Button onClick={handlePago} disabled={saving || !pagoForm.monto || parseFloat(pagoForm.monto) <= 0}>
                   {saving ? "Registrando..." : "Registrar Pago"}
                 </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      {/* Products list dialog */}
+      <Dialog open={prodListDialog.open} onOpenChange={(v) => !v && setProdListDialog({ open: false, nombre: "", productos: [] })}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">Productos de {prodListDialog.nombre}</DialogTitle>
+          </DialogHeader>
+          {prodListDialog.productos.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-6">Sin productos vinculados</p>
+          ) : (
+            <div className="space-y-1">
+              {prodListDialog.productos.map((p, i) => (
+                <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/50 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">{p.nombre}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">{p.codigo}</p>
+                  </div>
+                  <div className="flex items-center gap-4 shrink-0 text-xs">
+                    <span className="text-muted-foreground">Stock: <strong className={p.stock <= 0 ? "text-red-500" : ""}>{p.stock}</strong></span>
+                    <span className="font-semibold">{formatCurrency(p.precio)}</span>
+                  </div>
+                </div>
+              ))}
+              <div className="border-t pt-2 text-right text-xs text-muted-foreground">
+                {prodListDialog.productos.length} productos
               </div>
             </div>
           )}
