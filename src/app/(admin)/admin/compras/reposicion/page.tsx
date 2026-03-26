@@ -441,8 +441,8 @@ export default function ReposicionPage() {
       </div>
 
       {/* Filters */}
-      <Card className="overflow-visible">
-        <CardContent className="pt-6 space-y-4 overflow-visible">
+      <Card>
+        <CardContent className="pt-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className="flex-1">
               <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Buscar</Label>

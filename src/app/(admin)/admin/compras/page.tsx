@@ -169,6 +169,7 @@ export default function ComprasPage() {
 
   // F1 product search dialog
   const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [searchHighlight, setSearchHighlight] = useState(0);
 
   useEffect(() => {
     if (mode !== "new") return;
@@ -736,7 +737,16 @@ export default function ComprasPage() {
                 ref={productSearchRef}
                 placeholder="Buscar por nombre o código..."
                 value={productSearch}
-                onChange={(e) => handleProductSearch(e.target.value)}
+                onChange={(e) => { handleProductSearch(e.target.value); setSearchHighlight(0); }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") { e.preventDefault(); setSearchHighlight((h) => Math.min(h + 1, productResults.length - 1)); }
+                  else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHighlight((h) => Math.max(h - 1, 0)); }
+                  else if (e.key === "Enter" && productResults[searchHighlight]) {
+                    e.preventDefault();
+                    const p = productResults[searchHighlight];
+                    addProduct(p);
+                  }
+                }}
                 className="pl-9 h-11"
                 autoFocus
               />
@@ -745,15 +755,16 @@ export default function ComprasPage() {
               )}
             </div>
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {productResults.map((p) => {
+              {productResults.map((p, pIdx) => {
                 const alreadyAdded = items.some((i) => i.producto_id === p.id);
+                const isHighlighted = pIdx === searchHighlight;
                 const pres = searchPresentaciones[p.id] || [];
                 const boxPres = pres.find((pr) => pr.cantidad > 1);
                 const boxLabel = boxPres?.nombre || null;
                 return (
                   <div
                     key={p.id}
-                    className={`rounded-xl border p-3 transition-colors ${alreadyAdded ? "opacity-40 bg-muted" : "hover:border-primary/30 hover:bg-primary/5"}`}
+                    className={`rounded-xl border p-3 transition-colors ${alreadyAdded ? "opacity-40 bg-muted" : isHighlighted ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "hover:border-primary/30 hover:bg-primary/5"}`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -1199,6 +1210,56 @@ export default function ComprasPage() {
               <Printer className="w-3.5 h-3.5" />
               Carteles de precio
             </Button>
+            {detailCompra.estado !== "Anulada" && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={async () => {
+                if (!confirm(`¿Anular compra ${detailCompra.numero}? Se revertirá todo el stock.`)) return;
+                // Revert stock for each item
+                for (const item of detailItems) {
+                  if (!item.producto_id) continue;
+                  const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+                  if (!prod) continue;
+                  const unitsToRevert = item.cantidad;
+                  const newStock = Math.max(0, prod.stock - unitsToRevert);
+                  await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+                  await supabase.from("stock_movimientos").insert({
+                    producto_id: item.producto_id,
+                    tipo: "anulacion",
+                    cantidad_antes: prod.stock,
+                    cantidad_despues: newStock,
+                    cantidad: unitsToRevert,
+                    referencia: `Anulación Compra #${detailCompra.numero}`,
+                    descripcion: `Anulación compra - ${item.descripcion}`,
+                    usuario: currentUser?.nombre || "Admin",
+                    orden_id: detailCompra.id,
+                  });
+                }
+                // Reverse caja entry if exists
+                const { data: cajaRows } = await supabase.from("caja_movimientos").select("*").eq("referencia_id", detailCompra.id).eq("referencia_tipo", "compra");
+                for (const cm of cajaRows || []) {
+                  await supabase.from("caja_movimientos").insert({
+                    fecha: todayString(), hora: nowTimeARG(), tipo: "ingreso",
+                    descripcion: `Anulación Compra #${detailCompra.numero}`,
+                    metodo_pago: (cm as any).metodo_pago || "Efectivo",
+                    monto: Math.abs((cm as any).monto),
+                    referencia_id: detailCompra.id, referencia_tipo: "anulacion",
+                  });
+                }
+                // Reverse CC if provider had CC
+                if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
+                  const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
+                  if (prov) {
+                    await supabase.from("proveedores").update({ saldo: Math.max(0, prov.saldo - detailCompra.total) }).eq("id", detailCompra.proveedor_id);
+                  }
+                }
+                await supabase.from("compras").update({ estado: "Anulada" }).eq("id", detailCompra.id);
+                setDetailCompra({ ...detailCompra, estado: "Anulada" } as any);
+                fetchData();
+                showAdminToast("Compra anulada. Stock revertido.", "success");
+              }}>
+                <X className="w-3.5 h-3.5" />
+                Anular compra
+              </Button>
+            )}
             <div className="text-right">
               <p className="text-xs text-muted-foreground">Total</p>
               <p className="text-2xl font-bold">{formatCurrency(detailCompra.total)}</p>
@@ -1345,7 +1406,7 @@ export default function ComprasPage() {
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Periodo</Label>
                 <Select value={purchaseFilterMode} onValueChange={(v) => setPurchaseFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-                  <SelectTrigger className="w-32"><SelectValue placeholder="Período" /></SelectTrigger>
+                  <SelectTrigger className="w-32"><SelectValue placeholder="Período">{{ all: "Todos", day: "Día", month: "Mensual", range: "Entre fechas" }[purchaseFilterMode]}</SelectValue></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="day">Dia</SelectItem>

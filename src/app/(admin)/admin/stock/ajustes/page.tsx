@@ -130,6 +130,7 @@ export default function AjustesStockPage() {
 
   // Product search
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchHl, setSearchHl] = useState(0);
   const [productSearch, setProductSearch] = useState("");
 
   // Filters
@@ -691,16 +692,23 @@ export default function AjustesStockPage() {
               ref={codigoInputRef}
               placeholder="Buscar por nombre o código..."
               value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
+              onChange={(e) => { setProductSearch(e.target.value); setSearchHl(0); }}
+              onKeyDown={(e) => {
+                const results = filteredSearch.slice(0, 20);
+                if (e.key === "ArrowDown") { e.preventDefault(); setSearchHl((h) => Math.min(h + 1, results.length - 1)); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHl((h) => Math.max(h - 1, 0)); }
+                else if (e.key === "Enter" && results[searchHl]) { e.preventDefault(); addProduct(results[searchHl]); setSearchOpen(false); setProductSearch(""); }
+              }}
               className="pl-9"
               autoFocus
             />
           </div>
           <div className="space-y-2 max-h-80 overflow-y-auto">
-            {filteredSearch.slice(0, 20).map((p) => {
+            {filteredSearch.slice(0, 20).map((p, pIdx) => {
               const pres = presMap[p.id];
+              const isHl = pIdx === searchHl;
               return (
-                <div key={p.id} className="rounded-xl border p-3 transition-colors hover:border-primary/30 hover:bg-primary/5">
+                <div key={p.id} className={`rounded-xl border p-3 transition-colors ${isHl ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "hover:border-primary/30 hover:bg-primary/5"}`}>
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       {(p as any).imagen_url ? (
