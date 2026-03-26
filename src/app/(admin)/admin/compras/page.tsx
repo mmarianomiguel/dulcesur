@@ -158,6 +158,8 @@ export default function ComprasPage() {
 
   // Post-purchase: modified prices dialog
   const [showPreciosDialog, setShowPreciosDialog] = useState(false);
+  const [showVisibilidadDialog, setShowVisibilidadDialog] = useState(false);
+  const [productosOcultos, setProductosOcultos] = useState<{ id: string; nombre: string }[]>([]);
   const [anularCompraDialog, setAnularCompraDialog] = useState(false);
   const [anulando, setAnulando] = useState(false);
 
@@ -587,6 +589,18 @@ export default function ComprasPage() {
         entityId: compra.id,
         after: { numero, total: totalCompra, forma_pago: formaPago, items: items.length },
       });
+
+      // Check for hidden products that now have stock
+      const itemIds = items.map((i) => i.producto_id);
+      const { data: ocultos } = await supabase
+        .from("productos")
+        .select("id, nombre")
+        .in("id", itemIds)
+        .eq("visibilidad", "oculto");
+      if (ocultos && ocultos.length > 0) {
+        setProductosOcultos(ocultos);
+        setShowVisibilidadDialog(true);
+      }
 
       setSaving(false);
 
@@ -1730,6 +1744,46 @@ export default function ComprasPage() {
             </div>
             <div className="flex justify-end">
               <Button onClick={() => setShowPreciosDialog(false)}>Cerrar</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: productos ocultos que ahora tienen stock */}
+      <Dialog open={showVisibilidadDialog} onOpenChange={setShowVisibilidadDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg flex items-center gap-2">
+              <Eye className="w-5 h-5 text-amber-500" />
+              Productos ocultos en la tienda
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Los siguientes productos están ocultos en la tienda pero ahora tienen stock. ¿Querés mostrarlos?
+            </p>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {productosOcultos.map((p) => (
+                <div key={p.id} className="text-sm font-medium px-2 py-1.5 bg-amber-50 rounded border border-amber-200">
+                  {p.nombre}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setShowVisibilidadDialog(false); setProductosOcultos([]); }}>
+                No, dejar ocultos
+              </Button>
+              <Button
+                onClick={async () => {
+                  const ids = productosOcultos.map((p) => p.id);
+                  await supabase.from("productos").update({ visibilidad: "visible" }).in("id", ids);
+                  setShowVisibilidadDialog(false);
+                  setProductosOcultos([]);
+                  showAdminToast(`${ids.length} productos visibles en la tienda`, "success");
+                }}
+              >
+                Sí, mostrar en tienda
+              </Button>
             </div>
           </div>
         </DialogContent>
