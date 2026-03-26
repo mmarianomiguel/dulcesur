@@ -158,6 +158,52 @@ export default function ComprasPage() {
 
   // Post-purchase: modified prices dialog
   const [showPreciosDialog, setShowPreciosDialog] = useState(false);
+  const [anularCompraDialog, setAnularCompraDialog] = useState(false);
+  const [anulando, setAnulando] = useState(false);
+
+  const handleAnularCompra = async () => {
+    if (!detailCompra) return;
+    setAnulando(true);
+    try {
+      for (const item of detailItems) {
+        if (!item.producto_id) continue;
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        if (!prod) continue;
+        const unitsToRevert = item.cantidad;
+        const newStock = Math.max(0, prod.stock - unitsToRevert);
+        await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id, tipo: "anulacion",
+          cantidad_antes: prod.stock, cantidad_despues: newStock, cantidad: unitsToRevert,
+          referencia: `Anulación Compra #${detailCompra.numero}`,
+          descripcion: `Anulación compra - ${item.descripcion}`,
+          usuario: currentUser?.nombre || "Admin", orden_id: detailCompra.id,
+        });
+      }
+      const { data: cajaRows } = await supabase.from("caja_movimientos").select("*").eq("referencia_id", detailCompra.id).eq("referencia_tipo", "compra");
+      for (const cm of cajaRows || []) {
+        await supabase.from("caja_movimientos").insert({
+          fecha: todayString(), hora: nowTimeARG(), tipo: "ingreso",
+          descripcion: `Anulación Compra #${detailCompra.numero}`,
+          metodo_pago: (cm as any).metodo_pago || "Efectivo",
+          monto: Math.abs((cm as any).monto),
+          referencia_id: detailCompra.id, referencia_tipo: "anulacion",
+        });
+      }
+      if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
+        const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
+        if (prov) await supabase.from("proveedores").update({ saldo: Math.max(0, prov.saldo - detailCompra.total) }).eq("id", detailCompra.proveedor_id);
+      }
+      await supabase.from("compras").update({ estado: "Anulada" }).eq("id", detailCompra.id);
+      setDetailCompra({ ...detailCompra, estado: "Anulada" } as any);
+      fetchData();
+      showAdminToast("Compra anulada. Stock revertido.", "success");
+    } catch (err: any) {
+      showAdminToast("Error al anular: " + (err.message || "Error"), "error");
+    }
+    setAnulando(false);
+    setAnularCompraDialog(false);
+  };
   const [preciosModificados, setPreciosModificados] = useState<{ nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[]>([]);
 
   // Product search for adding items
@@ -1227,51 +1273,7 @@ export default function ComprasPage() {
               Carteles de precio
             </Button>
             {detailCompra.estado !== "Anulada" && (
-              <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={async () => {
-                if (!confirm(`¿Anular compra ${detailCompra.numero}? Se revertirá todo el stock.`)) return;
-                // Revert stock for each item
-                for (const item of detailItems) {
-                  if (!item.producto_id) continue;
-                  const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
-                  if (!prod) continue;
-                  const unitsToRevert = item.cantidad;
-                  const newStock = Math.max(0, prod.stock - unitsToRevert);
-                  await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
-                  await supabase.from("stock_movimientos").insert({
-                    producto_id: item.producto_id,
-                    tipo: "anulacion",
-                    cantidad_antes: prod.stock,
-                    cantidad_despues: newStock,
-                    cantidad: unitsToRevert,
-                    referencia: `Anulación Compra #${detailCompra.numero}`,
-                    descripcion: `Anulación compra - ${item.descripcion}`,
-                    usuario: currentUser?.nombre || "Admin",
-                    orden_id: detailCompra.id,
-                  });
-                }
-                // Reverse caja entry if exists
-                const { data: cajaRows } = await supabase.from("caja_movimientos").select("*").eq("referencia_id", detailCompra.id).eq("referencia_tipo", "compra");
-                for (const cm of cajaRows || []) {
-                  await supabase.from("caja_movimientos").insert({
-                    fecha: todayString(), hora: nowTimeARG(), tipo: "ingreso",
-                    descripcion: `Anulación Compra #${detailCompra.numero}`,
-                    metodo_pago: (cm as any).metodo_pago || "Efectivo",
-                    monto: Math.abs((cm as any).monto),
-                    referencia_id: detailCompra.id, referencia_tipo: "anulacion",
-                  });
-                }
-                // Reverse CC if provider had CC
-                if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
-                  const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
-                  if (prov) {
-                    await supabase.from("proveedores").update({ saldo: Math.max(0, prov.saldo - detailCompra.total) }).eq("id", detailCompra.proveedor_id);
-                  }
-                }
-                await supabase.from("compras").update({ estado: "Anulada" }).eq("id", detailCompra.id);
-                setDetailCompra({ ...detailCompra, estado: "Anulada" } as any);
-                fetchData();
-                showAdminToast("Compra anulada. Stock revertido.", "success");
-              }}>
+              <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setAnularCompraDialog(true)}>
                 <X className="w-3.5 h-3.5" />
                 Anular compra
               </Button>
@@ -1347,6 +1349,33 @@ export default function ComprasPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Anular compra confirmation modal */}
+        <Dialog open={anularCompraDialog} onOpenChange={setAnularCompraDialog}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="w-5 h-5" />
+                Anular compra
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="rounded-lg bg-red-50 border border-red-200 p-4 space-y-2">
+                <p className="text-sm text-red-900">
+                  ¿Anular compra <span className="font-bold">#{detailCompra?.numero}</span> por <span className="font-bold">{formatCurrency(detailCompra?.total || 0)}</span>?
+                </p>
+                <p className="text-xs text-red-700">Se revertirá todo el stock y los movimientos de caja asociados.</p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setAnularCompraDialog(false)} disabled={anulando}>Cancelar</Button>
+                <Button variant="destructive" onClick={handleAnularCompra} disabled={anulando} className="gap-1.5">
+                  {anulando ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                  {anulando ? "Anulando..." : "Confirmar anulación"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Prices dialog (also needed in detail view) */}
         <Dialog open={showPreciosDialog} onOpenChange={setShowPreciosDialog}>
