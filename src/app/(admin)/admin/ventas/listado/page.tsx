@@ -1946,7 +1946,7 @@ export default function ListadoVentasPage() {
                 </div>
 
                 {/* Registrar cobro — for retiro orders without caja entry */}
-                {poSelectedPedido.metodo_entrega === "retiro" && detailPagos.length === 0 && !isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
+                {detailPagos.length === 0 && !isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
                   const cobroMetodo = (poSelectedPedido as any)._cobroMetodo || "Efectivo";
                   const cobroMixtoEf = (poSelectedPedido as any)._cobroMixtoEf || 0;
                   const cobroMixtoTr = (poSelectedPedido as any)._cobroMixtoTr || 0;

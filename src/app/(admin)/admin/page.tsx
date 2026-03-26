@@ -369,25 +369,36 @@ export default function DashboardPage() {
     }
     setGananciaPeriodo(gananciaTotal);
 
-    const { data: prods } = await supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).limit(10000);
+    const [{ data: prods }, { data: cls }, { data: provs }] = await Promise.all([
+      supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).limit(10000),
+      supabase.from("clientes").select("saldo").eq("activo", true),
+      supabase.from("proveedores").select("saldo").eq("activo", true),
+    ]);
     setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo || p.precio), 0));
     setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
-    const { data: cls } = await supabase.from("clientes").select("saldo").eq("activo", true);
     setCuentasCobrar((cls || []).reduce((a, c) => a + (c.saldo > 0 ? c.saldo : 0), 0));
-    const { data: provs } = await supabase.from("proveedores").select("saldo").eq("activo", true);
     setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
 
-    const months: { name: string; ventas: number; egresos: number }[] = [];
+    // Fetch 6 months in parallel instead of sequentially
+    const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(todayARG() + "T12:00:00"); d.setMonth(d.getMonth() - i);
       const year = d.getFullYear(); const month = d.getMonth() + 1;
       const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
       const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-      const { data: mv } = await supabase.from("ventas").select("total").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada");
-      const { data: me } = await supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd);
-      months.push({ name: d.toLocaleDateString("es-AR", { month: "short" }), ventas: (mv || []).reduce((a, v) => a + v.total, 0), egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0) });
+      const label = d.toLocaleDateString("es-AR", { month: "short" });
+      monthQueries.push(
+        Promise.all([
+          supabase.from("ventas").select("total").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
+          supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd),
+        ]).then(([{ data: mv }, { data: me }]) => ({
+          name: label,
+          ventas: (mv || []).reduce((a, v) => a + v.total, 0),
+          egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
+        }))
+      );
     }
-    setMonthlyData(months);
+    setMonthlyData(await Promise.all(monthQueries));
 
     const { data: ventasCat } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada");
     const catMap: Record<string, number> = {};
@@ -458,9 +469,16 @@ export default function DashboardPage() {
   const confirmDelivery = async () => {
     const { venta, pendiente, type } = deliveryConfirm;
     if (!venta) return;
-    if (type === "no_client") {
-      setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" });
-      return;
+    // no_client: still allow delivery, register payment as Efectivo
+    if (type === "no_client" && pendiente > 0) {
+      const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+      await supabase.from("caja_movimientos").insert({
+        fecha: hoy, hora, tipo: "ingreso",
+        descripcion: `Cobro entrega #${venta.numero}`,
+        metodo_pago: "Efectivo", monto: pendiente,
+        referencia_id: venta.id, referencia_tipo: "venta",
+      });
     }
 
     setActionLoading(venta.id);
@@ -1087,23 +1105,21 @@ export default function DashboardPage() {
               </div>
             )}
             {deliveryConfirm.type === "no_client" && (
-              <div className="rounded-lg bg-red-50 border border-red-200 p-4 space-y-2">
-                <p className="text-sm text-red-900">
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2">
+                <p className="text-sm text-amber-900">
                   Este pedido tiene <span className="font-bold">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.pendiente)}</span> sin cobrar y no tiene cliente asignado.
                 </p>
-                <p className="text-xs text-red-700">No se puede registrar la deuda. Cobrá primero o asigná un cliente.</p>
+                <p className="text-xs text-amber-700">Se registrará como cobro en efectivo.</p>
               </div>
             )}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" })}>
                 Cancelar
               </Button>
-              {deliveryConfirm.type !== "no_client" && (
-                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmDelivery}>
-                  <CheckCircle className="w-4 h-4 mr-1.5" />
-                  {deliveryConfirm.type === "unpaid" ? "Cobrar y entregar" : "Marcar entregado"}
-                </Button>
-              )}
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmDelivery}>
+                <CheckCircle className="w-4 h-4 mr-1.5" />
+                {deliveryConfirm.type === "paid" ? "Marcar entregado" : "Cobrar y entregar"}
+              </Button>
             </div>
           </div>
         </DialogContent>
