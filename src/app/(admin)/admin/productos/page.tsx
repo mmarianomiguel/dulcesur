@@ -53,6 +53,7 @@ import {
   TrendingUp,
   ArrowUp,
   ArrowDown,
+  Eye,
   EyeOff,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -162,6 +163,7 @@ export default function ProductosPage() {
 
   // Mass selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [actionConfirm, setActionConfirm] = useState<{ open: boolean; title: string; message: string; variant: "destructive" | "default"; onConfirm: () => void }>({ open: false, title: "", message: "", variant: "default", onConfirm: () => {} });
   const [deleting, setDeleting] = useState(false);
 
   // History dialog state
@@ -506,14 +508,18 @@ export default function ProductosPage() {
     } catch (err: any) { showAdminToast("Error al actualizar descuento: " + (err?.message || ""), "error"); }
   };
 
-  const deleteProductDiscount = async (id: string) => {
-    if (!confirm("¿Eliminar este descuento?")) return;
+  const deleteProductDiscount = (id: string) => {
+    setActionConfirm({
+      open: true, title: "Eliminar descuento", message: "¿Eliminar este descuento?", variant: "destructive",
+      onConfirm: async () => {
     try {
-      const { error } = await supabase.from("descuentos").delete().eq("id", id);
-      if (error) throw error;
-      if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
-      showAdminToast("Descuento eliminado", "success");
-    } catch (err: any) { showAdminToast("Error al eliminar descuento: " + (err?.message || ""), "error"); }
+        const { error } = await supabase.from("descuentos").delete().eq("id", id);
+        if (error) throw error;
+        if (editingProduct) await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
+        showAdminToast("Descuento eliminado", "success");
+      } catch (err: any) { showAdminToast("Error al eliminar descuento: " + (err?.message || ""), "error"); }
+      },
+    });
   };
 
   const openEdit = async (p: ProductoWithRelations) => {
@@ -1527,9 +1533,11 @@ export default function ProductosPage() {
   const deselectAll = () => setSelected(new Set());
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
 
-  const handleMassDelete = async () => {
+  const handleMassDelete = () => {
     if (selected.size === 0) return;
-    if (!window.confirm(`¿Eliminar ${selected.size} producto${selected.size > 1 ? "s" : ""}? Esta acción los desactivará.`)) return;
+    setActionConfirm({
+      open: true, title: "Eliminar productos", message: `¿Eliminar ${selected.size} producto${selected.size > 1 ? "s" : ""}? Se desactivarán del sistema.`, variant: "destructive",
+      onConfirm: async () => {
     setDeleting(true);
     try {
       const ids = Array.from(selected);
@@ -1542,8 +1550,10 @@ export default function ProductosPage() {
       fetchProducts();
     } catch (err: any) {
       showAdminToast(err.message || "Error al eliminar productos", "error");
-    }
-    setDeleting(false);
+        }
+        setDeleting(false);
+      },
+    });
   };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -1704,24 +1714,51 @@ export default function ProductosPage() {
                 <Button
                   variant="outline"
                   className="gap-2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                  onClick={async () => {
-                    if (!confirm(`¿Ocultar ${outOfStock} productos sin stock de la tienda?`)) return;
-                    const sinStock = products.filter((p) => {
-                      const effectiveStock = (p as any).es_combo && comboStockMap[p.id] !== undefined ? comboStockMap[p.id] : p.stock;
-                      return effectiveStock <= 0 && p.visibilidad !== "oculto";
+                  onClick={() => {
+                    setActionConfirm({
+                      open: true, title: "Ocultar productos sin stock", message: `¿Ocultar ${outOfStock} productos sin stock de la tienda? No se eliminarán, solo se ocultarán.`, variant: "destructive",
+                      onConfirm: async () => {
+                        const sinStock = products.filter((p) => {
+                          const effectiveStock = (p as any).es_combo && comboStockMap[p.id] !== undefined ? comboStockMap[p.id] : p.stock;
+                          return effectiveStock <= 0 && p.visibilidad !== "oculto";
+                        });
+                        if (sinStock.length === 0) { showAdminToast("No hay productos visibles sin stock", "info"); return; }
+                        const ids = sinStock.map((p) => p.id);
+                        for (let i = 0; i < ids.length; i += 50) {
+                          await supabase.from("productos").update({ visibilidad: "oculto" }).in("id", ids.slice(i, i + 50));
+                        }
+                        setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, visibilidad: "oculto" } : p));
+                        showAdminToast(`${sinStock.length} productos ocultos de la tienda`, "success");
+                      },
                     });
-                    if (sinStock.length === 0) { showAdminToast("No hay productos visibles sin stock", "info"); return; }
-                    const ids = sinStock.map((p) => p.id);
-                    for (let i = 0; i < ids.length; i += 50) {
-                      const batch = ids.slice(i, i + 50);
-                      await supabase.from("productos").update({ visibilidad: "oculto" }).in("id", batch);
-                    }
-                    setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, visibilidad: "oculto" } : p));
-                    showAdminToast(`${sinStock.length} productos ocultos de la tienda`, "success");
                   }}
                 >
                   <EyeOff className="w-4 h-4" />
                   Ocultar sin stock ({outOfStock})
+                </Button>
+              )}
+              {/* Show hidden out-of-stock products */}
+              {products.some((p) => p.visibilidad === "oculto" && p.stock <= 0) && (
+                <Button
+                  variant="outline"
+                  className="gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                  onClick={() => {
+                    setActionConfirm({
+                      open: true, title: "Mostrar productos ocultos", message: "¿Hacer visibles todos los productos que están ocultos y sin stock?", variant: "default",
+                      onConfirm: async () => {
+                        const ocultos = products.filter((p) => p.visibilidad === "oculto" && p.stock <= 0);
+                        const ids = ocultos.map((p) => p.id);
+                        for (let i = 0; i < ids.length; i += 50) {
+                          await supabase.from("productos").update({ visibilidad: "visible" }).in("id", ids.slice(i, i + 50));
+                        }
+                        setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, visibilidad: "visible" } : p));
+                        showAdminToast(`${ocultos.length} productos visibles nuevamente`, "success");
+                      },
+                    });
+                  }}
+                >
+                  <Eye className="w-4 h-4" />
+                  Mostrar ocultos
                 </Button>
               )}
             </div>
@@ -3629,6 +3666,33 @@ export default function ProductosPage() {
                 <p className="text-xs text-muted-foreground font-mono">{p.codigo} · Stock: {p.stock}</p>
               </button>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Generic action confirmation modal */}
+      <Dialog open={actionConfirm.open} onOpenChange={(v) => !v && setActionConfirm({ ...actionConfirm, open: false })}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {actionConfirm.variant === "destructive" ? (
+                <AlertTriangle className="w-5 h-5 text-red-500" />
+              ) : (
+                <Check className="w-5 h-5 text-emerald-500" />
+              )}
+              {actionConfirm.title}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">{actionConfirm.message}</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setActionConfirm({ ...actionConfirm, open: false })}>Cancelar</Button>
+              <Button
+                variant={actionConfirm.variant === "destructive" ? "destructive" : "default"}
+                onClick={() => { setActionConfirm({ ...actionConfirm, open: false }); actionConfirm.onConfirm(); }}
+              >
+                Confirmar
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
