@@ -464,6 +464,8 @@ export default function VentasPage() {
     for (const d of activeDiscounts) {
       // Skip if discount excludes combos and product is combo
       if (d.excluir_combos && isCombo) continue;
+      // Skip if product is in exclusion list
+      if (d.productos_excluidos_ids?.length > 0 && d.productos_excluidos_ids.includes(product.id)) continue;
       // Check minimum quantity for volume discounts - skip if qty not met or not provided
       if (d.cantidad_minima && d.cantidad_minima > 0) {
         if (qty == null || qty < d.cantidad_minima) continue;

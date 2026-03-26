@@ -130,6 +130,8 @@ export default function ProductoDetallePage() {
     const isBox = effectivePres !== "Unidad" && !effectivePres.startsWith("Unidad");
     const isUnit = !isBox;
     for (const d of activeDiscounts) {
+      // Skip if product is in exclusion list
+      if (d.productos_excluidos_ids?.length > 0 && d.productos_excluidos_ids.includes(prod.id)) continue;
       // Skip volume discounts if qty not met
       if (d.cantidad_minima && d.cantidad_minima > 0) {
         if (qty == null || qty < d.cantidad_minima) continue;

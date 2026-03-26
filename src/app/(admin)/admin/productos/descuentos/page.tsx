@@ -49,6 +49,7 @@ interface Descuento {
   categorias_ids: string[];
   subcategorias_ids: string[];
   productos_ids: string[];
+  productos_excluidos_ids: string[];
   marcas_ids: string[];
   presentacion: string;
   cantidad_minima: number | null;
@@ -145,6 +146,7 @@ export default function DescuentosPage() {
   const [cantidadMinima, setCantidadMinima] = useState<number | null>(null);
   const [excluirCombos, setExcluirCombos] = useState(true);
   const [productosIds, setProductosIds] = useState<string[]>([]);
+  const [productosExcluidosIds, setProductosExcluidosIds] = useState<string[]>([]);
   const [marcasIds, setMarcasIds] = useState<string[]>([]);
 
   // categories for step 4
@@ -156,6 +158,9 @@ export default function DescuentosPage() {
   // products for step 4
   const [productosAll, setProductosAll] = useState<ProductoOption[]>([]);
   const [prodSearch, setProdSearch] = useState("");
+
+  // excluded products
+  const [exclSearch, setExclSearch] = useState("");
 
   // marcas for step 4
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -206,6 +211,7 @@ export default function DescuentosPage() {
     setCategoriasIds([]);
     setSubcategoriasIds([]);
     setProductosIds([]);
+    setProductosExcluidosIds([]);
     setMarcasIds([]);
     setPresentación("todas");
     setCantidadMinima(null);
@@ -235,6 +241,7 @@ export default function DescuentosPage() {
     setCategoriasIds(d.categorias_ids ?? []);
     setSubcategoriasIds(d.subcategorias_ids ?? []);
     setProductosIds(d.productos_ids ?? []);
+    setProductosExcluidosIds(d.productos_excluidos_ids ?? []);
     setMarcasIds(d.marcas_ids ?? []);
     setPresentación(d.presentacion);
     setCantidadMinima(d.cantidad_minima ?? null);
@@ -256,6 +263,7 @@ export default function DescuentosPage() {
       categorias_ids: aplicaA === "categorias" ? categoriasIds : [],
       subcategorias_ids: aplicaA === "subcategorias" ? subcategoriasIds : [],
       productos_ids: aplicaA === "productos" ? productosIds : [],
+      productos_excluidos_ids: productosExcluidosIds.length > 0 ? productosExcluidosIds : [],
       marcas_ids: marcasIds.length > 0 ? marcasIds : [],
       presentacion,
       cantidad_minima: cantidadMinima && cantidadMinima > 0 ? cantidadMinima : null,
@@ -1105,6 +1113,56 @@ export default function DescuentosPage() {
                 </button>
               </div>
 
+              {/* Excluir productos específicos */}
+              {aplicaA !== "productos" && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Excluir productos específicos</Label>
+                  <p className="text-xs text-muted-foreground">Estos productos no recibirán este descuento aunque cumplan las demás condiciones</p>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar producto para excluir..."
+                      value={exclSearch}
+                      onChange={(e) => setExclSearch(e.target.value)}
+                      className="pl-8 h-9 text-sm"
+                    />
+                  </div>
+                  {exclSearch.length >= 2 && (
+                    <div className="border rounded-lg max-h-36 overflow-y-auto">
+                      {productosAll
+                        .filter((p) => p.nombre.toLowerCase().includes(exclSearch.toLowerCase()) && !productosExcluidosIds.includes(p.id))
+                        .slice(0, 8)
+                        .map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="flex items-center w-full px-3 py-1.5 text-sm hover:bg-muted/50 text-left"
+                            onClick={() => { setProductosExcluidosIds((prev) => [...prev, p.id]); setExclSearch(""); }}
+                          >
+                            <X className="w-3 h-3 mr-2 text-red-400" />
+                            {p.nombre}
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                  {productosExcluidosIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {productosExcluidosIds.map((id) => {
+                        const prod = productosAll.find((p) => p.id === id);
+                        return (
+                          <Badge key={id} variant="secondary" className="gap-1 pr-1 bg-red-50 text-red-700 border-red-200">
+                            {prod?.nombre || id.slice(0, 8)}
+                            <button type="button" onClick={() => setProductosExcluidosIds((prev) => prev.filter((x) => x !== id))} className="hover:bg-red-200 rounded-full p-0.5">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Separator />
 
               {/* Resumen */}
@@ -1136,6 +1194,12 @@ export default function DescuentosPage() {
                       {aplicaA === "productos" && productosIds.length > 0 && ` (${productosIds.length})`}
                     </span>
                   </div>
+                  {productosExcluidosIds.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Excluidos</span>
+                      <span className="font-medium text-red-600">{productosExcluidosIds.length} productos</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Marcas</span>
                     <span className="font-medium">
