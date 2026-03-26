@@ -24,6 +24,7 @@ import { showToast } from "@/components/tienda/toast";
 interface Producto {
   id: string;
   nombre: string;
+  descripcion?: string | null;
   precio: number;
   imagen_url: string | null;
   codigo: string;
@@ -600,6 +601,10 @@ export default function ProductoDetallePage() {
                 Producto combo
               </span>
             </div>
+          )}
+
+          {producto.descripcion && (
+            <p className="mt-2 text-sm text-gray-500 leading-relaxed">{producto.descripcion}</p>
           )}
 
           {/* Price */}
