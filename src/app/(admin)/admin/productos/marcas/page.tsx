@@ -43,6 +43,7 @@ interface Categoria {
   id: string;
   nombre: string;
   producto_count: number;
+  restringida?: boolean;
 }
 
 interface Subcategoria {
