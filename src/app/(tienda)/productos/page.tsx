@@ -1373,7 +1373,7 @@ function ProductosContent() {
                           <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ {volHint.label}</p>
                         )}
                         {boxDiscountHint && (
-                          <p className="text-[10px] text-emerald-600 font-medium mt-0.5">📦 Por {boxDiscountHint.label}: ${Math.round(boxDiscountHint.unitPrice - boxDiscountHint.boxPrice / boxDiscountHint.qty).toLocaleString("es-AR")} menos c/u</p>
+                          <p className="text-[10px] text-emerald-600 font-medium mt-0.5">📦 {boxDiscountHint.pct}% OFF por {boxDiscountHint.label}</p>
                         )}
                       </div>
 
