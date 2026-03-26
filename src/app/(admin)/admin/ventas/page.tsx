@@ -1379,6 +1379,28 @@ export default function VentasPage() {
         setClientId(data.id);
         setCreateClientOpen(false);
         setClientDialogOpen(false);
+
+        // Auto-create tienda online access if email + DNI
+        if (newClientData.email && newClientData.numero_documento) {
+          try {
+            const res = await fetch("/api/auth/tienda", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "create-from-admin",
+                nombre: newClientData.nombre.trim(),
+                email: newClientData.email.trim(),
+                password: newClientData.numero_documento,
+                cliente_id: data.id,
+                telefono: newClientData.telefono.trim() || "",
+              }),
+            });
+            if (res.ok) {
+              showAdminToast("Acceso a tienda creado (contraseña: DNI)", "success");
+            }
+          } catch { /* silently ignore */ }
+        }
+
         setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "", zona_entrega: "", limite_credito: 0, maps_url: "" });
       }
     } finally {

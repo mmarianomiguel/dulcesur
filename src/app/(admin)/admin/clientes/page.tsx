@@ -328,6 +328,27 @@ export default function ClientesPage() {
     } else {
       const { data: newC } = await supabase.from("clientes").insert(payload).select("id").single();
       logAudit({ userName: currentUser?.nombre || "Admin", action: "CREATE", module: "clientes", entityId: newC?.id, after: { nombre: payload.nombre } });
+
+      // Auto-create tienda online access if email + DNI
+      if (newC?.id && form.email && form.numero_documento) {
+        try {
+          const res = await fetch("/api/auth/tienda", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "create-from-admin",
+              nombre: form.nombre,
+              email: form.email,
+              password: form.numero_documento,
+              cliente_id: newC.id,
+              telefono: form.telefono || "",
+            }),
+          });
+          if (res.ok) {
+            showAdminToast("Acceso a tienda online creado (contraseña: DNI)", "success");
+          }
+        } catch { /* silently ignore */ }
+      }
     }
     setDialogOpen(false);
     resetForm();

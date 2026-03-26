@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
       return handleChangePassword(body);
     } else if (action === "reset-password") {
       return handleResetPassword(body);
+    } else if (action === "create-from-admin") {
+      return handleCreateFromAdmin(body);
     }
 
     return NextResponse.json({ error: "Acción no válida" }, { status: 400 });
@@ -239,6 +241,45 @@ async function handleResetPassword({
 
   if (error) {
     return NextResponse.json({ error: "Error al restablecer la contraseña" }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+async function handleCreateFromAdmin({
+  nombre, email, password, cliente_id, telefono,
+}: {
+  nombre: string; email: string; password: string; cliente_id: string; telefono?: string; action: string;
+}) {
+  if (!nombre || !email || !password || !cliente_id) {
+    return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
+  }
+
+  // Check if email already exists in clientes_auth
+  const { data: existing } = await supabase
+    .from("clientes_auth")
+    .select("id")
+    .eq("email", email.toLowerCase().trim())
+    .single();
+
+  if (existing) {
+    return NextResponse.json({ error: "already_exists", message: "Ya existe una cuenta con ese email." }, { status: 409 });
+  }
+
+  const bcryptHash = await bcrypt.hash(password, 10);
+
+  const { error } = await supabase
+    .from("clientes_auth")
+    .insert({
+      nombre,
+      email: email.toLowerCase().trim(),
+      telefono: telefono || "",
+      password_hash: bcryptHash,
+      cliente_id,
+    });
+
+  if (error) {
+    return NextResponse.json({ error: "Error al crear acceso: " + error.message }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });
