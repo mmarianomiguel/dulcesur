@@ -289,6 +289,7 @@ export default function ProductosPage() {
   const [formMarcaOpen, setFormMarcaOpen] = useState(false);
 
   const [selectedProveedores, setSelectedProveedores] = useState<string[]>([]);
+  const [prodProvMap, setProdProvMap] = useState<Record<string, string>>({});
   const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
 
   // Combo state
@@ -401,6 +402,15 @@ export default function ProductosPage() {
     fetchSubcategories();
     fetchMarcas();
     fetchProveedores();
+    // Load provider map for product table
+    supabase.from("producto_proveedores").select("producto_id, proveedores(nombre)").then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data || []).forEach((pp: any) => {
+        const n = pp.proveedores?.nombre;
+        if (n) map[pp.producto_id] = map[pp.producto_id] ? `${map[pp.producto_id]}, ${n}` : n;
+      });
+      setProdProvMap(map);
+    });
   }, [fetchProducts, fetchCategories, fetchSubcategories, fetchMarcas, fetchProveedores]);
 
   useEffect(() => {
@@ -2019,7 +2029,10 @@ export default function ProductosPage() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-muted-foreground text-xs">
-                        {product.marcas?.nombre || "\u2014"}
+                        {product.marcas?.nombre || "—"}
+                        {prodProvMap[product.id] && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{prodProvMap[product.id]}</div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center">
                         {(() => {
