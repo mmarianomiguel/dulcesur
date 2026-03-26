@@ -838,6 +838,19 @@ export default function ListadoVentasPage() {
         else pagos.push({ metodo: m.metodo_pago, monto: m.monto });
       }
     }
+    // For Mixto online orders: enrich with pedidos_tienda to show original payment split
+    const fpLower = ((pedido as any).forma_pago || pedido.metodo_pago || "").toLowerCase();
+    if (fpLower === "mixto" && pedido.numero) {
+      const { data: ptMixto } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia").eq("numero", pedido.numero).maybeSingle();
+      if (ptMixto) {
+        if (ptMixto.monto_efectivo > 0 && !pagos.some((p) => p.metodo === "Efectivo")) {
+          pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptMixto.monto_efectivo });
+        }
+        if (ptMixto.monto_transferencia > 0 && !pagos.some((p) => p.metodo === "Transferencia")) {
+          pagos.push({ metodo: "Transferencia", monto: ptMixto.monto_transferencia });
+        }
+      }
+    }
     // Fallback: if no caja_movimientos (online orders), read from ventas/pedidos_tienda
     if (pagos.length === 0) {
       // Try ventas first

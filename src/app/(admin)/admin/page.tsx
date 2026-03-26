@@ -588,8 +588,19 @@ export default function DashboardPage() {
         else if (m.metodo_pago === "Cuenta Corriente") pagoCC += m.monto;
       }
     }
-    // Fallback: if no caja_movimientos, try pedidos_tienda
-    if (pagoEf === 0 && pagoTr === 0 && pagoCC === 0) {
+    // For online Mixto orders: get original payment split from pedidos_tienda
+    // (caja may only have the transfer portion — efectivo is collected on delivery)
+    if (venta.forma_pago === "Mixto") {
+      const { data: pedido } = await supabase.from("pedidos_tienda")
+        .select("monto_efectivo, monto_transferencia, recargo_transferencia")
+        .eq("numero", venta.numero)
+        .single();
+      if (pedido) {
+        pagoEf = pedido.monto_efectivo || pagoEf;
+        pagoTr = pedido.monto_transferencia || pagoTr;
+      }
+    } else if (pagoEf === 0 && pagoTr === 0 && pagoCC === 0) {
+      // Fallback: if no caja_movimientos at all, try pedidos_tienda
       const { data: pedido } = await supabase.from("pedidos_tienda")
         .select("monto_efectivo, monto_transferencia, recargo_transferencia")
         .eq("numero", venta.numero)
