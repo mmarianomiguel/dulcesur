@@ -2183,14 +2183,34 @@ export default function VentasPage() {
             </div>
           )}
 
-          {/* Payment method grid */}
-          <div className="grid grid-cols-5 gap-1.5">
+          {/* Cobro al entregar toggle */}
+          <button
+            onClick={() => setFormaPago(formaPago === "Pendiente" ? "Efectivo" : "Pendiente")}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all text-xs ${
+              formaPago === "Pendiente"
+                ? "bg-amber-50 border-amber-300 text-amber-800"
+                : "bg-card border-border text-muted-foreground hover:bg-accent"
+            }`}
+          >
+            <Truck className="w-4 h-4 shrink-0" />
+            <span className="font-medium">Cobro al entregar</span>
+            <div className={`ml-auto relative w-8 h-4.5 rounded-full transition-colors ${formaPago === "Pendiente" ? "bg-amber-500" : "bg-gray-300"}`}>
+              <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${formaPago === "Pendiente" ? "translate-x-4" : "translate-x-0.5"}`} />
+            </div>
+          </button>
+
+          {formaPago === "Pendiente" && (
+            <p className="text-[11px] text-amber-600 -mt-1 px-1">No se registra pago. Se cobra desde la hoja de ruta al entregar.</p>
+          )}
+
+          {/* Payment method grid — hidden when Pendiente */}
+          {formaPago !== "Pendiente" && (
+          <div className="grid grid-cols-4 gap-1.5">
             {[
               { key: "Efectivo", label: "Efect.", icon: DollarSign },
               { key: "Transferencia", label: "Transf.", icon: ArrowLeftRight },
               { key: "Mixto", label: "Mixto", icon: Shuffle },
               { key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen },
-              { key: "Pendiente", label: "Pend.", icon: Truck },
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -2206,13 +2226,6 @@ export default function VentasPage() {
               </button>
             ))}
           </div>
-
-          {/* Pendiente de cobro info */}
-          {formaPago === "Pendiente" && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
-              <Truck className="w-4 h-4 shrink-0" />
-              <span>No se registra pago. Se cobra al entregar desde la hoja de ruta.</span>
-            </div>
           )}
 
           {/* Transfer surcharge info */}
