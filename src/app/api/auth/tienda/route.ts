@@ -149,6 +149,7 @@ async function handleRegister({
       codigo_postal: codigoPostal || null,
       situacion_iva: "Consumidor final",
       origen: "tienda",
+      vendedor_id: "94b3d01c-6be8-4a38-a8f0-c42b6502b19e", // Mariano Miguel (default)
     })
     .select("id")
     .single();

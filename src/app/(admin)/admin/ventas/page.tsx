@@ -233,7 +233,7 @@ export default function VentasPage() {
   // create client from POS
   const [createClientOpen, setCreateClientOpen] = useState(false);
   const [newClientData, setNewClientData] = useState({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "", zona_entrega: "", limite_credito: 0, maps_url: "" });
-  const [zonasEntrega, setZonasEntrega] = useState<{ id: string; nombre: string }[]>([]);
+  const [zonasEntrega, setZonasEntrega] = useState<{ id: string; nombre: string; dias?: string[] }[]>([]);
   const [creatingClient, setCreatingClient] = useState(false);
 
   // presentaciones
@@ -294,7 +294,7 @@ export default function VentasPage() {
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo").eq("activo", true).eq("rol", "vendedor"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
-      supabase.from("zonas_entrega").select("id, nombre").order("nombre"),
+      supabase.from("zonas_entrega").select("id, nombre, dias").order("nombre"),
     ]);
     setProducts(prods || []);
     setClients((cls || []) as unknown as Cliente[]);
@@ -1366,7 +1366,7 @@ export default function VentasPage() {
           barrio: newClientData.barrio || null,
           observacion: newClientData.observacion || null,
           vendedor_id: newClientData.vendedor_id || null,
-          zona_entrega_id: newClientData.zona_entrega || null,
+          zona_entrega: newClientData.zona_entrega || null,
           limite_credito: newClientData.limite_credito || 0,
           maps_url: newClientData.maps_url || null,
           activo: true,
@@ -1401,7 +1401,7 @@ export default function VentasPage() {
           } catch { /* silently ignore */ }
         }
 
-        setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "", zona_entrega: "", limite_credito: 0, maps_url: "" });
+        setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: sellers[0]?.id || "", zona_entrega: "", limite_credito: 0, maps_url: "" });
       }
     } finally {
       setCreatingClient(false);
@@ -2826,7 +2826,7 @@ export default function VentasPage() {
               size="sm"
               variant="outline"
               onClick={() => {
-                setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "", zona_entrega: "", limite_credito: 0, maps_url: "" });
+                setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: sellers[0]?.id || "", zona_entrega: "", limite_credito: 0, maps_url: "" });
                 setCreateClientOpen(true);
               }}
             >
@@ -2953,7 +2953,7 @@ export default function VentasPage() {
                   <SelectTrigger><SelectValue placeholder="Seleccionar zona" /></SelectTrigger>
                   <SelectContent>
                     {zonasEntrega.map((z) => (
-                      <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>
+                      <SelectItem key={z.id} value={z.id}>{z.nombre}{z.dias && z.dias.length > 0 ? ` — ${z.dias.join(", ")}` : ""}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
