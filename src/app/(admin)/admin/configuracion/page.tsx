@@ -71,7 +71,12 @@ interface CuentaBancaria {
 function loadReceiptConfig(): ReceiptConfig {
   try {
     const stored = localStorage.getItem("receipt_config");
-    if (stored) return { ...defaultReceiptConfig, ...JSON.parse(stored) };
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const merged = { ...defaultReceiptConfig, ...parsed };
+      if (!merged.logoUrl) merged.logoUrl = defaultReceiptConfig.logoUrl;
+      return merged;
+    }
   } catch (err) { console.error("Config load error:", err); }
   return defaultReceiptConfig;
 }

@@ -26,7 +26,7 @@ export interface ReceiptConfig {
 }
 
 export const defaultReceiptConfig: ReceiptConfig = {
-  logoUrl: "",
+  logoUrl: "https://res.cloudinary.com/dss3lnovd/image/upload/v1774505786/dulcesur/logo-dulcesur-negro.jpg",
   empresaNombre: "",
   empresaWeb: "",
   empresaDomicilio: "",
