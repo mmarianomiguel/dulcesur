@@ -3488,68 +3488,93 @@ export default function ProductosPage() {
               <div className="text-center py-12 text-sm text-muted-foreground">
                 No hay movimientos registrados
               </div>
-            ) : (
-              historyItems.map((item) => {
-                const tipoLower = item.tipo.toLowerCase();
+            ) : (() => {
+              // Group movements by orden_id to collapse combo components
+              const groups: { key: string; items: typeof historyItems }[] = [];
+              const seen = new Set<string>();
+              for (const item of historyItems) {
+                const key = item.orden_id || item.id;
+                if (item.orden_id && seen.has(item.orden_id)) {
+                  const g = groups.find((g) => g.key === item.orden_id);
+                  if (g) g.items.push(item);
+                } else {
+                  if (item.orden_id) seen.add(item.orden_id);
+                  groups.push({ key, items: [item] });
+                }
+              }
+              return groups.map((group) => {
+                const first = group.items[0];
+                const isGrouped = group.items.length > 1;
+                const tipoLower = first.tipo.toLowerCase();
                 const isAnulacion = tipoLower.includes("anulacion") || tipoLower.includes("anulación");
                 const isDevolucion = tipoLower.includes("devolucion") || tipoLower.includes("devolución");
                 const isVenta = tipoLower.includes("venta");
-                const diff = item.cantidad_despues - item.cantidad_antes;
-                const isPositive = diff >= 0;
+                const isCompra = tipoLower.includes("compra");
+                const totalDiff = group.items.reduce((s, i) => s + (i.cantidad_despues - i.cantidad_antes), 0);
+                const isPositive = totalDiff >= 0;
 
                 const badgeConfig = isAnulacion
                   ? { label: "Anulación", className: "bg-orange-100 text-orange-700 border-orange-200", icon: <RefreshCw className="w-3 h-3" /> }
                   : isDevolucion
-                  ? { label: "Devolucion", className: "bg-blue-100 text-blue-700 border-blue-200", icon: <RefreshCw className="w-3 h-3" /> }
+                  ? { label: "Devolución", className: "bg-blue-100 text-blue-700 border-blue-200", icon: <RefreshCw className="w-3 h-3" /> }
+                  : isCompra
+                  ? { label: "Compra", className: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <Package className="w-3 h-3" /> }
                   : isVenta
                   ? { label: "Venta", className: "bg-red-100 text-red-700 border-red-200", icon: <ShoppingBag className="w-3 h-3" /> }
-                  : { label: "Ajuste", className: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <Settings className="w-3 h-3" /> };
+                  : { label: "Ajuste", className: "bg-gray-100 text-gray-700 border-gray-200", icon: <Settings className="w-3 h-3" /> };
 
                 return (
-                  <div key={item.id} className="border rounded-lg p-4 flex items-start justify-between gap-4 bg-white">
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={`text-xs gap-1 ${badgeConfig.className}`}>
-                          {badgeConfig.icon}
-                          {badgeConfig.label}
-                        </Badge>
+                  <div key={group.key} className="border rounded-lg p-3 bg-white">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={`text-xs gap-1 ${badgeConfig.className}`}>
+                            {badgeConfig.icon}
+                            {badgeConfig.label}
+                          </Badge>
+                          {first.referencia && <span className="text-xs text-muted-foreground">{first.referencia}</span>}
+                        </div>
+                        {isGrouped ? (
+                          <div className="space-y-0.5 mt-1">
+                            {group.items.map((item, i) => {
+                              const d = item.cantidad_despues - item.cantidad_antes;
+                              // Extract component name from description
+                              const compName = item.descripcion?.match(/\[(.+?)\]/)?.[1] || item.descripcion || "";
+                              return (
+                                <p key={i} className="text-xs text-muted-foreground flex items-center gap-2">
+                                  <span className="truncate max-w-[250px]">{compName}</span>
+                                  <span className={`font-mono font-medium ${d >= 0 ? "text-emerald-600" : "text-red-500"}`}>{d >= 0 ? "+" : ""}{d}</span>
+                                  <span className="text-[10px] text-gray-400">({item.cantidad_antes}→{item.cantidad_despues})</span>
+                                </p>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {first.cantidad_antes} → {first.cantidad_despues}
+                            {first.descripcion && <span className="ml-2">{first.descripcion}</span>}
+                          </p>
+                        )}
+                        {first.orden_id && (
+                          <button type="button" onClick={() => openOrdenDetail(first.orden_id!)} className="text-xs text-blue-600 hover:underline">
+                            Ver orden
+                          </button>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Antes: <span className="font-medium text-foreground">{item.cantidad_antes}</span>
-                        {"  "}
-                        Despues: <span className="font-medium text-foreground">{item.cantidad_despues}</span>
-                      </p>
-                      {item.descripcion && (
-                        <p className="text-sm text-muted-foreground">{item.descripcion}</p>
-                      )}
-                      {item.referencia && (
-                        <p className="text-sm text-muted-foreground">{item.referencia}</p>
-                      )}
-                      {item.orden_id && (
-                        <button
-                          type="button"
-                          onClick={() => openOrdenDetail(item.orden_id!)}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          Ver orden
-                        </button>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0 space-y-1">
-                      <p className={`text-sm font-semibold ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
-                        {isPositive ? "+" : ""}{diff} uds
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.created_at ? new Date(item.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" }) : "\u2014"}
-                      </p>
-                      {item.usuario && (
-                        <p className="text-xs text-muted-foreground">Por: {item.usuario}</p>
-                      )}
+                      <div className="text-right shrink-0 space-y-0.5">
+                        <p className={`text-sm font-semibold ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
+                          {isPositive ? "+" : ""}{totalDiff} uds
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {first.created_at ? new Date(first.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                        </p>
+                        {first.usuario && <p className="text-[11px] text-muted-foreground">{first.usuario}</p>}
+                      </div>
                     </div>
                   </div>
                 );
-              })
-            )}
+              });
+            })()}
           </div>
         </DialogContent>
       </Dialog>
