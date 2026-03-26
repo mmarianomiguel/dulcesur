@@ -936,33 +936,17 @@ export default function VentasPage() {
         return;
       }
 
-      // First digit: always capture it — we'll replay it to the input if it's NOT a scanner
-      if (bufLen === 0 && /^\d$/.test(e.key)) {
-        e.preventDefault();
-        e.stopPropagation();
+      // First char: buffer it but only preventDefault if NOT in an input
+      if (bufLen === 0) {
         barcodeBuffer.current = e.key;
+        if (!inInput) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
-        barcodeTimer.current = setTimeout(() => {
-          // Timed out with just 1 digit → it was a human keystroke, replay it
-          const buf = barcodeBuffer.current;
-          barcodeBuffer.current = "";
-          if (buf.length === 1) {
-            const active = document.activeElement as HTMLInputElement;
-            if (active?.tagName === "INPUT" && active.type === "number") {
-              // Replay into focused number input
-              const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-              if (nativeSetter) {
-                nativeSetter.call(active, active.value + buf);
-                active.dispatchEvent(new Event("input", { bubbles: true }));
-              }
-            }
-          }
-        }, 150);
+        barcodeTimer.current = setTimeout(() => { barcodeBuffer.current = ""; }, 400);
         return;
       }
-
-      // First non-digit char or slow typing in input → let it through
-      if (bufLen === 0) return;
 
       // Slow typing → not a scanner, reset buffer
       barcodeBuffer.current = "";
