@@ -263,9 +263,25 @@ export default function EditarPreciosPage() {
     }
     setSaving(false);
     setRoundOpen(false);
+
+    // Show post-save dialog with carteles option
+    const savedInfo = roundPreview.map((item) => {
+      const prod = productos.find((p) => p.id === item.id);
+      return { id: item.id, nombre: prod?.nombre || "", codigo: prod?.codigo || "", precio: item.precioNuevo };
+    });
+
+    // Update local state instead of reloading
+    setProductos((prev) => prev.map((p) => {
+      const rp = roundPreview.find((r) => r.id === p.id);
+      return rp ? { ...p, precio: rp.precioNuevo } : p;
+    }));
+
     setRoundPreview([]);
-    // Reload page to refresh data
-    window.location.reload();
+
+    if (savedInfo.length > 0) {
+      setSavedProductNames(savedInfo);
+      setPostSaveDialog(true);
+    }
   };
 
   // Confirmation dialog for mass edit
@@ -710,6 +726,16 @@ export default function EditarPreciosPage() {
 
       setMassEditOpen(false);
       setMassAmount("");
+
+      // Show post-save dialog with carteles option
+      const savedInfo = massEditPreview.map((item) => {
+        const prod = productos.find((p) => p.id === item.id);
+        return { id: item.id, nombre: prod?.nombre || item.nombre, codigo: prod?.codigo || "", precio: item.newPrecio };
+      });
+      if (savedInfo.length > 0) {
+        setSavedProductNames(savedInfo);
+        setPostSaveDialog(true);
+      }
     } catch (err) {
       console.error("Error applying mass edit:", err);
     } finally {
