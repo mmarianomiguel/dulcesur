@@ -346,7 +346,11 @@ export default function ReportesPage() {
 
   const calcItemProfit = (item: VentaItemDetail) => {
     const costoU = item.productos?.costo || 0;
-    const unidadesPres = getUnidadesPres(item);
+    const pres = (item as any).presentacion || "";
+    const isCombo = pres.toLowerCase().startsWith("combo");
+    // For combos: cost = unit cost (combo's own cost, not multiplied by units)
+    // For regular: cost = unit cost × units per presentation
+    const unidadesPres = isCombo ? 1 : getUnidadesPres(item);
     const presCosts = presCostMap[(item as any).producto_id];
     const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
     const descPct = Number((item as any).descuento) || 0;

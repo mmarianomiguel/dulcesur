@@ -107,7 +107,9 @@ export default function ResumenMensualPage() {
       const g = (items || []).reduce((a: number, item: any) => {
         const costoUnitario = item.productos?.costo || 0;
         if (!costoUnitario) sinCosto++;
-        const u = getU(item);
+        const pres = (item.presentacion || "").toLowerCase();
+        const isCombo = pres.startsWith("combo");
+        const u = isCombo ? 1 : getU(item);
         // Try to get presentation-specific cost, fallback to unitario × units
         const presCosts = presCostMap[item.producto_id];
         const costoPresentacion = presCosts?.[u] || (costoUnitario * u);
