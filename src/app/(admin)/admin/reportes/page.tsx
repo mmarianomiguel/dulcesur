@@ -103,7 +103,7 @@ export default function ReportesPage() {
         .gte("fecha", dEff).lte("fecha", hEff)
         .not("tipo_comprobante", "ilike", "Nota de Crédito%")
         .neq("estado", "anulada")
-        .order("fecha", { ascending: false }),
+        .order("created_at", { ascending: false }),
       supabase.from("compras").select("id, fecha, total, forma_pago, proveedor_id, observacion, proveedores(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
         .order("fecha", { ascending: false }),

@@ -623,22 +623,31 @@ export default function DashboardPage() {
 
   const pendientes = pedidosOnline.filter((p) => {
     const fe = pedidoEntregaMap[p.numero];
+    // Retiro sin fecha → pendiente
+    if (!fe && p.metodo_entrega === "retiro") return false; // shown in "Hoy" instead
     if (!fe) return true;
     return fe < today;
   });
+
+  // Retiro orders without fecha_entrega count as "today"
+  const getTabForPedido = (p: PedidoVenta) => {
+    const fe = pedidoEntregaMap[p.numero];
+    if (!fe && p.metodo_entrega === "retiro") return today;
+    return fe || null;
+  };
 
   const countByTab: Record<string, number> = {};
   for (const tab of dayTabs) {
     if (tab.key === "_pending") {
       countByTab[tab.key] = pendientes.length;
     } else {
-      countByTab[tab.key] = pedidosOnline.filter((p) => pedidoEntregaMap[p.numero] === tab.key).length;
+      countByTab[tab.key] = pedidosOnline.filter((p) => getTabForPedido(p) === tab.key).length;
     }
   }
 
   let tabPedidos = effectiveTab === "_pending"
     ? pendientes
-    : pedidosOnline.filter((p) => pedidoEntregaMap[p.numero] === effectiveTab);
+    : pedidosOnline.filter((p) => getTabForPedido(p) === effectiveTab);
 
   // Apply envio/retiro filter
   if (pedidoFilter === "envio") tabPedidos = tabPedidos.filter((p) => p.metodo_entrega === "envio");
