@@ -147,6 +147,7 @@ export default function ProductosPage() {
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
   const [stockFilter, setStockFilter] = useState("all");
+  const [tiendaFilter, setTiendaFilter] = useState("all");
   const [comboFilter, setComboFilter] = useState("all");
   const [sortBy, setSortBy] = useState("nombre_asc");
   const [page, setPage] = useState(1);
@@ -1517,8 +1518,9 @@ export default function ProductosPage() {
       const matchesMarca = marcaFilter === "all" || p.marca_id === marcaFilter;
       const effectiveStock = (p as any).es_combo ? (comboStockMap[p.id] ?? 0) : p.stock;
       const matchesStock = stockFilter === "all" || (stockFilter === "si" ? effectiveStock > 0 : effectiveStock === 0);
+      const matchesTienda = tiendaFilter === "all" || (tiendaFilter === "visible" ? p.visibilidad === "visible" : p.visibilidad === "oculto");
       const matchesCombo = comboFilter === "all" || (comboFilter === "si" ? !!(p as any).es_combo : !(p as any).es_combo);
-      return matchesSearch && matchesCategory && matchesSubcategory && matchesMarca && matchesStock && matchesCombo;
+      return matchesSearch && matchesCategory && matchesSubcategory && matchesMarca && matchesStock && matchesTienda && matchesCombo;
     });
     arr.sort((a, b) => {
       if (sortBy === "nombre_asc") return a.nombre.localeCompare(b.nombre);
@@ -1531,7 +1533,7 @@ export default function ProductosPage() {
       return 0;
     });
     return arr;
-  }, [products, debouncedSearch, presCodigoMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, comboFilter, sortBy]);
+  }, [products, debouncedSearch, presCodigoMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, tiendaFilter, comboFilter, sortBy]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -1903,6 +1905,21 @@ export default function ProductosPage() {
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="si">Con stock</SelectItem>
                       <SelectItem value="no">Sin stock</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">En Tienda</Label>
+                  <Select value={tiendaFilter} onValueChange={(v) => { setTiendaFilter(v ?? "all"); setPage(1); }}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue>
+                        {tiendaFilter === "all" ? "Todos" : tiendaFilter === "visible" ? "Visible" : "Oculto"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="visible">Visible</SelectItem>
+                      <SelectItem value="oculto">Oculto</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
