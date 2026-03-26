@@ -2928,149 +2928,139 @@ export default function ProductosPage() {
                 )}
               </div>
 
-              {/* Compact table */}
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/40 text-muted-foreground">
-                      <th className="text-left py-2 px-3 font-medium text-xs w-10"></th>
-                      <th className="text-left py-2 px-3 font-medium text-xs">Nombre</th>
-                      <th className="text-left py-2 px-3 font-medium text-xs w-32">Código</th>
-                      <th className="text-center py-2 px-3 font-medium text-xs w-20">Cant.</th>
-                      <th className="text-right py-2 px-3 font-medium text-xs w-24">Costo</th>
-                      <th className="text-right py-2 px-3 font-medium text-xs w-24">Precio</th>
-                      <th className="text-right py-2 px-3 font-medium text-xs w-24">Oferta</th>
-                      <th className="text-center py-2 px-3 font-medium text-xs w-20">Margen</th>
-                      <th className="text-right py-2 px-3 font-medium text-xs w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {presentaciones
-                      .map((pres, idx) => ({ pres, idx }))
-                      .filter(({ pres }) => !pres._deleted)
-                      .sort((a, b) => {
-                        // Unit (1) first, then Medio Carton (0.5), then boxes
-                        if (a.pres.cantidad === 1 && b.pres.cantidad !== 1) return -1;
-                        if (a.pres.cantidad !== 1 && b.pres.cantidad === 1) return 1;
-                        if (a.pres.cantidad < 1 && b.pres.cantidad >= 1) return -1;
-                        if (a.pres.cantidad >= 1 && b.pres.cantidad < 1) return 1;
-                        return a.pres.cantidad - b.pres.cantidad;
-                      })
-                      .map(({ pres, idx }) => {
-                        const isUnit = pres.nombre === "Unidad" && pres.cantidad === 1;
-                        const unit = getUnitPresentacion();
-                        return (
-                          <tr key={idx} className={`border-b last:border-0 ${isUnit ? "bg-blue-50" : "bg-emerald-50"}`}>
-                            <td className="py-2 px-3">
-                              {isUnit ? (
-                                <ShoppingBag className="w-4 h-4 text-blue-500" />
-                              ) : (
-                                <Box className="w-4 h-4 text-emerald-500" />
-                              )}
-                            </td>
-                            <td className="py-2 px-3">
-                              <Input
-                                value={pres.nombre}
-                                onChange={(e) => updatePresentacion(idx, "nombre", e.target.value)}
-                                className="h-7 text-sm"
-                                placeholder={isUnit ? "Unidad" : "Caja x12"}
-                              />
-                            </td>
-                            <td className="py-2 px-3">
-                              <Input
-                                value={pres.sku}
-                                onChange={(e) => updatePresentacion(idx, "sku", e.target.value)}
-                                className="h-7 text-sm font-mono text-xs"
-                                placeholder={isUnit ? form.codigo || "Código" : form.codigo ? `${form.codigo}-C${pres.cantidad}` : "Código caja"}
-                              />
-                            </td>
-                            <td className="py-2 px-3">
+              {/* Presentaciones cards */}
+              <div className="space-y-3">
+                {presentaciones
+                  .map((pres, idx) => ({ pres, idx }))
+                  .filter(({ pres }) => !pres._deleted)
+                  .sort((a, b) => {
+                    if (a.pres.cantidad === 1 && b.pres.cantidad !== 1) return -1;
+                    if (a.pres.cantidad !== 1 && b.pres.cantidad === 1) return 1;
+                    if (a.pres.cantidad < 1 && b.pres.cantidad >= 1) return -1;
+                    if (a.pres.cantidad >= 1 && b.pres.cantidad < 1) return 1;
+                    return a.pres.cantidad - b.pres.cantidad;
+                  })
+                  .map(({ pres, idx }) => {
+                    const isUnit = pres.nombre === "Unidad" && pres.cantidad === 1;
+                    const unit = getUnitPresentacion();
+                    const margen = pres.costo > 0 ? ((pres.precio - pres.costo) / pres.costo) * 100 : 0;
+                    const ganancia = pres.precio - pres.costo;
+                    const unitPriceInBox = !isUnit && pres.cantidad > 0 ? Math.round(pres.precio / pres.cantidad) : 0;
+                    return (
+                      <div key={idx} className={`border rounded-lg p-4 ${isUnit ? "bg-blue-50/50 border-blue-200" : "bg-emerald-50/50 border-emerald-200"}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            {isUnit ? <ShoppingBag className="w-4 h-4 text-blue-500" /> : <Box className="w-4 h-4 text-emerald-500" />}
+                            <span className="font-semibold text-sm">{pres.nombre || (isUnit ? "Unidad" : `Caja x${pres.cantidad}`)}</span>
+                            {!isUnit && unitPriceInBox > 0 && (
+                              <span className="text-[11px] text-muted-foreground">({formatCurrency(unitPriceInBox)} c/u)</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className={`text-xs font-semibold px-2 py-0.5 rounded ${ganancia >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                              {pres.costo > 0 ? `${margen.toFixed(1)}% · ${formatCurrency(ganancia)}` : "—"}
+                            </div>
+                            {!isUnit && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removePresentacion(idx)}>
+                                <X className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        {/* Inputs grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {!isUnit && (
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-muted-foreground font-medium">Unidades</label>
                               <Input
                                 type="number"
                                 value={pres.cantidad}
                                 onChange={(e) => {
                                   const newQty = Number(e.target.value);
                                   updatePresentacion(idx, "cantidad", newQty);
-                                  if (!isUnit && unit && newQty > 0) {
-                                    // Only auto-rename if name follows "Caja xN" pattern or is empty
+                                  if (unit && newQty > 0) {
                                     const currentName = pres.nombre;
                                     const isAutoName = !currentName || /^Caja\s*x\d*$/i.test(currentName);
                                     if (isAutoName) {
-                                      if (newQty < 1) {
-                                        updatePresentacion(idx, "nombre", "Medio Carton");
-                                      } else {
-                                        updatePresentacion(idx, "nombre", `Caja x${newQty}`);
-                                      }
+                                      updatePresentacion(idx, "nombre", newQty < 1 ? "Medio Carton" : `Caja x${newQty}`);
                                     }
                                     updatePresentacion(idx, "costo", unit.costo * newQty);
                                     updatePresentacion(idx, "precio", unit.precio * newQty);
                                   }
                                 }}
-                                className="h-7 text-sm text-center"
-                                disabled={isUnit}
+                                className="h-9"
                                 step={form.unidad_medida === "Mt" ? 0.5 : 1}
                                 min={form.unidad_medida === "Mt" ? 0.5 : 1}
                               />
-                            </td>
-                            <td className="py-2 px-3">
-                              <Input
-                                type="number"
-                                min="0"
-                                value={pres.costo}
-                                onChange={(e) => updatePresentacion(idx, "costo", Math.max(0, Number(e.target.value)))}
-                                className="h-7 text-sm text-right"
-                              />
-                            </td>
-                            <td className="py-2 px-3">
-                              <Input
-                                type="number"
-                                min="0"
-                                value={pres.precio}
-                                onChange={(e) => updatePresentacion(idx, "precio", Math.max(0, Number(e.target.value)))}
-                                className="h-7 text-sm text-right"
-                              />
-                            </td>
-                            <td className="py-2 px-3">
-                              <Input
-                                type="number"
-                                value={pres.precio_oferta ?? ""}
-                                onChange={(e) =>
-                                  updatePresentacion(idx, "precio_oferta", e.target.value ? Number(e.target.value) : null)
+                            </div>
+                          )}
+                          <div className="space-y-1">
+                            <label className="text-[11px] text-muted-foreground font-medium">Costo {!isUnit && pres.cantidad > 1 ? `(x${pres.cantidad})` : ""}</label>
+                            <Input
+                              type="number" min="0"
+                              value={pres.costo}
+                              onChange={(e) => updatePresentacion(idx, "costo", Math.max(0, Number(e.target.value)))}
+                              className="h-9"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] text-muted-foreground font-medium">Precio {!isUnit && pres.cantidad > 1 ? `(x${pres.cantidad})` : ""}</label>
+                            <Input
+                              type="number" min="0"
+                              value={pres.precio}
+                              onChange={(e) => updatePresentacion(idx, "precio", Math.max(0, Number(e.target.value)))}
+                              className="h-9"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] text-muted-foreground font-medium">Margen %</label>
+                            <Input
+                              type="number" min="0" step="0.1"
+                              value={pres.costo > 0 ? Number(margen.toFixed(1)) : ""}
+                              onChange={(e) => {
+                                const newMargen = Number(e.target.value);
+                                if (pres.costo > 0 && newMargen >= 0) {
+                                  updatePresentacion(idx, "precio", Math.round(pres.costo * (1 + newMargen / 100)));
                                 }
-                                className="h-7 text-sm text-right"
-                                placeholder="—"
+                              }}
+                              className="h-9"
+                              placeholder="—"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] text-muted-foreground font-medium">Oferta</label>
+                            <Input
+                              type="number"
+                              value={pres.precio_oferta ?? ""}
+                              onChange={(e) => updatePresentacion(idx, "precio_oferta", e.target.value ? Number(e.target.value) : null)}
+                              className="h-9"
+                              placeholder="—"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] text-muted-foreground font-medium">Código</label>
+                            <Input
+                              value={pres.sku}
+                              onChange={(e) => updatePresentacion(idx, "sku", e.target.value)}
+                              className="h-9 font-mono text-xs"
+                              placeholder={isUnit ? form.codigo || "Código" : form.codigo ? `${form.codigo}-C${pres.cantidad}` : "Código"}
+                            />
+                          </div>
+                          {!isUnit && (
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-muted-foreground font-medium">Nombre</label>
+                              <Input
+                                value={pres.nombre}
+                                onChange={(e) => updatePresentacion(idx, "nombre", e.target.value)}
+                                className="h-9"
+                                placeholder={`Caja x${pres.cantidad}`}
                               />
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              {(() => {
-                                const margen = pres.costo > 0 ? ((pres.precio - pres.costo) / pres.costo) * 100 : 0;
-                                const ganancia = pres.precio - pres.costo;
-                                const pos = ganancia >= 0;
-                                return (
-                                  <div className={`flex flex-col items-center text-[10px] ${pos ? "text-emerald-700" : "text-red-600"}`}>
-                                    <span className="font-semibold">{pres.costo > 0 ? `${margen.toFixed(1)}%` : "—"}</span>
-                                    <span className="opacity-70">{formatCurrency(ganancia)}</span>
-                                  </div>
-                                );
-                              })()}
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              {!isUnit && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                  onClick={() => removePresentacion(idx)}
-                                >
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
 
               {/* Quick add buttons */}
