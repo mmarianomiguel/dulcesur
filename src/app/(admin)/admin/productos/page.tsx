@@ -2850,7 +2850,7 @@ export default function ProductosPage() {
                         return a.pres.cantidad - b.pres.cantidad;
                       })
                       .map(({ pres, idx }) => {
-                        const isUnit = pres.cantidad === 1;
+                        const isUnit = pres.nombre === "Unidad" && pres.cantidad === 1;
                         const unit = getUnitPresentacion();
                         return (
                           <tr key={idx} className={`border-b last:border-0 ${isUnit ? "bg-blue-50" : "bg-emerald-50"}`}>
