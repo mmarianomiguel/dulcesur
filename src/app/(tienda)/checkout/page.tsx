@@ -236,7 +236,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const raw = localStorage.getItem("carrito");
     if (raw) {
-      try { setItems(JSON.parse(raw)); } catch {}
+      try { const _p = JSON.parse(raw); setItems(Array.isArray(_p) ? _p : []); } catch {}
     }
 
     const auth = localStorage.getItem("cliente_auth");
@@ -373,8 +373,9 @@ export default function CheckoutPage() {
       const stored = localStorage.getItem("cuentas_bancarias");
       if (stored) {
         const parsed = JSON.parse(stored);
-        setCuentasBancarias(parsed);
-        if (parsed.length > 0) setSelectedCuentaId(parsed[0].id);
+        const arr = Array.isArray(parsed) ? parsed : [];
+        setCuentasBancarias(arr);
+        if (arr.length > 0) setSelectedCuentaId(arr[0].id);
       }
     } catch {}
     setLoaded(true);
