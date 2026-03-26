@@ -2316,7 +2316,27 @@ export default function ProductosPage() {
                             <button key={m.id} type="button" onClick={() => { setForm({ ...form, marca_id: m.id }); setMarcaOpen(false); setMarcaSearch(""); }}
                               className={`w-full text-left px-3 py-1.5 text-sm rounded-md hover:bg-muted transition ${form.marca_id === m.id ? "bg-primary/10 font-medium" : ""}`}>{m.nombre}</button>
                           ))}
-                          {filtered.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Sin resultados</p>}
+                          {filtered.length === 0 && marcaSearch.trim() && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const nombre = marcaSearch.trim();
+                                const { data } = await supabase.from("marcas").insert({ nombre }).select("id").single();
+                                if (data) {
+                                  setMarcas((prev) => [...prev, { id: data.id, nombre }].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+                                  setForm({ ...form, marca_id: data.id });
+                                  showAdminToast(`Marca "${nombre}" creada`, "success");
+                                }
+                                setMarcaOpen(false);
+                                setMarcaSearch("");
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-emerald-50 text-emerald-700 font-medium flex items-center gap-2"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Crear &quot;{marcaSearch.trim()}&quot;
+                            </button>
+                          )}
+                          {filtered.length === 0 && !marcaSearch.trim() && <p className="text-xs text-muted-foreground text-center py-2">Sin marcas</p>}
                         </div>
                       </div>
                     </>)}
