@@ -40,7 +40,7 @@ export default function DireccionesPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem("cliente_auth");
-    if (!stored) return;
+    if (!stored) { window.location.href = "/cuenta"; return; }
     const { id } = JSON.parse(stored);
     setClienteId(id);
     fetchDirecciones(id);

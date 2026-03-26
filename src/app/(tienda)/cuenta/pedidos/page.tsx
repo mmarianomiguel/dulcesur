@@ -103,7 +103,7 @@ export default function PedidosPage() {
   useEffect(() => {
     const fetchData = async () => {
       const stored = localStorage.getItem("cliente_auth");
-      if (!stored) return;
+      if (!stored) { window.location.href = "/cuenta"; return; }
       const { id } = JSON.parse(stored);
 
       // Verify client still exists in DB

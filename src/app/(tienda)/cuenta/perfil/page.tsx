@@ -56,7 +56,7 @@ export default function PerfilPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem("cliente_auth");
-    if (!stored) return;
+    if (!stored) { window.location.href = "/cuenta"; return; }
     const { id } = JSON.parse(stored);
     setClienteAuthId(id);
 

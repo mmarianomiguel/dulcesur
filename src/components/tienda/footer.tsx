@@ -43,9 +43,9 @@ const badgeIcons: Record<string, typeof Truck> = {
 
 const categoryLinks = [
   { label: "Todos los productos", href: "/productos" },
-  { label: "Kiosco", href: "/productos?categoria=4295d00e-86c8-41d1-bfd0-ac1bcdc97572" },
-  { label: "Almacen", href: "/productos?categoria=61e26068-cc48-42f2-90c2-041faa90bde2" },
-  { label: "Libreria", href: "/productos?categoria=4641ce12-5a49-4efd-87ff-eaf5db083417" },
+  { label: "Kiosco", href: "/productos?categoria=1be34ac4-fedb-4b74-881b-b88a02d56e4e" },
+  { label: "Almacen", href: "/productos?categoria=40f1dbcd-777a-44dd-ad1e-dfdeab12980c" },
+  { label: "Libreria", href: "/productos?categoria=a3bce1fb-1b47-4809-a9bf-4cc5751bc59d" },
 ];
 
 const accountLinks = [
