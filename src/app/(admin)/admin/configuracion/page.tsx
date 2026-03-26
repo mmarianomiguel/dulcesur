@@ -919,9 +919,21 @@ export default function ConfiguracionPage() {
                                 formData.append("file", file);
                                 try {
                                   const res = await fetch("/api/upload", { method: "POST", body: formData });
+                                  if (!res.ok) {
+                                    const err = await res.text();
+                                    showAdminToast("Error al subir logo: " + err, "error");
+                                    return;
+                                  }
                                   const data = await res.json();
-                                  if (data.url) setCuentaForm({ ...cuentaForm, logo_url: data.url });
-                                } catch {}
+                                  if (data.url) {
+                                    setCuentaForm({ ...cuentaForm, logo_url: data.url });
+                                    showAdminToast("Logo subido", "success");
+                                  } else {
+                                    showAdminToast("No se obtuvo URL del logo", "error");
+                                  }
+                                } catch (err: any) {
+                                  showAdminToast("Error: " + (err?.message || "No se pudo subir"), "error");
+                                }
                               }} />
                             </label>
                           </div>
