@@ -1350,11 +1350,12 @@ export default function VentasPage() {
       const { data } = await supabase
         .from("clientes")
         .insert({
+          codigo_cliente: (newClientData as any).codigo_cliente || null,
           nombre: newClientData.nombre.trim(),
           email: newClientData.email.trim() || null,
           telefono: newClientData.telefono.trim() || null,
           cuit: newClientData.cuit.trim() || null,
-          direccion: newClientData.direccion.trim() || null,
+          domicilio: newClientData.direccion.trim() || null,
           tipo_documento: newClientData.tipo_documento || null,
           numero_documento: newClientData.numero_documento || null,
           situacion_iva: newClientData.situacion_iva,
@@ -2837,92 +2838,64 @@ export default function VentasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Create client dialog */}
+      {/* Create client dialog — identical to Clientes page */}
       <Dialog open={createClientOpen} onOpenChange={setCreateClientOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5" />
-              Nuevo Cliente
-            </DialogTitle>
+            <DialogTitle>Nuevo cliente</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            {/* Row 1: Nombre, Razón Social */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
-                <Input value={newClientData.nombre} onChange={(e) => setNewClientData((d) => ({ ...d, nombre: e.target.value }))} placeholder="Nombre completo" autoFocus />
+          <div className="space-y-4 mt-2">
+            {/* Código + Nombre */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Código de cliente</label>
+                <Input value={(newClientData as any).codigo_cliente || ""} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 4); setNewClientData((d) => ({ ...d, codigo_cliente: v } as any)); }} maxLength={4} className="font-mono" />
+                <p className="text-[11px] text-muted-foreground">4 dígitos, único por cliente</p>
               </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Razón Social</label>
-                <Input value={newClientData.razon_social} onChange={(e) => setNewClientData((d) => ({ ...d, razon_social: e.target.value }))} placeholder="Razón social" />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Apellido y Nombre</label>
+                <Input value={newClientData.nombre} onChange={(e) => setNewClientData((d) => ({ ...d, nombre: e.target.value }))} autoFocus />
               </div>
             </div>
-            {/* Row 2: Tipo Doc, Nro Doc, CUIT */}
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Tipo Documento</label>
+            {/* Tipo Doc + Nro Doc */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tipo de Documento</label>
                 <Select value={newClientData.tipo_documento} onValueChange={(v) => setNewClientData((d) => ({ ...d, tipo_documento: v ?? "" }))}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="DNI">DNI</SelectItem>
                     <SelectItem value="CUIT">CUIT</SelectItem>
                     <SelectItem value="CUIL">CUIL</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
-                    <SelectItem value="Otro">Otro</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Nro. Documento</label>
-                <Input value={newClientData.numero_documento} onChange={(e) => setNewClientData((d) => ({ ...d, numero_documento: e.target.value }))} placeholder="12345678" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">CUIT</label>
-                <Input value={newClientData.cuit} onChange={(e) => setNewClientData((d) => ({ ...d, cuit: e.target.value }))} placeholder="20-12345678-9" />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Número de Documento</label>
+                <Input value={newClientData.numero_documento} onChange={(e) => setNewClientData((d) => ({ ...d, numero_documento: e.target.value }))} />
               </div>
             </div>
-            {/* Row 3: Situación IVA */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Situación IVA</label>
-                <Select value={newClientData.situacion_iva} onValueChange={(v) => setNewClientData((d) => ({ ...d, situacion_iva: v ?? "Consumidor final" }))}>
-                  <SelectTrigger><SelectValue placeholder="Situación IVA" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Consumidor final">Consumidor final</SelectItem>
-                    <SelectItem value="Responsable inscripto">Responsable inscripto</SelectItem>
-                    <SelectItem value="Monotributista">Monotributista</SelectItem>
-                    <SelectItem value="Exento">Exento</SelectItem>
-                  </SelectContent>
-                </Select>
+            {/* Domicilio + Maps */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Domicilio</label>
+              <Input value={newClientData.direccion} onChange={(e) => setNewClientData((d) => ({ ...d, direccion: e.target.value }))} />
+              <Input value={newClientData.maps_url} onChange={(e) => setNewClientData((d) => ({ ...d, maps_url: e.target.value }))} placeholder="Link de Google Maps personalizado (opcional)" className="text-xs h-8" />
+            </div>
+            {/* Teléfono + Email */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Teléfono</label>
+                <Input value={newClientData.telefono} onChange={(e) => setNewClientData((d) => ({ ...d, telefono: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">E-mail</label>
+                <Input type="email" value={newClientData.email} onChange={(e) => setNewClientData((d) => ({ ...d, email: e.target.value }))} />
               </div>
             </div>
-            {/* Row 4: Email, Teléfono */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Email</label>
-                <Input value={newClientData.email} onChange={(e) => setNewClientData((d) => ({ ...d, email: e.target.value }))} placeholder="email@ejemplo.com" type="email" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Teléfono</label>
-                <Input value={newClientData.telefono} onChange={(e) => setNewClientData((d) => ({ ...d, telefono: e.target.value }))} placeholder="11-1234-5678" />
-              </div>
-            </div>
-            {/* Row 5: Domicilio, Domicilio Fiscal */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Domicilio</label>
-                <Input value={newClientData.direccion} onChange={(e) => setNewClientData((d) => ({ ...d, direccion: e.target.value }))} placeholder="Calle 123" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Domicilio Fiscal</label>
-                <Input value={newClientData.domicilio_fiscal} onChange={(e) => setNewClientData((d) => ({ ...d, domicilio_fiscal: e.target.value }))} placeholder="Calle 456" />
-              </div>
-            </div>
-            {/* Row 6: Provincia, Localidad, CP, Barrio */}
-            <div className="grid grid-cols-4 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Provincia</label>
+            {/* Provincia + Localidad */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Provincia</label>
                 <Select value={newClientData.provincia} onValueChange={(v) => setNewClientData((d) => ({ ...d, provincia: v ?? "" }))}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
@@ -2932,59 +2905,68 @@ export default function VentasPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Localidad</label>
-                <Input value={newClientData.localidad} onChange={(e) => setNewClientData((d) => ({ ...d, localidad: e.target.value }))} placeholder="Localidad" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">C.P.</label>
-                <Input value={newClientData.codigo_postal} onChange={(e) => setNewClientData((d) => ({ ...d, codigo_postal: e.target.value }))} placeholder="1234" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Barrio</label>
-                <Input value={newClientData.barrio} onChange={(e) => setNewClientData((d) => ({ ...d, barrio: e.target.value }))} placeholder="Barrio" />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Localidad</label>
+                <Input value={newClientData.localidad} onChange={(e) => setNewClientData((d) => ({ ...d, localidad: e.target.value }))} />
               </div>
             </div>
-            {/* Row 7: Zona Entrega, Límite Crédito */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Zona de Entrega</label>
-                <Select value={newClientData.zona_entrega} onValueChange={(v) => setNewClientData((d) => ({ ...d, zona_entrega: v ?? "" }))}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar zona" /></SelectTrigger>
-                  <SelectContent>
-                    {zonasEntrega.map((z) => (
-                      <SelectItem key={z.id} value={z.id}>{z.nombre}{z.dias && z.dias.length > 0 ? ` — ${z.dias.join(", ")}` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {/* Barrio + CP */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Barrio / Zona</label>
+                <Input value={newClientData.barrio} onChange={(e) => setNewClientData((d) => ({ ...d, barrio: e.target.value }))} />
               </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Límite de Crédito</label>
-                <Input type="number" value={newClientData.limite_credito || ""} onChange={(e) => setNewClientData((d) => ({ ...d, limite_credito: Number(e.target.value) }))} placeholder="0" />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Código Postal</label>
+                <Input value={newClientData.codigo_postal} onChange={(e) => setNewClientData((d) => ({ ...d, codigo_postal: e.target.value }))} />
               </div>
             </div>
-            {/* Row 8: Vendedor, Maps URL */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Vendedor</label>
-                <Select value={newClientData.vendedor_id} onValueChange={(v) => setNewClientData((d) => ({ ...d, vendedor_id: v ?? "" }))}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar vendedor" /></SelectTrigger>
-                  <SelectContent>
-                    {sellers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Google Maps</label>
-                <Input value={newClientData.maps_url} onChange={(e) => setNewClientData((d) => ({ ...d, maps_url: e.target.value }))} placeholder="https://maps.google.com/..." />
-              </div>
+            {/* Zona de entrega */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Zona de entrega</label>
+              <Select value={newClientData.zona_entrega || "none"} onValueChange={(v) => setNewClientData((d) => ({ ...d, zona_entrega: v === "none" ? "" : (v ?? "") }))}>
+                <SelectTrigger>
+                  {newClientData.zona_entrega
+                    ? (zonasEntrega.find((z) => z.id === newClientData.zona_entrega)?.nombre ?? "Sin zona asignada")
+                    : "Sin zona asignada"}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin zona asignada</SelectItem>
+                  {zonasEntrega.map((z) => (
+                    <SelectItem key={z.id} value={z.id}>
+                      {z.nombre}{z.dias && z.dias.length > 0 ? ` — ${z.dias.join(", ")}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            {/* Row 9: Observación */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Observación</label>
-              <Input value={newClientData.observacion} onChange={(e) => setNewClientData((d) => ({ ...d, observacion: e.target.value }))} placeholder="Notas adicionales" />
+            {/* Vendedor */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Vendedor</label>
+              <Select value={newClientData.vendedor_id || "none"} onValueChange={(v) => setNewClientData((d) => ({ ...d, vendedor_id: v === "none" ? "" : (v ?? "") }))}>
+                <SelectTrigger>
+                  {newClientData.vendedor_id
+                    ? (sellers.find((s) => s.id === newClientData.vendedor_id)?.nombre ?? "Sin vendedor")
+                    : "Sin vendedor"}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin vendedor</SelectItem>
+                  {sellers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Límite crédito + Observación */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Límite de crédito</label>
+                <Input type="number" min={0} value={newClientData.limite_credito || ""} onChange={(e) => setNewClientData((d) => ({ ...d, limite_credito: Math.max(0, Number(e.target.value)) }))} placeholder="0 = sin límite" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Observación</label>
+                <Input value={newClientData.observacion} onChange={(e) => setNewClientData((d) => ({ ...d, observacion: e.target.value }))} />
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
