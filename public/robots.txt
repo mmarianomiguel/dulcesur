@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /productos
+Allow: /productos/*
+Allow: /cuenta
+Allow: /info
+Allow: /info/*
+
+Disallow: /login
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /api/
+
+Sitemap: https://dulcesur.com/sitemap.xml
