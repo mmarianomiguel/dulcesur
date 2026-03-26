@@ -2095,8 +2095,8 @@ export default function ListadoVentasPage() {
                   </div>
                 )}
 
-                {/* Cuenta de transferencia - show for transferencia OR mixto */}
-                {(() => { const fp = (((poSelectedPedido as any).forma_pago || "") + " " + (poSelectedPedido.metodo_pago || "")).toLowerCase(); return fp.includes("transferencia") || fp.includes("mixto"); })() && (
+                {/* Cuenta de transferencia - only show when there's actual transfer payment */}
+                {(() => { const fp = (((poSelectedPedido as any).forma_pago || "") + " " + (poSelectedPedido.metodo_pago || "")).toLowerCase(); const hasTransf = detailPagos.some((p) => p.metodo === "Transferencia") || (fp.includes("transferencia") && !fp.includes("mixto")); return hasTransf; })() && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">

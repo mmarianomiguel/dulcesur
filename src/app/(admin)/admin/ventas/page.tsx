@@ -1421,6 +1421,10 @@ export default function VentasPage() {
       setErrorModal({ open: true, message: "Debes seleccionar un cliente para usar Cuenta Corriente." });
       return;
     }
+    if (formaPago === "Pendiente" && !clientId) {
+      setErrorModal({ open: true, message: "Debes seleccionar un cliente para envíos pendientes de cobro." });
+      return;
+    }
     if (!mixtoValid) {
       setErrorModal({ open: true, message: "Los montos del pago mixto no suman el total." });
       return;
@@ -1468,9 +1472,10 @@ export default function VentasPage() {
           descuento_porcentaje: descuento,
           recargo_porcentaje: recargo,
           total,
-          estado: "cerrada",
+          estado: formaPago === "Pendiente" ? "pendiente" : "cerrada",
+          entregado: formaPago === "Pendiente" ? false : undefined,
           observacion: despacho,
-          metodo_entrega: deliveryMethod === "delivery" ? "envio" : "retiro",
+          metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
           lista_precio_id: listaPrecioId || null,
           ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
             cuenta_transferencia_id: cuentaBancariaId,
@@ -1578,7 +1583,10 @@ export default function VentasPage() {
         const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
         const hora = nowTimeARG();
 
-        if (formaPago === "Cuenta Corriente") {
+        // Pendiente de cobro: skip all payment processing
+        if (formaPago === "Pendiente") {
+          // No caja, no CC — payment happens at delivery
+        } else if (formaPago === "Cuenta Corriente") {
           if (clientId) {
             const { data: freshCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
             const saldoActual = freshCC?.saldo ?? selectedClient?.saldo ?? 0;
@@ -1679,7 +1687,7 @@ export default function VentasPage() {
 
         // Collect pending balance if toggled
         // Collect ONLY the pre-existing debt (not what was just added by this sale's CC)
-        if (cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
+        if (formaPago !== "Pendiente" && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
           const saldoActualDB = saldoRealAntesDeTodo;
           if (saldoActualDB > 0) {
             const saldoPendiente = saldoActualDB;
@@ -2176,12 +2184,13 @@ export default function VentasPage() {
           )}
 
           {/* Payment method grid */}
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-5 gap-1.5">
             {[
               { key: "Efectivo", label: "Efect.", icon: DollarSign },
               { key: "Transferencia", label: "Transf.", icon: ArrowLeftRight },
               { key: "Mixto", label: "Mixto", icon: Shuffle },
               { key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen },
+              { key: "Pendiente", label: "Pend.", icon: Truck },
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -2197,6 +2206,14 @@ export default function VentasPage() {
               </button>
             ))}
           </div>
+
+          {/* Pendiente de cobro info */}
+          {formaPago === "Pendiente" && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
+              <Truck className="w-4 h-4 shrink-0" />
+              <span>No se registra pago. Se cobra al entregar desde la hoja de ruta.</span>
+            </div>
+          )}
 
           {/* Transfer surcharge info */}
           {formaPago === "Transferencia" && (
