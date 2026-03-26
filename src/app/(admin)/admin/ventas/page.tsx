@@ -283,7 +283,7 @@ export default function VentasPage() {
     const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }] = await Promise.all([
       supabase.from("productos").select("*").eq("activo", true).order("nombre").range(0, 9999),
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
-      supabase.from("usuarios").select("id, nombre, email, rol, activo"),
+      supabase.from("usuarios").select("id, nombre, email, rol, activo").eq("activo", true).eq("rol", "vendedor"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
     ]);
     setProducts(prods || []);
