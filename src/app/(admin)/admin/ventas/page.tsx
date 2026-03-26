@@ -232,7 +232,8 @@ export default function VentasPage() {
 
   // create client from POS
   const [createClientOpen, setCreateClientOpen] = useState(false);
-  const [newClientData, setNewClientData] = useState({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "" });
+  const [newClientData, setNewClientData] = useState({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "", zona_entrega: "", limite_credito: 0, maps_url: "" });
+  const [zonasEntrega, setZonasEntrega] = useState<{ id: string; nombre: string }[]>([]);
   const [creatingClient, setCreatingClient] = useState(false);
 
   // presentaciones
@@ -288,16 +289,18 @@ export default function VentasPage() {
 
   // ---------- data fetch ----------
   const fetchData = useCallback(async () => {
-    const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }] = await Promise.all([
+    const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData }] = await Promise.all([
       supabase.from("productos").select("*").eq("activo", true).order("nombre").range(0, 9999),
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo").eq("activo", true).eq("rol", "vendedor"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
+      supabase.from("zonas_entrega").select("id, nombre").order("nombre"),
     ]);
     setProducts(prods || []);
     setClients((cls || []) as unknown as Cliente[]);
     setSellers((sls || []) as unknown as Usuario[]);
     setListasPrecio((listas || []) as any[]);
+    setZonasEntrega(zonasData || []);
     const defaultList = (listas || []).find((l: any) => l.es_default);
     if (defaultList) setListaPrecioId((defaultList as any).id);
     if (sls && sls.length > 0) setVendedorId(sls[0].id);
@@ -1360,9 +1363,12 @@ export default function VentasPage() {
           provincia: newClientData.provincia || null,
           localidad: newClientData.localidad || null,
           codigo_postal: newClientData.codigo_postal || null,
-          barrio: (newClientData as any).barrio || null,
+          barrio: newClientData.barrio || null,
           observacion: newClientData.observacion || null,
           vendedor_id: newClientData.vendedor_id || null,
+          zona_entrega_id: newClientData.zona_entrega || null,
+          limite_credito: newClientData.limite_credito || 0,
+          maps_url: newClientData.maps_url || null,
           activo: true,
           saldo: 0,
         })
@@ -1373,7 +1379,7 @@ export default function VentasPage() {
         setClientId(data.id);
         setCreateClientOpen(false);
         setClientDialogOpen(false);
-        setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "" });
+        setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "", zona_entrega: "", limite_credito: 0, maps_url: "" });
       }
     } finally {
       setCreatingClient(false);
@@ -2798,7 +2804,7 @@ export default function VentasPage() {
               size="sm"
               variant="outline"
               onClick={() => {
-                setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "" });
+                setNewClientData({ nombre: "", email: "", telefono: "", cuit: "", direccion: "", tipo_documento: "", numero_documento: "", situacion_iva: "Consumidor final", razon_social: "", domicilio_fiscal: "", provincia: "", localidad: "", codigo_postal: "", barrio: "", observacion: "", vendedor_id: "", zona_entrega: "", limite_credito: 0, maps_url: "" });
                 setCreateClientOpen(true);
               }}
             >
@@ -2917,7 +2923,25 @@ export default function VentasPage() {
                 <Input value={newClientData.barrio} onChange={(e) => setNewClientData((d) => ({ ...d, barrio: e.target.value }))} placeholder="Barrio" />
               </div>
             </div>
-            {/* Row 7: Vendedor, Observación */}
+            {/* Row 7: Zona Entrega, Límite Crédito */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Zona de Entrega</label>
+                <Select value={newClientData.zona_entrega} onValueChange={(v) => setNewClientData((d) => ({ ...d, zona_entrega: v ?? "" }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar zona" /></SelectTrigger>
+                  <SelectContent>
+                    {zonasEntrega.map((z) => (
+                      <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Límite de Crédito</label>
+                <Input type="number" value={newClientData.limite_credito || ""} onChange={(e) => setNewClientData((d) => ({ ...d, limite_credito: Number(e.target.value) }))} placeholder="0" />
+              </div>
+            </div>
+            {/* Row 8: Vendedor, Maps URL */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Vendedor</label>
@@ -2931,9 +2955,14 @@ export default function VentasPage() {
                 </Select>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Observación</label>
-                <Input value={newClientData.observacion} onChange={(e) => setNewClientData((d) => ({ ...d, observacion: e.target.value }))} placeholder="Notas adicionales" />
+                <label className="text-xs font-medium text-muted-foreground">Google Maps</label>
+                <Input value={newClientData.maps_url} onChange={(e) => setNewClientData((d) => ({ ...d, maps_url: e.target.value }))} placeholder="https://maps.google.com/..." />
               </div>
+            </div>
+            {/* Row 9: Observación */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Observación</label>
+              <Input value={newClientData.observacion} onChange={(e) => setNewClientData((d) => ({ ...d, observacion: e.target.value }))} placeholder="Notas adicionales" />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
