@@ -1945,8 +1945,11 @@ export default function ListadoVentasPage() {
                   </div>
                 </div>
 
-                {/* Registrar cobro — for retiro orders without caja entry */}
-                {detailPagos.length === 0 && !isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
+                {/* Registrar cobro — only for tienda orders with pending amount */}
+                {poSelectedPedido.isOnline && !isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
+                  const pagado = detailPagos.reduce((s, p) => s + p.monto, 0);
+                  const pendiente = poSelectedPedido.total - pagado;
+                  if (pendiente < 1) return null; // Already fully paid
                   const cobroMetodo = (poSelectedPedido as any)._cobroMetodo || "Efectivo";
                   const cobroMixtoEf = (poSelectedPedido as any)._cobroMixtoEf || 0;
                   const cobroMixtoTr = (poSelectedPedido as any)._cobroMixtoTr || 0;
@@ -1957,8 +1960,11 @@ export default function ListadoVentasPage() {
                       <div className="flex items-center gap-2">
                         <DollarSign className="w-4 h-4 text-emerald-600" />
                         <p className="text-sm font-semibold text-emerald-800">Registrar cobro</p>
-                        <span className="ml-auto text-sm font-bold text-emerald-700">{formatCurrency(poSelectedPedido.total)}</span>
+                        <span className="ml-auto text-sm font-bold text-emerald-700">Pendiente: {formatCurrency(pendiente)}</span>
                       </div>
+                      {pagado > 0 && (
+                        <p className="text-xs text-emerald-600">Ya pagado: {formatCurrency(pagado)} — Resta: {formatCurrency(pendiente)}</p>
+                      )}
 
                       {/* Payment method selector — same style as POS */}
                       <div className="grid grid-cols-4 gap-1.5">
@@ -2000,7 +2006,7 @@ export default function ListadoVentasPage() {
                       <Button
                         size="sm"
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={cobroMetodo === "Mixto" && (cobroMixtoEf + cobroMixtoTr) < poSelectedPedido.total * 0.99}
+                        disabled={cobroMetodo === "Mixto" && (cobroMixtoEf + cobroMixtoTr) < pendiente * 0.99}
                         onClick={async () => {
                           const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
                           const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
@@ -2014,21 +2020,18 @@ export default function ListadoVentasPage() {
                             if (cobroMixtoEf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: ventaId, referencia_tipo: "venta" });
                             if (cobroMixtoTr > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: ventaId, referencia_tipo: "venta" });
                           } else if (cobroMetodo === "Cuenta Corriente") {
-                            // CC: don't create caja entry, update client saldo
                             const clienteId = (poSelectedPedido as any).cliente_id;
                             if (clienteId) {
                               const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-                              const newSaldo = (cl?.saldo || 0) + poSelectedPedido.total;
+                              const newSaldo = (cl?.saldo || 0) + pendiente;
                               await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
-                              await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, tipo: "cargo", descripcion: `Cobro #${poSelectedPedido.numero}`, monto: poSelectedPedido.total, saldo: newSaldo, comprobante: poSelectedPedido.numero, referencia_id: ventaId, referencia_tipo: "venta" });
+                              await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, tipo: "cargo", descripcion: `Cobro #${poSelectedPedido.numero}`, monto: pendiente, saldo: newSaldo, comprobante: poSelectedPedido.numero, referencia_id: ventaId, referencia_tipo: "venta" });
                             }
                           } else {
-                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}`, metodo_pago: cobroMetodo, monto: poSelectedPedido.total, referencia_id: ventaId, referencia_tipo: "venta" });
+                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}`, metodo_pago: cobroMetodo, monto: pendiente, referencia_id: ventaId, referencia_tipo: "venta" });
                           }
                           if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
-                          // Update forma_pago on the venta
                           if (ventaId) {
-                            await supabase.from("ventas").update({ forma_pago: cobroMetodo }).eq("id", ventaId);
                             const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
                             setDetailPagos((movs || []).map((m: any) => ({ metodo: m.metodo_pago, monto: m.monto })));
                           }
