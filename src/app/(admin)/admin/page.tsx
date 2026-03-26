@@ -30,6 +30,9 @@ import {
   MapPin,
   AlertTriangle,
   PackageCheck,
+  ArrowLeftRight,
+  Shuffle,
+  BookOpen,
 } from "lucide-react";
 import {
   Dialog,
@@ -173,7 +176,7 @@ export default function DashboardPage() {
   const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
   const [pedidoDetailPagos, setPedidoDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client" }>({ open: false, venta: null, pendiente: 0, type: "paid" });
+  const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMixtoEf?: number; cobroMixtoTr?: number }>({ open: false, venta: null, pendiente: 0, type: "paid" });
 
   // ─── Combo data for preview ───
   const [comboProductIds, setComboProductIds] = useState<Set<string>>(new Set());
@@ -472,35 +475,35 @@ export default function DashboardPage() {
   };
 
   const confirmDelivery = async () => {
-    const { venta, pendiente, type } = deliveryConfirm;
+    const { venta, pendiente, type, cobroMetodo, cobroMixtoEf, cobroMixtoTr } = deliveryConfirm;
     if (!venta) return;
     try {
-    // no_client: still allow delivery, register payment as Efectivo
-    if (type === "no_client" && pendiente > 0) {
-      const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-      const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
-      await supabase.from("caja_movimientos").insert({
-        fecha: hoy, hora, tipo: "ingreso",
-        descripcion: `Cobro entrega #${venta.numero}`,
-        metodo_pago: "Efectivo", monto: pendiente,
-        referencia_id: venta.id, referencia_tipo: "venta",
-      });
-    }
-
     setActionLoading(venta.id);
     setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" });
 
-    // Register efectivo payment if unpaid
-    if (type === "unpaid" && pendiente > 0) {
+    // Register payment if unpaid
+    if ((type === "unpaid" || type === "no_client") && pendiente > 0) {
       const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
       const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
       const clienteNombre = (venta as any).clientes?.nombre || "";
-      await supabase.from("caja_movimientos").insert({
-        fecha: hoy, hora, tipo: "ingreso",
-        descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`,
-        metodo_pago: "Efectivo", monto: pendiente,
-        referencia_id: venta.id, referencia_tipo: "venta",
-      });
+      const metodo = cobroMetodo || "Efectivo";
+      const entries: any[] = [];
+
+      if (metodo === "Mixto") {
+        if ((cobroMixtoEf || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: venta.id, referencia_tipo: "venta" });
+        if ((cobroMixtoTr || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: venta.id, referencia_tipo: "venta" });
+      } else if (metodo === "Cuenta Corriente") {
+        const clienteId = (venta as any).cliente_id;
+        if (clienteId) {
+          const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+          const newSaldo = (cl?.saldo || 0) + pendiente;
+          await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
+          await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Entrega #${venta.numero}`, descripcion: `Cobro entrega — ${clienteNombre}`, debe: pendiente, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: venta.id });
+        }
+      } else {
+        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: metodo, monto: pendiente, referencia_id: venta.id, referencia_tipo: "venta" });
+      }
+      if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
     }
 
     await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id);
@@ -1115,30 +1118,56 @@ export default function DashboardPage() {
                 <p className="text-xs text-emerald-600 mt-1">Pago completo — listo para entregar</p>
               </div>
             )}
-            {deliveryConfirm.type === "unpaid" && deliveryConfirm.venta && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2">
-                <p className="text-sm text-amber-900">
-                  <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "El cliente"}</span> tiene{" "}
-                  <span className="font-bold text-amber-700">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.pendiente)}</span> sin cobrar.
-                </p>
-                <p className="text-xs text-amber-700">Se registrará como cobro en efectivo en la caja diaria.</p>
-              </div>
-            )}
-            {deliveryConfirm.type === "no_client" && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2">
-                <p className="text-sm text-amber-900">
-                  Este pedido tiene <span className="font-bold">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.pendiente)}</span> sin cobrar y no tiene cliente asignado.
-                </p>
-                <p className="text-xs text-amber-700">Se registrará como cobro en efectivo.</p>
-              </div>
-            )}
+            {(deliveryConfirm.type === "unpaid" || deliveryConfirm.type === "no_client") && deliveryConfirm.venta && (() => {
+              const pend = deliveryConfirm.pendiente;
+              const metodo = deliveryConfirm.cobroMetodo || "Efectivo";
+              const mixEf = deliveryConfirm.cobroMixtoEf || 0;
+              const mixTr = deliveryConfirm.cobroMixtoTr || 0;
+              const setField = (field: string, val: any) => setDeliveryConfirm((prev) => ({ ...prev, [field]: val }));
+              return (
+                <div className="space-y-3">
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                    <p className="text-sm text-amber-900">
+                      <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "Cliente"}</span> debe{" "}
+                      <span className="font-bold text-amber-700">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(pend)}</span>
+                    </p>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground">Método de pago</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { key: "Efectivo", label: "Efect.", icon: DollarSign },
+                      { key: "Transferencia", label: "Transf.", icon: ArrowLeftRight },
+                      { key: "Mixto", label: "Mixto", icon: Shuffle },
+                      { key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen },
+                    ].map(({ key, label, icon: Icon }) => (
+                      <button key={key} onClick={() => setField("cobroMetodo", key)}
+                        className={`flex flex-col items-center justify-center gap-0.5 rounded-lg border-2 p-1.5 transition-all text-[10px] font-medium ${metodo === key ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>
+                        <Icon className="w-3.5 h-3.5" />{label}
+                      </button>
+                    ))}
+                  </div>
+                  {metodo === "Mixto" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-gray-500">Efectivo</label>
+                        <input type="number" value={mixEf || ""} onChange={(e) => setField("cobroMixtoEf", Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500">Transferencia</label>
+                        <input type="number" value={mixTr || ""} onChange={(e) => setField("cobroMixtoTr", Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" })}>
                 Cancelar
               </Button>
               <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmDelivery}>
                 <CheckCircle className="w-4 h-4 mr-1.5" />
-                {deliveryConfirm.type === "paid" ? "Marcar entregado" : "Cobrar y entregar"}
+                {deliveryConfirm.type === "paid" ? "Marcar entregado" : `Cobrar y entregar`}
               </Button>
             </div>
           </div>
