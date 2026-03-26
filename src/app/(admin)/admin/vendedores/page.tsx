@@ -179,7 +179,7 @@ export default function VendedoresPage() {
 
     const { data: ventasData } = await supabase
       .from("ventas")
-      .select("id, vendedor_id, total")
+      .select("id, vendedor_id, total, tipo_comprobante")
       .neq("estado", "anulada")
       .gte("fecha", dateRange.from)
       .lte("fecha", dateRange.to);
@@ -247,7 +247,9 @@ export default function VendedoresPage() {
       const vid = venta.vendedor_id;
       if (!vid) continue;
       if (!summary[vid]) summary[vid] = { total: 0, comisionable: 0, excluidoPorCategoria: {} };
-      summary[vid].total += venta.total;
+      const isNC = ((venta as any).tipo_comprobante || "").toLowerCase().includes("nota de crédito");
+      const sign = isNC ? -1 : 1;
+      summary[vid].total += venta.total * sign;
 
       const items = itemsByVenta[venta.id] || [];
       const vendExcl = exclMap[vid] || new Set<string>();
@@ -255,10 +257,10 @@ export default function VendedoresPage() {
       for (const item of items) {
         const catId = item.producto_id ? productCategories[item.producto_id] : null;
         if (catId && vendExcl.has(catId)) {
-          summary[vid].excluidoPorCategoria[catId] = (summary[vid].excluidoPorCategoria[catId] || 0) + item.subtotal;
+          summary[vid].excluidoPorCategoria[catId] = (summary[vid].excluidoPorCategoria[catId] || 0) + item.subtotal * sign;
           continue;
         }
-        comisionable += item.subtotal;
+        comisionable += item.subtotal * sign;
       }
       summary[vid].comisionable += comisionable;
     }
@@ -273,7 +275,7 @@ export default function VendedoresPage() {
 
     const { data: ventasData } = await supabase
       .from("ventas")
-      .select("id, fecha, hora, nro_comprobante, cliente_id, total, vendedor_id")
+      .select("id, fecha, hora, nro_comprobante, cliente_id, total, vendedor_id, tipo_comprobante")
       .neq("estado", "anulada")
       .eq("vendedor_id", vendedorId)
       .gte("fecha", dateRange.from)
@@ -357,6 +359,8 @@ export default function VendedoresPage() {
     }
 
     const detalle: VentaDetalle[] = ventasData.map((v) => {
+      const isNC = ((v as any).tipo_comprobante || "").toLowerCase().includes("nota de crédito");
+      const sign = isNC ? -1 : 1;
       const items = itemsByVenta[v.id] || [];
       let comisionable = 0;
       for (const item of items) {
@@ -364,15 +368,15 @@ export default function VendedoresPage() {
         if (catId && vendExcl.has(catId)) continue;
         comisionable += item.subtotal;
       }
-      const comision = comisionable * (comisionPct / 100);
+      const comision = comisionable * (comisionPct / 100) * sign;
 
       return {
         id: v.id,
         fecha: v.fecha,
         hora: v.hora || "",
-        nro_comprobante: v.nro_comprobante,
+        nro_comprobante: (isNC ? "NC " : "") + (v.nro_comprobante || ((v as any).tipo_comprobante || "")),
         cliente_nombre: v.cliente_id ? (clienteMap[v.cliente_id] || "Cliente") : "Consumidor final",
-        total: v.total,
+        total: v.total * sign,
         comision,
       };
     });

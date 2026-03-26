@@ -374,7 +374,7 @@ export default function NotaCreditoPage() {
         tipo_comprobante: tipoComprobante,
         fecha: hoy,
         cliente_id: clientId,
-        vendedor_id: null,
+        vendedor_id: origenId ? (clientVentas.find((v) => v.id === origenId)?.vendedor_id || null) : null,
         forma_pago: metodoDev,
         subtotal: total,
         descuento_porcentaje: 0,
@@ -717,9 +717,9 @@ export default function NotaCreditoPage() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">Comprobante de origen (opcional)</Label>
-                      <Select value={origenId} onValueChange={(v) => { setOrigenId(v || ""); setItems([]); }}>
+                      <Select value={origenId || "none"} onValueChange={(v) => { setOrigenId(v === "none" ? "" : (v || "")); setItems([]); }}>
                         <SelectTrigger className="w-full truncate">
-                          <SelectValue placeholder="Sin referencia" />
+                          {origenId && origenId !== "none" ? (() => { const v = clientVentas.find((cv) => cv.id === origenId); return v ? `${v.tipo_comprobante} ${v.numero} — ${formatCurrency(v.total)}` : "Sin referencia"; })() : "Sin referencia"}
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Sin referencia</SelectItem>
