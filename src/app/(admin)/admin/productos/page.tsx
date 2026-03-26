@@ -2060,6 +2060,21 @@ export default function ProductosPage() {
                       <td className="py-3 px-4 font-medium max-w-xs">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="truncate max-w-[250px]" title={product.nombre}>{product.nombre}</span>
+                          {product.visibilidad === "oculto" && (
+                            <button
+                              title="Oculto en la tienda — click para mostrar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                supabase.from("productos").update({ visibilidad: "visible" }).eq("id", product.id).then(() => {
+                                  setProducts((prev) => prev.map((p) => p.id === product.id ? { ...p, visibilidad: "visible" } : p));
+                                  showAdminToast(`${product.nombre} visible en la tienda`, "success");
+                                });
+                              }}
+                              className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition"
+                            >
+                              <EyeOff className="w-3 h-3" /> Oculto
+                            </button>
+                          )}
                           {(product as any).es_combo && (
                             <Badge className="text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700 border border-emerald-300">COMBO</Badge>
                           )}
