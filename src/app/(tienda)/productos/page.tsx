@@ -157,7 +157,7 @@ function ProductosContent() {
   const subcategoriaId = searchParams.get("subcategoria");
   const marcaParam = searchParams.get("marca");
   const searchQuery = searchParams.get("q") || "";
-  const sort = searchParams.get("sort") || "recientes";
+  const sort = searchParams.get("sort") || "az";
   const page = Number(searchParams.get("page") || "1");
   const precioMin = searchParams.get("precio_min") || "";
   const precioMax = searchParams.get("precio_max") || "";

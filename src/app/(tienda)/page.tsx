@@ -726,7 +726,7 @@ export default function TiendaPage() {
         } else if (orden === "precio_desc") {
           query = query.order("precio", { ascending: false });
         } else {
-          query = query.order("created_at", { ascending: false });
+          query = query.order("nombre", { ascending: true });
         }
 
         const { data: prods } = await query.limit(maxItems);
