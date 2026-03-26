@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       cloudinary.uploader
         .upload_stream(
           {
-            folder: "productos",
+            folder: "dulcesur",
             resource_type: "image",
             transformation: [{ width: 1200, crop: "limit", quality: "auto:good", fetch_format: "auto" }],
           },
