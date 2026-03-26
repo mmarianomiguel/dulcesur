@@ -184,6 +184,7 @@ function clasificarProducto(nombre: string): { categoria: string; subcategoria: 
 }
 
 export default function ListaPreciosPage() {
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());

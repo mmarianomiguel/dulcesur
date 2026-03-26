@@ -204,7 +204,7 @@ export default function ComprasPage() {
     setAnulando(false);
     setAnularCompraDialog(false);
   };
-  const [preciosModificados, setPreciosModificados] = useState<{ nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[]>([]);
+  const [preciosModificados, setPreciosModificados] = useState<{ producto_id?: string; nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[]>([]);
 
   // Product search for adding items
   const [productSearch, setProductSearch] = useState("");
@@ -410,7 +410,7 @@ export default function ComprasPage() {
     setSaveError("");
     setShowConfirmDialog(false);
 
-    const preciosActualizados: { nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[] = [];
+    const preciosActualizados: { producto_id?: string; nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[] = [];
 
     try {
       let numero = numeroCompra.trim();
@@ -526,6 +526,7 @@ export default function ComprasPage() {
               })
               .eq("id", item.producto_id);
             preciosActualizados.push({
+              producto_id: item.producto_id,
               nombre: item.nombre,
               codigo: item.codigo,
               precioAnterior: item.precio_original,
@@ -1252,22 +1253,10 @@ export default function ComprasPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
-              // Load current prices of products in this purchase
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
               const productIds = detailItems.map((i) => i.producto_id).filter(Boolean);
               if (productIds.length === 0) return;
-              const { data: prods } = await supabase.from("productos").select("id, codigo, nombre, precio").in("id", productIds);
-              if (!prods || prods.length === 0) return;
-              const lista = prods.map((p) => ({
-                nombre: p.nombre,
-                codigo: p.codigo || "",
-                precioAnterior: 0,
-                precioNuevo: p.precio,
-                costoAnterior: 0,
-                costoNuevo: 0,
-              }));
-              setPreciosModificados(lista);
-              setShowPreciosDialog(true);
+              window.open(`/admin/productos/lista-precios?ids=${productIds.join(",")}`, "_blank");
             }}>
               <Printer className="w-3.5 h-3.5" />
               Carteles de precio
@@ -1402,27 +1391,18 @@ export default function ComprasPage() {
               </div>
               <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
                 <Button variant="outline" className="flex-1 gap-2" onClick={() => {
-                  const { jsPDF } = require("jspdf");
-                  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-                  const pw2 = pdf.internal.pageSize.getWidth();
-                  const ph2 = pdf.internal.pageSize.getHeight();
-                  const cols2 = 3, maxRows2 = 4;
-                  const tagW2 = (pw2 - 20) / cols2, tagH2 = (ph2 - 20) / maxRows2;
-                  let col2 = 0, row2 = 0;
-                  for (const p of preciosModificados) {
-                    if (row2 >= maxRows2) { pdf.addPage(); row2 = 0; col2 = 0; }
-                    const x = 10 + col2 * tagW2, yp = 10 + row2 * tagH2;
-                    pdf.setDrawColor(200); pdf.setLineDashPattern([2, 2], 0); pdf.rect(x, yp, tagW2, tagH2); pdf.setLineDashPattern([], 0);
-                    pdf.setFontSize(10); pdf.setFont("helvetica", "bold"); pdf.setTextColor(0);
-                    pdf.text(pdf.splitTextToSize(p.nombre, tagW2 - 8).slice(0, 2), x + tagW2 / 2, yp + 10, { align: "center" });
-                    pdf.setFontSize(7); pdf.setFont("helvetica", "normal"); pdf.setTextColor(120);
-                    pdf.text(p.codigo || "", x + tagW2 / 2, yp + 20, { align: "center" }); pdf.setTextColor(0);
-                    pdf.setFontSize(28); pdf.setFont("helvetica", "bold");
-                    pdf.text(formatCurrency(p.precioNuevo), x + tagW2 / 2, yp + tagH2 - 10, { align: "center" });
-                    col2++; if (col2 >= cols2) { col2 = 0; row2++; }
+                  // Get product IDs and open Lista de Precios page with pre-selection
+                  const ids = preciosModificados.map((p) => {
+                    // Find product ID by codigo
+                    return p.codigo; // Will search by code in the page
+                  }).filter(Boolean);
+                  // Use the detail items to get real product IDs
+                  const productIds = detailItems?.map((i: any) => i.producto_id).filter(Boolean) || [];
+                  if (productIds.length > 0) {
+                    window.open(`/admin/productos/lista-precios?ids=${productIds.join(",")}`, "_blank");
+                  } else {
+                    showAdminToast("No se encontraron productos", "error");
                   }
-                  pdf.save(`Carteles_Precios_${todayString()}.pdf`);
-                  showAdminToast("PDF de carteles generado", "success");
                 }}>
                   <Printer className="w-4 h-4" />
                   Imprimir carteles
@@ -1646,41 +1626,10 @@ export default function ComprasPage() {
             </div>
             <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
               <Button variant="outline" className="flex-1 gap-2" onClick={() => {
-                const { jsPDF } = require("jspdf");
-                const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-                const pw = pdf.internal.pageSize.getWidth();
-                const ph = pdf.internal.pageSize.getHeight();
-                const cols = 3, maxRows = 4;
-                const tagW = (pw - 20) / cols;
-                const tagH = (ph - 20) / maxRows;
-                let col = 0, row = 0;
-                for (const p of preciosModificados) {
-                  if (row >= maxRows) { pdf.addPage(); row = 0; col = 0; }
-                  const x = 10 + col * tagW;
-                  const y = 10 + row * tagH;
-                  pdf.setDrawColor(200);
-                  pdf.setLineDashPattern([2, 2], 0);
-                  pdf.rect(x, y, tagW, tagH);
-                  pdf.setLineDashPattern([], 0);
-                  pdf.setFontSize(10);
-                  pdf.setFont("helvetica", "bold");
-                  pdf.setTextColor(0);
-                  const nameLines = pdf.splitTextToSize(p.nombre, tagW - 8);
-                  pdf.text(nameLines.slice(0, 2), x + tagW / 2, y + 10, { align: "center" });
-                  pdf.setFontSize(7);
-                  pdf.setFont("helvetica", "normal");
-                  pdf.setTextColor(120);
-                  pdf.text(p.codigo || "", x + tagW / 2, y + 20, { align: "center" });
-                  pdf.setTextColor(0);
-                  pdf.setFontSize(28);
-                  pdf.setFont("helvetica", "bold");
-                  const fmtPrice = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(p.precioNuevo);
-                  pdf.text(fmtPrice, x + tagW / 2, y + tagH - 10, { align: "center" });
-                  col++;
-                  if (col >= cols) { col = 0; row++; }
+                const ids = preciosModificados.map((p) => p.producto_id).filter(Boolean);
+                if (ids.length > 0) {
+                  window.open(`/admin/productos/lista-precios?ids=${ids.join(",")}`, "_blank");
                 }
-                pdf.save(`Carteles_Precios_${todayString()}.pdf`);
-                showAdminToast("PDF de carteles generado", "success");
               }}>
                 <Printer className="w-4 h-4" />
                 Imprimir carteles de precio
