@@ -336,7 +336,7 @@ export default function ListadoVentasPage() {
       if (tc) {
         setReceiptConfig((prev) => ({
           ...prev,
-          logoUrl: prev.logoUrl || tc.logo_url || "",
+          logoUrl: prev.logoUrl || "https://res.cloudinary.com/dss3lnovd/image/upload/v1774505786/dulcesur/logo-dulcesur-negro.jpg",
           empresaWeb: prev.empresaWeb || tc.url_tienda || "",
         }));
       }

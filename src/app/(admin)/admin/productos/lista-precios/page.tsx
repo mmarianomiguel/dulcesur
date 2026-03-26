@@ -211,7 +211,19 @@ export default function ListaPreciosPage() {
       const savedConfig = localStorage.getItem("listaPreciosConfig");
       if (savedConfig) setConfig({ ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) });
       const savedLogo = localStorage.getItem("listaPreciosLogo");
-      if (savedLogo) setLogoBase64(savedLogo);
+      if (savedLogo) {
+        setLogoBase64(savedLogo);
+      } else {
+        // Auto-load default logo
+        fetch("https://res.cloudinary.com/dss3lnovd/image/upload/v1774505786/dulcesur/logo-dulcesur-negro.jpg")
+          .then((r) => r.blob())
+          .then((blob) => {
+            const reader = new FileReader();
+            reader.onloadend = () => { if (reader.result) setLogoBase64(reader.result as string); };
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => {});
+      }
     } catch (err) { console.error("Parse error:", err); }
   }, []);
 
