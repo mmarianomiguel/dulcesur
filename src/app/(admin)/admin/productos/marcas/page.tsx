@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Tag, Package, Loader2, FolderTree, Layers, AlertTriangle, ArrowRightLeft } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, Package, Loader2, FolderTree, Layers, AlertTriangle, ArrowRightLeft, Lock, LockOpen } from "lucide-react";
 
 // ─── Shared modules ───
 import { useAsyncData } from "@/hooks/use-async-data";
@@ -237,7 +237,7 @@ export default function MarcasPage() {
   const fetchCategorías = useCallback(async () => {
     setCatLoading(true);
     const [{ data: cats }, { data: subs }, { data: prods }] = await Promise.all([
-      supabase.from("categorias").select("id, nombre").order("nombre"),
+      supabase.from("categorias").select("id, nombre, restringida").order("nombre"),
       supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
       supabase.from("productos").select("categoria_id, subcategoria_id"),
     ]);
@@ -427,12 +427,27 @@ export default function MarcasPage() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b bg-muted/50"><th className="text-left px-4 py-3 font-medium">Nombre</th><th className="text-left px-4 py-3 font-medium">Productos</th><th className="text-right px-4 py-3 font-medium">Acciones</th></tr></thead>
+                    <thead><tr className="border-b bg-muted/50"><th className="text-left px-4 py-3 font-medium">Nombre</th><th className="text-left px-4 py-3 font-medium">Productos</th><th className="text-center px-4 py-3 font-medium">Visibilidad</th><th className="text-right px-4 py-3 font-medium">Acciones</th></tr></thead>
                     <tbody>
                       {filteredCats.map((c) => (
                         <tr key={c.id} className="border-b hover:bg-muted/30">
                           <td className="px-4 py-3 font-medium">{c.nombre}</td>
                           <td className="px-4 py-3"><Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{c.producto_count}</Badge></td>
+                          <td className="px-4 py-3 text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`gap-1.5 text-xs ${c.restringida ? "text-amber-600 hover:text-amber-700" : "text-emerald-600 hover:text-emerald-700"}`}
+                              onClick={async () => {
+                                const newVal = !c.restringida;
+                                await supabase.from("categorias").update({ restringida: newVal }).eq("id", c.id);
+                                setCategorías((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, restringida: newVal } : cat));
+                                showAdminToast(newVal ? `"${c.nombre}" restringida — solo clientes autorizados` : `"${c.nombre}" pública — visible para todos`, "success");
+                              }}
+                            >
+                              {c.restringida ? <><Lock className="w-3.5 h-3.5" /> Restringida</> : <><LockOpen className="w-3.5 h-3.5" /> Pública</>}
+                            </Button>
+                          </td>
                           <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
                             <Button variant="ghost" size="icon" onClick={() => { setEditingCat(c); setCatNombre(c.nombre); setCatDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button>
                             <Button variant="ghost" size="icon" onClick={() => handleDeleteCat(c.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
