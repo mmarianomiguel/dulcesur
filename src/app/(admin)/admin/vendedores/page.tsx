@@ -180,7 +180,7 @@ export default function VendedoresPage() {
     const { data: ventasData } = await supabase
       .from("ventas")
       .select("id, vendedor_id, total")
-      .eq("estado", "cerrada")
+      .neq("estado", "anulada")
       .gte("fecha", dateRange.from)
       .lte("fecha", dateRange.to);
 
@@ -274,7 +274,7 @@ export default function VendedoresPage() {
     const { data: ventasData } = await supabase
       .from("ventas")
       .select("id, fecha, hora, nro_comprobante, cliente_id, total, vendedor_id")
-      .eq("estado", "cerrada")
+      .neq("estado", "anulada")
       .eq("vendedor_id", vendedorId)
       .gte("fecha", dateRange.from)
       .lte("fecha", dateRange.to)
