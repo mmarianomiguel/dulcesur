@@ -1398,9 +1398,11 @@ export default function HojaDeRutaPage() {
                       <div className="space-y-1.5">
                         <Label className="text-xs">Cuenta bancaria</Label>
                         <Select value={payCuentaBancariaId} onValueChange={(v) => setPayCuentaBancariaId(v || "")}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                          <SelectTrigger className="h-9">
+                            {payCuentaBancariaId ? ((cuentasBancarias.find((c) => c.id === payCuentaBancariaId) as any)?.alias || cuentasBancarias.find((c) => c.id === payCuentaBancariaId)?.nombre || "Seleccionar cuenta") : "Seleccionar cuenta"}
+                          </SelectTrigger>
                           <SelectContent>
-                            {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                            {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{(c as any).alias || c.nombre}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1417,9 +1419,11 @@ export default function HojaDeRutaPage() {
                       <div className="space-y-1.5 mt-2">
                         <Label className="text-xs">Cuenta bancaria</Label>
                         <Select value={payCuentaBancariaId} onValueChange={(v) => setPayCuentaBancariaId(v || "")}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                          <SelectTrigger className="h-9">
+                            {payCuentaBancariaId ? ((cuentasBancarias.find((c) => c.id === payCuentaBancariaId) as any)?.alias || cuentasBancarias.find((c) => c.id === payCuentaBancariaId)?.nombre || "Seleccionar cuenta") : "Seleccionar cuenta"}
+                          </SelectTrigger>
                           <SelectContent>
-                            {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                            {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{(c as any).alias || c.nombre}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
