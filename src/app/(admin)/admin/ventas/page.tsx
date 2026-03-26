@@ -305,10 +305,14 @@ export default function VentasPage() {
     if (defaultList) setListaPrecioId((defaultList as any).id);
     if (sls && sls.length > 0) setVendedorId(sls[0].id);
 
-    // Pre-load combo items
-    const { data: allComboItems } = await supabase
-      .from("combo_items")
-      .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock)");
+    // Pre-load combo items, discounts, and presentaciones in parallel
+    const [{ data: allComboItems }, { data: descuentosData }, ...presBatches] = await Promise.all([
+      supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock)"),
+      supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", todayARG()),
+      supabase.from("presentaciones").select("*").range(0, 999),
+      supabase.from("presentaciones").select("*").range(1000, 1999),
+    ]);
+
     if (allComboItems) {
       const cmap: Record<string, ComboItemRef[]> = {};
       for (const ci of allComboItems as any[]) {
@@ -320,26 +324,15 @@ export default function VentasPage() {
       setComboItemsMap(cmap);
     }
 
-    // Pre-load active discounts
-    const { data: descuentosData } = await supabase
-      .from("descuentos")
-      .select("*")
-      .eq("activo", true)
-      .lte("fecha_inicio", todayARG());
     setActiveDiscounts((descuentosData || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= todayARG()));
 
-    // Pre-load all presentaciones for search by code (paginated to avoid 1000 row limit)
     const map: Record<string, Presentacion[]> = {};
-    let presPage = 0;
-    while (true) {
-      const { data: batch } = await supabase.from("presentaciones").select("*").range(presPage * 1000, (presPage + 1) * 1000 - 1);
-      if (!batch || batch.length === 0) break;
-      for (const raw of batch) {
+    for (const batch of presBatches) {
+      for (const raw of (batch as any).data || []) {
         const pr = { ...raw, codigo: raw.sku || "" } as Presentacion;
         if (!map[pr.producto_id]) map[pr.producto_id] = [];
         map[pr.producto_id].push(pr);
       }
-      presPage++;
     }
     setPresentacionesMap(map);
 
