@@ -873,10 +873,10 @@ export default function VendedoresPage() {
                   <Label className="text-xs text-muted-foreground">Tipo</Label>
                   <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as "day" | "month" | "range")}>
                     <SelectTrigger className="w-28">
-                      <SelectValue />
+                      {filterMode === "day" ? "Día" : filterMode === "month" ? "Mes" : "Rango"}
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="day">Dia</SelectItem>
+                      <SelectItem value="day">Día</SelectItem>
                       <SelectItem value="month">Mes</SelectItem>
                       <SelectItem value="range">Rango</SelectItem>
                     </SelectContent>
