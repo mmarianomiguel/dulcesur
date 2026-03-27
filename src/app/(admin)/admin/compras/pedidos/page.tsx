@@ -310,6 +310,51 @@ export default function PedidosProveedorPage() {
 
   const totalEstimado = items.reduce((a, i) => a + i.subtotal, 0);
 
+  /* ── helper: create compra pendiente from pedido ── */
+
+  const crearCompraPendiente = async (
+    pedidoId: string,
+    proveedorId: string,
+    itemsData: { producto_id: string; codigo: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[],
+    totalEstimadoVal: number,
+  ) => {
+    const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "compra" });
+    const numero = numData || "C-0000";
+    const fecha = todayARG();
+    const pedDisplay = pedidoDisplayNum(pedidoId);
+
+    const { data: compra, error: compraError } = await supabase
+      .from("compras")
+      .insert({
+        numero,
+        fecha,
+        proveedor_id: proveedorId,
+        total: totalEstimadoVal,
+        estado: "Pendiente",
+        forma_pago: "Efectivo",
+        estado_pago: "Pendiente",
+        observacion: `Generado desde pedido ${pedDisplay}`,
+      })
+      .select("id")
+      .single();
+
+    if (compraError || !compra) {
+      console.error("Error creando compra pendiente:", compraError?.message);
+      return;
+    }
+
+    const compraItems = itemsData.map((item) => ({
+      compra_id: compra.id,
+      producto_id: item.producto_id,
+      codigo: item.codigo,
+      descripcion: item.descripcion,
+      cantidad: item.cantidad,
+      precio_unitario: item.precio_unitario,
+      subtotal: item.subtotal,
+    }));
+    await supabase.from("compra_items").insert(compraItems);
+  };
+
   /* ── save pedido (new or edit) ── */
 
   const savePedido = async (estado: "Borrador" | "Enviado") => {
@@ -350,13 +395,26 @@ export default function PedidosProveedorPage() {
 
       await supabase.from("pedido_proveedor_items").insert(rows);
 
+      // Si se confirma (Enviado), crear compra pendiente
+      if (estado === "Enviado") {
+        const compraItemsData = items.map((item) => ({
+          producto_id: item.producto_id,
+          codigo: item.codigo,
+          descripcion: item.nombre,
+          cantidad: item.faltante,
+          precio_unitario: item.precio_unitario,
+          subtotal: item.subtotal,
+        }));
+        await crearCompraPendiente(pedido.id, selectedProveedorId, compraItemsData, totalEstimado);
+      }
+
       resetForm();
       setMode("list");
       await fetchData();
       setSuccessMsg(
         estado === "Borrador"
           ? `Borrador ${pedidoDisplayNum(pedido.id)} guardado`
-          : `Pedido ${pedidoDisplayNum(pedido.id)} confirmado`
+          : `Pedido ${pedidoDisplayNum(pedido.id)} guardado y registrado como compra pendiente`
       );
       setTimeout(() => setSuccessMsg(""), 4000);
     } catch (err: any) {
@@ -463,6 +521,22 @@ export default function PedidosProveedorPage() {
       .from("pedidos_proveedor")
       .update({ estado: newEstado })
       .eq("id", detailPedido.id);
+
+    // Si se marca como Enviado, crear compra pendiente
+    if (newEstado === "Enviado" && detailPedido.proveedor_id) {
+      const compraItemsData = detailItems.map((item) => ({
+        producto_id: item.producto_id,
+        codigo: item.codigo,
+        descripcion: item.descripcion,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio_unitario,
+        subtotal: item.subtotal,
+      }));
+      const total = detailItems.reduce((a, i) => a + i.subtotal, 0);
+      await crearCompraPendiente(detailPedido.id, detailPedido.proveedor_id, compraItemsData, total);
+      showAdminToast("Pedido guardado y registrado como compra pendiente", "success");
+    }
+
     setDetailPedido({ ...detailPedido, estado: newEstado });
     fetchData();
   };
@@ -505,36 +579,68 @@ export default function PedidosProveedorPage() {
         return;
       }
 
-      const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "compra" });
-      const numero = numData || "C-0000";
       const fecha = todayARG();
-
       const total = itemsToReceive.reduce((a, i) => a + i.cantidad_recibir * i.precio_unitario, 0);
       const estadoPago = receiveFormaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
+      const pedDisplay = pedidoDisplayNum(detailPedido.id);
 
-      const { data: compra, error: compraError } = await supabase
+      // Buscar compra pendiente generada al enviar el pedido
+      const { data: pendingCompra } = await supabase
         .from("compras")
-        .insert({
-          numero,
-          fecha,
-          proveedor_id: detailPedido.proveedor_id,
-          total,
-          estado: "Confirmada",
-          forma_pago: receiveFormaPago,
-          estado_pago: estadoPago,
-          observacion: `Recepcion de pedido ${pedidoDisplayNum(detailPedido.id)}`,
-        })
-        .select("id")
-        .single();
+        .select("id, numero")
+        .eq("estado", "Pendiente")
+        .ilike("observacion", `%${pedDisplay}%`)
+        .maybeSingle();
 
-      if (compraError || !compra) {
-        setReceiveError(compraError?.message || "Error al crear la compra");
-        setReceiveSaving(false);
-        return;
+      let compra: { id: string } | null = null;
+      let numero: string;
+
+      if (pendingCompra) {
+        // Actualizar la compra pendiente existente
+        numero = pendingCompra.numero;
+        await supabase
+          .from("compras")
+          .update({
+            total,
+            estado: "Confirmada",
+            forma_pago: receiveFormaPago,
+            estado_pago: estadoPago,
+            observacion: `Recepcion de pedido ${pedDisplay}`,
+          })
+          .eq("id", pendingCompra.id);
+        // Eliminar items anteriores y reemplazar con los recibidos
+        await supabase.from("compra_items").delete().eq("compra_id", pendingCompra.id);
+        compra = { id: pendingCompra.id };
+      } else {
+        // No hay compra pendiente (recepcion parcial posterior), crear nueva
+        const { data: numData } = await supabase.rpc("next_numero", { p_tipo: "compra" });
+        numero = numData || "C-0000";
+
+        const { data: newCompra, error: compraError } = await supabase
+          .from("compras")
+          .insert({
+            numero,
+            fecha,
+            proveedor_id: detailPedido.proveedor_id,
+            total,
+            estado: "Confirmada",
+            forma_pago: receiveFormaPago,
+            estado_pago: estadoPago,
+            observacion: `Recepcion de pedido ${pedDisplay}`,
+          })
+          .select("id")
+          .single();
+
+        if (compraError || !newCompra) {
+          setReceiveError(compraError?.message || "Error al crear la compra");
+          setReceiveSaving(false);
+          return;
+        }
+        compra = newCompra;
       }
 
       const compraItems = itemsToReceive.map((item) => ({
-        compra_id: compra.id,
+        compra_id: compra!.id,
         producto_id: detailItems.find((di) => di.id === item.id)?.producto_id,
         codigo: item.codigo,
         descripcion: item.descripcion,
