@@ -145,11 +145,23 @@ export default function TiendaFooter() {
               </ul>
             </div>
 
-            {/* Información */}
+            {/* Envíos */}
             <div className="lg:col-span-2">
-              <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Información</h4>
-              <ul className="space-y-2.5">
-                {infoLinks.map((link) => {
+              <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Envíos</h4>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="font-medium text-pink-400">Zona 1</p>
+                  <p className="text-gray-400">Longchamps, Burzaco</p>
+                  <p className="text-xs text-gray-500">Lunes a Sábados</p>
+                </div>
+                <div>
+                  <p className="font-medium text-pink-400">Zona 2</p>
+                  <p className="text-gray-400">Glew, Guernica</p>
+                  <p className="text-xs text-gray-500">Lunes, Miércoles, Viernes</p>
+                </div>
+              </div>
+              <ul className="mt-4 space-y-2">
+                {infoLinks.slice(0, 3).map((link) => {
                   const Icon = link.icon;
                   return (
                     <li key={link.href}>
