@@ -63,6 +63,49 @@ const infoLinks = [
   { label: "Términos y condiciones", href: "/info#terminos", icon: FileText },
 ];
 
+function FooterZonas() {
+  const [zonas, setZonas] = useState<{ id: string; nombre: string; localidades?: string; dias?: string[] }[]>([]);
+  useEffect(() => {
+    supabase.from("zonas_entrega").select("id, nombre, localidades, dias").order("nombre").then(({ data }) => {
+      if (data) setZonas(data);
+    });
+  }, []);
+
+  const formatDias = (dias?: string[]) => {
+    if (!dias || dias.length === 0) return "";
+    if (dias.length >= 6) return "Lunes a Sábados";
+    return dias.join(", ");
+  };
+
+  return (
+    <div className="lg:col-span-2">
+      <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Envíos</h4>
+      <div className="space-y-3 text-sm">
+        {zonas.map((z) => (
+          <div key={z.id}>
+            <p className="font-medium text-pink-400">{z.nombre}</p>
+            {z.localidades && <p className="text-gray-400">{z.localidades}</p>}
+            <p className="text-xs text-gray-500">{formatDias(z.dias)}</p>
+          </div>
+        ))}
+      </div>
+      <ul className="mt-4 space-y-2">
+        {infoLinks.slice(0, 3).map((link) => {
+          const Icon = link.icon;
+          return (
+            <li key={link.href}>
+              <Link href={link.href} className="group flex items-center gap-2 text-sm text-gray-400 transition hover:text-pink-400">
+                <Icon className="h-3.5 w-3.5 text-gray-500 transition group-hover:text-pink-400" />
+                {link.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export default function TiendaFooter() {
   const [config, setConfig] = useState<FooterConfig>(DEFAULT_CONFIG);
   const [tiendaNombre, setTiendaNombre] = useState("DulceSur");
@@ -146,34 +189,8 @@ export default function TiendaFooter() {
             </div>
 
             {/* Envíos */}
-            <div className="lg:col-span-2">
-              <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Envíos</h4>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <p className="font-medium text-pink-400">Zona 1</p>
-                  <p className="text-gray-400">Longchamps, Burzaco</p>
-                  <p className="text-xs text-gray-500">Lunes a Sábados</p>
-                </div>
-                <div>
-                  <p className="font-medium text-pink-400">Zona 2</p>
-                  <p className="text-gray-400">Glew, Guernica</p>
-                  <p className="text-xs text-gray-500">Lunes, Miércoles, Viernes</p>
-                </div>
-              </div>
-              <ul className="mt-4 space-y-2">
-                {infoLinks.slice(0, 3).map((link) => {
-                  const Icon = link.icon;
-                  return (
-                    <li key={link.href}>
-                      <Link href={link.href} className="group flex items-center gap-2 text-sm text-gray-400 transition hover:text-pink-400">
-                        <Icon className="h-3.5 w-3.5 text-gray-500 transition group-hover:text-pink-400" />
-                        {link.label}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+            <FooterZonas />
+
 
             {/* Contacto */}
             <div className="lg:col-span-3">
