@@ -151,8 +151,18 @@ export default function CajaPage() {
 
   // ─── Movements (filtered by turno time range) ───
   const fetchMovements = useCallback(async () => {
-    const all = await cajaService.getByFecha(today);
     if (!turno) return [];
+    // Fetch movements from apertura date to today (turno may span multiple days)
+    const fechaApertura = turno.fecha_apertura || today;
+    let allMovs: CajaMovimiento[] = [];
+    if (fechaApertura === today) {
+      allMovs = await cajaService.getByFecha(today);
+    } else {
+      // Fetch range: from apertura date to today
+      const { data } = await supabase.from("caja_movimientos").select("*").gte("fecha", fechaApertura).lte("fecha", today).order("created_at", { ascending: false });
+      allMovs = (data || []) as CajaMovimiento[];
+    }
+    const all = allMovs;
     const aperturaDate = new Date(turno.created_at);
     const cierreDate = turno.estado === "cerrado" && turno.fecha_cierre && turno.hora_cierre
       ? new Date(`${turno.fecha_cierre}T${turno.hora_cierre}-03:00`)
@@ -172,13 +182,16 @@ export default function CajaPage() {
 
   // ─── Ventas (filtered by turno time range, includes web orders) ───
   const fetchVentas = useCallback(async () => {
-    const { data: allData } = await supabase
-      .from("ventas")
-      .select("*, clientes(nombre)")
-      .eq("fecha", today)
-      .order("created_at", { ascending: false });
-    const all = (allData || []) as Venta[];
     if (!turno) return [];
+    const fechaApertura = turno.fecha_apertura || today;
+    let query = supabase.from("ventas").select("*, clientes(nombre)").order("created_at", { ascending: false });
+    if (fechaApertura === today) {
+      query = query.eq("fecha", today);
+    } else {
+      query = query.gte("fecha", fechaApertura).lte("fecha", today);
+    }
+    const { data: allData } = await query;
+    const all = (allData || []) as Venta[];
     const aperturaDate = new Date(turno.created_at);
     const cierreDate = turno.estado === "cerrado" && turno.fecha_cierre && turno.hora_cierre
       ? new Date(`${turno.fecha_cierre}T${turno.hora_cierre}-03:00`)
