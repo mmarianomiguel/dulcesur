@@ -356,6 +356,7 @@ export default function DashboardPage() {
     });
     setPaymentBreakdown(Object.entries(paymentMap).map(([name, value]) => ({ name, value })));
 
+    // Only real expenses (tipo=egreso), exclude cancelaciones (reversed income)
     const { data: periodExpenses } = await supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso");
     setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
 

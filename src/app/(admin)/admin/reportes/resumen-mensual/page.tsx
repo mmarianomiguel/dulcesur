@@ -205,7 +205,7 @@ export default function ResumenMensualPage() {
     });
     setVentasPorPago(Object.entries(pagoMap).map(([metodo, d]) => ({ metodo, ...d })).sort((a, b) => b.total - a.total));
 
-    // Egresos (caja_movimientos tipo egreso)
+    // Egresos reales (tipo=egreso only, excludes tipo=cancelacion which are reversed income)
     const { data: egresos } = await supabase.from("caja_movimientos")
       .select("metodo_pago, monto, descripcion")
       .eq("tipo", "egreso")

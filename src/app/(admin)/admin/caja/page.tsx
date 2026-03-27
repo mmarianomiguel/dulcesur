@@ -656,15 +656,15 @@ export default function CajaPage() {
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const notasCreditoEgresos = movements
-      .filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito")
+      .filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito")
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const anulaciones = movements
-      .filter((m) => m.tipo === "egreso" && m.referencia_tipo === "anulacion")
+      .filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion")
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const retiros = movements
-      .filter((m) => m.tipo === "egreso" && !(m.descripcion || "").toLowerCase().includes("gasto") && m.referencia_tipo !== "nota_credito" && m.referencia_tipo !== "anulacion")
+      .filter((m) => m.tipo === "egreso" && !(m.descripcion || "").toLowerCase().includes("gasto"))
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const efectivoInicial = turno?.efectivo_inicial ?? 0;
@@ -821,7 +821,7 @@ export default function CajaPage() {
                       ) : <p className="text-xs text-muted-foreground">Sin transferencias</p>;
                     })()}
                     {(() => {
-                      const ncMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito");
+                      const ncMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
                       if (ncMovs.length === 0) return null;
                       const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
                       const porMetodo: Record<string, number> = {};
@@ -842,7 +842,7 @@ export default function CajaPage() {
                       );
                     })()}
                     {(() => {
-                      const anulMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "anulacion");
+                      const anulMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
                       if (anulMovs.length === 0) return null;
                       const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
                       return (
@@ -1354,7 +1354,7 @@ export default function CajaPage() {
 
                   {/* Notas de crédito */}
                   {(() => {
-                    const ncMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito");
+                    const ncMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
                     if (ncMovs.length === 0) return null;
                     const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
                     const porMetodo: Record<string, number> = {};
@@ -1377,7 +1377,7 @@ export default function CajaPage() {
 
                   {/* Anulaciones */}
                   {(() => {
-                    const anulMovs = histMovs.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "anulacion");
+                    const anulMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
                     if (anulMovs.length === 0) return null;
                     const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
                     return (
@@ -1581,7 +1581,7 @@ export default function CajaPage() {
                       </div>
                       {/* NC breakdown by metodo_pago */}
                       {(() => {
-                        const ncMovs = movements.filter((m) => m.tipo === "egreso" && m.referencia_tipo === "nota_credito");
+                        const ncMovs = movements.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
                         const porMetodo: Record<string, number> = {};
                         ncMovs.forEach((m) => {
                           const k = m.metodo_pago || "Efectivo";
