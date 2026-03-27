@@ -70,6 +70,8 @@ export default function ProveedoresPage() {
   const [ccMovimientos, setCcMovimientos] = useState<CuentaCorrienteProveedor[]>([]);
   const [provCuentas, setProvCuentas] = useState<{ id: string; nombre: string; alias: string; cbu_cvu: string; tipo_cuenta: string; titular: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [historialCompras, setHistorialCompras] = useState<{ id: string; numero: string; fecha: string; total: number; estado: string; forma_pago: string }[]>([]);
+  const [historialLoading, setHistorialLoading] = useState(false);
 
   const fetchProviders = useCallback(
     () => proveedorService.getAll({ filters: { activo: true }, orderBy: "nombre" }),
@@ -128,6 +130,19 @@ export default function ProveedoresPage() {
     // Load bank accounts for this provider
     const { data: cuentas } = await supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("proveedor_id", p.id).eq("activo", true);
     setProvCuentas((cuentas || []) as any[]);
+    // Load purchase history
+    setHistorialLoading(true);
+    setHistorialCompras([]);
+    supabase
+      .from("compras")
+      .select("id, numero, fecha, total, estado, forma_pago")
+      .eq("proveedor_id", p.id)
+      .order("fecha", { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        setHistorialCompras((data || []) as any[]);
+        setHistorialLoading(false);
+      });
   };
 
   const handleSave = async () => {
