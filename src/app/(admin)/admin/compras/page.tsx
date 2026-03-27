@@ -204,10 +204,13 @@ export default function ComprasPage() {
         }
       }
 
-      await supabase.from("compras").update({ estado: "Anulada" }).eq("id", detailCompra.id);
-      setDetailCompra({ ...detailCompra, estado: "Anulada" } as any);
+      // Delete items first, then the compra
+      await supabase.from("compra_items").delete().eq("compra_id", detailCompra.id);
+      await supabase.from("compras").delete().eq("id", detailCompra.id);
+      setDetailCompra(null);
+      setMode("list");
       fetchData();
-      showAdminToast(isPendiente ? "Compra pendiente anulada." : "Compra anulada. Stock revertido.", "success");
+      showAdminToast(isPendiente ? "Compra eliminada." : "Compra anulada y eliminada. Stock revertido.", "success");
     } catch (err: any) {
       showAdminToast("Error al anular: " + (err.message || "Error"), "error");
     }
