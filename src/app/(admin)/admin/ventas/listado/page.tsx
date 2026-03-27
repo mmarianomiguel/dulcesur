@@ -204,6 +204,7 @@ export default function ListadoVentasPage() {
   const [filterOrigen, setFilterOrigen] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
+  const [quickPeriod, setQuickPeriod] = useState<"today" | "week" | "month" | "custom">("today");
   const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("month");
   const [filterDay, setFilterDay] = useState(todayARG());
   const [filterMonth, setFilterMonth] = useState(currentMonthPadded());
@@ -283,7 +284,21 @@ export default function ListadoVentasPage() {
     if (filterType !== "all") query = query.eq("tipo_comprobante", filterType);
     if (filterPayment !== "all") query = query.eq("forma_pago", filterPayment);
 
-    if (filterMode === "day") {
+    if (quickPeriod === "today") {
+      query = query.eq("fecha", todayARG());
+    } else if (quickPeriod === "week") {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      const mondayStr = monday.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      query = query.gte("fecha", mondayStr).lte("fecha", todayARG());
+    } else if (quickPeriod === "month") {
+      const now = new Date();
+      const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      query = query.gte("fecha", firstDay).lte("fecha", todayARG());
+    } else if (filterMode === "day") {
       query = query.eq("fecha", filterDay);
     } else if (filterMode === "month") {
       const m = filterMonth.padStart(2, "0");
@@ -308,7 +323,7 @@ export default function ListadoVentasPage() {
 
     setVentas(results);
     setLoading(false);
-  }, [filterOrigen, filterType, filterPayment, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
+  }, [quickPeriod, filterOrigen, filterType, filterPayment, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
 
   useEffect(() => { fetchVentas(); }, [fetchVentas]);
   useEffect(() => {
@@ -1569,42 +1584,48 @@ export default function ListadoVentasPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Periodo</Label>
-                  <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "month") as "day" | "month" | "range" | "all")}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Mensual" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="day">Dia</SelectItem>
-                      <SelectItem value="month">Mensual</SelectItem>
-                      <SelectItem value="range">Entre fechas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
-              {filterMode === "day" && (
-                <div className="flex items-center gap-3">
-                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Fecha:</Label>
-                  <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-44 h-9" />
-                </div>
-              )}
-              {filterMode === "month" && (
-                <div className="flex items-center gap-3">
-                  <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
-                    <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
+              <div className="flex items-center gap-1 rounded-lg border p-1">
+                {([["today", "Hoy"], ["week", "Esta semana"], ["month", "Este mes"], ["custom", "Personalizado"]] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => setQuickPeriod(key)} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${quickPeriod === key ? "bg-foreground text-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {quickPeriod === "custom" && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as any)}>
+                    <SelectTrigger className="w-28 h-9">
+                      {filterMode === "day" ? "Día" : filterMode === "month" ? "Mes" : filterMode === "range" ? "Rango" : "Todos"}
+                    </SelectTrigger>
                     <SelectContent>
-                      {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
+                      <SelectItem value="day">Día</SelectItem>
+                      <SelectItem value="month">Mes</SelectItem>
+                      <SelectItem value="range">Rango</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-24 h-9" />
-                </div>
-              )}
-              {filterMode === "range" && (
-                <div className="flex items-center gap-3">
-                  <Label className="text-xs text-muted-foreground">Desde</Label>
-                  <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-9" />
-                  <Label className="text-xs text-muted-foreground">Hasta</Label>
-                  <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-9" />
+                  {filterMode === "day" && (
+                    <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-40 h-9" />
+                  )}
+                  {filterMode === "month" && (
+                    <>
+                      <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
+                        <SelectTrigger className="w-32 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
+                        <SelectContent>
+                          {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                      <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-20 h-9" />
+                    </>
+                  )}
+                  {filterMode === "range" && (
+                    <>
+                      <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-9" />
+                      <span className="text-muted-foreground text-sm">a</span>
+                      <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-9" />
+                    </>
+                  )}
                 </div>
               )}
             </div>
