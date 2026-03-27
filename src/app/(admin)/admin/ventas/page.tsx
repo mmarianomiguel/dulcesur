@@ -1812,6 +1812,21 @@ export default function VentasPage() {
     setCashReceived((prev) => String((parseFloat(prev) || 0) + amount));
   };
 
+  // ---------- cash dialog keyboard support ----------
+  useEffect(() => {
+    if (!cashDialogOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key >= "0" && e.key <= "9") { e.preventDefault(); cashAppend(e.key); }
+      else if (e.key === "." || e.key === ",") { e.preventDefault(); cashAppend("."); }
+      else if (e.key === "Backspace") { e.preventDefault(); cashBackspace(); }
+      else if (e.key === "Delete") { e.preventDefault(); setCashReceived(""); }
+      else if (e.key === "Enter") { e.preventDefault(); const btn = document.querySelector("[data-cash-cobrar]") as HTMLButtonElement; if (btn && !btn.disabled) btn.click(); }
+      else if (e.key === "Escape") { setCashDialogOpen(false); }
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [cashDialogOpen]);
+
   // ---------- client selector keyboard nav ----------
   const handleClientKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -3262,6 +3277,7 @@ export default function VentasPage() {
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm"
                 onClick={handleCerrarComprobante}
                 disabled={cashReceivedNum < totalACobrar || saving}
+                data-cash-cobrar
               >
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 Cobrar

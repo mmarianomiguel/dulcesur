@@ -122,6 +122,7 @@ export default function ClientesPage() {
   }, []);
   const [filterDomicilio, setFilterDomicilio] = useState("");
   const [filterZona, setFilterZona] = useState("");
+  const [sortOrder, setSortOrder] = useState<"recent" | "az" | "za" | "saldo">("az");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Cliente | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -809,14 +810,21 @@ export default function ClientesPage() {
   const filtered = useMemo(() => {
     const searchLower = search.toLowerCase();
     const domicilioLower = filterDomicilio.toLowerCase();
-    return clients.filter(
+    const result = clients.filter(
       (c) =>
         (c.nombre.toLowerCase().includes(searchLower) || (c.cuit || "").includes(search) || ((c as any).codigo_cliente || "").includes(search)) &&
         (!vendedorFilter || (c as any).vendedor_id === vendedorFilter) &&
         (!filterDomicilio || (c.domicilio || "").toLowerCase().includes(domicilioLower)) &&
         (!filterZona || c.zona_entrega === filterZona)
     );
-  }, [clients, search, vendedorFilter, filterDomicilio, filterZona]);
+    switch (sortOrder) {
+      case "recent": return result.sort((a, b) => new Date((b as any).created_at || 0).getTime() - new Date((a as any).created_at || 0).getTime());
+      case "az": return result.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      case "za": return result.sort((a, b) => b.nombre.localeCompare(a.nombre));
+      case "saldo": return result.sort((a, b) => b.saldo - a.saldo);
+      default: return result;
+    }
+  }, [clients, search, vendedorFilter, filterDomicilio, filterZona, sortOrder]);
 
   const inscriptos = useMemo(() => clients.filter((c) => c.situacion_iva === "Responsable Inscripto").length, [clients]);
   const withBalance = useMemo(() => clients.filter((c) => c.saldo > 0).length, [clients]);
@@ -979,6 +987,20 @@ export default function ClientesPage() {
                     </div>
                   </div>
                 )}
+                <div className="space-y-1.5 min-w-[160px]">
+                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">ORDENAR POR</span>
+                  <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="az">A → Z</SelectItem>
+                      <SelectItem value="za">Z → A</SelectItem>
+                      <SelectItem value="recent">Más recientes</SelectItem>
+                      <SelectItem value="saldo">Mayor deuda</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1823,7 +1845,7 @@ export default function ClientesPage() {
 
             <div className="space-y-2">
               <Label>Monto a cobrar</Label>
-              <Input type="number" value={cobroMonto} onChange={(e) => setCobroMonto(Number(e.target.value))} />
+              <Input type="text" inputMode="numeric" value={cobroMonto ? cobroMonto.toLocaleString("es-AR") : ""} onChange={(e) => { const v = e.target.value.replace(/\./g, "").replace(/[^0-9]/g, ""); setCobroMonto(Number(v) || 0); }} />
               {cobroClient && cobroMonto > 0 && (
                 <p className="text-xs text-muted-foreground">
                   Saldo después del cobro: <span className="font-semibold">{formatCurrency(cobroClient.saldo - cobroMonto)}</span>
@@ -1833,15 +1855,15 @@ export default function ClientesPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Forma de pago</Label>
-              <Select value={cobroFormaPago} onValueChange={(v) => setCobroFormaPago(v || "Efectivo")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Efectivo">Efectivo</SelectItem>
-                  <SelectItem value="Transferencia">Transferencia</SelectItem>
-                  <SelectItem value="Tarjeta">Tarjeta</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Método de pago</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {["Efectivo", "Transferencia"].map((m) => (
+                  <button key={m} type="button" onClick={() => setCobroFormaPago(m)}
+                    className={`flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition ${cobroFormaPago === m ? "border-purple-500 bg-purple-50 text-purple-700" : "border-gray-200 hover:border-gray-300 text-gray-600"}`}>
+                    {m === "Efectivo" ? "💵" : "🏦"} {m}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1851,9 +1873,9 @@ export default function ClientesPage() {
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setCobroOpen(false)}>Cancelar</Button>
-              <Button onClick={handleCobro} disabled={saving || cobroMonto <= 0}>
+              <Button onClick={handleCobro} disabled={saving || cobroMonto <= 0} className="bg-purple-600 hover:bg-purple-700">
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Registrar cobro
+                Registrar cobro — {formatCurrency(cobroMonto)}
               </Button>
             </div>
           </div>
