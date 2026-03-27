@@ -275,7 +275,7 @@ export default function VendedoresPage() {
 
     const { data: ventasData } = await supabase
       .from("ventas")
-      .select("id, fecha, hora, nro_comprobante, cliente_id, total, vendedor_id, tipo_comprobante")
+      .select("id, fecha, hora, numero, cliente_id, total, vendedor_id, tipo_comprobante")
       .neq("estado", "anulada")
       .eq("vendedor_id", vendedorId)
       .gte("fecha", dateRange.from)
@@ -374,7 +374,7 @@ export default function VendedoresPage() {
         id: v.id,
         fecha: v.fecha,
         hora: v.hora || "",
-        nro_comprobante: (isNC ? "NC " : "") + (v.nro_comprobante || ((v as any).tipo_comprobante || "")),
+        nro_comprobante: (isNC ? "NC " : "") + (v.numero || ((v as any).tipo_comprobante || "")),
         cliente_nombre: v.cliente_id ? (clienteMap[v.cliente_id] || "Cliente") : "Consumidor final",
         total: v.total * sign,
         comision,
