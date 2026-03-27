@@ -492,13 +492,14 @@ export default function PedidosProveedorPage() {
       await supabase.from("pedido_proveedor_items").delete().eq("pedido_id", pedido.id);
       await supabase.from("pedidos_proveedor").delete().eq("id", pedido.id);
       setDeleteConfirm({ open: false, pedido: null });
+      // Remove from local state immediately
+      setPedidos((prev) => prev.filter((p) => p.id !== pedido.id));
       if (mode === "detail") {
         setMode("list");
         setDetailPedido(null);
+        setDetailItems([]);
       }
-      await fetchData();
-      setSuccessMsg(`Pedido ${pedidoDisplayNum(pedido.id)} eliminado`);
-      setTimeout(() => setSuccessMsg(""), 3000);
+      showAdminToast(`Pedido ${pedidoDisplayNum(pedido.id)} eliminado`, "success");
     } catch (err: any) {
       console.error("Error deleting pedido:", err);
     } finally {
