@@ -1354,8 +1354,12 @@ export default function ComprasPage() {
               </Button>
             )}
             {detailCompra.estado === "Pendiente" && (
-              <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={async () => {
-                if (!confirm("¿Confirmar ingreso al stock? Se actualizará stock, caja y precios.")) return;
+              <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+                setConfirmDialog({
+                  open: true,
+                  title: "Confirmar ingreso",
+                  message: "¿Confirmar ingreso al stock? Se actualizará stock, caja y precios.",
+                  onConfirm: async () => {
                 setSaving(true);
                 try {
                   // Execute stock, caja, price updates for pending purchase
@@ -1400,6 +1404,8 @@ export default function ComprasPage() {
                   }
                 } catch (err) { showAdminToast("Error al confirmar ingreso", "error"); }
                 setSaving(false);
+                  },
+                });
               }}>
                 <Package className="w-3.5 h-3.5" />
                 Confirmar ingreso al stock
@@ -1971,6 +1977,18 @@ export default function ComprasPage() {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
