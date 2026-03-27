@@ -454,28 +454,59 @@ export default function ComprasPage() {
       // Determine estado_pago based on forma de pago
       const estadoPago = formaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
 
-      const { data: compra, error } = await supabase
-        .from("compras")
-        .insert({
-          numero,
-          fecha: fecha || todayString(),
-          proveedor_id: selectedProveedorId || null,
-          total: totalCompra,
-          estado: asPendiente ? "Pendiente" : "Confirmada",
-          forma_pago: formaPago,
-          estado_pago: estadoPago,
-          observacion: observacion || null,
-        })
-        .select("id")
-        .single();
+      const pendingId = (window as any).__pendingCompraId as string | undefined;
+      let compra: { id: string };
 
-      if (error || !compra) {
-        console.error("Error creating compra:", error);
-        setSaveError(
-          error?.message || "Error al crear la compra. Revisa los datos."
-        );
-        setSaving(false);
-        return;
+      if (pendingId) {
+        // Update existing pending compra
+        const { error } = await supabase
+          .from("compras")
+          .update({
+            numero,
+            fecha: fecha || todayString(),
+            proveedor_id: selectedProveedorId || null,
+            total: totalCompra,
+            estado: asPendiente ? "Pendiente" : "Confirmada",
+            forma_pago: formaPago,
+            estado_pago: estadoPago,
+            observacion: observacion || null,
+          })
+          .eq("id", pendingId);
+        if (error) {
+          setSaveError(error.message);
+          setSaving(false);
+          return;
+        }
+        // Delete old items
+        await supabase.from("compra_items").delete().eq("compra_id", pendingId);
+        compra = { id: pendingId };
+        delete (window as any).__pendingCompraId;
+      } else {
+        // Create new compra
+        const { data, error } = await supabase
+          .from("compras")
+          .insert({
+            numero,
+            fecha: fecha || todayString(),
+            proveedor_id: selectedProveedorId || null,
+            total: totalCompra,
+            estado: asPendiente ? "Pendiente" : "Confirmada",
+            forma_pago: formaPago,
+            estado_pago: estadoPago,
+            observacion: observacion || null,
+          })
+          .select("id")
+          .single();
+
+        if (error || !data) {
+          console.error("Error creating compra:", error);
+          setSaveError(
+            error?.message || "Error al crear la compra. Revisa los datos."
+          );
+          setSaving(false);
+          return;
+        }
+        compra = data;
       }
 
       // Save compra items
@@ -695,11 +726,55 @@ export default function ComprasPage() {
     setNumeroCompra("");
     setFormaPago("Transferencia");
     setSaveError("");
+    delete (window as any).__pendingCompraId;
   };
 
   /* ── open detail ── */
 
   const openDetail = async (compra: CompraRow) => {
+    // If pending, open in edit mode (same as new compra form but pre-filled)
+    if (compra.estado === "Pendiente") {
+      const { data } = await supabase
+        .from("compra_items")
+        .select("id, compra_id, producto_id, codigo, descripcion, cantidad, precio_unitario, subtotal")
+        .eq("compra_id", compra.id)
+        .order("created_at");
+      const compraItems = (data || []) as CompraItemRow[];
+
+      // Load product data for each item
+      const loadedItems: CompraItem[] = [];
+      for (const ci of compraItems) {
+        const { data: prod } = await supabase.from("productos").select("id, nombre, codigo, precio, costo, stock, imagen_url").eq("id", ci.producto_id).single();
+        loadedItems.push({
+          producto_id: ci.producto_id,
+          nombre: ci.descripcion,
+          codigo: ci.codigo || prod?.codigo || "",
+          cantidad: ci.cantidad,
+          costo_unitario: ci.precio_unitario,
+          costo_original: prod?.costo || ci.precio_unitario,
+          precio_original: prod?.precio || 0,
+          subtotal: ci.subtotal,
+          actualizarPrecio: false,
+          imagen_url: prod?.imagen_url || null,
+          stock_actual: prod?.stock || 0,
+          cajas: 0,
+          sueltas: ci.cantidad,
+          unidades_por_caja: 1,
+        });
+      }
+
+      setSelectedProveedorId(compra.proveedor_id || "");
+      setItems(loadedItems);
+      setNumeroCompra(compra.numero);
+      setFormaPago(compra.forma_pago || "Efectivo");
+      setObservacion(compra.observacion || "");
+      setFecha(compra.fecha);
+      // Store the pending compra ID so we can update instead of creating new
+      (window as any).__pendingCompraId = compra.id;
+      setMode("new");
+      return;
+    }
+
     setDetailCompra(compra);
     const { data } = await supabase
       .from("compra_items")
