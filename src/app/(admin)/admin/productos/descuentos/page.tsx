@@ -131,6 +131,7 @@ export default function DescuentosPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   // wizard state
   const [step, setStep] = useState(0);
@@ -301,15 +302,21 @@ export default function DescuentosPage() {
     fetchDescuentos();
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar este descuento?")) return;
-    const { error } = await supabase.from("descuentos").delete().eq("id", id);
-    if (error) {
-      showAdminToast("Error al eliminar: " + error.message, "error");
-      return;
-    }
-    showAdminToast("Descuento eliminado", "success");
-    fetchDescuentos();
+  const handleDelete = (id: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Eliminar descuento",
+      message: "¿Eliminar este descuento?",
+      onConfirm: async () => {
+        const { error } = await supabase.from("descuentos").delete().eq("id", id);
+        if (error) {
+          showAdminToast("Error al eliminar: " + error.message, "error");
+          return;
+        }
+        showAdminToast("Descuento eliminado", "success");
+        fetchDescuentos();
+      },
+    });
   };
 
   // stats
@@ -1237,6 +1244,18 @@ export default function DescuentosPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

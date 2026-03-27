@@ -106,6 +106,7 @@ export default function RolesPage() {
   const [form, setForm] = useState(emptyRolForm);
   const [permisos, setPermisos] = useState<Record<string, boolean>>({});
   const [savingPerms, setSavingPerms] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   const fetchRoles = useCallback(async () => {
     setLoading(true);
@@ -158,11 +159,17 @@ export default function RolesPage() {
     fetchRoles();
   };
 
-  const handleDelete = async (r: Rol) => {
-    if (!confirm(`Eliminar el rol "${r.nombre}"? Se eliminarán sus permisos asociados.`)) return;
-    await supabase.from("permisos").delete().eq("rol_id", r.id);
-    await supabase.from("roles").delete().eq("id", r.id);
-    fetchRoles();
+  const handleDelete = (r: Rol) => {
+    setConfirmDialog({
+      open: true,
+      title: "Eliminar rol",
+      message: `Eliminar el rol "${r.nombre}"? Se eliminarán sus permisos asociados.`,
+      onConfirm: async () => {
+        await supabase.from("permisos").delete().eq("rol_id", r.id);
+        await supabase.from("roles").delete().eq("id", r.id);
+        fetchRoles();
+      },
+    });
   };
 
   // Permissions management
@@ -393,6 +400,18 @@ export default function RolesPage() {
                 {editingRol ? "Guardar" : "Crear Rol"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
         </DialogContent>
       </Dialog>

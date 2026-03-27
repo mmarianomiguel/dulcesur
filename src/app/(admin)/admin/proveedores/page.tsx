@@ -72,6 +72,7 @@ export default function ProveedoresPage() {
   const [saving, setSaving] = useState(false);
   const [historialCompras, setHistorialCompras] = useState<{ id: string; numero: string; fecha: string; total: number; estado: string; forma_pago: string }[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   const fetchProviders = useCallback(
     () => proveedorService.getAll({ filters: { activo: true }, orderBy: "nombre" }),
@@ -176,11 +177,17 @@ export default function ProveedoresPage() {
     refetch();
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     const p = providers.find((pr) => pr.id === id);
-    if (!confirm(`¿Eliminar a "${p?.nombre || "este proveedor"}"?`)) return;
-    await proveedorService.update(id, { activo: false } as Partial<Proveedor>);
-    refetch();
+    setConfirmDialog({
+      open: true,
+      title: "Eliminar proveedor",
+      message: `¿Eliminar a "${p?.nombre || "este proveedor"}"?`,
+      onConfirm: async () => {
+        await proveedorService.update(id, { activo: false } as Partial<Proveedor>);
+        refetch();
+      },
+    });
   };
 
   // ─── Cuenta Corriente ───
@@ -739,6 +746,53 @@ export default function ProveedoresPage() {
                         </Button>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Historial de compras */}
+            {editDialog.data && (
+              <div className="space-y-2 border-t pt-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5" />Historial de compras
+                </h3>
+                {historialLoading ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">Cargando...</p>
+                ) : historialCompras.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">Sin compras registradas</p>
+                ) : (
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="text-left py-1.5 px-2.5 font-semibold text-[10px] uppercase tracking-wider">Fecha</th>
+                          <th className="text-left py-1.5 px-2.5 font-semibold text-[10px] uppercase tracking-wider">Número</th>
+                          <th className="text-right py-1.5 px-2.5 font-semibold text-[10px] uppercase tracking-wider">Total</th>
+                          <th className="text-center py-1.5 px-2.5 font-semibold text-[10px] uppercase tracking-wider">Estado</th>
+                          <th className="text-left py-1.5 px-2.5 font-semibold text-[10px] uppercase tracking-wider">Forma de pago</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historialCompras.map((c) => (
+                          <tr
+                            key={c.id}
+                            className="border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                            onClick={() => window.open(`/admin/compras?id=${c.id}`, "_blank")}
+                          >
+                            <td className="py-1.5 px-2.5 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDateARG(c.fecha)}</td>
+                            <td className="py-1.5 px-2.5 text-xs font-medium">{c.numero}</td>
+                            <td className="py-1.5 px-2.5 text-xs text-right font-semibold tabular-nums">{formatCurrency(c.total)}</td>
+                            <td className="py-1.5 px-2.5 text-center">
+                              <Badge variant={c.estado === "Completada" ? "default" : c.estado === "Pendiente" ? "secondary" : "outline"} className="text-[10px] font-normal px-1.5 py-0">
+                                {c.estado}
+                              </Badge>
+                            </td>
+                            <td className="py-1.5 px-2.5 text-xs text-muted-foreground">{c.forma_pago || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

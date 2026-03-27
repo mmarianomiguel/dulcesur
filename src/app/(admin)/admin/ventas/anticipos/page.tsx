@@ -89,6 +89,7 @@ export default function AnticiposPage() {
   const [ventasCliente, setVentasCliente] = useState<Venta[]>([]);
   const [selectedVentaId, setSelectedVentaId] = useState("");
   const [loadingVentas, setLoadingVentas] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -224,48 +225,54 @@ export default function AnticiposPage() {
   };
 
   const handleDevolver = async (anticipo: Anticipo) => {
-    if (!confirm("¿Confirmar devolución del anticipo?")) return;
-    setSaving(true);
-    try {
-      const fecha = todayARG();
-      await supabase
-        .from("anticipos")
-        .update({ estado: "Devuelto" })
-        .eq("id", anticipo.id);
+    setConfirmDialog({
+      open: true,
+      title: "Confirmar devolución",
+      message: "¿Confirmar devolución del anticipo?",
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          const fecha = todayARG();
+          await supabase
+            .from("anticipos")
+            .update({ estado: "Devuelto" })
+            .eq("id", anticipo.id);
 
-      await supabase.from("caja_movimientos").insert({
-        fecha,
-        hora: new Date().toLocaleTimeString("es-AR", { hour12: false }),
-        tipo: "egreso",
-        descripcion: `Devolución anticipo ${anticipo.numero}`,
-        metodo_pago: "Efectivo",
-        monto: anticipo.monto,
-        referencia_id: anticipo.id,
-        referencia_tipo: "anticipo",
-      });
+          await supabase.from("caja_movimientos").insert({
+            fecha,
+            hora: new Date().toLocaleTimeString("es-AR", { hour12: false }),
+            tipo: "egreso",
+            descripcion: `Devolución anticipo ${anticipo.numero}`,
+            metodo_pago: "Efectivo",
+            monto: anticipo.monto,
+            referencia_id: anticipo.id,
+            referencia_tipo: "anticipo",
+          });
 
-      // Reverse saldo: add back the anticipo amount
-      const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", anticipo.cliente_id).single();
-      const saldoActual = freshCliente?.saldo ?? 0;
-      const newSaldo = saldoActual + anticipo.monto;
-      await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", anticipo.cliente_id);
-      await supabase.from("cuenta_corriente").insert({
-        cliente_id: anticipo.cliente_id,
-        fecha,
-        comprobante: anticipo.numero,
-        descripcion: `Devolución anticipo/seña - ${anticipo.concepto || ""}`,
-        debe: anticipo.monto,
-        haber: 0,
-        saldo: newSaldo,
-        forma_pago: "Efectivo",
-      });
+          // Reverse saldo: add back the anticipo amount
+          const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", anticipo.cliente_id).single();
+          const saldoActual = freshCliente?.saldo ?? 0;
+          const newSaldo = saldoActual + anticipo.monto;
+          await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", anticipo.cliente_id);
+          await supabase.from("cuenta_corriente").insert({
+            cliente_id: anticipo.cliente_id,
+            fecha,
+            comprobante: anticipo.numero,
+            descripcion: `Devolución anticipo/seña - ${anticipo.concepto || ""}`,
+            debe: anticipo.monto,
+            haber: 0,
+            saldo: newSaldo,
+            forma_pago: "Efectivo",
+          });
 
-      fetchData();
-    } catch (err) {
-      console.error("Error devolviendo anticipo:", err);
-    } finally {
-      setSaving(false);
-    }
+          fetchData();
+        } catch (err) {
+          console.error("Error devolviendo anticipo:", err);
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const estadoBadge = (estado: string) => {
@@ -483,6 +490,18 @@ export default function AnticiposPage() {
                 Guardar
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
         </DialogContent>
       </Dialog>

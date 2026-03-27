@@ -37,6 +37,7 @@ export default function DireccionesPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [clienteId, setClienteId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("cliente_auth");
@@ -129,9 +130,14 @@ export default function DireccionesPage() {
 
   const handleDelete = async (id: number) => {
     if (!clienteId) return;
-    if (!confirm("¿Eliminar esta dirección?")) return;
-    await supabase.from("cliente_direcciones").delete().eq("id", id);
+    setConfirmDeleteId(id);
+  };
+
+  const executeDelete = async () => {
+    if (!clienteId || confirmDeleteId === null) return;
+    await supabase.from("cliente_direcciones").delete().eq("id", confirmDeleteId);
     showToast("Dirección eliminada", "info");
+    setConfirmDeleteId(null);
     fetchDirecciones(clienteId);
   };
 
@@ -360,6 +366,20 @@ export default function DireccionesPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDeleteId !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900">Confirmar acción</h3>
+            <p className="text-sm text-gray-500 mt-2">¿Eliminar esta dirección?</p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancelar</button>
+              <button onClick={executeDelete} className="px-4 py-2 text-sm font-medium text-white bg-pink-600 rounded-xl hover:bg-pink-700 transition-colors">Confirmar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

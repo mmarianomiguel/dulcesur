@@ -140,6 +140,9 @@ export default function AutoconsumoPage() {
   // Link copy
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Confirm dialog
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
+
   // Date range computation
   const dateRange = useMemo(() => {
     if (quickPeriod === "today") {
@@ -611,7 +614,7 @@ export default function AutoconsumoPage() {
                         return (
                           <tr
                             key={c.id}
-                            className={`border-b last:border-b-0 ${idx % 2 === 1 ? "bg-gray-50 dark:bg-muted/30" : ""}`}
+                            className={`border-b last:border-b-0 ${(c as any).anulado ? "opacity-50" : ""} ${idx % 2 === 1 ? "bg-gray-50 dark:bg-muted/30" : ""}`}
                           >
                             <td className="py-4 text-muted-foreground">
                               {fechaShort}
@@ -619,36 +622,43 @@ export default function AutoconsumoPage() {
                                 <span className="mx-1.5 text-muted-foreground/50">&middot;</span>
                               )}
                               {horaShort}
+                              {(c as any).anulado && <span className="ml-2 text-[10px] font-medium text-red-500 bg-red-50 px-1.5 py-0.5 rounded">ANULADO</span>}
                             </td>
-                            <td className="py-4 font-semibold text-foreground">{c.producto_nombre}</td>
-                            <td className="py-4 text-right">{c.cantidad}</td>
-                            <td className="py-4 text-right text-muted-foreground">{formatCurrency(c.costo_unitario, true)}</td>
-                            <td className="py-4 text-right font-semibold text-foreground">{formatCurrency(c.costo_total, true)}</td>
-                            <td className="py-4 text-right">
+                            <td className={`py-4 font-semibold ${(c as any).anulado ? "line-through text-muted-foreground" : "text-foreground"}`}>{c.producto_nombre}</td>
+                            <td className={`py-4 text-right ${(c as any).anulado ? "line-through" : ""}`}>{c.cantidad}</td>
+                            <td className={`py-4 text-right ${(c as any).anulado ? "line-through text-muted-foreground" : "text-muted-foreground"}`}>{formatCurrency(c.costo_unitario, true)}</td>
+                            <td className={`py-4 text-right font-semibold ${(c as any).anulado ? "line-through text-muted-foreground" : "text-foreground"}`}>{formatCurrency(c.costo_total, true)}</td>
+                            <td className="py-4 text-right">{(c as any).anulado ? null : (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>
                                     <button
-                                      onClick={async () => {
-                                        if (!confirm(`¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`)) return;
-                                        const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
-                                        const stockAntes = prod?.stock ?? 0;
-                                        const newStock = stockAntes + c.cantidad;
-                                        await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
-                                        await supabase.from("stock_movimientos").insert({
-                                          producto_id: c.producto_id,
-                                          tipo: "ajuste",
-                                          cantidad_antes: stockAntes,
-                                          cantidad_despues: newStock,
-                                          cantidad: c.cantidad,
-                                          referencia: "Anulación autoconsumo",
-                                          descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMiembro?.nombre})`,
-                                          usuario: "Admin",
+                                      onClick={() => {
+                                        setConfirmDialog({
+                                          open: true,
+                                          title: "Anular consumo",
+                                          message: `¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`,
+                                          onConfirm: async () => {
+                                            const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
+                                            const stockAntes = prod?.stock ?? 0;
+                                            const newStock = stockAntes + c.cantidad;
+                                            await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
+                                            await supabase.from("stock_movimientos").insert({
+                                              producto_id: c.producto_id,
+                                              tipo: "ajuste",
+                                              cantidad_antes: stockAntes,
+                                              cantidad_despues: newStock,
+                                              cantidad: c.cantidad,
+                                              referencia: "Anulación autoconsumo",
+                                              descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMiembro?.nombre})`,
+                                              usuario: "Admin",
+                                            });
+                                            await supabase.from("autoconsumo").update({ anulado: true }).eq("id", c.id);
+                                            setConsumos((prev) => prev.map((x) => x.id === c.id ? { ...x, anulado: true } : x));
+                                            fetchSummary();
+                                            showAdminToast("Consumo anulado, stock devuelto", "success");
+                                          },
                                         });
-                                        await supabase.from("autoconsumo").delete().eq("id", c.id);
-                                        setConsumos((prev) => prev.filter((x) => x.id !== c.id));
-                                        fetchSummary();
-                                        showAdminToast("Consumo anulado, stock devuelto", "success");
                                       }}
                                       className="inline-flex items-center justify-center w-8 h-8 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                                     >
@@ -658,7 +668,7 @@ export default function AutoconsumoPage() {
                                   <TooltipContent side="left">Anular consumo</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            </td>
+                            )}</td>
                           </tr>
                         );
                       })}
@@ -706,26 +716,32 @@ export default function AutoconsumoPage() {
                               {formatCurrency(c.costo_total, true)}
                             </span>
                             <button
-                              onClick={async () => {
-                                if (!confirm(`¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`)) return;
-                                const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
-                                const stockAntes = prod?.stock ?? 0;
-                                const newStock = stockAntes + c.cantidad;
-                                await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
-                                await supabase.from("stock_movimientos").insert({
-                                  producto_id: c.producto_id,
-                                  tipo: "ajuste",
-                                  cantidad_antes: stockAntes,
-                                  cantidad_despues: newStock,
-                                  cantidad: c.cantidad,
-                                  referencia: "Anulación autoconsumo",
-                                  descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMiembro?.nombre})`,
-                                  usuario: "Admin",
+                              onClick={() => {
+                                setConfirmDialog({
+                                  open: true,
+                                  title: "Anular consumo",
+                                  message: `¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`,
+                                  onConfirm: async () => {
+                                    const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
+                                    const stockAntes = prod?.stock ?? 0;
+                                    const newStock = stockAntes + c.cantidad;
+                                    await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
+                                    await supabase.from("stock_movimientos").insert({
+                                      producto_id: c.producto_id,
+                                      tipo: "ajuste",
+                                      cantidad_antes: stockAntes,
+                                      cantidad_despues: newStock,
+                                      cantidad: c.cantidad,
+                                      referencia: "Anulación autoconsumo",
+                                      descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMiembro?.nombre})`,
+                                      usuario: "Admin",
+                                    });
+                                    await supabase.from("autoconsumo").delete().eq("id", c.id);
+                                    setConsumos((prev) => prev.filter((x) => x.id !== c.id));
+                                    fetchSummary();
+                                    showAdminToast("Consumo anulado, stock devuelto", "success");
+                                  },
                                 });
-                                await supabase.from("autoconsumo").delete().eq("id", c.id);
-                                setConsumos((prev) => prev.filter((x) => x.id !== c.id));
-                                fetchSummary();
-                                showAdminToast("Consumo anulado, stock devuelto", "success");
                               }}
                               className="inline-flex items-center justify-center w-8 h-8 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                             >
@@ -1057,6 +1073,18 @@ export default function AutoconsumoPage() {
                 )}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
         </DialogContent>
       </Dialog>

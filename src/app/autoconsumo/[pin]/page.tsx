@@ -36,6 +36,7 @@ interface Consumo {
   hora: string;
   producto_id: number;
   productos?: { imagen_url: string | null } | null;
+  anulado?: boolean;
 }
 
 type HistoryPeriod = "today" | "week" | "month";
@@ -452,7 +453,7 @@ export default function AutoconsumoPage() {
   };
 
   // ------- Computed: history total -------
-  const historyTotal = historial.reduce((sum, c) => sum + c.costo_total, 0);
+  const historyTotal = historial.filter((c) => !c.anulado).reduce((sum, c) => sum + c.costo_total, 0);
 
   // ------- Loading state -------
   if (loading) {
@@ -900,7 +901,7 @@ export default function AutoconsumoPage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center gap-3 px-3 py-3.5 bg-gray-50 rounded-2xl border border-gray-100"
+                    className={`flex items-center gap-3 px-3 py-3.5 rounded-2xl border ${item.anulado ? "bg-red-50/50 border-red-100 opacity-60" : "bg-gray-50 border-gray-100"}`}
                   >
                     {imgUrl ? (
                       <div className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0 bg-white border border-gray-100">
@@ -916,8 +917,9 @@ export default function AutoconsumoPage() {
                       <PlaceholderIcon size={44} />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">
+                      <p className={`text-sm font-semibold truncate ${item.anulado ? "line-through text-gray-400" : "text-gray-800"}`}>
                         {item.producto_nombre}
+                        {item.anulado && <span className="ml-1.5 text-[10px] font-medium text-red-500 no-underline">ANULADO</span>}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {fechaShort}
