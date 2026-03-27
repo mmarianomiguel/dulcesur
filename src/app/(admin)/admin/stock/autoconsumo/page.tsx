@@ -14,7 +14,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -40,6 +45,7 @@ import {
   Check,
   ShoppingBasket,
   Users,
+  Undo2,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
@@ -582,75 +588,161 @@ export default function AutoconsumoPage() {
                 No hay consumos en este periodo
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="pb-3 font-medium">Fecha</th>
-                      <th className="pb-3 font-medium">Hora</th>
-                      <th className="pb-3 font-medium">Producto</th>
-                      <th className="pb-3 font-medium text-right">Cant.</th>
-                      <th className="pb-3 font-medium text-right">Costo unit.</th>
-                      <th className="pb-3 font-medium text-right">Costo total</th>
-                      <th className="pb-3 font-medium text-right w-16"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {consumos.map((c) => (
-                      <tr key={c.id} className="border-b last:border-b-0">
-                        <td className="py-3">{formatDateARG(c.fecha)}</td>
-                        <td className="py-3">{c.hora?.slice(0, 5) || "—"}</td>
-                        <td className="py-3">{c.producto_nombre}</td>
-                        <td className="py-3 text-right">{c.cantidad}</td>
-                        <td className="py-3 text-right">{formatCurrency(c.costo_unitario, true)}</td>
-                        <td className="py-3 text-right font-medium">{formatCurrency(c.costo_total, true)}</td>
-                        <td className="py-2 text-right">
-                          <button
-                            onClick={async () => {
-                              if (!confirm(`¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`)) return;
-                              // Restore stock
-                              const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
-                              const stockAntes = prod?.stock ?? 0;
-                              const newStock = stockAntes + c.cantidad;
-                              await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
-                              // Log stock movement
-                              await supabase.from("stock_movimientos").insert({
-                                producto_id: c.producto_id,
-                                tipo: "ajuste",
-                                cantidad_antes: stockAntes,
-                                cantidad_despues: newStock,
-                                cantidad: c.cantidad,
-                                referencia: "Anulación autoconsumo",
-                                descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMember?.nombre})`,
-                                usuario: "Admin",
-                              });
-                              // Delete the consumption record
-                              await supabase.from("autoconsumo").delete().eq("id", c.id);
-                              // Refresh
-                              setConsumos((prev) => prev.filter((x) => x.id !== c.id));
-                              setDetailSummary((prev) => ({ items: prev.items - c.cantidad, total: prev.total - c.costo_total }));
-                              showAdminToast("Consumo anulado, stock devuelto", "success");
-                            }}
-                            className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded px-2 py-1 transition"
-                          >
-                            Anular
-                          </button>
-                        </td>
+              <>
+                {/* Desktop table */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="pb-3 font-medium">Fecha / Hora</th>
+                        <th className="pb-3 font-medium">Producto</th>
+                        <th className="pb-3 font-medium text-right">Cant.</th>
+                        <th className="pb-3 font-medium text-right">Costo unit.</th>
+                        <th className="pb-3 font-medium text-right">Costo total</th>
+                        <th className="pb-3 font-medium text-right w-12"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t font-semibold">
-                      <td colSpan={5} className="py-3 text-right">
-                        Total
-                      </td>
-                      <td className="py-3 text-right">
-                        {formatCurrency(detailSummary.total, true)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {consumos.map((c, idx) => {
+                        const fechaShort = c.fecha
+                          ? `${c.fecha.slice(8, 10)}/${c.fecha.slice(5, 7)}`
+                          : "—";
+                        const horaShort = c.hora?.slice(0, 5) || "";
+                        return (
+                          <tr
+                            key={c.id}
+                            className={`border-b last:border-b-0 ${idx % 2 === 1 ? "bg-gray-50 dark:bg-muted/30" : ""}`}
+                          >
+                            <td className="py-4 text-muted-foreground">
+                              {fechaShort}
+                              {horaShort && (
+                                <span className="mx-1.5 text-muted-foreground/50">&middot;</span>
+                              )}
+                              {horaShort}
+                            </td>
+                            <td className="py-4 font-semibold text-foreground">{c.producto_nombre}</td>
+                            <td className="py-4 text-right">{c.cantidad}</td>
+                            <td className="py-4 text-right text-muted-foreground">{formatCurrency(c.costo_unitario, true)}</td>
+                            <td className="py-4 text-right font-semibold text-foreground">{formatCurrency(c.costo_total, true)}</td>
+                            <td className="py-4 text-right">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger render={<span />}>
+                                    <button
+                                      onClick={async () => {
+                                        if (!confirm(`¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`)) return;
+                                        const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
+                                        const stockAntes = prod?.stock ?? 0;
+                                        const newStock = stockAntes + c.cantidad;
+                                        await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
+                                        await supabase.from("stock_movimientos").insert({
+                                          producto_id: c.producto_id,
+                                          tipo: "ajuste",
+                                          cantidad_antes: stockAntes,
+                                          cantidad_despues: newStock,
+                                          cantidad: c.cantidad,
+                                          referencia: "Anulación autoconsumo",
+                                          descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMiembro?.nombre})`,
+                                          usuario: "Admin",
+                                        });
+                                        await supabase.from("autoconsumo").delete().eq("id", c.id);
+                                        setConsumos((prev) => prev.filter((x) => x.id !== c.id));
+                                        fetchSummary();
+                                        showAdminToast("Consumo anulado, stock devuelto", "success");
+                                      }}
+                                      className="inline-flex items-center justify-center w-8 h-8 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                    >
+                                      <Undo2 className="h-4 w-4" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left">Anular consumo</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t font-semibold">
+                        <td colSpan={4} className="py-4 text-right">
+                          Total
+                        </td>
+                        <td className="py-4 text-right">
+                          {formatCurrency(detailSummary.total, true)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Mobile card list */}
+                <div className="sm:hidden space-y-2">
+                  {consumos.map((c, idx) => {
+                    const fechaShort = c.fecha
+                      ? `${c.fecha.slice(8, 10)}/${c.fecha.slice(5, 7)}`
+                      : "—";
+                    const horaShort = c.hora?.slice(0, 5) || "";
+                    return (
+                      <div
+                        key={c.id}
+                        className={`rounded-lg border p-3.5 ${idx % 2 === 1 ? "bg-gray-50 dark:bg-muted/30" : "bg-background"}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm text-foreground truncate">
+                              {c.producto_nombre}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {fechaShort}
+                              {horaShort && ` \u00b7 ${horaShort}`}
+                              {" \u00b7 "}x{c.cantidad}
+                              {" \u00b7 "}unit. {formatCurrency(c.costo_unitario, true)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="font-semibold text-sm text-foreground">
+                              {formatCurrency(c.costo_total, true)}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`)) return;
+                                const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
+                                const stockAntes = prod?.stock ?? 0;
+                                const newStock = stockAntes + c.cantidad;
+                                await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
+                                await supabase.from("stock_movimientos").insert({
+                                  producto_id: c.producto_id,
+                                  tipo: "ajuste",
+                                  cantidad_antes: stockAntes,
+                                  cantidad_despues: newStock,
+                                  cantidad: c.cantidad,
+                                  referencia: "Anulación autoconsumo",
+                                  descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMiembro?.nombre})`,
+                                  usuario: "Admin",
+                                });
+                                await supabase.from("autoconsumo").delete().eq("id", c.id);
+                                setConsumos((prev) => prev.filter((x) => x.id !== c.id));
+                                fetchSummary();
+                                showAdminToast("Consumo anulado, stock devuelto", "success");
+                              }}
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            >
+                              <Undo2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Mobile total */}
+                  <div className="rounded-lg border bg-muted/50 p-3.5 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-muted-foreground">Total</span>
+                    <span className="text-sm font-bold">{formatCurrency(detailSummary.total, true)}</span>
+                  </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
