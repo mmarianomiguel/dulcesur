@@ -228,8 +228,8 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPr
                 )}
                 {(() => {
                   const fp = ((data.forma_pago || "") + " " + (data.metodo_pago || "")).toLowerCase();
-                  const hasTransfer = fp.includes("transferencia") || fp.includes("mixto");
-                  if (!hasTransfer) return null;
+                  const hasTransferPayment = fp.includes("transferencia") || (fp.includes("mixto") && (data.monto_transferencia > 0 || detailPagos.some((p: any) => p.metodo_pago === "Transferencia")));
+                  if (!hasTransferPayment) return null;
                   return data.cuenta_transferencia_alias ? (
                     <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Banknote className="w-3 h-3" />

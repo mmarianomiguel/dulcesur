@@ -1720,7 +1720,7 @@ export default function CajaPage() {
           if (pagos.length === 0 && ventaDetail.forma_pago) pagos.push({ metodo: ventaDetail.forma_pago, monto: ventaDetail.total });
           return pagos;
         })()}
-        footerExtra={ventaDetail && (ventaDetail.forma_pago === "Transferencia" || ventaDetail.forma_pago === "Mixto") && !(ventaDetail as any).cuenta_transferencia_alias && cajaCuentasBancarias.length > 0 ? (
+        footerExtra={ventaDetail && (ventaDetail.forma_pago === "Transferencia" || (ventaDetail.forma_pago === "Mixto" && (ventaDetail as any).monto_transferencia > 0)) && !(ventaDetail as any).cuenta_transferencia_alias && cajaCuentasBancarias.length > 0 ? (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-amber-600 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Asignar cuenta:</span>
             {cajaCuentasBancarias.map((cb) => (
