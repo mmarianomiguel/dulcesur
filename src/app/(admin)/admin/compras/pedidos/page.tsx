@@ -1047,7 +1047,7 @@ export default function PedidosProveedorPage() {
             )}
             <Button size="sm" variant="outline" onClick={() => {
               const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
-              const lines = detailItems.map((i) => `• ${i.descripcion || i.producto_nombre || "Producto"} x${i.cantidad}`);
+              const lines = detailItems.map((i) => `• ${i.descripcion || "Producto"} x${i.cantidad}`);
               const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
               navigator.clipboard.writeText(text);
               showAdminToast("Pedido copiado al portapapeles", "success");
@@ -1056,7 +1056,7 @@ export default function PedidosProveedorPage() {
             </Button>
             <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => {
               const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
-              const lines = detailItems.map((i) => `• ${i.descripcion || i.producto_nombre || "Producto"} x${i.cantidad}`);
+              const lines = detailItems.map((i) => `• ${i.descripcion || "Producto"} x${i.cantidad}`);
               const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
               window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
             }}>

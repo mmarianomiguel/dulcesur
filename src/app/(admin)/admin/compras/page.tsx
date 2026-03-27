@@ -124,6 +124,7 @@ export default function ComprasPage() {
   const [providers, setProviders] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [quickPeriod, setQuickPeriod] = useState<"today" | "week" | "month" | "custom">("today");
   const [purchaseFilterMode, setPurchaseFilterMode] = useState<"day" | "month" | "range" | "all">("day");
   const [purchaseFilterDay, setPurchaseFilterDay] = useState(todayString());
   const [purchaseFilterMonth, setPurchaseFilterMonth] = useState(currentMonthPadded());
@@ -256,7 +257,22 @@ export default function ComprasPage() {
       .select("id, numero, fecha, proveedor_id, total, estado, forma_pago, estado_pago, observacion, proveedores(nombre)")
       .order("fecha", { ascending: false });
 
-    if (purchaseFilterMode === "day") {
+    // Apply date filter based on quickPeriod
+    if (quickPeriod === "today") {
+      comprasQuery = comprasQuery.eq("fecha", todayString());
+    } else if (quickPeriod === "week") {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      const mondayStr = monday.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      comprasQuery = comprasQuery.gte("fecha", mondayStr).lte("fecha", todayString());
+    } else if (quickPeriod === "month") {
+      const now = new Date();
+      const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      comprasQuery = comprasQuery.gte("fecha", firstDay).lte("fecha", todayString());
+    } else if (purchaseFilterMode === "day") {
       comprasQuery = comprasQuery.eq("fecha", purchaseFilterDay);
     } else if (purchaseFilterMode === "month") {
       const m = purchaseFilterMonth.padStart(2, "0");
@@ -280,7 +296,7 @@ export default function ComprasPage() {
     setPurchases((c as unknown as CompraRow[]) || []);
     setProviders((p || []) as unknown as Proveedor[]);
     setLoading(false);
-  }, [purchaseFilterMode, purchaseFilterDay, purchaseFilterMonth, purchaseFilterYear, purchaseFilterFrom, purchaseFilterTo]);
+  }, [quickPeriod, purchaseFilterMode, purchaseFilterDay, purchaseFilterMonth, purchaseFilterYear, purchaseFilterFrom, purchaseFilterTo]);
 
   useEffect(() => {
     fetchData();
@@ -1627,56 +1643,58 @@ export default function ComprasPage() {
 
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <div className="flex items-end gap-4 flex-wrap">
-            <div className="flex-1 max-w-md space-y-1.5">
-              <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex-1 max-w-md">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input placeholder="Buscar por numero o proveedor..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
               </div>
             </div>
-            <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Periodo</Label>
-                <Select value={purchaseFilterMode} onValueChange={(v) => setPurchaseFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-                  <SelectTrigger className="w-32"><SelectValue placeholder="Período">{{ all: "Todos", day: "Día", month: "Mensual", range: "Entre fechas" }[purchaseFilterMode]}</SelectValue></SelectTrigger>
+            <div className="flex items-center gap-1 rounded-lg border p-1">
+              {([["today", "Hoy"], ["week", "Esta semana"], ["month", "Este mes"], ["custom", "Personalizado"]] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setQuickPeriod(key)} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${quickPeriod === key ? "bg-foreground text-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {quickPeriod === "custom" && (
+              <div className="flex items-center gap-2">
+                <Select value={purchaseFilterMode} onValueChange={(v) => setPurchaseFilterMode((v ?? "day") as any)}>
+                  <SelectTrigger className="w-28">
+                    {purchaseFilterMode === "day" ? "Día" : purchaseFilterMode === "month" ? "Mes" : purchaseFilterMode === "range" ? "Rango" : "Todos"}
+                  </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="day">Día</SelectItem>
+                    <SelectItem value="month">Mes</SelectItem>
+                    <SelectItem value="range">Rango</SelectItem>
                     <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="day">Dia</SelectItem>
-                    <SelectItem value="month">Mensual</SelectItem>
-                    <SelectItem value="range">Entre fechas</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              {purchaseFilterMode === "day" && (
-                <Input type="date" value={purchaseFilterDay} onChange={(e) => setPurchaseFilterDay(e.target.value)} className="w-40" />
-              )}
-              {purchaseFilterMode === "month" && (
-                <>
-                  <Select value={purchaseFilterMonth} onValueChange={(v) => setPurchaseFilterMonth(v ?? "1")}>
-                    <SelectTrigger className="w-32"><SelectValue placeholder="Mes" /></SelectTrigger>
-                    <SelectContent>
-                      {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((m, i) => (
-                        <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input type="number" value={purchaseFilterYear} onChange={(e) => setPurchaseFilterYear(e.target.value)} className="w-20" />
-                </>
-              )}
-              {purchaseFilterMode === "range" && (
-                <>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Desde</Label>
+                {purchaseFilterMode === "day" && (
+                  <Input type="date" value={purchaseFilterDay} onChange={(e) => setPurchaseFilterDay(e.target.value)} className="w-40" />
+                )}
+                {purchaseFilterMode === "month" && (
+                  <>
+                    <Select value={purchaseFilterMonth} onValueChange={(v) => setPurchaseFilterMonth(v ?? "1")}>
+                      <SelectTrigger className="w-32"><SelectValue placeholder="Mes" /></SelectTrigger>
+                      <SelectContent>
+                        {["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((m, i) => (
+                          <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" value={purchaseFilterYear} onChange={(e) => setPurchaseFilterYear(e.target.value)} className="w-20" />
+                  </>
+                )}
+                {purchaseFilterMode === "range" && (
+                  <>
                     <Input type="date" value={purchaseFilterFrom} onChange={(e) => setPurchaseFilterFrom(e.target.value)} className="w-40" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Hasta</Label>
+                    <span className="text-muted-foreground text-sm">a</span>
                     <Input type="date" value={purchaseFilterTo} onChange={(e) => setPurchaseFilterTo(e.target.value)} className="w-40" />
-                  </div>
-                </>
-              )}
-            </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
