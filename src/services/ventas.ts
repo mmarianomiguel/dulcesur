@@ -67,7 +67,7 @@ class CajaService extends BaseService<{
   id: string;
   fecha: string;
   hora: string;
-  tipo: "ingreso" | "egreso";
+  tipo: "ingreso" | "egreso" | "cancelacion";
   descripcion: string;
   metodo_pago: string;
   monto: number;
@@ -110,6 +110,25 @@ class CajaService extends BaseService<{
       fecha: todayARG(),
       hora: nowTimeARG(),
       tipo: "egreso",
+      descripcion: opts.descripcion,
+      metodo_pago: opts.metodoPago,
+      monto: opts.monto,
+      referencia_id: opts.referenciaId || null,
+      referencia_tipo: opts.referenciaTipo || null,
+    } as never);
+  }
+
+  async registrarCancelacion(opts: {
+    descripcion: string;
+    metodoPago: string;
+    monto: number;
+    referenciaId?: string;
+    referenciaTipo?: string;
+  }) {
+    return this.create({
+      fecha: todayARG(),
+      hora: nowTimeARG(),
+      tipo: "cancelacion",
       descripcion: opts.descripcion,
       metodo_pago: opts.metodoPago,
       monto: opts.monto,

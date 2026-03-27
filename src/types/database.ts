@@ -247,7 +247,7 @@ export interface CajaMovimiento {
   id: string;
   fecha: string;
   hora: string;
-  tipo: "ingreso" | "egreso";
+  tipo: "ingreso" | "egreso" | "cancelacion";
   descripcion: string;
   metodo_pago: string;
   monto: number;
@@ -256,6 +256,15 @@ export interface CajaMovimiento {
   cuenta_bancaria: string | null;
   created_at: string;
 }
+
+// MIGRATION NOTE: Existing caja_movimientos records that represent sale cancellations
+// (referencia_tipo = 'anulacion' or 'nota_credito') currently have tipo = 'egreso'.
+// They should be migrated to tipo = 'cancelacion' with the following SQL:
+//
+//   UPDATE caja_movimientos
+//   SET tipo = 'cancelacion'
+//   WHERE tipo = 'egreso'
+//     AND referencia_tipo IN ('anulacion', 'nota_credito');
 
 export interface PagoProveedor {
   id: string;

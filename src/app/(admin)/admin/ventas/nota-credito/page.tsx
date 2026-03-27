@@ -465,12 +465,12 @@ export default function NotaCreditoPage() {
 
     // ── Impacto en caja según método de devolución ──
     if (metodoDev === "Efectivo" || metodoDev === "Transferencia") {
-      // Egreso de caja: dinero que sale hacia el cliente
+      // Cancelacion de caja: reversed income (not a real expense)
       await supabase.from("caja_movimientos").insert({
         fecha: hoy,
         hora,
-        tipo: "egreso",
-        descripcion: `Devolución NC #${numero} — ${selectedClient?.nombre || ""}`,
+        tipo: "cancelacion",
+        descripcion: `Cancelación NC #${numero} — ${selectedClient?.nombre || ""}`,
         metodo_pago: metodoDev,
         monto: total,
         referencia_id: venta.id,

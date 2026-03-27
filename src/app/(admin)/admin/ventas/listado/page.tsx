@@ -513,8 +513,8 @@ export default function ListadoVentasPage() {
       for (const cm of cajaRows || []) {
         const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
           fecha: hoy, hora,
-          tipo: "egreso",
-          descripcion: `Anulación Venta #${v.numero}${motivoTexto}`,
+          tipo: "cancelacion",
+          descripcion: `Cancelación Venta #${v.numero}${motivoTexto}`,
           metodo_pago: (cm as any).metodo_pago,
           monto: (cm as any).monto,
           referencia_id: v.id,
@@ -1240,7 +1240,7 @@ export default function ListadoVentasPage() {
         for (const cm of cajaRows || []) {
           await supabase.from("caja_movimientos").insert({
             fecha: hoy, hora,
-            tipo: "egreso",
+            tipo: "cancelacion",
             descripcion: `Cancelación Pedido Web #${pedido.numero}`,
             metodo_pago: (cm as any).metodo_pago,
             monto: (cm as any).monto,

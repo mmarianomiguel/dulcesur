@@ -592,6 +592,7 @@ export default function AutoconsumoPage() {
                       <th className="pb-3 font-medium text-right">Cant.</th>
                       <th className="pb-3 font-medium text-right">Costo unit.</th>
                       <th className="pb-3 font-medium text-right">Costo total</th>
+                      <th className="pb-3 font-medium text-right w-16"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -603,6 +604,38 @@ export default function AutoconsumoPage() {
                         <td className="py-3 text-right">{c.cantidad}</td>
                         <td className="py-3 text-right">{formatCurrency(c.costo_unitario, true)}</td>
                         <td className="py-3 text-right font-medium">{formatCurrency(c.costo_total, true)}</td>
+                        <td className="py-2 text-right">
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`)) return;
+                              // Restore stock
+                              const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
+                              const stockAntes = prod?.stock ?? 0;
+                              const newStock = stockAntes + c.cantidad;
+                              await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
+                              // Log stock movement
+                              await supabase.from("stock_movimientos").insert({
+                                producto_id: c.producto_id,
+                                tipo: "ajuste",
+                                cantidad_antes: stockAntes,
+                                cantidad_despues: newStock,
+                                cantidad: c.cantidad,
+                                referencia: "Anulación autoconsumo",
+                                descripcion: `Anulación autoconsumo - ${c.producto_nombre} (${selectedMember?.nombre})`,
+                                usuario: "Admin",
+                              });
+                              // Delete the consumption record
+                              await supabase.from("autoconsumo").delete().eq("id", c.id);
+                              // Refresh
+                              setConsumos((prev) => prev.filter((x) => x.id !== c.id));
+                              setDetailSummary((prev) => ({ items: prev.items - c.cantidad, total: prev.total - c.costo_total }));
+                              showAdminToast("Consumo anulado, stock devuelto", "success");
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded px-2 py-1 transition"
+                          >
+                            Anular
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
