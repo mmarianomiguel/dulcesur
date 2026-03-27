@@ -1702,7 +1702,7 @@ export default function ComprasPage() {
                     <th className="text-left py-3 px-4 font-medium">Proveedor</th>
                     <th className="text-left py-3 px-4 font-medium">Forma pago</th>
                     <th className="text-right py-3 px-4 font-medium">Total</th>
-                    <th className="text-center py-3 px-4 font-medium">Pago</th>
+                    <th className="text-center py-3 px-4 font-medium">Estado</th>
                     <th className="text-right py-3 px-4 font-medium w-16"></th>
                   </tr>
                 </thead>
@@ -1720,10 +1720,10 @@ export default function ComprasPage() {
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.total)}</td>
                       <td className="py-3 px-4 text-center">
                         <Badge
-                          variant={p.estado_pago === "Pagada" ? "outline" : p.estado_pago === "Pendiente" ? "destructive" : "secondary"}
+                          variant={p.estado === "Confirmada" ? "default" : p.estado === "Pendiente" ? "secondary" : "destructive"}
                           className="text-xs font-normal"
                         >
-                          {p.estado_pago || "---"}
+                          {p.estado || "---"}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right">
