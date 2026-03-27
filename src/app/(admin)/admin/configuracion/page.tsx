@@ -132,6 +132,7 @@ export default function ConfiguracionPage() {
   const [provDropdownOpen, setProvDropdownOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("empresa");
   const [successMsg, setSuccessMsg] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   // ─── Module enable/disable ───
   const allModulos = ["Dashboard", "Ventas", "Clientes", "Productos", "Proveedores", "Compras", "Caja", "Stock", "Reportes", "Vendedores", "Auditoría", "Tienda Online", "Configuración"] as const;
@@ -1101,29 +1102,33 @@ export default function ConfiguracionPage() {
                       type="file"
                       accept=".json"
                       className="hidden"
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        if (!confirm("Esto reemplazará TODOS los datos actuales. ¿Estás seguro?")) {
-                          e.target.value = "";
-                          return;
-                        }
-                        try {
-                          showAdminToast("Restaurando backup...");
-                          const text = await file.text();
-                          const json = JSON.parse(text);
-                          const res = await fetch("/api/backup", {
-                            method: "PUT",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(json),
-                          });
-                          const result = await res.json();
-                          if (!res.ok) throw new Error(result.error);
-                          showAdminToast(`Backup restaurado: ${result.success_count} tablas exitosas`);
-                        } catch {
-                          showAdminToast("Error al restaurar el backup", "error");
-                        }
-                        e.target.value = "";
+                        const inputEl = e.target;
+                        setConfirmDialog({
+                          open: true,
+                          title: "Restaurar backup",
+                          message: "Esto reemplazará TODOS los datos actuales. ¿Estás seguro?",
+                          onConfirm: async () => {
+                            try {
+                              showAdminToast("Restaurando backup...");
+                              const text = await file.text();
+                              const json = JSON.parse(text);
+                              const res = await fetch("/api/backup", {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(json),
+                              });
+                              const result = await res.json();
+                              if (!res.ok) throw new Error(result.error);
+                              showAdminToast(`Backup restaurado: ${result.success_count} tablas exitosas`);
+                            } catch {
+                              showAdminToast("Error al restaurar el backup", "error");
+                            }
+                            inputEl.value = "";
+                          },
+                        });
                       }}
                     />
                     <Button
@@ -1143,6 +1148,18 @@ export default function ConfiguracionPage() {
           )}
         </div>
       </div>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => { if (!o) { setConfirmDialog(prev => ({ ...prev, open: false })); const el = document.getElementById("backup-restore-input") as HTMLInputElement; if (el) el.value = ""; } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => { setConfirmDialog(prev => ({ ...prev, open: false })); const el = document.getElementById("backup-restore-input") as HTMLInputElement; if (el) el.value = ""; }}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
