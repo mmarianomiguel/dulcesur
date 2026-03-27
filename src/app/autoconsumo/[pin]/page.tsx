@@ -38,6 +38,32 @@ interface Consumo {
   productos?: { imagen_url: string | null } | null;
 }
 
+type HistoryPeriod = "today" | "week" | "month";
+
+// ---------------------------------------------------------------------------
+// Date helpers (Argentina timezone)
+// ---------------------------------------------------------------------------
+const todayARG = () =>
+  new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+
+function mondayOfWeekARG(): string {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - diffToMonday);
+  return monday.toLocaleDateString("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
+
+function monthStartARG(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 // ---------------------------------------------------------------------------
 // Toast component
 // ---------------------------------------------------------------------------
@@ -59,7 +85,7 @@ function Toast({
       }`}
     >
       <div
-        className={`px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium flex items-center gap-2 ${
+        className={`px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-medium flex items-center gap-2 ${
           type === "success" ? "bg-green-600" : "bg-red-500"
         }`}
       >
@@ -104,11 +130,12 @@ function Toast({
 function PlaceholderIcon({ size = 64 }: { size?: number }) {
   return (
     <div
-      className="bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0"
+      className="bg-gray-100 rounded-2xl flex items-center justify-center flex-shrink-0"
       style={{ width: size, height: size }}
     >
       <svg
-        className="w-8 h-8 text-gray-300"
+        className="text-gray-300"
+        style={{ width: size * 0.45, height: size * 0.45 }}
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -120,6 +147,60 @@ function PlaceholderIcon({ size = 64 }: { size?: number }) {
           d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
         />
       </svg>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Success overlay component
+// ---------------------------------------------------------------------------
+function SuccessOverlay({
+  visible,
+  onDone,
+}: {
+  visible: boolean;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    if (visible) {
+      const t = setTimeout(onDone, 1800);
+      return () => clearTimeout(t);
+    }
+  }, [visible, onDone]);
+
+  if (!visible) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center gap-3 animate-in zoom-in-95 duration-300">
+        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+          <svg
+            className="w-10 h-10 text-green-600 animate-[bounceCheck_0.5s_ease-in-out]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={3}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M5 13l4 4L19 7"
+              style={{
+                strokeDasharray: 24,
+                strokeDashoffset: 24,
+                animation: "drawCheck 0.4s 0.2s ease forwards",
+              }}
+            />
+          </svg>
+        </div>
+        <p className="text-lg font-semibold text-gray-800">Retiro registrado</p>
+        <p className="text-sm text-gray-500">Stock actualizado correctamente</p>
+      </div>
+      <style>{`
+        @keyframes drawCheck {
+          to { stroke-dashoffset: 0; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -143,8 +224,11 @@ export default function AutoconsumoPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [cantidad, setCantidad] = useState(1);
   const [confirming, setConfirming] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const [historial, setHistorial] = useState<Consumo[]>([]);
+  const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>("today");
+  const [refreshing, setRefreshing] = useState(false);
 
   const [toast, setToast] = useState({
     visible: false,
@@ -184,22 +268,52 @@ export default function AutoconsumoPage() {
     validate();
   }, [pin]);
 
-  // ------- Load history -------
-  const loadHistorial = useCallback(async () => {
-    if (!miembro) return;
-    const { data } = await supabase
-      .from("autoconsumo")
-      .select("*, productos(imagen_url)")
-      .eq("miembro_id", miembro.id)
-      .order("created_at", { ascending: false })
-      .limit(10);
+  // ------- Date range for history -------
+  const getDateRange = useCallback(
+    (period: HistoryPeriod): { from: string; to: string } => {
+      const today = todayARG();
+      if (period === "today") return { from: today, to: today };
+      if (period === "week") return { from: mondayOfWeekARG(), to: today };
+      return { from: monthStartARG(), to: today };
+    },
+    []
+  );
 
-    if (data) setHistorial(data as Consumo[]);
-  }, [miembro]);
+  // ------- Load history -------
+  const loadHistorial = useCallback(
+    async (period?: HistoryPeriod) => {
+      if (!miembro) return;
+      const range = getDateRange(period ?? historyPeriod);
+      const { data } = await supabase
+        .from("autoconsumo")
+        .select("*, productos(imagen_url)")
+        .eq("miembro_id", miembro.id)
+        .gte("fecha", range.from)
+        .lte("fecha", range.to)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (data) setHistorial(data as Consumo[]);
+    },
+    [miembro, historyPeriod, getDateRange]
+  );
 
   useEffect(() => {
     loadHistorial();
   }, [loadHistorial]);
+
+  // ------- Refresh handler -------
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadHistorial();
+    setRefreshing(false);
+  };
+
+  // ------- Period change -------
+  const handlePeriodChange = (period: HistoryPeriod) => {
+    setHistoryPeriod(period);
+    loadHistorial(period);
+  };
 
   // ------- Debounced search -------
   useEffect(() => {
@@ -333,10 +447,12 @@ export default function AutoconsumoPage() {
     setSelectedId(null);
     setCantidad(1);
     setConfirming(false);
-
-    showToast("Retiro registrado correctamente");
+    setShowSuccess(true);
     loadHistorial();
   };
+
+  // ------- Computed: history total -------
+  const historyTotal = historial.reduce((sum, c) => sum + c.costo_total, 0);
 
   // ------- Loading state -------
   if (loading) {
@@ -384,24 +500,30 @@ export default function AutoconsumoPage() {
 
   // ------- Main page -------
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <Toast
         visible={toast.visible}
         message={toast.message}
         type={toast.type}
       />
+      <SuccessOverlay
+        visible={showSuccess}
+        onDone={() => setShowSuccess(false)}
+      />
 
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-green-600 flex items-center justify-center">
               <span className="text-white font-bold text-sm">D</span>
             </div>
-            <span className="font-semibold text-gray-800">DulceSur</span>
+            <span className="font-semibold text-gray-800 text-[15px]">
+              DulceSur
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-green-50 flex items-center justify-center">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center">
               <svg
                 className="w-4 h-4 text-green-600"
                 fill="none"
@@ -423,12 +545,12 @@ export default function AutoconsumoPage() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 pb-8">
+      <main className="max-w-lg mx-auto px-4 pb-10">
         {/* Search */}
-        <div className="sticky top-[57px] z-30 bg-gray-50 pt-4 pb-2">
+        <div className="sticky top-[57px] z-30 bg-white pt-4 pb-2">
           <div className="relative">
             <svg
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+              className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -445,7 +567,7 @@ export default function AutoconsumoPage() {
               placeholder="Buscar producto o código..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border border-gray-200 text-base text-gray-800 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+              className="w-full pl-12 pr-12 py-4 rounded-2xl bg-gray-50 border border-gray-200 text-base text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent focus:bg-white transition min-h-[56px]"
             />
             {search && (
               <button
@@ -453,10 +575,10 @@ export default function AutoconsumoPage() {
                   setSearch("");
                   setSelectedId(null);
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center active:bg-gray-300 min-w-[32px] min-h-[32px]"
               >
                 <svg
-                  className="w-4 h-4 text-gray-500"
+                  className="w-4 h-4 text-gray-600"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -475,17 +597,17 @@ export default function AutoconsumoPage() {
 
         {/* Search results */}
         {search.trim() && (
-          <div className="mt-2 space-y-2">
+          <div className="mt-3 space-y-3">
             {searching && (
-              <div className="flex justify-center py-8">
-                <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+              <div className="flex justify-center py-10">
+                <div className="w-7 h-7 border-[3px] border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
             )}
 
             {!searching && productos.length === 0 && (
-              <div className="text-center py-10">
+              <div className="text-center py-12">
                 <svg
-                  className="w-12 h-12 mx-auto text-gray-200 mb-2"
+                  className="w-14 h-14 mx-auto text-gray-200 mb-3"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -509,47 +631,47 @@ export default function AutoconsumoPage() {
                 return (
                   <div
                     key={producto.id}
-                    className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden ${
+                    className={`bg-white rounded-2xl border-2 transition-all duration-200 overflow-hidden ${
                       isSelected
-                        ? "border-green-500 shadow-md shadow-green-100"
+                        ? "border-green-500 shadow-lg shadow-green-100"
                         : "border-gray-100 shadow-sm"
                     }`}
                   >
                     {/* Product card */}
                     <button
                       onClick={() => handleSelect(producto.id)}
-                      className="w-full flex items-center gap-3 p-3 text-left min-h-[72px]"
+                      className="w-full flex items-center gap-4 p-4 text-left min-h-[80px]"
                     >
                       {producto.imagen_url ? (
-                        <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-gray-50">
+                        <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden flex-shrink-0 bg-gray-50 border border-gray-100">
                           <Image
                             src={producto.imagen_url}
                             alt={producto.nombre}
-                            width={64}
-                            height={64}
+                            width={72}
+                            height={72}
                             className="w-full h-full object-cover"
                           />
                         </div>
                       ) : (
-                        <PlaceholderIcon size={64} />
+                        <PlaceholderIcon size={72} />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-800 text-sm leading-tight truncate">
+                        <p className="font-semibold text-gray-800 text-[15px] leading-tight truncate">
                           {producto.nombre}
                         </p>
                         {producto.codigo && (
-                          <p className="text-xs text-gray-400 mt-0.5">
+                          <p className="text-xs text-gray-400 mt-1">
                             Cód: {producto.codigo}
                           </p>
                         )}
-                        <div className="flex items-center gap-3 mt-1">
+                        <div className="flex items-center gap-3 mt-1.5">
                           <span className="text-xs text-gray-500">
                             Stock:{" "}
-                            <span className="font-medium text-gray-700">
+                            <span className="font-semibold text-gray-700">
                               {producto.stock}
                             </span>
                           </span>
-                          <span className="text-xs font-semibold text-green-700">
+                          <span className="text-sm font-bold text-green-700">
                             ${producto.costo.toLocaleString("es-AR")}
                           </span>
                         </div>
@@ -573,20 +695,21 @@ export default function AutoconsumoPage() {
 
                     {/* Expanded: quantity selector + confirm */}
                     {isSelected && (
-                      <div className="px-3 pb-3 pt-1 border-t border-gray-50">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-500">
+                      <div className="px-4 pb-4 pt-2 border-t border-gray-100 bg-gray-50/50">
+                        {/* Quantity selector - prominent */}
+                        <div className="flex items-center justify-between mb-4">
+                          <span className="text-sm font-medium text-gray-600">
                             Cantidad
                           </span>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={() =>
                                 setCantidad((c) => Math.max(1, c - 1))
                               }
-                              className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center active:bg-gray-200 transition"
+                              className="w-12 h-12 rounded-2xl bg-white border-2 border-gray-200 flex items-center justify-center active:bg-gray-100 active:border-gray-300 transition min-w-[48px] min-h-[48px]"
                             >
                               <svg
-                                className="w-5 h-5 text-gray-600"
+                                className="w-5 h-5 text-gray-700"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -599,7 +722,7 @@ export default function AutoconsumoPage() {
                                 />
                               </svg>
                             </button>
-                            <span className="w-12 text-center text-lg font-semibold text-gray-800">
+                            <span className="w-14 text-center text-2xl font-bold text-gray-800">
                               {cantidad}
                             </span>
                             <button
@@ -608,10 +731,10 @@ export default function AutoconsumoPage() {
                                   Math.min(producto.stock, c + 1)
                                 )
                               }
-                              className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center active:bg-gray-200 transition"
+                              className="w-12 h-12 rounded-2xl bg-white border-2 border-gray-200 flex items-center justify-center active:bg-gray-100 active:border-gray-300 transition min-w-[48px] min-h-[48px]"
                             >
                               <svg
-                                className="w-5 h-5 text-gray-600"
+                                className="w-5 h-5 text-gray-700"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -627,11 +750,11 @@ export default function AutoconsumoPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between mt-2 mb-3 px-1">
+                        <div className="flex items-center justify-between mb-4 px-1">
                           <span className="text-xs text-gray-400">
                             Total retiro
                           </span>
-                          <span className="text-sm font-semibold text-gray-700">
+                          <span className="text-lg font-bold text-gray-800">
                             $
                             {(producto.costo * cantidad).toLocaleString(
                               "es-AR"
@@ -642,11 +765,11 @@ export default function AutoconsumoPage() {
                         <button
                           onClick={handleConfirm}
                           disabled={confirming}
-                          className="w-full py-3.5 rounded-xl bg-green-600 text-white font-semibold text-sm active:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                          className="w-full py-4 rounded-2xl bg-green-600 text-white font-semibold text-base active:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 min-h-[56px] shadow-lg shadow-green-200"
                         >
                           {confirming ? (
                             <>
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                               Registrando...
                             </>
                           ) : (
@@ -677,15 +800,80 @@ export default function AutoconsumoPage() {
         )}
 
         {/* Recent history */}
-        <div className="mt-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 px-1">
-            Últimos retiros
-          </h2>
+        <div className="mt-8">
+          {/* History header */}
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+              Mis retiros
+            </h2>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 active:bg-gray-100 transition min-w-[36px] min-h-[36px]"
+            >
+              <svg
+                className={`w-4.5 h-4.5 ${refreshing ? "animate-spin" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </button>
+          </div>
+
+          {/* Period filter */}
+          <div className="flex rounded-2xl bg-gray-100 p-1 mb-4">
+            {(
+              [
+                { key: "today" as HistoryPeriod, label: "Hoy" },
+                { key: "week" as HistoryPeriod, label: "Esta semana" },
+                { key: "month" as HistoryPeriod, label: "Este mes" },
+              ] as const
+            ).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => handlePeriodChange(key)}
+                className={`flex-1 py-2.5 text-sm rounded-xl transition-all min-h-[44px] ${
+                  historyPeriod === key
+                    ? "bg-white text-gray-800 font-semibold shadow-sm"
+                    : "text-gray-500 active:bg-gray-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Period total */}
+          {historial.length > 0 && (
+            <div className="bg-green-50 border border-green-100 rounded-2xl p-4 mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-green-600 font-medium">
+                  Total del periodo
+                </p>
+                <p className="text-lg font-bold text-green-700">
+                  ${historyTotal.toLocaleString("es-AR")}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-green-600 font-medium">Retiros</p>
+                <p className="text-lg font-bold text-green-700">
+                  {historial.length}
+                </p>
+              </div>
+            </div>
+          )}
 
           {historial.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+            <div className="bg-gray-50 rounded-2xl border border-gray-100 p-10 text-center">
               <svg
-                className="w-10 h-10 mx-auto text-gray-200 mb-2"
+                className="w-12 h-12 mx-auto text-gray-200 mb-3"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -698,44 +886,47 @@ export default function AutoconsumoPage() {
                 />
               </svg>
               <p className="text-gray-400 text-sm">
-                Aún no hay retiros registrados
+                No hay retiros en este periodo
               </p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            <div className="space-y-2">
               {historial.map((item) => {
                 const imgUrl = item.productos?.imagen_url ?? null;
+                const fechaShort = item.fecha
+                  ? `${item.fecha.slice(8, 10)}/${item.fecha.slice(5, 7)}`
+                  : "";
+                const horaShort = item.hora?.slice(0, 5) || "";
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center gap-3 px-3 py-3"
+                    className="flex items-center gap-3 px-3 py-3.5 bg-gray-50 rounded-2xl border border-gray-100"
                   >
                     {imgUrl ? (
-                      <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-50">
+                      <div className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0 bg-white border border-gray-100">
                         <Image
                           src={imgUrl}
                           alt={item.producto_nombre}
-                          width={40}
-                          height={40}
+                          width={44}
+                          height={44}
                           className="w-full h-full object-cover"
                         />
                       </div>
                     ) : (
-                      <PlaceholderIcon size={40} />
+                      <PlaceholderIcon size={44} />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">
+                      <p className="text-sm font-semibold text-gray-800 truncate">
                         {item.producto_nombre}
                       </p>
-                      <p className="text-xs text-gray-400">
-                        {item.fecha} &middot; {item.hora}
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {fechaShort}
+                        {horaShort && ` \u00b7 ${horaShort}`}
+                        {" \u00b7 "}x{item.cantidad}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-gray-700">
-                        x{item.cantidad}
-                      </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm font-bold text-gray-800">
                         ${item.costo_total.toLocaleString("es-AR")}
                       </p>
                     </div>
