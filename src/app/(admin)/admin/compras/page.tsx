@@ -42,6 +42,8 @@ import {
   TrendingUp,
   Printer,
   Download,
+  Copy,
+  MessageCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -1323,6 +1325,30 @@ export default function ComprasPage() {
               <Printer className="w-3.5 h-3.5" />
               Carteles de precio
             </Button>
+            {detailCompra.estado === "Pendiente" && (
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                const provNombre = detailCompra.proveedores?.nombre || "Proveedor";
+                const lines = detailItems.map((i: any) => `• ${i.descripcion} x${i.cantidad}`);
+                const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
+                navigator.clipboard.writeText(text);
+                showAdminToast("Pedido copiado al portapapeles", "success");
+              }}>
+                <Copy className="w-3.5 h-3.5" />
+                Copiar pedido
+              </Button>
+            )}
+            {detailCompra.estado === "Pendiente" && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-green-600 border-green-200 hover:bg-green-50" onClick={() => {
+                const provNombre = detailCompra.proveedores?.nombre || "Proveedor";
+                const lines = detailItems.map((i: any) => `• ${i.descripcion} x${i.cantidad}`);
+                const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
+                const encoded = encodeURIComponent(text);
+                window.open(`https://wa.me/?text=${encoded}`, "_blank");
+              }}>
+                <MessageCircle className="w-3.5 h-3.5" />
+                WhatsApp
+              </Button>
+            )}
             {detailCompra.estado === "Pendiente" && (
               <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={async () => {
                 if (!confirm("¿Confirmar ingreso al stock? Se actualizará stock, caja y precios.")) return;
