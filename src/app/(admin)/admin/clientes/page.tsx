@@ -920,8 +920,8 @@ export default function ClientesPage() {
             </Card>
           </div>
 
-          <Card>
-            <CardContent className="pt-6">
+          <Card className="overflow-visible">
+            <CardContent className="pt-6 overflow-visible">
               <div className="flex flex-wrap gap-4">
                 <div className="space-y-1.5 flex-1 min-w-[200px]">
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">NOMBRE / CUIT</span>
