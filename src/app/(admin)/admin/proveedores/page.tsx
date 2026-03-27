@@ -328,15 +328,9 @@ export default function ProveedoresPage() {
     });
   };
 
-  const handlePago = async () => {
-    if (saving) return; // Guard against double-click
+  const executePago = async () => {
     if (!pagoDialog.data) return;
     const monto = parseFloat(pagoForm.monto);
-    if (!monto || monto <= 0) return;
-    if (monto > pagoDialog.data.saldo && pagoDialog.data.saldo > 0) {
-      if (!confirm(`El monto ($${monto.toLocaleString()}) supera la deuda ($${pagoDialog.data.saldo.toLocaleString()}). ¿Continuar?`)) return;
-    }
-
     setSaving(true);
     try {
       const provId = pagoDialog.data.id;
