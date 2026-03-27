@@ -328,6 +328,23 @@ export default function ProveedoresPage() {
     });
   };
 
+  const handlePago = () => {
+    if (saving) return;
+    if (!pagoDialog.data) return;
+    const monto = parseFloat(pagoForm.monto);
+    if (!monto || monto <= 0) return;
+    if (monto > pagoDialog.data.saldo && pagoDialog.data.saldo > 0) {
+      setConfirmDialog({
+        open: true,
+        title: "Confirmar pago",
+        message: `El monto ($${monto.toLocaleString()}) supera la deuda ($${pagoDialog.data.saldo.toLocaleString()}). ¿Continuar?`,
+        onConfirm: () => executePago(),
+      });
+      return;
+    }
+    executePago();
+  };
+
   const executePago = async () => {
     if (!pagoDialog.data) return;
     const monto = parseFloat(pagoForm.monto);
@@ -730,11 +747,17 @@ export default function ProveedoresPage() {
                           {c.titular && <div className="text-[11px] text-muted-foreground">Titular: {c.titular}</div>}
                           {c.nombre && c.alias && <div className="text-[10px] text-muted-foreground">{c.nombre}</div>}
                         </div>
-                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 hover:text-red-600" onClick={async () => {
-                          if (!confirm("¿Eliminar esta cuenta?")) return;
-                          await supabase.from("cuentas_bancarias").update({ activo: false }).eq("id", c.id);
-                          setProvCuentas((prev) => prev.filter((x) => x.id !== c.id));
-                          showAdminToast("Cuenta eliminada", "success");
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 hover:text-red-600" onClick={() => {
+                          setConfirmDialog({
+                            open: true,
+                            title: "Eliminar cuenta",
+                            message: "¿Eliminar esta cuenta?",
+                            onConfirm: async () => {
+                              await supabase.from("cuentas_bancarias").update({ activo: false }).eq("id", c.id);
+                              setProvCuentas((prev) => prev.filter((x) => x.id !== c.id));
+                              showAdminToast("Cuenta eliminada", "success");
+                            },
+                          });
                         }}>
                           <Trash2 className="w-3 h-3" />
                         </Button>
@@ -1128,6 +1151,18 @@ export default function ProveedoresPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
