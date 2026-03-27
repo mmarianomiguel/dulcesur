@@ -477,6 +477,18 @@ export default function PedidosProveedorPage() {
   const handleDeletePedido = async (pedido: PedidoRow) => {
     setDeleting(true);
     try {
+      // Also delete associated pending compra if exists
+      const pedDisplay = pedidoDisplayNum(pedido.id);
+      const { data: pendingCompra } = await supabase
+        .from("compras")
+        .select("id")
+        .eq("estado", "Pendiente")
+        .ilike("observacion", `%${pedDisplay}%`)
+        .maybeSingle();
+      if (pendingCompra) {
+        await supabase.from("compra_items").delete().eq("compra_id", pendingCompra.id);
+        await supabase.from("compras").delete().eq("id", pendingCompra.id);
+      }
       await supabase.from("pedido_proveedor_items").delete().eq("pedido_id", pedido.id);
       await supabase.from("pedidos_proveedor").delete().eq("id", pedido.id);
       setDeleteConfirm({ open: false, pedido: null });
@@ -1104,7 +1116,7 @@ export default function PedidosProveedorPage() {
     const isParcial = detailPedido.estado === "Recibido Parcial";
     const canReceive = detailPedido.estado === "Enviado" || isParcial;
     const canEdit = detailPedido.estado === "Borrador";
-    const canDelete = detailPedido.estado === "Borrador";
+    const canDelete = detailPedido.estado === "Borrador" || detailPedido.estado === "Enviado";
     const detailTotal = detailItems.reduce((a, i) => a + i.subtotal, 0);
     const cfg = estadoConfig(detailPedido.estado);
     const EstadoIcon = cfg.icon;
