@@ -642,6 +642,7 @@ export default function CheckoutPage() {
         entregado: false,
         origen: "tienda",
         metodo_entrega: metodoEntrega === "retiro" ? "retiro" : "envio",
+        vendedor_id: "94b3d01c-6be8-4a38-a8f0-c42b6502b19e",
       }).select("id").single();
 
       if (ventaError) throw ventaError;
