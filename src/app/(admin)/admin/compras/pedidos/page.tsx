@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { showAdminToast } from "@/components/admin-toast";
 import { todayARG, nowTimeARG, currentMonthPadded } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,8 @@ import {
   CheckCircle2,
   TruckIcon,
   FileText,
+  Copy,
+  MessageCircle,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
@@ -1042,6 +1045,23 @@ export default function PedidosProveedorPage() {
                 </Button>
               </>
             )}
+            <Button size="sm" variant="outline" onClick={() => {
+              const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
+              const lines = detailItems.map((i) => `• ${i.descripcion || i.producto_nombre || "Producto"} x${i.cantidad}`);
+              const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
+              navigator.clipboard.writeText(text);
+              showAdminToast("Pedido copiado al portapapeles", "success");
+            }}>
+              <Copy className="w-4 h-4 mr-1.5" />Copiar
+            </Button>
+            <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => {
+              const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
+              const lines = detailItems.map((i) => `• ${i.descripcion || i.producto_nombre || "Producto"} x${i.cantidad}`);
+              const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
+              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+            }}>
+              <MessageCircle className="w-4 h-4 mr-1.5" />WhatsApp
+            </Button>
             {canReceive && (
               <Button size="sm" onClick={openReceiveDialog}>
                 <Package className="w-4 h-4 mr-1.5" />Recibir Mercaderia
