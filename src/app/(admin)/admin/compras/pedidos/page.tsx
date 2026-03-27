@@ -246,7 +246,7 @@ export default function PedidosProveedorPage() {
 
     let query = supabase
       .from("productos")
-      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, categoria_id, producto_proveedores!inner(proveedor_id, precio_proveedor, cantidad_minima_pedido)")
+      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, categoria_id, producto_proveedores!inner(proveedor_id, precio_proveedor, cantidad_minima_pedido), presentaciones(nombre, cantidad)")
       .eq("activo", true)
       .eq("producto_proveedores.proveedor_id", selectedProveedorId);
 
@@ -271,6 +271,12 @@ export default function PedidosProveedorPage() {
             faltante = Math.abs(stock);
           } else {
             faltante = Math.max(pp?.cantidad_minima_pedido || 1, minimo > 0 ? minimo * 2 - stock : 1);
+          }
+          // Round up to full boxes if product has a Caja presentation
+          const cajaPres = (p.presentaciones || []).find((pr: any) => pr.nombre?.toLowerCase().startsWith("caja") && pr.cantidad > 1);
+          if (cajaPres) {
+            const unidadesPorCaja = cajaPres.cantidad;
+            faltante = Math.ceil(faltante / unidadesPorCaja) * unidadesPorCaja;
           }
           const precio = pp?.precio_proveedor || p.costo || 0;
           return {
@@ -1718,7 +1724,7 @@ export default function PedidosProveedorPage() {
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {p.estado === "Borrador" && (
+                            {(p.estado === "Borrador" || p.estado === "Enviado") && (
                               <Button
                                 variant="ghost"
                                 size="icon"
