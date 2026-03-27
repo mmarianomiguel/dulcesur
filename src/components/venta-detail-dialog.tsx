@@ -228,7 +228,7 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPr
                 )}
                 {(() => {
                   const fp = ((data.forma_pago || "") + " " + (data.metodo_pago || "")).toLowerCase();
-                  const hasTransferPayment = fp.includes("transferencia") || (fp.includes("mixto") && (data.monto_transferencia > 0 || detailPagos.some((p: any) => p.metodo_pago === "Transferencia")));
+                  const hasTransferPayment = fp.includes("transferencia") || (fp.includes("mixto") && ((data as any).monto_transferencia > 0 || (pagos || []).some((p: any) => (p.metodo_pago || p.metodo) === "Transferencia")));
                   if (!hasTransferPayment) return null;
                   return data.cuenta_transferencia_alias ? (
                     <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
