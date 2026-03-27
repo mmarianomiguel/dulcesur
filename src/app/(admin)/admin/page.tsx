@@ -83,6 +83,8 @@ interface ClienteInfo {
   nombre: string;
   domicilio: string | null;
   localidad: string | null;
+  provincia: string | null;
+  codigo_postal: string | null;
   telefono: string | null;
   saldo: number;
   situacion_iva: string | null;
@@ -114,6 +116,7 @@ interface PedidoVenta {
   entregado: boolean;
   metodo_entrega: string | null;
   created_at: string;
+  origen?: string;
   clientes: ClienteInfo | null;
   venta_items: VentaItemRow[];
 }
@@ -258,7 +261,7 @@ export default function DashboardPage() {
   const fetchPedidosOnline = useCallback(async () => {
     const { data: ventasOnline } = await supabase
       .from("ventas")
-      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, cuenta_transferencia_alias, cliente_id, clientes(nombre, domicilio, localidad, telefono, saldo, situacion_iva), venta_items(id, producto_id, codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
+      .select("id, numero, fecha, forma_pago, total, subtotal, estado, observacion, entregado, metodo_entrega, created_at, cuenta_transferencia_alias, cliente_id, origen, clientes(nombre, domicilio, localidad, provincia, codigo_postal, telefono, saldo, situacion_iva), venta_items(id, producto_id, codigo, descripcion, cantidad, precio_unitario, descuento, subtotal, unidad_medida, presentacion, unidades_por_presentacion)")
       .eq("origen", "tienda")
       .eq("entregado", false)
       .neq("estado", "anulada")
@@ -542,6 +545,15 @@ export default function DashboardPage() {
   const handlePrintRemito = async (venta: PedidoVenta) => {
     const cliente = venta.clientes;
 
+    // Enrich with pedidos_tienda data for online orders
+    if (venta.origen === "tienda") {
+      const { data: ptData } = await supabase.from("pedidos_tienda").select("direccion_texto, telefono, nombre_cliente").eq("numero", venta.numero).maybeSingle();
+      if (ptData) {
+        (venta as any)._direccion_texto = ptData.direccion_texto;
+        (venta as any)._telefono = ptData.telefono;
+      }
+    }
+
     // Fetch product IDs to check for combos
     const { data: ventaItemsDB } = await supabase
       .from("venta_items")
@@ -635,10 +647,17 @@ export default function DashboardPage() {
       formaPago: venta.forma_pago,
       moneda: "ARS",
       cliente: cliente?.nombre || "Consumidor Final",
-      clienteDireccion: [cliente?.domicilio, cliente?.localidad].filter(Boolean).join(", ") || null,
-      clienteTelefono: cliente?.telefono || null,
-      clienteCondicionIva: cliente?.situacion_iva || null,
-      vendedor: "Pedido Online",
+      clienteDireccion: (() => {
+        // Try pedidos_tienda for full address
+        const ptDir = (venta as any)._direccion_texto;
+        if (ptDir) return ptDir;
+        const parts = [cliente?.domicilio, cliente?.localidad, cliente?.provincia].filter(Boolean);
+        if (cliente?.codigo_postal) parts.push(`(${cliente.codigo_postal})`);
+        return parts.join(", ") || null;
+      })(),
+      clienteTelefono: cliente?.telefono || (venta as any)._telefono || null,
+      clienteCondicionIva: cliente?.situacion_iva || "Consumidor final",
+      vendedor: "Mariano Miguel",
       items: saleItems,
       fecha: new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }),
       saldoAnterior: saldoActual,

@@ -275,13 +275,12 @@ export default function VendedoresPage() {
 
     const { data: ventasData } = await supabase
       .from("ventas")
-      .select("id, fecha, hora, numero, cliente_id, total, vendedor_id, tipo_comprobante")
+      .select("id, fecha, numero, cliente_id, total, vendedor_id, tipo_comprobante, created_at")
       .neq("estado", "anulada")
       .eq("vendedor_id", vendedorId)
       .gte("fecha", dateRange.from)
       .lte("fecha", dateRange.to)
-      .order("fecha", { ascending: false })
-      .order("hora", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (!ventasData || ventasData.length === 0) {
       setVentasDetalle([]);
@@ -373,7 +372,7 @@ export default function VendedoresPage() {
       return {
         id: v.id,
         fecha: v.fecha,
-        hora: v.hora || "",
+        hora: v.created_at ? new Date(v.created_at).toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" }) : "",
         nro_comprobante: (isNC ? "NC " : "") + (v.numero || ((v as any).tipo_comprobante || "")),
         cliente_nombre: v.cliente_id ? (clienteMap[v.cliente_id] || "Cliente") : "Consumidor final",
         total: v.total * sign,
