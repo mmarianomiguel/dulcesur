@@ -167,39 +167,45 @@ export default function ComprasPage() {
     if (!detailCompra) return;
     setAnulando(true);
     try {
-      for (const item of detailItems) {
-        if (!item.producto_id) continue;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
-        if (!prod) continue;
-        const unitsToRevert = item.cantidad;
-        const newStock = Math.max(0, prod.stock - unitsToRevert);
-        await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
-        await supabase.from("stock_movimientos").insert({
-          producto_id: item.producto_id, tipo: "anulacion",
-          cantidad_antes: prod.stock, cantidad_despues: newStock, cantidad: unitsToRevert,
-          referencia: `Anulación Compra #${detailCompra.numero}`,
-          descripcion: `Anulación compra - ${item.descripcion}`,
-          usuario: currentUser?.nombre || "Admin", orden_id: detailCompra.id,
-        });
+      const isPendiente = detailCompra.estado === "Pendiente";
+
+      if (!isPendiente) {
+        // Only revert stock/caja if the purchase was confirmed (stock was ingested)
+        for (const item of detailItems) {
+          if (!item.producto_id) continue;
+          const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+          if (!prod) continue;
+          const unitsToRevert = item.cantidad;
+          const newStock = Math.max(0, prod.stock - unitsToRevert);
+          await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+          await supabase.from("stock_movimientos").insert({
+            producto_id: item.producto_id, tipo: "anulacion",
+            cantidad_antes: prod.stock, cantidad_despues: newStock, cantidad: unitsToRevert,
+            referencia: `Anulación Compra #${detailCompra.numero}`,
+            descripcion: `Anulación compra - ${item.descripcion}`,
+            usuario: currentUser?.nombre || "Admin", orden_id: detailCompra.id,
+          });
+        }
+        const { data: cajaRows } = await supabase.from("caja_movimientos").select("*").eq("referencia_id", detailCompra.id).eq("referencia_tipo", "compra");
+        for (const cm of cajaRows || []) {
+          await supabase.from("caja_movimientos").insert({
+            fecha: todayString(), hora: nowTimeARG(), tipo: "ingreso",
+            descripcion: `Anulación Compra #${detailCompra.numero}`,
+            metodo_pago: (cm as any).metodo_pago || "Efectivo",
+            monto: Math.abs((cm as any).monto),
+            referencia_id: detailCompra.id, referencia_tipo: "anulacion",
+          });
+        }
+        if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
+          const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
+          if (prov) await supabase.from("proveedores").update({ saldo: Math.max(0, prov.saldo - detailCompra.total) }).eq("id", detailCompra.proveedor_id);
+        }
       }
-      const { data: cajaRows } = await supabase.from("caja_movimientos").select("*").eq("referencia_id", detailCompra.id).eq("referencia_tipo", "compra");
-      for (const cm of cajaRows || []) {
-        await supabase.from("caja_movimientos").insert({
-          fecha: todayString(), hora: nowTimeARG(), tipo: "ingreso",
-          descripcion: `Anulación Compra #${detailCompra.numero}`,
-          metodo_pago: (cm as any).metodo_pago || "Efectivo",
-          monto: Math.abs((cm as any).monto),
-          referencia_id: detailCompra.id, referencia_tipo: "anulacion",
-        });
-      }
-      if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
-        const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
-        if (prov) await supabase.from("proveedores").update({ saldo: Math.max(0, prov.saldo - detailCompra.total) }).eq("id", detailCompra.proveedor_id);
-      }
+
       await supabase.from("compras").update({ estado: "Anulada" }).eq("id", detailCompra.id);
       setDetailCompra({ ...detailCompra, estado: "Anulada" } as any);
       fetchData();
-      showAdminToast("Compra anulada. Stock revertido.", "success");
+      showAdminToast(isPendiente ? "Compra pendiente anulada." : "Compra anulada. Stock revertido.", "success");
     } catch (err: any) {
       showAdminToast("Error al anular: " + (err.message || "Error"), "error");
     }
@@ -1461,7 +1467,7 @@ export default function ComprasPage() {
                 <p className="text-sm text-red-900">
                   ¿Anular compra <span className="font-bold">#{detailCompra?.numero}</span> por <span className="font-bold">{formatCurrency(detailCompra?.total || 0)}</span>?
                 </p>
-                <p className="text-xs text-red-700">Se revertirá todo el stock y los movimientos de caja asociados.</p>
+                <p className="text-xs text-red-700">{detailCompra?.estado === "Pendiente" ? "La compra no fue ingresada al stock. Solo se anulará el registro." : "Se revertirá todo el stock y los movimientos de caja asociados."}</p>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setAnularCompraDialog(false)} disabled={anulando}>Cancelar</Button>
