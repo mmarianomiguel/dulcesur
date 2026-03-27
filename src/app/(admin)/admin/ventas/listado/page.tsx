@@ -750,11 +750,42 @@ export default function ListadoVentasPage() {
 
   const fetchPedidos = useCallback(async () => {
     setPoLoading(true);
-    const { data } = await supabase
+    let ptQuery = supabase
       .from("pedidos_tienda")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(200);
+
+    // Apply same date filter as ventas
+    const todayStr = todayARG();
+    if (quickPeriod === "today") {
+      ptQuery = ptQuery.gte("created_at", todayStr + "T00:00:00").lte("created_at", todayStr + "T23:59:59");
+    } else if (quickPeriod === "week") {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      const mondayStr = monday.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      ptQuery = ptQuery.gte("created_at", mondayStr + "T00:00:00").lte("created_at", todayStr + "T23:59:59");
+    } else if (quickPeriod === "month") {
+      const now = new Date();
+      const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      ptQuery = ptQuery.gte("created_at", firstDay + "T00:00:00").lte("created_at", todayStr + "T23:59:59");
+    } else if (filterMode === "day") {
+      ptQuery = ptQuery.gte("created_at", filterDay + "T00:00:00").lte("created_at", filterDay + "T23:59:59");
+    } else if (filterMode === "month") {
+      const m = filterMonth.padStart(2, "0");
+      const start = `${filterYear}-${m}-01`;
+      const nextMonth = Number(filterMonth) === 12 ? 1 : Number(filterMonth) + 1;
+      const nextYear = Number(filterMonth) === 12 ? Number(filterYear) + 1 : Number(filterYear);
+      const end = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+      ptQuery = ptQuery.gte("created_at", start + "T00:00:00").lt("created_at", end + "T00:00:00");
+    } else if (filterMode === "range" && filterFrom && filterTo) {
+      ptQuery = ptQuery.gte("created_at", filterFrom + "T00:00:00").lte("created_at", filterTo + "T23:59:59");
+    }
+
+    const { data } = await ptQuery;
 
     if (!data) { setPoLoading(false); return; }
 
@@ -800,7 +831,7 @@ export default function ListadoVentasPage() {
 
     setPoPedidos(data.map((p: any) => ({ ...p, items: itemsByPedido[p.id] || [] })));
     setPoLoading(false);
-  }, []);
+  }, [quickPeriod, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo]);
 
   useEffect(() => { fetchPedidos(); }, [fetchPedidos]);
 
