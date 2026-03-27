@@ -194,6 +194,7 @@ export default function VentasPage() {
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
   const [newAddress, setNewAddress] = useState({ direccion: "", ciudad: "", provincia: "", codigo_postal: "", telefono: "" });
   const [savingAddress, setSavingAddress] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   const [successModal, setSuccessModal] = useState<{
     open: boolean;
