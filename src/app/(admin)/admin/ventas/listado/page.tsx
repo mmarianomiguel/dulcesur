@@ -875,12 +875,14 @@ export default function ListadoVentasPage() {
       }
     }
 
-    // Load payment breakdown - caja_movimientos + cuenta_corriente
+    // Load payment breakdown - caja_movimientos + cuenta_corriente + NC refunds
     const pagos: { metodo: string; monto: number }[] = [];
     if (ventaId) {
-      const [{ data: movs }, { data: ccMovs }] = await Promise.all([
+      const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
         supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
         supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
+        // Find NCs linked to this original sale (NC has remito_origen_id pointing to original)
+        supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       ]);
       for (const m of movs || []) {
         const existing = pagos.find((p) => p.metodo === m.metodo_pago);
@@ -890,6 +892,11 @@ export default function ListadoVentasPage() {
       const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
       if (ccTotal > 0) {
         pagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
+      }
+      // Add NC refunds as settled amount (NC = money returned/credited to client)
+      const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+      if (ncTotal > 0) {
+        pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
       }
     }
     // For Mixto online orders: enrich with pedidos_tienda to show original payment split
@@ -2100,20 +2107,29 @@ export default function ListadoVentasPage() {
                             if (cobroMixtoEf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: ventaId, referencia_tipo: "venta" });
                             if (cobroMixtoTr > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: ventaId, referencia_tipo: "venta" });
                           } else if (cobroMetodo === "Cuenta Corriente") {
-                            const clienteId = (poSelectedPedido as any).cliente_id;
+                            const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
                             if (clienteId) {
                               const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
                               const newSaldo = (cl?.saldo || 0) + pendiente;
                               await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
-                              await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, tipo: "cargo", descripcion: `Cobro #${poSelectedPedido.numero}`, monto: pendiente, saldo: newSaldo, comprobante: poSelectedPedido.numero, referencia_id: ventaId, referencia_tipo: "venta" });
+                              await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: `Saldo pendiente a cuenta corriente`, debe: pendiente, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: ventaId });
                             }
                           } else {
                             entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}`, metodo_pago: cobroMetodo, monto: pendiente, referencia_id: ventaId, referencia_tipo: "venta" });
                           }
                           if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
                           if (ventaId) {
-                            const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
-                            setDetailPagos((movs || []).map((m: any) => ({ metodo: m.metodo_pago, monto: m.monto })));
+                            const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
+                              supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+                              supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
+                              supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+                            ]);
+                            const newPagos = (movs || []).map((m: any) => ({ metodo: m.metodo_pago, monto: m.monto }));
+                            const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
+                            if (ccTotal > 0) newPagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
+                            const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+                            if (ncTotal > 0) newPagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
+                            setDetailPagos(newPagos);
                           }
                           showAdminToast("Cobro registrado", "success");
                         }}

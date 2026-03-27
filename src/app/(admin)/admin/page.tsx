@@ -326,11 +326,16 @@ export default function DashboardPage() {
     const { data: tiendaConfig } = await supabase.from("tienda_config").select("dias_entrega").single();
     if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
 
-    // Period sales
-    const { data: periodSales } = await supabase.from("ventas").select("id, total, forma_pago, estado").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
-    const salesTotal = (periodSales || []).reduce((a, v) => a + v.total, 0);
+    // Period sales — fetch tipo_comprobante to distinguish NCs from regular sales
+    const { data: periodSalesRaw } = await supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
+    // Separate NCs from regular sales
+    const periodSales = (periodSalesRaw || []).filter((v) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+    const periodNCs = (periodSalesRaw || []).filter((v) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+    const ncTotalAmount = periodNCs.reduce((a, v) => a + v.total, 0);
+    // Sales total = regular sales minus NC refund amounts
+    const salesTotal = periodSales.reduce((a, v) => a + v.total, 0) - ncTotalAmount;
     setVentasPeriodo(salesTotal);
-    setTicketsPeriodo((periodSales || []).length);
+    setTicketsPeriodo(periodSales.length);
 
     // Split Mixto into Efectivo+Transferencia+CC using caja_movimientos + cuenta_corriente
     const mixtoIds = (periodSales || []).filter((v) => v.forma_pago === "Mixto").map((v) => v.id);
@@ -363,10 +368,12 @@ export default function DashboardPage() {
     const { data: periodExpenses } = await supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso");
     setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
 
-    const { data: ventaIds } = await supabase.from("ventas").select("id").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
+    const { data: ventaIds } = await supabase.from("ventas").select("id, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
+    // Exclude NCs from margin calculation (returned items are not real profit)
+    const regularVentaIds = (ventaIds || []).filter((v) => !(v as any).tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
     let gananciaTotal = 0;
-    if (ventaIds && ventaIds.length > 0) {
-      const ids = ventaIds.map((v) => v.id);
+    if (regularVentaIds.length > 0) {
+      const ids = regularVentaIds.map((v) => v.id);
       const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, unidades_por_presentacion, presentacion, productos(costo)").in("venta_id", ids);
       gananciaTotal = (items || []).reduce((acc, item: any) => {
         const costoUnitario = item.productos?.costo ?? 0;
@@ -402,13 +409,17 @@ export default function DashboardPage() {
       const label = d.toLocaleDateString("es-AR", { month: "short" });
       monthQueries.push(
         Promise.all([
-          supabase.from("ventas").select("total").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
+          supabase.from("ventas").select("total, tipo_comprobante").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
           supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd),
-        ]).then(([{ data: mv }, { data: me }]) => ({
-          name: label,
-          ventas: (mv || []).reduce((a, v) => a + v.total, 0),
-          egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
-        }))
+        ]).then(([{ data: mv }, { data: me }]) => {
+          const regularSales = (mv || []).filter((v: any) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+          const ncSales = (mv || []).filter((v: any) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+          return {
+            name: label,
+            ventas: regularSales.reduce((a: number, v: any) => a + v.total, 0) - ncSales.reduce((a: number, v: any) => a + v.total, 0),
+            egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
+          };
+        })
       );
     }
     setMonthlyData(await Promise.all(monthQueries));
@@ -466,14 +477,16 @@ export default function DashboardPage() {
 
   // ─── Pedido actions ───
   const handleMarkDelivered = async (venta: PedidoVenta) => {
-    // Check how much is already paid in caja + cuenta corriente
-    const [{ data: cajaMovs }, { data: ccMovs }] = await Promise.all([
+    // Check how much is already paid in caja + cuenta corriente + NC refunds
+    const [{ data: cajaMovs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
       supabase.from("caja_movimientos").select("monto").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
       supabase.from("cuenta_corriente").select("debe").eq("venta_id", venta.id),
+      supabase.from("ventas").select("id, total").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
     ]);
     const pagadoCaja = (cajaMovs || []).reduce((s: number, m: any) => s + m.monto, 0);
     const pagadoCC = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
-    const pagado = pagadoCaja + pagadoCC;
+    const ncRefunded = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+    const pagado = pagadoCaja + pagadoCC + ncRefunded;
     const pendiente = Math.max(0, venta.total - pagado);
 
     if (pendiente > 0 && !(venta as any).cliente_id) {

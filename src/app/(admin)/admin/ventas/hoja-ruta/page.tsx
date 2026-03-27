@@ -161,19 +161,34 @@ export default function HojaDeRutaPage() {
     const rows = (data || []) as unknown as VentaRow[];
     setVentas(rows);
 
-    // Fetch payments per order from caja_movimientos
+    // Fetch payments per order from caja_movimientos + NC refunds
     if (rows.length > 0) {
       const ventaIds = rows.map((v) => v.id);
-      const { data: movs } = await supabase
-        .from("caja_movimientos")
-        .select("referencia_id, monto")
-        .eq("tipo", "ingreso")
-        .eq("referencia_tipo", "venta")
-        .in("referencia_id", ventaIds);
+      const [{ data: movs }, { data: ncVentas }] = await Promise.all([
+        supabase
+          .from("caja_movimientos")
+          .select("referencia_id, monto")
+          .eq("tipo", "ingreso")
+          .eq("referencia_tipo", "venta")
+          .in("referencia_id", ventaIds),
+        // Find NCs linked to these sales (NC has remito_origen_id pointing to original)
+        supabase
+          .from("ventas")
+          .select("remito_origen_id, total")
+          .in("remito_origen_id", ventaIds)
+          .ilike("tipo_comprobante", "Nota de Crédito%")
+          .neq("estado", "anulada"),
+      ]);
 
       const pagadoMap: Record<string, number> = {};
       (movs || []).forEach((m: { referencia_id: string; monto: number }) => {
         pagadoMap[m.referencia_id] = (pagadoMap[m.referencia_id] || 0) + m.monto;
+      });
+      // Add NC refund amounts as "paid" (they reduce what the client owes)
+      (ncVentas || []).forEach((nc: any) => {
+        if (nc.remito_origen_id) {
+          pagadoMap[nc.remito_origen_id] = (pagadoMap[nc.remito_origen_id] || 0) + (nc.total || 0);
+        }
       });
       setPagadoPorVenta(pagadoMap);
     } else {
@@ -215,20 +230,35 @@ export default function HojaDeRutaPage() {
     const rows = (data || []) as unknown as VentaRow[];
     setHistorialVentas(rows);
 
-    // Fetch payments for these orders
+    // Fetch payments for these orders + NC refunds
     if (rows.length > 0) {
       const ventaIds = rows.map((v) => v.id);
-      const { data: movs } = await supabase
-        .from("caja_movimientos")
-        .select("referencia_id, monto, metodo_pago")
-        .eq("tipo", "ingreso")
-        .eq("referencia_tipo", "venta")
-        .in("referencia_id", ventaIds);
+      const [{ data: movs }, { data: ncVentas }] = await Promise.all([
+        supabase
+          .from("caja_movimientos")
+          .select("referencia_id, monto, metodo_pago")
+          .eq("tipo", "ingreso")
+          .eq("referencia_tipo", "venta")
+          .in("referencia_id", ventaIds),
+        supabase
+          .from("ventas")
+          .select("remito_origen_id, total")
+          .in("remito_origen_id", ventaIds)
+          .ilike("tipo_comprobante", "Nota de Crédito%")
+          .neq("estado", "anulada"),
+      ]);
 
       const pagosMap: Record<string, { monto: number; metodo: string }[]> = {};
       (movs || []).forEach((m: { referencia_id: string; monto: number; metodo_pago: string }) => {
         if (!pagosMap[m.referencia_id]) pagosMap[m.referencia_id] = [];
         pagosMap[m.referencia_id].push({ monto: m.monto, metodo: m.metodo_pago });
+      });
+      // Add NC refunds as payments
+      (ncVentas || []).forEach((nc: any) => {
+        if (nc.remito_origen_id && nc.total > 0) {
+          if (!pagosMap[nc.remito_origen_id]) pagosMap[nc.remito_origen_id] = [];
+          pagosMap[nc.remito_origen_id].push({ monto: nc.total, metodo: "Nota de Crédito" });
+        }
       });
       setHistorialPagos(pagosMap);
     } else {
@@ -335,12 +365,22 @@ export default function HojaDeRutaPage() {
     setDetailVenta(venta);
     setDetailPagos([]);
     setDetailOpen(true);
-    const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+    const [{ data: movs }, { data: ncVentas }] = await Promise.all([
+      supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+      supabase.from("ventas").select("id, total").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+    ]);
+    const pagos: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
     if (movs && movs.length > 0) {
-      setDetailPagos(movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
+      pagos.push(...movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
     } else if (venta.forma_pago) {
-      setDetailPagos([{ metodo: venta.forma_pago, monto: venta.total }]);
+      pagos.push({ metodo: venta.forma_pago, monto: venta.total });
     }
+    // Add NC refunds as settled amount
+    const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+    if (ncTotal > 0) {
+      pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
+    }
+    setDetailPagos(pagos);
   };
 
   // Payment dialog state
