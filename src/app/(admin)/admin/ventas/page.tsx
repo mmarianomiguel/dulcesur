@@ -1765,7 +1765,7 @@ export default function VentasPage() {
           cashReceived: formaPago === "Efectivo" ? cashReceivedNum : undefined,
           cashChange: formaPago === "Efectivo" ? (cashReceivedNum - totalACobrar) : undefined,
           pagoEfectivo: formaPago === "Mixto" ? mixtoEfectivo : formaPago === "Efectivo" ? total : undefined,
-          pagoTransferencia: formaPago === "Mixto" ? mixtoTransferencia : formaPago === "Transferencia" ? total : undefined,
+          pagoTransferencia: formaPago === "Mixto" ? (mixtoTransferencia + transferSurcharge) : formaPago === "Transferencia" ? total : undefined,
           pagoCuentaCorriente: formaPago === "Mixto" ? mixtoCuentaCorriente : formaPago === "Cuenta Corriente" ? total : undefined,
         };
 
