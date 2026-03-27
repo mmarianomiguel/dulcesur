@@ -66,6 +66,7 @@ export default function UsuariosPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   const fetchUsuarios = useCallback(async () => {
     setLoading(true);
@@ -152,13 +153,19 @@ export default function UsuariosPage() {
     setSaving(false);
   };
 
-  const handleDeactivate = async (u: Usuario) => {
-    if (!confirm(`Desactivar a "${u.nombre}"?`)) return;
-    const res = await fetch(
-      `/api/usuarios?id=${u.id}&auth_id=${u.auth_id || ""}`,
-      { method: "DELETE" }
-    );
-    if (res.ok) fetchUsuarios();
+  const handleDeactivate = (u: Usuario) => {
+    setConfirmDialog({
+      open: true,
+      title: "Desactivar usuario",
+      message: `Desactivar a "${u.nombre}"?`,
+      onConfirm: async () => {
+        const res = await fetch(
+          `/api/usuarios?id=${u.id}&auth_id=${u.auth_id || ""}`,
+          { method: "DELETE" }
+        );
+        if (res.ok) fetchUsuarios();
+      },
+    });
   };
 
   const handleToggleActive = async (u: Usuario) => {
@@ -390,6 +397,18 @@ export default function UsuariosPage() {
                 {editingUser ? "Guardar" : "Crear Usuario"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
         </DialogContent>
       </Dialog>

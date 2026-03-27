@@ -1433,11 +1433,21 @@ export default function VentasPage() {
           const currentSaldo = freshClient?.saldo ?? selectedClient.saldo ?? 0;
           const newDebt = currentSaldo + ccAmount;
           if (newDebt > limit) {
-            if (!confirm(`El cliente superará su límite de crédito (${formatCurrency(limit)}). Deuda resultante: ${formatCurrency(newDebt)}. ¿Continuar?`)) return;
+            setConfirmDialog({
+              open: true,
+              title: "Límite de crédito",
+              message: `El cliente superará su límite de crédito (${formatCurrency(limit)}). Deuda resultante: ${formatCurrency(newDebt)}. ¿Continuar?`,
+              onConfirm: () => executeComprobante(),
+            });
+            return;
           }
         }
       }
     }
+    executeComprobante();
+  };
+
+  const executeComprobante = async () => {
     setSaving(true);
     setCashDialogOpen(false);
 
@@ -1911,7 +1921,16 @@ export default function VentasPage() {
                   onClick={(e) => {
                     e.stopPropagation();
                     if (items.length > 0 && (formaPago === "Cuenta Corriente" || (formaPago === "Mixto" && mixtoCuentaCorriente > 0))) {
-                      if (!confirm("Hay items en el carrito con Cuenta Corriente. ¿Cambiar cliente?")) return;
+                      setConfirmDialog({
+                        open: true,
+                        title: "Cambiar cliente",
+                        message: "Hay items en el carrito con Cuenta Corriente. ¿Cambiar cliente?",
+                        onConfirm: () => {
+                          setClientId("");
+                          if (codigoClienteRef.current) codigoClienteRef.current.value = "";
+                        },
+                      });
+                      return;
                     }
                     setClientId("");
                     if (codigoClienteRef.current) codigoClienteRef.current.value = "";
@@ -3905,6 +3924,18 @@ export default function VentasPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
