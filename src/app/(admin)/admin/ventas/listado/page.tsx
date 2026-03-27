@@ -2218,7 +2218,7 @@ export default function ListadoVentasPage() {
                               key={cb.id}
                               type="button"
                               onClick={() => {
-                                setPoSelectedPedido({ ...poSelectedPedido, _pendingCuentaId: cb.id, _pendingCuentaAlias: cb.alias || cb.nombre } as any);
+                                setPoSelectedPedido({ ...poSelectedPedido, _pendingCuentaId: cb.id, _pendingCuentaAlias: cb.nombre } as any);
                               }}
                               className={`w-full text-left rounded-lg border p-2.5 transition flex items-center justify-between ${isSelected ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200" : "hover:bg-blue-50 hover:border-blue-300"}`}
                             >

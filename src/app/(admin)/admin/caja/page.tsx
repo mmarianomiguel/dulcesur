@@ -1740,12 +1740,12 @@ export default function CajaPage() {
               <button
                 key={cb.id}
                 onClick={async () => {
-                  const alias = cb.alias || cb.nombre;
-                  await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: alias }).eq("id", ventaDetail.id);
-                  await supabase.from("caja_movimientos").update({ cuenta_bancaria: alias }).eq("referencia_id", ventaDetail.id).eq("referencia_tipo", "venta").eq("metodo_pago", "Transferencia");
-                  setVentaDetail({ ...ventaDetail, cuenta_transferencia_alias: alias } as any);
+                  const nombre = cb.nombre;
+                  await supabase.from("ventas").update({ cuenta_transferencia_id: cb.id, cuenta_transferencia_alias: nombre }).eq("id", ventaDetail.id);
+                  await supabase.from("caja_movimientos").update({ cuenta_bancaria: nombre }).eq("referencia_id", ventaDetail.id).eq("referencia_tipo", "venta").eq("metodo_pago", "Transferencia");
+                  setVentaDetail({ ...ventaDetail, cuenta_transferencia_alias: nombre } as any);
                   refetchVentas();
-                  showAdminToast(`Cuenta asignada: ${alias}`, "success");
+                  showAdminToast(`Cuenta asignada: ${nombre}`, "success");
                 }}
                 className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium transition"
               >

@@ -767,20 +767,24 @@ export default function CheckoutPage() {
         const cajaHora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
         const cajaEntries: any[] = [];
         if (metodoPago === "transferencia") {
+          const cuentaNombre = cuentasBancarias.find(c => c.id === selectedCuentaId)?.nombre || null;
           cajaEntries.push({
             fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-            descripcion: `Pedido Web #${numero}`,
+            descripcion: `Pedido Web #${numero}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`,
             metodo_pago: "Transferencia", monto: vTotal,
             referencia_id: venta.id, referencia_tipo: "venta",
+            cuenta_bancaria: cuentaNombre,
           });
         } else if (metodoPago === "mixto") {
           const montoTransf = mixtoTransferencia + vRecargoTransf;
+          const cuentaNombre = cuentasBancarias.find(c => c.id === selectedCuentaId)?.nombre || null;
           if (montoTransf > 0) {
             cajaEntries.push({
               fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-              descripcion: `Pedido Web #${numero} (Transferencia)`,
+              descripcion: `Pedido Web #${numero} (Transferencia)${cuentaNombre ? ` → ${cuentaNombre}` : ""}`,
               metodo_pago: "Transferencia", monto: montoTransf,
               referencia_id: venta.id, referencia_tipo: "venta",
+              cuenta_bancaria: cuentaNombre,
             });
           }
         }
