@@ -143,6 +143,7 @@ export default function ComprasPage() {
   const [numeroCompra, setNumeroCompra] = useState("");
   const [formaPago, setFormaPago] = useState("Transferencia");
   const [saving, setSaving] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
   const [saveError, setSaveError] = useState("");
   const [confirmCuentaBancariaId, setConfirmCuentaBancariaId] = useState("");
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);

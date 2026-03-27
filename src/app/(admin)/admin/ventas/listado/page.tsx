@@ -194,6 +194,7 @@ export default function ListadoVentasPage() {
   const currentUser = useCurrentUser();
   // ─── Unified source filter ───
   const [filterSource, setFilterSource] = useState<"todos" | "pos" | "online">("todos");
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   // ══════════════════════════════════════════════════════════════
   // HISTORIAL DE VENTAS STATE
@@ -1844,7 +1845,13 @@ export default function ListadoVentasPage() {
       {/* ══════════════════════════════════════════════════════════ */}
       <Dialog open={poDetailOpen} onOpenChange={(open) => {
         if (!open && poHasChanges) {
-          if (!confirm("Tenés cambios sin guardar. ¿Cerrar de todas formas?")) return;
+          setConfirmDialog({
+            open: true,
+            title: "Cambios sin guardar",
+            message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?",
+            onConfirm: () => setPoDetailOpen(false),
+          });
+          return;
         }
         setPoDetailOpen(open);
       }}>
@@ -2334,7 +2341,15 @@ export default function ListadoVentasPage() {
                     <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
                   </Button>
                   <Button variant="outline" onClick={() => {
-                    if (poHasChanges && !confirm("Tenés cambios sin guardar. ¿Cerrar de todas formas?")) return;
+                    if (poHasChanges) {
+                      setConfirmDialog({
+                        open: true,
+                        title: "Cambios sin guardar",
+                        message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?",
+                        onConfirm: () => setPoDetailOpen(false),
+                      });
+                      return;
+                    }
                     setPoDetailOpen(false);
                   }}>
                     Cerrar
@@ -2472,6 +2487,18 @@ export default function ListadoVentasPage() {
           />
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

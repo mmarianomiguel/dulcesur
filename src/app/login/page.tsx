@@ -53,59 +53,59 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen">
       {/* Left side - decorative */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-primary/70">
-        {/* Decorative circles */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white/5" />
-        <div className="absolute top-1/3 -right-20 w-72 h-72 rounded-full bg-white/5" />
-        <div className="absolute -bottom-16 left-1/4 w-80 h-80 rounded-full bg-white/5" />
-        <div className="absolute top-1/2 left-1/3 w-40 h-40 rounded-full bg-white/10" />
-
-        {/* Grid pattern */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
-          backgroundSize: "32px 32px"
-        }} />
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)" }}>
+        {/* Candy/sweet decorative elements */}
+        <div className="absolute -top-10 -left-10 w-64 h-64 rounded-full" style={{ background: "radial-gradient(circle, rgba(233,69,96,0.15) 0%, transparent 70%)" }} />
+        <div className="absolute top-1/4 right-10 w-48 h-48 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,183,77,0.12) 0%, transparent 70%)" }} />
+        <div className="absolute bottom-1/4 left-1/3 w-56 h-56 rounded-full" style={{ background: "radial-gradient(circle, rgba(129,212,250,0.1) 0%, transparent 70%)" }} />
+        <div className="absolute -bottom-20 -right-10 w-72 h-72 rounded-full" style={{ background: "radial-gradient(circle, rgba(186,104,200,0.12) 0%, transparent 70%)" }} />
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
           <div>
             <div className="flex items-center gap-3">
-              <Image src="/icon.png" alt="DulceSur" width={40} height={40} className="rounded-xl" />
+              <Image src="/icon.png" alt="DulceSur" width={48} height={48} className="rounded-2xl shadow-lg" />
               <div>
-                <span className="text-xl font-semibold tracking-tight">DulceSur</span>
-                <p className="text-white/60 text-xs">Software de Gestión</p>
+                <span className="text-2xl font-bold tracking-tight">DulceSur</span>
+                <p className="text-white/50 text-xs tracking-wider uppercase">Gestión Comercial</p>
               </div>
             </div>
           </div>
 
-          <div className="space-y-6 max-w-md">
-            <h2 className="text-4xl font-bold leading-tight">
-              Gestión comercial
-              <br />
-              <span className="text-white/80">simple y eficiente</span>
-            </h2>
-            <p className="text-white/60 text-lg leading-relaxed">
-              Controlá tus ventas, stock, clientes y más desde un solo lugar.
-              Todo lo que tu negocio necesita para crecer.
+          <div className="space-y-8 max-w-lg">
+            <div>
+              <p className="text-sm font-medium text-amber-400/80 tracking-wider uppercase mb-3">Mayorista de golosinas y kiosco</p>
+              <h2 className="text-4xl font-bold leading-tight">
+                Todo tu negocio
+                <br />
+                <span className="bg-gradient-to-r from-amber-300 to-pink-400 bg-clip-text text-transparent">en un solo lugar</span>
+              </h2>
+            </div>
+            <p className="text-white/50 text-lg leading-relaxed">
+              Punto de venta, stock, clientes, entregas, reportes y tienda online.
+              Diseñado para distribuidores y mayoristas.
             </p>
-            <div className="flex gap-8 pt-4">
-              <div>
-                <div className="text-2xl font-bold">100%</div>
-                <div className="text-white/50 text-sm">En la nube</div>
+            <div className="flex gap-6 pt-2">
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl px-5 py-4 border border-white/10">
+                <div className="text-2xl font-bold text-amber-300">POS</div>
+                <div className="text-white/40 text-xs mt-1">Punto de venta</div>
               </div>
-              <div>
-                <div className="text-2xl font-bold">24/7</div>
-                <div className="text-white/50 text-sm">Disponible</div>
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl px-5 py-4 border border-white/10">
+                <div className="text-2xl font-bold text-pink-300">Stock</div>
+                <div className="text-white/40 text-xs mt-1">Control total</div>
               </div>
-              <div>
-                <div className="text-2xl font-bold">Fácil</div>
-                <div className="text-white/50 text-sm">De usar</div>
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl px-5 py-4 border border-white/10">
+                <div className="text-2xl font-bold text-sky-300">Web</div>
+                <div className="text-white/40 text-xs mt-1">Tienda online</div>
               </div>
             </div>
           </div>
 
-          <p className="text-white/30 text-sm">
-            &copy; {new Date().getFullYear()} {wl.system_name || "DulceSur"}. Todos los derechos reservados.
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-white/20 text-sm">
+              &copy; {new Date().getFullYear()} DulceSur. Todos los derechos reservados.
+            </p>
+            <p className="text-white/20 text-xs">Francisco Canaro 4012 · Longchamps</p>
+          </div>
         </div>
       </div>
 

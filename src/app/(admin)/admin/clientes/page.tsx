@@ -142,6 +142,7 @@ export default function ClientesPage() {
   const [editingZona, setEditingZona] = useState<ZonaEntrega | null>(null);
   const [zonaForm, setZonaForm] = useState<{ nombre: string; dias: string[] }>({ nombre: "", dias: [] });
   const [zonaSaving, setZonaSaving] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
   // Movements
   const [movClient, setMovClient] = useState<Cliente | null>(null);
@@ -228,9 +229,15 @@ export default function ClientesPage() {
       alert(`No se puede eliminar: ${count} cliente(s) usan esta zona. Reasignalos primero.`);
       return;
     }
-    if (!confirm("Eliminar esta zona de entrega?")) return;
-    await supabase.from("zonas_entrega").delete().eq("id", id);
-    fetchZonas();
+    setConfirmDialog({
+      open: true,
+      title: "Eliminar zona",
+      message: "¿Eliminar esta zona de entrega?",
+      onConfirm: async () => {
+        await supabase.from("zonas_entrega").delete().eq("id", id);
+        fetchZonas();
+      },
+    });
   };
 
   useEffect(() => {
@@ -377,12 +384,18 @@ export default function ClientesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     const c = clients.find((cl) => cl.id === id);
-    if (!confirm(`¿Eliminar a "${c?.nombre || "este cliente"}"?`)) return;
-    await supabase.from("clientes").update({ activo: false }).eq("id", id);
-    logAudit({ userName: currentUser?.nombre || "Admin", action: "DELETE", module: "clientes", entityId: id, before: { nombre: c?.nombre } });
-    fetchClients();
+    setConfirmDialog({
+      open: true,
+      title: "Eliminar cliente",
+      message: `¿Eliminar a "${c?.nombre || "este cliente"}"?`,
+      onConfirm: async () => {
+        await supabase.from("clientes").update({ activo: false }).eq("id", id);
+        logAudit({ userName: currentUser?.nombre || "Admin", action: "DELETE", module: "clientes", entityId: id, before: { nombre: c?.nombre } });
+        fetchClients();
+      },
+    });
   };
 
   const openMovimientos = async (client: Cliente) => {
@@ -558,12 +571,23 @@ export default function ClientesPage() {
     setCobroOpen(true);
   };
 
-  const handleCobro = async () => {
-    if (saving) return; // Guard against double-click
+  const handleCobro = () => {
+    if (saving) return;
     if (!cobroClient || cobroMonto <= 0) return;
     if (cobroMonto > cobroClient.saldo && cobroClient.saldo > 0) {
-      if (!confirm(`El monto ($${cobroMonto.toLocaleString()}) supera la deuda ($${cobroClient.saldo.toLocaleString()}). ¿Continuar?`)) return;
+      setConfirmDialog({
+        open: true,
+        title: "Confirmar cobro",
+        message: `El monto ($${cobroMonto.toLocaleString()}) supera la deuda ($${cobroClient.saldo.toLocaleString()}). ¿Continuar?`,
+        onConfirm: () => executeCobro(),
+      });
+      return;
     }
+    executeCobro();
+  };
+
+  const executeCobro = async () => {
+    if (!cobroClient || cobroMonto <= 0) return;
     setSaving(true);
 
     await supabase.from("cobros").insert({
@@ -2141,6 +2165,18 @@ export default function ClientesPage() {
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave}>{editingClient ? "Guardar cambios" : "Crear cliente"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
         </DialogContent>
       </Dialog>
