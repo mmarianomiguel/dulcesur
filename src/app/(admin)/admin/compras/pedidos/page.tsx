@@ -148,6 +148,7 @@ export default function PedidosProveedorPage() {
   const [mode, setMode] = useState<"list" | "new" | "detail" | "generate" | "edit">("list");
   const [selectedProveedorId, setSelectedProveedorId] = useState("");
   const [selectedCategoriaId, setSelectedCategoriaId] = useState("all");
+  const [pedirHasta, setPedirHasta] = useState<"minimo" | "maximo">("maximo");
 
   // Searchable dropdown states
   const [provSearch, setProvSearch] = useState("");
@@ -258,19 +259,29 @@ export default function PedidosProveedorPage() {
 
     if (data) {
       const suggested: SuggestedItem[] = (data as any[])
-        .filter((p) => (p.stock ?? 0) < (p.stock_minimo ?? 0) || (p.stock ?? 0) < 0)
+        .filter((p) => {
+          const stock = p.stock ?? 0;
+          const minimo = p.stock_minimo ?? 0;
+          const maximo = p.stock_maximo ?? 0;
+          if (pedirHasta === "maximo") {
+            return (maximo > 0 && stock < maximo) || (minimo > 0 && stock < minimo) || stock < 0;
+          }
+          return stock < minimo || stock < 0;
+        })
         .map((p) => {
           const pp = (p.producto_proveedores || [])[0];
           const stock = p.stock ?? 0;
           const maximo = p.stock_maximo ?? 0;
           const minimo = p.stock_minimo ?? 0;
           let faltante: number;
-          if (maximo > 0) {
+          if (pedirHasta === "maximo" && maximo > 0) {
             faltante = Math.max(pp?.cantidad_minima_pedido || 1, maximo - stock);
+          } else if (minimo > 0) {
+            faltante = Math.max(pp?.cantidad_minima_pedido || 1, minimo - stock);
           } else if (stock < 0) {
             faltante = Math.abs(stock);
           } else {
-            faltante = Math.max(pp?.cantidad_minima_pedido || 1, minimo > 0 ? minimo * 2 - stock : 1);
+            faltante = pp?.cantidad_minima_pedido || 1;
           }
           // Round up to full boxes if product has a Caja presentation
           const cajaPres = (p.presentaciones || []).find((pr: any) => pr.nombre?.toLowerCase().startsWith("caja") && pr.cantidad > 1);
@@ -810,8 +821,15 @@ export default function PedidosProveedorPage() {
       for (const p of data as any[]) {
         const stock = p.stock ?? 0;
         const minimo = p.stock_minimo ?? 0;
+        const maximo = p.stock_maximo ?? 0;
 
-        if (stock >= minimo && stock >= 0) continue;
+        // Filter based on pedirHasta mode
+        if (pedirHasta === "maximo") {
+          if (!((maximo > 0 && stock < maximo) || (minimo > 0 && stock < minimo) || stock < 0)) continue;
+        } else {
+          if (stock >= minimo && stock >= 0) continue;
+        }
+
         const ppList = p.producto_proveedores || [];
         if (ppList.length === 0) continue;
 
@@ -823,14 +841,15 @@ export default function PedidosProveedorPage() {
         if (!groupMap[provId]) groupMap[provId] = { proveedor_nombre: provName, items: [] };
         if (groupMap[provId].items.some((i: SuggestedItem) => i.producto_id === p.id)) continue;
 
-        const maximo = p.stock_maximo ?? 0;
         let faltante: number;
-        if (maximo > 0) {
+        if (pedirHasta === "maximo" && maximo > 0) {
           faltante = Math.max(pp.cantidad_minima_pedido || 1, maximo - stock);
+        } else if (minimo > 0) {
+          faltante = Math.max(pp.cantidad_minima_pedido || 1, minimo - stock);
         } else if (stock < 0) {
           faltante = Math.abs(stock);
         } else {
-          faltante = Math.max(pp.cantidad_minima_pedido || 1, minimo > 0 ? minimo * 2 - stock : 1);
+          faltante = pp.cantidad_minima_pedido || 1;
         }
         const precio = pp.precio_proveedor || p.costo || 0;
         groupMap[provId].items.push({
@@ -1021,10 +1040,16 @@ export default function PedidosProveedorPage() {
                   )}
                 </div>
               </div>
-              <Button onClick={handleSugerirFaltantes} disabled={!selectedProveedorId || suggesting}>
-                {suggesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Sugerir faltantes
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-lg border overflow-hidden text-sm">
+                  <button className={`px-3 py-2 ${pedirHasta === "maximo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("maximo")}>Hasta máximo</button>
+                  <button className={`px-3 py-2 ${pedirHasta === "minimo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("minimo")}>Hasta mínimo</button>
+                </div>
+                <Button onClick={handleSugerirFaltantes} disabled={!selectedProveedorId || suggesting}>
+                  {suggesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                  Sugerir faltantes
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1545,7 +1570,11 @@ export default function PedidosProveedorPage() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Pedidos a Proveedores</h1>
           <p className="text-muted-foreground text-sm">Gestiona tus pedidos de compra</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg border overflow-hidden text-sm">
+            <button className={`px-3 py-2 ${pedirHasta === "maximo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("maximo")}>Hasta máx</button>
+            <button className={`px-3 py-2 ${pedirHasta === "minimo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("minimo")}>Hasta mín</button>
+          </div>
           <Button variant="outline" onClick={handleGenerarPedidos}>
             <Sparkles className="w-4 h-4 mr-2" />Generar Pedidos
           </Button>
