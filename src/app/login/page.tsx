@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { logAudit } from "@/lib/audit";
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from "lucide-react";
 import { useWhiteLabel } from "@/hooks/use-white-label";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,10 +69,11 @@ export default function LoginPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-bold text-lg">
-                C
+              <Image src="/icon.png" alt="DulceSur" width={40} height={40} className="rounded-xl" />
+              <div>
+                <span className="text-xl font-semibold tracking-tight">DulceSur</span>
+                <p className="text-white/60 text-xs">Software de Gestión</p>
               </div>
-              <span className="text-xl font-semibold tracking-tight">{wl.system_name || "Dulcesur"}</span>
             </div>
           </div>
 
@@ -102,7 +104,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-white/30 text-sm">
-            &copy; {new Date().getFullYear()} {wl.system_name || "Dulcesur"}. Todos los derechos reservados.
+            &copy; {new Date().getFullYear()} {wl.system_name || "DulceSur"}. Todos los derechos reservados.
           </p>
         </div>
       </div>
@@ -112,10 +114,11 @@ export default function LoginPage() {
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-lg">
-              C
+            <Image src="/icon.png" alt="DulceSur" width={40} height={40} className="rounded-xl" />
+            <div>
+              <span className="text-xl font-semibold text-gray-900 tracking-tight">DulceSur</span>
+              <p className="text-gray-400 text-xs">Software de Gestión</p>
             </div>
-            <span className="text-xl font-semibold text-gray-900 tracking-tight">{wl.system_name || "Dulcesur"}</span>
           </div>
 
           <div className="space-y-2 mb-8">
@@ -193,7 +196,7 @@ export default function LoginPage() {
           </form>
 
           <p className="text-center text-xs text-gray-400 mt-8 lg:hidden">
-            &copy; {new Date().getFullYear()} {wl.system_name || "Dulcesur"}
+            &copy; {new Date().getFullYear()} {wl.system_name || "DulceSur"}
           </p>
         </div>
       </div>
