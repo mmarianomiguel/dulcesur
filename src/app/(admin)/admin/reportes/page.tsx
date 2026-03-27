@@ -30,6 +30,7 @@ interface ClienteOption { id: string; nombre: string; }
 
 export default function ReportesPage() {
   const [tab, setTab] = useState("ventas");
+  const [quickPeriod, setQuickPeriod] = useState<"today" | "week" | "month" | "custom">("today");
   const [desde, setDesde] = useState(() => {
     const d = new Date(); d.setDate(1);
     return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -82,9 +83,23 @@ export default function ReportesPage() {
   const stockSubcatRef = useRef<HTMLDivElement>(null);
   const stockMarcaRef = useRef<HTMLDivElement>(null);
 
-  // Compute effective date range based on ventaDateMode
+  // Compute effective date range based on quickPeriod or custom filters
   const effectiveDates = useMemo(() => {
     const today = todayARG();
+    if (quickPeriod === "today") {
+      return { desde: today, hasta: today };
+    } else if (quickPeriod === "week") {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      return { desde: monday.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), hasta: today };
+    } else if (quickPeriod === "month") {
+      const d = new Date(); d.setDate(1);
+      return { desde: d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), hasta: today };
+    }
+    // custom
     if (ventaDateMode === "dia") {
       return { desde: today, hasta: today };
     } else if (ventaDateMode === "mensual") {
@@ -92,7 +107,7 @@ export default function ReportesPage() {
       return { desde: d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), hasta: today };
     }
     return { desde, hasta };
-  }, [ventaDateMode, desde, hasta]);
+  }, [quickPeriod, ventaDateMode, desde, hasta]);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -383,16 +398,22 @@ export default function ReportesPage() {
             <p className="text-sm text-muted-foreground">Análisis de ventas, compras y stock</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col gap-0.5">
-            <Label className="text-xs text-muted-foreground">Desde</Label>
-            <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9 w-36" />
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1 rounded-lg border p-1">
+            {([["today", "Hoy"], ["week", "Esta semana"], ["month", "Este mes"], ["custom", "Personalizado"]] as const).map(([key, label]) => (
+              <button key={key} onClick={() => { setQuickPeriod(key); }} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${quickPeriod === key ? "bg-foreground text-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="flex flex-col gap-0.5">
-            <Label className="text-xs text-muted-foreground">Hasta</Label>
-            <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9 w-36" />
-          </div>
-          <Button size="sm" onClick={fetchReports} disabled={loading} className="self-end">
+          {quickPeriod === "custom" && (
+            <>
+              <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9 w-36" />
+              <span className="text-muted-foreground text-sm">a</span>
+              <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9 w-36" />
+            </>
+          )}
+          <Button size="sm" onClick={fetchReports} disabled={loading}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Filter className="w-4 h-4" />}
           </Button>
         </div>
@@ -438,29 +459,6 @@ export default function ReportesPage() {
         <TabsContent value="ventas" className="mt-4 space-y-4">
           {/* Ventas filters */}
           <div className="flex items-end gap-3 flex-wrap">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Periodo</Label>
-              <Select value={ventaDateMode} onValueChange={(v) => setVentaDateMode(v as any)}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="Período" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dia">Hoy</SelectItem>
-                  <SelectItem value="mensual">Mensual</SelectItem>
-                  <SelectItem value="entre_fechas">Entre fechas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {ventaDateMode === "entre_fechas" && (
-              <>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Desde</Label>
-                  <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="h-9 w-36" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Hasta</Label>
-                  <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="h-9 w-36" />
-                </div>
-              </>
-            )}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Tipo</Label>
               <Select value={ventaTipo} onValueChange={(v) => setVentaTipo(v || "todos")}>
