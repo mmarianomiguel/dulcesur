@@ -1237,6 +1237,25 @@ export default function ComprasPage() {
               Al confirmar se actualizara el stock y se registrara el movimiento de caja.
             </p>
             <div className="flex gap-2">
+              {(window as any).__pendingCompraId && (
+                <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => {
+                  setConfirmDialog({ open: true, title: "Eliminar compra pendiente", message: "¿Eliminar esta compra pendiente? No se ingresó mercadería.", onConfirm: async () => {
+                    const pid = (window as any).__pendingCompraId;
+                    if (pid) {
+                      await supabase.from("compra_items").delete().eq("compra_id", pid);
+                      await supabase.from("compras").delete().eq("id", pid);
+                      delete (window as any).__pendingCompraId;
+                    }
+                    resetForm();
+                    setMode("list");
+                    fetchData();
+                    showAdminToast("Compra pendiente eliminada", "success");
+                  }});
+                }}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar
+                </Button>
+              )}
               <Button variant="outline" onClick={() => { resetForm(); setMode("list"); }}>Cancelar</Button>
               <Button onClick={openConfirmDialog} disabled={saving} size="lg">
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
