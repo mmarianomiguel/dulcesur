@@ -124,9 +124,10 @@ export default function ResumenMensualPage() {
       setItemsSinCosto(0);
     }
 
-    // Top 10 clientes
+    // Top 10 clientes (exclude anonymous/consumidor final sales where cliente_id is null)
     const clientMap: Record<string, { nombre: string; total: number; qty: number }> = {};
     vList.forEach((v: any) => {
+      if (!v.cliente_id) return; // Skip sales without a client (consumidor final)
       const name = v.clientes?.nombre || "Sin cliente";
       if (!clientMap[name]) clientMap[name] = { nombre: name, total: 0, qty: 0 };
       clientMap[name].total += v.total;
@@ -244,7 +245,9 @@ export default function ResumenMensualPage() {
         const costoU = (item as any).productos?.costo ?? 0;
         const qty = (item as any).cantidad || 0;
         const u = getU(item);
-        const venta = (item as any).subtotal || 0;
+        const descPct = Number((item as any).descuento) || 0;
+        const precioReal = (item as any).precio_unitario * (1 - descPct / 100);
+        const venta = precioReal * qty;
         const costoTotal = costoU * u * qty;
         if (!prodRent[nombre]) prodRent[nombre] = { nombre, vendido: 0, costo: 0 };
         prodRent[nombre].vendido += venta;

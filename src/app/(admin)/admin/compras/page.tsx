@@ -406,7 +406,7 @@ export default function ComprasPage() {
     setShowConfirmDialog(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (asPendiente = false) => {
     if (items.length === 0) return;
     setSaving(true);
     setSaveError("");
@@ -433,7 +433,7 @@ export default function ComprasPage() {
           fecha: fecha || todayString(),
           proveedor_id: selectedProveedorId || null,
           total: totalCompra,
-          estado: "Confirmada",
+          estado: asPendiente ? "Pendiente" : "Confirmada",
           forma_pago: formaPago,
           estado_pago: estadoPago,
           observacion: observacion || null,
@@ -468,6 +468,23 @@ export default function ComprasPage() {
         console.error("Error inserting items:", itemsError);
         setSaveError("Error al guardar los items: " + itemsError.message);
         setSaving(false);
+        return;
+      }
+
+      // If pending, skip stock/caja/price updates
+      if (asPendiente) {
+        logAudit({
+          userName: currentUser?.nombre || "Admin Sistema",
+          action: "CREATE",
+          module: "compras",
+          entityId: compra.id,
+          after: { numero, total: totalCompra, forma_pago: formaPago, items: items.length, estado: "Pendiente" },
+        });
+        setSaving(false);
+        resetForm();
+        setMode("list");
+        fetchData();
+        showAdminToast("Compra guardada como pendiente", "success");
         return;
       }
 
@@ -1249,9 +1266,13 @@ export default function ComprasPage() {
               {/* Actions */}
               <div className="flex justify-end gap-2 pt-2 border-t">
                 <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancelar</Button>
-                <Button onClick={handleSave} disabled={saving} size="lg">
+                <Button variant="secondary" onClick={() => handleSave(true)} disabled={saving}>
                   {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Confirmar compra — {formatCurrency(totalCompra)}
+                  Guardar pendiente
+                </Button>
+                <Button onClick={() => handleSave(false)} disabled={saving} size="lg">
+                  {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Confirmar e ingresar — {formatCurrency(totalCompra)}
                 </Button>
               </div>
             </div>
@@ -1296,6 +1317,58 @@ export default function ComprasPage() {
               <Printer className="w-3.5 h-3.5" />
               Carteles de precio
             </Button>
+            {detailCompra.estado === "Pendiente" && (
+              <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={async () => {
+                if (!confirm("¿Confirmar ingreso al stock? Se actualizará stock, caja y precios.")) return;
+                setSaving(true);
+                try {
+                  // Execute stock, caja, price updates for pending purchase
+                  for (const item of detailItems) {
+                    const { data: prodData } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+                    const stockAntes = prodData?.stock ?? 0;
+                    const newStock = stockAntes + item.cantidad;
+                    await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+                    await supabase.from("stock_movimientos").insert({
+                      producto_id: item.producto_id,
+                      tipo: "compra",
+                      cantidad_antes: stockAntes,
+                      cantidad_despues: newStock,
+                      cantidad: item.cantidad,
+                      referencia: `Compra #${detailCompra.numero}`,
+                      descripcion: `Compra - ${item.descripcion}`,
+                      usuario: currentUser?.nombre || "Admin Sistema",
+                      orden_id: detailCompra.id,
+                    });
+                  }
+                  // Register caja
+                  if (detailCompra.total > 0 && detailCompra.forma_pago !== "Cuenta Corriente") {
+                    await supabase.from("caja_movimientos").insert({
+                      fecha: detailCompra.fecha,
+                      hora: new Date().toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" }),
+                      tipo: "egreso",
+                      descripcion: `Compra ${detailCompra.numero} - ${detailCompra.proveedores?.nombre || "Proveedor"}`,
+                      metodo_pago: detailCompra.forma_pago,
+                      monto: -detailCompra.total,
+                    });
+                  }
+                  // Update estado
+                  await supabase.from("compras").update({ estado: "Confirmada" }).eq("id", detailCompra.id);
+                  setDetailCompra({ ...detailCompra, estado: "Confirmada" } as any);
+                  showAdminToast("Compra ingresada al stock", "success");
+                  // Check hidden products
+                  const itemIds = detailItems.map((i: any) => i.producto_id).filter(Boolean);
+                  const { data: ocultos } = await supabase.from("productos").select("id, nombre").in("id", itemIds).eq("visibilidad", "oculto");
+                  if (ocultos && ocultos.length > 0) {
+                    setProductosOcultos(ocultos);
+                    setShowVisibilidadDialog(true);
+                  }
+                } catch (err) { showAdminToast("Error al confirmar ingreso", "error"); }
+                setSaving(false);
+              }}>
+                <Package className="w-3.5 h-3.5" />
+                Confirmar ingreso al stock
+              </Button>
+            )}
             {detailCompra.estado !== "Anulada" && (
               <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setAnularCompraDialog(true)}>
                 <X className="w-3.5 h-3.5" />

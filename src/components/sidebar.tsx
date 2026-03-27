@@ -107,6 +107,7 @@ const navigation: NavItem[] = [
     icon: PackageMinus,
     children: [
       { name: "Ajustes de Stock", href: "/admin/stock/ajustes" },
+      { name: "Autoconsumo", href: "/admin/stock/autoconsumo" },
     ],
   },
   {
