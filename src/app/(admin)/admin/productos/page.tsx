@@ -1257,6 +1257,7 @@ export default function ProductosPage() {
 
               if (precio > 0 && precio !== existing.precio) {
                 updatePayload.precio = precio;
+                updatePayload.precio_anterior = existing.precio;
                 changes.push(`Precio: ${existing.precio} → ${precio}`);
               }
               if (costo > 0 && costo !== existing.costo) {

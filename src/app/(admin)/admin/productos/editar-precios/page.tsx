@@ -244,7 +244,7 @@ export default function EditarPreciosPage() {
     for (const item of roundPreview) {
       const prod = productos.find((p) => p.id === item.id);
       if (!prod) continue;
-      await supabase.from("productos").update({ precio: item.precioNuevo }).eq("id", item.id);
+      await supabase.from("productos").update({ precio: item.precioNuevo, precio_anterior: item.precioActual, fecha_actualizacion: new Date().toISOString() }).eq("id", item.id);
       await supabase.from("precio_historial").insert({
         producto_id: item.id, precio_anterior: item.precioActual, precio_nuevo: item.precioNuevo,
         costo_anterior: prod.costo, costo_nuevo: prod.costo, usuario: "Admin (Redondeo)",
@@ -451,9 +451,14 @@ export default function EditarPreciosPage() {
       const updates: PromiseLike<any>[] = [];
 
       for (const id of allIds) {
-        const updateData: Record<string, number> = {};
-        if (priceChanges[id] !== undefined) updateData.precio = priceChanges[id];
+        const updateData: Record<string, unknown> = {};
+        if (priceChanges[id] !== undefined) {
+          const prod = productos.find((p) => p.id === id);
+          updateData.precio = priceChanges[id];
+          if (prod) updateData.precio_anterior = prod.precio;
+        }
         if (costoChanges[id] !== undefined) updateData.costo = costoChanges[id];
+        updateData.fecha_actualizacion = new Date().toISOString();
         updates.push(supabase.from("productos").update(updateData).eq("id", id).then());
 
         // Update presentation prices proportionally when precio changes
@@ -653,12 +658,13 @@ export default function EditarPreciosPage() {
       const updates: PromiseLike<unknown>[] = [];
 
       for (const item of massEditPreview) {
-        const updateData: Record<string, number> = { precio: item.newPrecio };
+        const prod = productos.find((p) => p.id === item.id);
+        const updateData: Record<string, unknown> = { precio: item.newPrecio, fecha_actualizacion: new Date().toISOString() };
+        if (prod) updateData.precio_anterior = prod.precio;
         if (massTarget === "costo") updateData.costo = item.newCosto;
         updates.push(supabase.from("productos").update(updateData).eq("id", item.id).then());
 
         // Update presentation prices proportionally
-        const prod = productos.find((p) => p.id === item.id);
         if (prod && prod.precio > 0 && item.newPrecio !== prod.precio) {
           const ratio = item.newPrecio / prod.precio;
           const prodPres = presentaciones.filter((pr) => pr.producto_id === item.id);
