@@ -627,7 +627,7 @@ export default function AutoconsumoPage() {
                             <td className="py-4 text-right">
                               <TooltipProvider>
                                 <Tooltip>
-                                  <TooltipTrigger render={<span />}>
+                                  <TooltipTrigger>
                                     <button
                                       onClick={async () => {
                                         if (!confirm(`¿Anular retiro de ${c.cantidad} ${c.producto_nombre}? Se devolverá el stock.`)) return;
