@@ -1426,11 +1426,11 @@ export default function VentasPage() {
     // Bank account validation for Transferencia payments
     if (cuentasBancarias.length > 0 && !cuentaBancariaId) {
       if (formaPago === "Transferencia") {
-        showAdminToast("Seleccioná una cuenta bancaria para la transferencia", "error");
+        setErrorModal({ open: true, message: "Seleccioná una cuenta bancaria para la transferencia." });
         return;
       }
       if (formaPago === "Mixto" && mixtoTransferencia > 0) {
-        showAdminToast("Seleccioná una cuenta bancaria para la parte de transferencia", "error");
+        setErrorModal({ open: true, message: "Seleccioná una cuenta bancaria para la parte de transferencia." });
         return;
       }
     }
