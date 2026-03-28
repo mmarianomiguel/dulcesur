@@ -257,6 +257,8 @@ export default function CargaManualPage() {
 
   const handleSave = async () => {
     if (items.length === 0) return;
+    if (fecha > todayARG()) { showAdminToast("No se puede usar una fecha futura", "error"); return; }
+    if (descuento < 0 || descuento > 100 || recargo < 0 || recargo > 100) { showAdminToast("Descuento y recargo deben estar entre 0 y 100", "error"); return; }
     setSaving(true);
 
     const finalNumero = numero.trim() || undefined;
@@ -468,6 +470,7 @@ export default function CargaManualPage() {
                     type="date"
                     value={fecha}
                     onChange={(e) => setFecha(e.target.value)}
+                    max={todayARG()}
                   />
                 </div>
               </div>
@@ -671,7 +674,7 @@ export default function CargaManualPage() {
                   <Input
                     type="number"
                     value={descuento}
-                    onChange={(e) => setDescuento(Number(e.target.value))}
+                    onChange={(e) => setDescuento(Math.max(0, Math.min(100, Number(e.target.value))))}
                     className="w-16 h-7 text-right text-xs"
                     min={0}
                     max={100}
@@ -691,7 +694,7 @@ export default function CargaManualPage() {
                   <Input
                     type="number"
                     value={recargo}
-                    onChange={(e) => setRecargo(Number(e.target.value))}
+                    onChange={(e) => setRecargo(Math.max(0, Math.min(100, Number(e.target.value))))}
                     className="w-16 h-7 text-right text-xs"
                     min={0}
                     max={100}
@@ -900,6 +903,7 @@ export default function CargaManualPage() {
                 />
               </div>
             </div>
+            <p className="text-xs text-amber-600">Los items de texto libre no descuentan stock</p>
             <Button className="w-full" onClick={addFreeItem}>
               Agregar
             </Button>

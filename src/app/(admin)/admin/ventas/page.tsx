@@ -442,7 +442,7 @@ export default function VentasPage() {
   const mixtoSum = Math.round((mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente) * 100) / 100;
   // Compare against baseTotal (without surcharge) — surcharge is added automatically on transfer
   const mixtoRemaining = formaPago === "Mixto" ? Math.round((baseTotal - mixtoSum) * 100) / 100 : 0;
-  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 1 && mixtoSum > 0);
+  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 0.01 && mixtoSum > 0);
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
   const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
@@ -1344,7 +1344,7 @@ export default function VentasPage() {
 
   // ---------- create client ----------
   const handleCreateClient = async () => {
-    if (!newClientData.nombre.trim()) return;
+    if (!newClientData.nombre.trim() || creatingClient) return;
     setCreatingClient(true);
     try {
       const { data } = await supabase
@@ -1556,6 +1556,27 @@ export default function VentasPage() {
           }
         }
 
+        // Fresh stock check right before deduction (prevents overselling between UI check and here)
+        const prodIds = [...new Set(stockItems.map((si) => si.producto_id))];
+        if (prodIds.length > 0) {
+          const { data: freshProds } = await supabase.from("productos").select("id, stock").in("id", prodIds);
+          const freshMap: Record<string, number> = {};
+          for (const fp of freshProds || []) freshMap[fp.id] = fp.stock;
+          const stockIssues: string[] = [];
+          for (const si of stockItems) {
+            const available = freshMap[si.producto_id] ?? 0;
+            if (si.cantidad > available) stockIssues.push(`${si.descripcion}: necesita ${si.cantidad}, hay ${available}`);
+          }
+          if (stockIssues.length > 0) {
+            setErrorModal({ open: true, message: `Stock insuficiente:\n${stockIssues.join("\n")}` });
+            // Delete the venta and items that were already inserted
+            await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+            await supabase.from("ventas").delete().eq("id", venta.id);
+            setSaving(false);
+            return;
+          }
+        }
+
         // Atomic stock decrement via RPC (handles race conditions + logging)
         const { data: stockResult, error: stockRpcError } = await supabase.rpc("decrementar_stock_venta", {
           p_items: stockItems,
@@ -1568,34 +1589,25 @@ export default function VentasPage() {
           // Fallback: RPC may not exist yet — decrement stock directly
           const stockErrors: string[] = [];
           for (const item of stockItems) {
-            const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
-            if (prod) {
+            let updated = false;
+            for (let attempt = 0; attempt < 3 && !updated; attempt++) {
+              const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+              if (!prod) break;
               const stockAntes = prod.stock;
               const stockDespues = stockAntes - item.cantidad;
-              const { error: updErr } = await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
-              if (updErr) {
-                stockErrors.push(`${item.descripcion}`);
-                // Log failed attempt in stock_movimientos for audit trail
+              // Atomic: only update if stock hasn't changed since read
+              const { data: updResult } = await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id).eq("stock", stockAntes).select("id");
+              if (updResult && updResult.length > 0) {
+                updated = true;
                 await supabase.from("stock_movimientos").insert({
                   producto_id: item.producto_id, tipo: "Venta", cantidad: -item.cantidad,
-                  cantidad_antes: stockAntes, cantidad_despues: stockAntes,
-                  referencia: `Venta #${numero} (ERROR)`, descripcion: `ERROR stock: ${item.descripcion} - ${updErr.message}`,
+                  cantidad_antes: stockAntes, cantidad_despues: stockDespues,
+                  referencia: `Venta #${numero}`, descripcion: item.descripcion,
                   usuario: currentUser?.nombre || "Admin Sistema", orden_id: venta.id,
                 });
-                continue;
               }
-              await supabase.from("stock_movimientos").insert({
-                producto_id: item.producto_id,
-                tipo: "Venta",
-                cantidad: -item.cantidad,
-                cantidad_antes: stockAntes,
-                cantidad_despues: stockDespues,
-                referencia: `Venta #${numero}`,
-                descripcion: item.descripcion,
-                usuario: currentUser?.nombre || "Admin Sistema",
-                orden_id: venta.id,
-              });
             }
+            if (!updated) stockErrors.push(`${item.descripcion}`);
           }
           if (stockErrors.length > 0) {
             console.error("Stock decrement errors:", stockErrors);
@@ -1610,19 +1622,16 @@ export default function VentasPage() {
           // No caja, no CC — payment happens at delivery
         } else if (formaPago === "Cuenta Corriente") {
           if (clientId) {
-            const { data: freshCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-            const saldoActual = freshCC?.saldo ?? selectedClient?.saldo ?? 0;
-            const newSaldo = saldoActual + total;
-            const saldoAFavorAplicado = saldoActual < 0 ? Math.min(Math.abs(saldoActual), total) : 0;
-            const deudaReal = total - saldoAFavorAplicado;
-            // Optimistic lock: only update if saldo hasn't changed since read
-            const { data: updResult } = await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clientId).eq("saldo", saldoActual).select("id");
-            if (!updResult || updResult.length === 0) {
-              // Retry with fresh read
-              const { data: retry } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-              const retrySaldo = (retry?.saldo ?? 0) + total;
-              await supabase.from("clientes").update({ saldo: retrySaldo }).eq("id", clientId);
+            let saldoActual = 0;
+            let newSaldo = 0;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const { data: freshCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+              saldoActual = freshCC?.saldo ?? 0;
+              newSaldo = saldoActual + total;
+              const { data: updResult } = await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clientId).eq("saldo", saldoActual).select("id");
+              if (updResult && updResult.length > 0) break;
             }
+            const saldoAFavorAplicado = saldoActual < 0 ? Math.min(Math.abs(saldoActual), total) : 0;
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
@@ -1646,34 +1655,36 @@ export default function VentasPage() {
           }
           if (mixtoCuentaCorriente > 0) mixtoEntries.push({ metodo: "Cuenta Corriente", monto: mixtoCuentaCorriente });
 
+          // Handle CC entry separately with atomic saldo update
+          const ccEntry = mixtoEntries.find((e) => e.metodo === "Cuenta Corriente");
+          if (ccEntry && clientId) {
+            let saldoActualMixto = 0;
+            let newSaldoMixto = 0;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const { data: freshCCMixto } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+              saldoActualMixto = freshCCMixto?.saldo ?? 0;
+              newSaldoMixto = saldoActualMixto + ccEntry.monto;
+              const { data: mixtoUpd } = await supabase.from("clientes").update({ saldo: newSaldoMixto }).eq("id", clientId).eq("saldo", saldoActualMixto).select("id");
+              if (mixtoUpd && mixtoUpd.length > 0) break;
+            }
+            const favorAplicadoMixto = saldoActualMixto < 0 ? Math.min(Math.abs(saldoActualMixto), ccEntry.monto) : 0;
+            await supabase.from("cuenta_corriente").insert({
+              cliente_id: clientId,
+              fecha: hoy,
+              comprobante: `Venta #${numero}`,
+              descripcion: favorAplicadoMixto > 0
+                ? `Venta - Cta Cte parcial (saldo a favor aplicado: ${formatCurrency(favorAplicadoMixto)})`
+                : `Venta - Cuenta Corriente (parcial)`,
+              debe: ccEntry.monto,
+              haber: favorAplicadoMixto,
+              saldo: newSaldoMixto,
+              forma_pago: "Cuenta Corriente",
+              venta_id: venta.id,
+            });
+          }
+          // Handle non-CC entries (Efectivo, Transferencia)
           for (const entry of mixtoEntries) {
-            if (entry.metodo === "Cuenta Corriente") {
-              if (clientId) {
-                const { data: freshCCMixto } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-                const saldoActualMixto = freshCCMixto?.saldo ?? selectedClient?.saldo ?? 0;
-                const newSaldoMixto = saldoActualMixto + entry.monto;
-                const favorAplicadoMixto = saldoActualMixto < 0 ? Math.min(Math.abs(saldoActualMixto), entry.monto) : 0;
-                // Optimistic lock on saldo update
-                const { data: mixtoUpd } = await supabase.from("clientes").update({ saldo: newSaldoMixto }).eq("id", clientId).eq("saldo", saldoActualMixto).select("id");
-                if (!mixtoUpd || mixtoUpd.length === 0) {
-                  const { data: retryM } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-                  await supabase.from("clientes").update({ saldo: (retryM?.saldo ?? 0) + entry.monto }).eq("id", clientId);
-                }
-                await supabase.from("cuenta_corriente").insert({
-                  cliente_id: clientId,
-                  fecha: hoy,
-                  comprobante: `Venta #${numero}`,
-                  descripcion: favorAplicadoMixto > 0
-                    ? `Venta - Cta Cte parcial (saldo a favor aplicado: ${formatCurrency(favorAplicadoMixto)})`
-                    : `Venta - Cuenta Corriente (parcial)`,
-                  debe: entry.monto,
-                  haber: favorAplicadoMixto,
-                  saldo: newSaldoMixto,
-                  forma_pago: "Cuenta Corriente",
-                  venta_id: venta.id,
-                });
-              }
-            } else {
+            if (entry.metodo !== "Cuenta Corriente") {
               const mixCuenta = entry.metodo === "Transferencia" && cuentaBancariaId
                 ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
                 : null;
