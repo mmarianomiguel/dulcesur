@@ -238,9 +238,8 @@ export default function ReportesPage() {
   };
   const ganancia = useMemo(() => ventaItems.reduce((a, item: any) => {
     const costoPres = getItemCost(item);
-    const descPct = Number(item.descuento) || 0;
-    const precioVenta = item.precio_unitario * (1 - descPct / 100);
-    return a + (precioVenta - costoPres) * item.cantidad;
+    const ventaItem = Number(item.subtotal) || 0;
+    return a + (ventaItem - costoPres * item.cantidad);
   }, 0), [ventaItems]);
 
   // Split Mixto into Efectivo + Transferencia + CC using caja_movimientos
@@ -346,15 +345,14 @@ export default function ReportesPage() {
 
       const costoPres = getItemCost(item);
       const unidadesPres = getUnidadesPres(item);
-      const descPct = Number(item.descuento) || 0;
-      const precioVenta = item.precio_unitario * (1 - descPct / 100);
       const cantidad = Number(item.cantidad) || 0;
+      const ventaItem = Number(item.subtotal) || 0;
 
       const row = groupMap[groupId].productos[prodId];
       row.unidades += cantidad * unidadesPres;
-      row.venta += precioVenta * cantidad;
+      row.venta += ventaItem;
       row.costo += costoPres * cantidad;
-      row.ganancia += (precioVenta - costoPres) * cantidad;
+      row.ganancia += ventaItem - costoPres * cantidad;
     }
 
     return Object.entries(groupMap).map(([gId, { nombre, productos }]) => {
@@ -405,9 +403,8 @@ export default function ReportesPage() {
     const filteredIds = new Set(filteredVentas.map((v) => v.id));
     return ventaItems.filter((item) => filteredIds.has(item.venta_id)).reduce((a, item: any) => {
       const costoPres = getItemCost(item);
-      const descPct = Number(item.descuento) || 0;
-      const precioVenta = item.precio_unitario * (1 - descPct / 100);
-      return a + (precioVenta - costoPres) * item.cantidad;
+      const ventaItem = Number(item.subtotal) || 0;
+      return a + (ventaItem - costoPres * item.cantidad);
     }, 0);
   }, [filteredVentas, ventaItems]);
 
@@ -421,9 +418,8 @@ export default function ReportesPage() {
 
   const calcItemProfit = (item: VentaItemDetail) => {
     const costoPres = getItemCost(item);
-    const descPct = Number((item as any).descuento) || 0;
-    const precioVenta = item.precio_unitario * (1 - descPct / 100);
-    return (precioVenta - costoPres) * item.cantidad;
+    const ventaItem = Number(item.subtotal) || 0;
+    return ventaItem - costoPres * item.cantidad;
   };
 
   const calcVentaProfit = (ventaId: string) => {
