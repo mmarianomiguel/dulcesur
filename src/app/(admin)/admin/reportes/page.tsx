@@ -231,13 +231,9 @@ export default function ReportesPage() {
     }
     return u;
   };
-  // Helper: get frozen cost per item (costo_unitario if available, fallback to product cost)
+  // Helper: get frozen cost per item (uses only costo_unitario — never falls back to live product cost)
   const getItemCost = (item: any) => {
-    if (item.costo_unitario && item.costo_unitario > 0) return item.costo_unitario;
-    // Fallback for old items without costo_unitario
-    const costoU = item.productos?.costo || 0;
-    const unidadesPres = getUnidadesPres(item);
-    return costoU * unidadesPres;
+    return (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
   };
   const ganancia = useMemo(() => ventaItems.reduce((a, item: any) => {
     const costoPres = getItemCost(item);
@@ -648,8 +644,7 @@ export default function ReportesPage() {
                                 <tbody>
                                   {items.map((item, idx) => {
                                     const itemProfit = calcItemProfit(item);
-                                    const costoU = item.productos?.costo || 0;
-                                    const unidadesPres = getUnidadesPres(item);
+                                    const itemCost = getItemCost(item);
                                     const descPct = Number((item as any).descuento) || 0;
                                     const precioVenta = item.precio_unitario * (1 - descPct / 100);
                                     return (
@@ -663,7 +658,7 @@ export default function ReportesPage() {
                                         </td>
                                         <td className="py-1.5 px-3 text-center">{item.cantidad}</td>
                                         <td className="py-1.5 px-3 text-right">{fc(precioVenta)}</td>
-                                        <td className="py-1.5 px-3 text-right text-muted-foreground">{fc(costoU * unidadesPres)}</td>
+                                        <td className="py-1.5 px-3 text-right text-muted-foreground">{fc(itemCost)}</td>
                                         <td className="py-1.5 px-3 text-right">{fc(item.subtotal)}</td>
                                         <td className={`py-1.5 px-3 text-right font-medium ${itemProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                                           {fc(itemProfit)}

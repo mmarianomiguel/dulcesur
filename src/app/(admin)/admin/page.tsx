@@ -394,23 +394,14 @@ export default function DashboardPage() {
     let gananciaTotal = 0;
     if (regularVentaIds.length > 0) {
       const ids = regularVentaIds.map((v) => v.id);
-      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, unidades_por_presentacion, presentacion, costo_unitario, productos(costo)").in("venta_id", ids);
+      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", ids);
       gananciaTotal = (items || []).reduce((acc, item: any) => {
         const cantidad = Number(item.cantidad) || 0;
         const precioUnitario = Number(item.precio_unitario) || 0;
         const descPct = Number(item.descuento) || 0;
         const precioConDesc = precioUnitario * (1 - descPct / 100);
-        // Use frozen costo_unitario if available, fallback to product cost × units
-        let costoReal: number;
-        if (item.costo_unitario && item.costo_unitario > 0) {
-          costoReal = item.costo_unitario;
-        } else {
-          const costoBase = item.productos?.costo ?? 0;
-          let unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
-          const presTxt = (item.presentacion || "").toLowerCase();
-          if (presTxt.includes("medio") && unidadesPorPres === 1) unidadesPorPres = 0.5;
-          costoReal = costoBase * unidadesPorPres;
-        }
+        // Use frozen costo_unitario only — never fall back to live product cost
+        const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
         return acc + (precioConDesc - costoReal) * cantidad;
       }, 0);
     }
