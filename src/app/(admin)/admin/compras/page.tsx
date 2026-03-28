@@ -44,7 +44,12 @@ import {
   Download,
   Copy,
   MessageCircle,
+  Pencil,
+  CreditCard,
+  Check,
+  RotateCcw,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logAudit } from "@/lib/audit";
@@ -57,9 +62,14 @@ interface CompraRow {
   fecha: string;
   proveedor_id: string | null;
   total: number;
+  subtotal: number | null;
+  descuento_porcentaje: number | null;
   estado: string;
   forma_pago: string | null;
   estado_pago: string | null;
+  monto_pagado: number | null;
+  tipo_comprobante: string | null;
+  numero_comprobante: string | null;
   observacion: string | null;
   proveedores: { nombre: string } | null;
 }
@@ -135,6 +145,9 @@ export default function ComprasPage() {
   const [fecha, setFecha] = useState(todayString());
   const [numeroCompra, setNumeroCompra] = useState("");
   const [formaPago, setFormaPago] = useState("Transferencia");
+  const [tipoComprobante, setTipoComprobante] = useState("Factura A");
+  const [numeroComprobante, setNumeroComprobante] = useState("");
+  const [descuento, setDescuento] = useState(0);
   const [saving, setSaving] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
   const confirmDialogRef = useRef<() => void>(() => {});
@@ -161,20 +174,30 @@ export default function ComprasPage() {
   const [anularCompraDialog, setAnularCompraDialog] = useState(false);
   const [anulando, setAnulando] = useState(false);
 
+  // Devolucion (partial return) state
+  const [devolucionDialog, setDevolucionDialog] = useState(false);
+  const [devolucionItems, setDevolucionItems] = useState<{ id: string; producto_id: string; codigo: string; descripcion: string; cantidad_original: number; cantidad_devolver: number; precio_unitario: number }[]>([]);
+  const [devolucionMotivo, setDevolucionMotivo] = useState("");
+  const [procesandoDevolucion, setProcesandoDevolucion] = useState(false);
+
   const handleAnularCompra = async () => {
     if (!detailCompra) return;
     setAnulando(true);
     try {
       const isPendiente = detailCompra.estado === "Pendiente";
 
-      if (!isPendiente) {
-        // Only revert stock/caja if the purchase was confirmed (stock was ingested)
+      if (isPendiente) {
+        // Pendiente: just delete (never had stock/caja impact)
+        await supabase.from("compra_items").delete().eq("compra_id", detailCompra.id);
+        await supabase.from("compras").delete().eq("id", detailCompra.id);
+      } else {
+        // Confirmed: revert stock, caja, CC proveedor — mark as Anulada (keep audit trail)
         for (const item of detailItems) {
           if (!item.producto_id) continue;
           const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
           if (!prod) continue;
           const unitsToRevert = item.cantidad;
-          const newStock = Math.max(0, prod.stock - unitsToRevert);
+          const newStock = prod.stock - unitsToRevert;
           await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id, tipo: "anulacion",
@@ -184,6 +207,7 @@ export default function ComprasPage() {
             usuario: currentUser?.nombre || "Admin", orden_id: detailCompra.id,
           });
         }
+        // Revert caja movements
         const { data: cajaRows } = await supabase.from("caja_movimientos").select("*").eq("referencia_id", detailCompra.id).eq("referencia_tipo", "compra");
         for (const cm of cajaRows || []) {
           await supabase.from("caja_movimientos").insert({
@@ -194,25 +218,165 @@ export default function ComprasPage() {
             referencia_id: detailCompra.id, referencia_tipo: "anulacion",
           });
         }
+        // Revert CC proveedor
         if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
           const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
-          if (prov) await supabase.from("proveedores").update({ saldo: Math.max(0, prov.saldo - detailCompra.total) }).eq("id", detailCompra.proveedor_id);
+          if (prov) {
+            const newSaldo = prov.saldo - detailCompra.total;
+            await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", detailCompra.proveedor_id);
+            await supabase.from("cuenta_corriente_proveedor").insert({
+              proveedor_id: detailCompra.proveedor_id,
+              fecha: todayString(),
+              tipo: "anulacion",
+              descripcion: `Anulación Compra #${detailCompra.numero}`,
+              monto: -detailCompra.total,
+              saldo_resultante: newSaldo,
+              referencia_id: detailCompra.id,
+              referencia_tipo: "anulacion",
+            });
+          }
         }
+        // Mark as Anulada instead of deleting (audit trail)
+        await supabase.from("compras").update({ estado: "Anulada" }).eq("id", detailCompra.id);
       }
-
-      // Delete items first, then the compra
-      await supabase.from("compra_items").delete().eq("compra_id", detailCompra.id);
-      await supabase.from("compras").delete().eq("id", detailCompra.id);
       setDetailCompra(null);
       setMode("list");
       fetchData();
-      showAdminToast(isPendiente ? "Compra eliminada." : "Compra anulada y eliminada. Stock revertido.", "success");
+      showAdminToast(isPendiente ? "Compra eliminada." : "Compra anulada. Stock y caja revertidos.", "success");
     } catch (err: any) {
       showAdminToast("Error al anular: " + (err.message || "Error"), "error");
     }
     setAnulando(false);
     setAnularCompraDialog(false);
   };
+
+  const openDevolucionDialog = () => {
+    if (!detailCompra || !detailItems.length) return;
+    setDevolucionItems(detailItems.map((item) => ({
+      id: item.id,
+      producto_id: item.producto_id,
+      codigo: item.codigo,
+      descripcion: item.descripcion,
+      cantidad_original: item.cantidad,
+      cantidad_devolver: 0,
+      precio_unitario: item.precio_unitario,
+    })));
+    setDevolucionMotivo("");
+    setDevolucionDialog(true);
+  };
+
+  const devolucionTotal = devolucionItems.reduce((sum, i) => sum + i.cantidad_devolver * i.precio_unitario, 0);
+
+  const handleDevolucion = async () => {
+    if (!detailCompra) return;
+    const itemsToReturn = devolucionItems.filter((i) => i.cantidad_devolver > 0);
+    if (itemsToReturn.length === 0) {
+      showAdminToast("Selecciona al menos un item para devolver", "error");
+      return;
+    }
+    setProcesandoDevolucion(true);
+    try {
+      const returnTotal = itemsToReturn.reduce((sum, i) => sum + i.cantidad_devolver * i.precio_unitario, 0);
+
+      // 1. Subtract returned quantities from product stock (fresh read first)
+      for (const item of itemsToReturn) {
+        if (!item.producto_id) continue;
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        if (!prod) continue;
+        const stockAntes = prod.stock;
+        const newStock = stockAntes - item.cantidad_devolver;
+        await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+
+        await supabase.from("stock_movimientos").insert({
+          producto_id: item.producto_id,
+          tipo: "devolucion_proveedor",
+          cantidad_antes: stockAntes,
+          cantidad_despues: newStock,
+          cantidad: item.cantidad_devolver,
+          referencia: `Devolución Compra #${detailCompra.numero}`,
+          descripcion: `Devolución a proveedor - ${item.descripcion}${devolucionMotivo ? ` (${devolucionMotivo})` : ""}`,
+          usuario: currentUser?.nombre || "Admin",
+          orden_id: detailCompra.id,
+        });
+      }
+
+      // 2. Handle financial impact
+      const wasPaid = detailCompra.estado_pago === "Pagada";
+      const wasCC = detailCompra.forma_pago === "Cuenta Corriente";
+
+      if (wasPaid && !wasCC) {
+        await supabase.from("caja_movimientos").insert({
+          fecha: todayARG(),
+          hora: nowTimeARG(),
+          tipo: "ingreso",
+          descripcion: `Devolución Compra #${detailCompra.numero} - ${detailCompra.proveedores?.nombre || "Proveedor"}`,
+          metodo_pago: detailCompra.forma_pago || "Efectivo",
+          monto: returnTotal,
+          referencia_id: detailCompra.id,
+          referencia_tipo: "devolucion_compra",
+        });
+      }
+
+      if (wasCC && detailCompra.proveedor_id) {
+        const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
+        if (prov) {
+          const newSaldo = prov.saldo - returnTotal;
+          await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", detailCompra.proveedor_id);
+          await supabase.from("cuenta_corriente_proveedor").insert({
+            proveedor_id: detailCompra.proveedor_id,
+            fecha: todayARG(),
+            tipo: "devolucion",
+            descripcion: `Devolución Compra #${detailCompra.numero}${devolucionMotivo ? ` - ${devolucionMotivo}` : ""}`,
+            monto: -returnTotal,
+            saldo_resultante: newSaldo,
+            referencia_id: detailCompra.id,
+            referencia_tipo: "devolucion_compra",
+          });
+        }
+      }
+
+      // 3. Update compra total and append devolucion note to observacion
+      const newTotal = Math.max(0, detailCompra.total - returnTotal);
+      await supabase.from("compras").update({
+        total: newTotal,
+        observacion: [
+          detailCompra.observacion,
+          `[Devolución ${todayARG()}] ${itemsToReturn.map((i) => `${i.descripcion} x${i.cantidad_devolver}`).join(", ")} = ${formatCurrency(returnTotal)}${devolucionMotivo ? ` — Motivo: ${devolucionMotivo}` : ""}`,
+        ].filter(Boolean).join("\n"),
+      }).eq("id", detailCompra.id);
+
+      // 4. Update compra_items quantities
+      for (const item of itemsToReturn) {
+        const newQty = item.cantidad_original - item.cantidad_devolver;
+        if (newQty <= 0) {
+          await supabase.from("compra_items").delete().eq("id", item.id);
+        } else {
+          await supabase.from("compra_items").update({
+            cantidad: newQty,
+            subtotal: newQty * item.precio_unitario,
+          }).eq("id", item.id);
+        }
+      }
+
+      logAudit({
+        userName: currentUser?.nombre || "Admin Sistema",
+        action: "UPDATE",
+        module: "compras",
+        entityId: detailCompra.id,
+        after: { tipo: "devolucion_parcial", items: itemsToReturn.length, total_devuelto: returnTotal, motivo: devolucionMotivo },
+      });
+
+      setDevolucionDialog(false);
+      setDetailCompra(null);
+      setMode("list");
+      fetchData();
+      showAdminToast(`Devolución registrada por ${formatCurrency(returnTotal)}. Stock actualizado.`, "success");
+    } catch (err: any) {
+      showAdminToast("Error al procesar devolución: " + (err.message || "Error"), "error");
+    }
+    setProcesandoDevolucion(false);
+  };
+
   const [preciosModificados, setPreciosModificados] = useState<{ producto_id?: string; nombre: string; codigo: string; precioAnterior: number; precioNuevo: number; costoAnterior: number; costoNuevo: number }[]>([]);
 
   // Product search for adding items
@@ -242,13 +406,25 @@ export default function ComprasPage() {
   const [detailCompra, setDetailCompra] = useState<CompraRow | null>(null);
   const [detailItems, setDetailItems] = useState<CompraItemRow[]>([]);
 
+  // Edit prices mode (for confirmed compras)
+  const [editingPrices, setEditingPrices] = useState(false);
+  const [editedPrices, setEditedPrices] = useState<Record<string, number>>({});
+  const [savingPrices, setSavingPrices] = useState(false);
+
+  // Partial payment dialog
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState("Efectivo");
+  const [paymentCuentaBancariaId, setPaymentCuentaBancariaId] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
+
   /* ── fetch list ── */
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     let comprasQuery = supabase
       .from("compras")
-      .select("id, numero, fecha, proveedor_id, total, estado, forma_pago, estado_pago, observacion, proveedores(nombre)")
+      .select("id, numero, fecha, proveedor_id, total, subtotal, descuento_porcentaje, estado, forma_pago, estado_pago, monto_pagado, tipo_comprobante, numero_comprobante, observacion, proveedores(nombre)")
       .order("fecha", { ascending: false });
 
     // Apply date filter based on quickPeriod
@@ -417,7 +593,8 @@ export default function ComprasPage() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const totalCompra = items.reduce((a, i) => a + i.subtotal, 0);
+  const subtotalCompra = items.reduce((a, i) => a + i.subtotal, 0);
+  const totalCompra = descuento > 0 ? Math.round(subtotalCompra * (1 - descuento / 100) * 100) / 100 : subtotalCompra;
   const totalUnidades = items.reduce((a, i) => a + i.cantidad, 0);
 
   /* ── save compra ── */
@@ -447,6 +624,7 @@ export default function ComprasPage() {
 
       // Determine estado_pago based on forma de pago
       const estadoPago = formaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
+      const montoPagado = asPendiente ? 0 : (formaPago === "Cuenta Corriente" ? 0 : totalCompra);
 
       const pendingId = pendingCompraId;
       let compra: { id: string };
@@ -459,10 +637,15 @@ export default function ComprasPage() {
             numero,
             fecha: fecha || todayString(),
             proveedor_id: selectedProveedorId || null,
+            subtotal: subtotalCompra,
+            descuento_porcentaje: descuento || 0,
             total: totalCompra,
             estado: asPendiente ? "Pendiente" : "Confirmada",
             forma_pago: formaPago,
             estado_pago: estadoPago,
+            monto_pagado: montoPagado,
+            tipo_comprobante: tipoComprobante || null,
+            numero_comprobante: numeroComprobante.trim() || null,
             observacion: observacion || null,
           })
           .eq("id", pendingId);
@@ -483,10 +666,15 @@ export default function ComprasPage() {
             numero,
             fecha: fecha || todayString(),
             proveedor_id: selectedProveedorId || null,
+            subtotal: subtotalCompra,
+            descuento_porcentaje: descuento || 0,
             total: totalCompra,
             estado: asPendiente ? "Pendiente" : "Confirmada",
             forma_pago: formaPago,
             estado_pago: estadoPago,
+            monto_pagado: montoPagado,
+            tipo_comprobante: tipoComprobante || null,
+            numero_comprobante: numeroComprobante.trim() || null,
             observacion: observacion || null,
           })
           .select("id")
@@ -628,6 +816,9 @@ export default function ComprasPage() {
           descripcion: `Compra ${numero} - ${prov?.nombre || "Proveedor"}`,
           metodo_pago: formaPago,
           monto: -totalCompra,
+          referencia_id: compra.id,
+          referencia_tipo: "compra",
+          ...(formaPago === "Transferencia" && confirmCuentaBancariaId ? { cuenta_bancaria: confirmCuentaBancariaId } : {}),
         });
       }
 
@@ -719,6 +910,9 @@ export default function ComprasPage() {
     setFecha(todayString());
     setNumeroCompra("");
     setFormaPago("Transferencia");
+    setTipoComprobante("Factura A");
+    setNumeroComprobante("");
+    setDescuento(0);
     setSaveError("");
     setPendingCompraId(null);
   };
@@ -761,8 +955,11 @@ export default function ComprasPage() {
       setItems(loadedItems);
       setNumeroCompra(compra.numero);
       setFormaPago(compra.forma_pago || "Efectivo");
+      setTipoComprobante(compra.tipo_comprobante || "Factura A");
+      setNumeroComprobante(compra.numero_comprobante || "");
       setObservacion(compra.observacion || "");
       setFecha(compra.fecha);
+      setDescuento(compra.descuento_porcentaje || 0);
       // Store the pending compra ID so we can update instead of creating new
       setPendingCompraId(compra.id);
       setMode("new");
@@ -776,13 +973,144 @@ export default function ComprasPage() {
       .eq("compra_id", compra.id)
       .order("created_at");
     setDetailItems((data as CompraItemRow[]) || []);
+    setEditingPrices(false);
+    setEditedPrices({});
     setMode("detail");
+  };
+
+  /* ── save edited prices (confirmed compra) ── */
+
+  const handleSaveEditedPrices = async () => {
+    if (!detailCompra || Object.keys(editedPrices).length === 0) return;
+    setSavingPrices(true);
+    try {
+      // Update each changed item
+      for (const item of detailItems) {
+        const newPrice = editedPrices[item.id];
+        if (newPrice === undefined || newPrice === item.precio_unitario) continue;
+
+        const newSubtotal = Math.round(newPrice * item.cantidad * 100) / 100;
+        await supabase
+          .from("compra_items")
+          .update({ precio_unitario: newPrice, subtotal: newSubtotal })
+          .eq("id", item.id);
+
+        // Update product costo if changed
+        if (item.producto_id) {
+          await supabase
+            .from("productos")
+            .update({ costo: newPrice, fecha_actualizacion: todayString() })
+            .eq("id", item.producto_id);
+        }
+      }
+
+      // Recalculate compra total
+      const { data: updatedItems } = await supabase
+        .from("compra_items")
+        .select("subtotal")
+        .eq("compra_id", detailCompra.id);
+      const newSubtotal = (updatedItems || []).reduce((a: number, i: any) => a + (i.subtotal || 0), 0);
+      const disc = detailCompra.descuento_porcentaje || 0;
+      const newTotal = disc > 0 ? Math.round(newSubtotal * (1 - disc / 100) * 100) / 100 : newSubtotal;
+
+      await supabase
+        .from("compras")
+        .update({ subtotal: newSubtotal, total: newTotal })
+        .eq("id", detailCompra.id);
+
+      // Refresh detail
+      setDetailCompra({ ...detailCompra, subtotal: newSubtotal, total: newTotal });
+      const { data: refreshedItems } = await supabase
+        .from("compra_items")
+        .select("id, compra_id, producto_id, codigo, descripcion, cantidad, precio_unitario, subtotal")
+        .eq("compra_id", detailCompra.id)
+        .order("created_at");
+      setDetailItems((refreshedItems as CompraItemRow[]) || []);
+      setEditingPrices(false);
+      setEditedPrices({});
+      fetchData();
+      showAdminToast("Precios actualizados correctamente", "success");
+    } catch (err: any) {
+      showAdminToast("Error al actualizar precios: " + (err.message || "Error"), "error");
+    }
+    setSavingPrices(false);
+  };
+
+  /* ── register partial payment ── */
+
+  const handleRegisterPayment = async () => {
+    if (!detailCompra || paymentAmount <= 0) return;
+    setSavingPayment(true);
+    try {
+      const montoPagadoActual = detailCompra.monto_pagado || 0;
+      const nuevoMontoPagado = montoPagadoActual + paymentAmount;
+      const nuevoEstadoPago = nuevoMontoPagado >= detailCompra.total ? "Pagada" : "Pago Parcial";
+
+      // Register caja movement if not CC
+      if (paymentMethod !== "Cuenta Corriente") {
+        const prov = providers.find((p) => p.id === detailCompra.proveedor_id);
+        await supabase.from("caja_movimientos").insert({
+          fecha: todayString(),
+          hora: nowTimeARG(),
+          tipo: "egreso",
+          descripcion: `Pago Compra ${detailCompra.numero} - ${prov?.nombre || "Proveedor"}`,
+          metodo_pago: paymentMethod,
+          monto: -paymentAmount,
+          referencia_id: detailCompra.id,
+          referencia_tipo: "compra",
+          ...(paymentMethod === "Transferencia" && paymentCuentaBancariaId ? { cuenta_bancaria: paymentCuentaBancariaId } : {}),
+        });
+      } else if (detailCompra.proveedor_id) {
+        // CC: update proveedor saldo and create CC entry
+        const { data: prov } = await supabase
+          .from("proveedores")
+          .select("saldo")
+          .eq("id", detailCompra.proveedor_id)
+          .single();
+        if (prov) {
+          const newSaldo = (prov.saldo || 0) + paymentAmount;
+          await supabase
+            .from("proveedores")
+            .update({ saldo: newSaldo })
+            .eq("id", detailCompra.proveedor_id);
+          await supabase.from("cuenta_corriente_proveedor").insert({
+            proveedor_id: detailCompra.proveedor_id,
+            fecha: todayString(),
+            tipo: "pago",
+            descripcion: `Pago parcial Compra ${detailCompra.numero}`,
+            monto: paymentAmount,
+            saldo_resultante: newSaldo,
+            referencia_id: detailCompra.id,
+            referencia_tipo: "compra",
+          });
+        }
+      }
+
+      // Update compra
+      await supabase
+        .from("compras")
+        .update({ monto_pagado: nuevoMontoPagado, estado_pago: nuevoEstadoPago })
+        .eq("id", detailCompra.id);
+
+      setDetailCompra({ ...detailCompra, monto_pagado: nuevoMontoPagado, estado_pago: nuevoEstadoPago });
+      setShowPaymentDialog(false);
+      fetchData();
+      showAdminToast(
+        nuevoEstadoPago === "Pagada"
+          ? "Compra pagada en su totalidad"
+          : `Pago de ${formatCurrency(paymentAmount)} registrado`,
+        "success"
+      );
+    } catch (err: any) {
+      showAdminToast("Error al registrar pago: " + (err.message || "Error"), "error");
+    }
+    setSavingPayment(false);
   };
 
   /* ── stats ── */
 
   const totalMonth = useMemo(() => purchases.reduce((a, p) => a + p.total, 0), [purchases]);
-  const pendientePago = useMemo(() => purchases.filter((p) => p.estado_pago === "Pendiente").length, [purchases]);
+  const pendientePago = useMemo(() => purchases.filter((p) => p.estado_pago === "Pendiente" || p.estado_pago === "Pago Parcial").length, [purchases]);
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
@@ -905,6 +1233,35 @@ export default function ComprasPage() {
               </div>
             </div>
 
+            {/* Tipo comprobante + Numero comprobante row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5" />
+                  Tipo de comprobante
+                </Label>
+                <Select value={tipoComprobante} onValueChange={(v) => setTipoComprobante(v ?? "Factura A")}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+                  <SelectContent>
+                    {["Factura A", "Factura B", "Factura C", "Remito", "Sin comprobante"].map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Hash className="w-3.5 h-3.5" />
+                  N de comprobante
+                  <span className="text-[10px] opacity-60">(opcional)</span>
+                </Label>
+                <Input
+                  value={numeroComprobante}
+                  onChange={(e) => setNumeroComprobante(e.target.value)}
+                  placeholder="Ej: 0001-00012345"
+                />
+              </div>
+            </div>
             {/* Observaciones row */}
             <div className="mt-4 space-y-2">
               <Label className="text-xs text-muted-foreground">
@@ -1212,9 +1569,33 @@ export default function ComprasPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Total:</span>
-                      <span className="text-lg font-bold">{formatCurrency(totalCompra)}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">Desc.</span>
+                        <div className="relative w-20">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            value={descuento || ""}
+                            onChange={(e) => setDescuento(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                            placeholder="0"
+                            className="h-8 text-sm pr-6 text-right"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {descuento > 0 && (
+                          <div className="text-right text-xs text-muted-foreground">
+                            <span className="line-through">{formatCurrency(subtotalCompra)}</span>
+                            <span className="ml-1 text-red-500">-{descuento}%</span>
+                          </div>
+                        )}
+                        <span className="text-sm text-muted-foreground">Total:</span>
+                        <span className="text-lg font-bold">{formatCurrency(totalCompra)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1309,9 +1690,23 @@ export default function ComprasPage() {
                     );
                   })}
                 </div>
-                <div className="flex justify-between items-center px-1 pt-1">
-                  <span className="text-sm font-semibold">Total compra</span>
-                  <span className="text-xl font-bold">{formatCurrency(totalCompra)}</span>
+                <div className="space-y-1 px-1 pt-1">
+                  {descuento > 0 && (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Subtotal</span>
+                        <span className="text-sm tabular-nums">{formatCurrency(subtotalCompra)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-red-500">
+                        <span className="text-sm">Descuento ({descuento}%)</span>
+                        <span className="text-sm tabular-nums">-{formatCurrency(subtotalCompra - totalCompra)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold">Total compra</span>
+                    <span className="text-xl font-bold">{formatCurrency(totalCompra)}</span>
+                  </div>
                 </div>
               </div>
 
@@ -1420,7 +1815,16 @@ export default function ComprasPage() {
                 {detailCompra.estado}
               </Badge>
               {detailCompra.estado_pago && (
-                <Badge variant={detailCompra.estado_pago === "Pagada" ? "outline" : "destructive"} className="text-xs">
+                <Badge
+                  variant="outline"
+                  className={`text-xs ${
+                    detailCompra.estado_pago === "Pagada"
+                      ? "border-green-300 bg-green-50 text-green-700"
+                      : detailCompra.estado_pago === "Pago Parcial"
+                      ? "border-orange-300 bg-orange-50 text-orange-700"
+                      : "border-yellow-300 bg-yellow-50 text-yellow-700"
+                  }`}
+                >
                   {detailCompra.estado_pago}
                 </Badge>
               )}
@@ -1518,7 +1922,47 @@ export default function ComprasPage() {
                 Confirmar ingreso al stock
               </Button>
             )}
-            {detailCompra.estado !== "Anulada" && (
+            {detailCompra.estado === "Confirmada" && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50" onClick={openDevolucionDialog}>
+                <RotateCcw className="w-3.5 h-3.5" />
+                Devolución
+              </Button>
+            )}
+            {detailCompra.estado === "Confirmada" && !editingPrices && (
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                const priceMap: Record<string, number> = {};
+                detailItems.forEach((i) => { priceMap[i.id] = i.precio_unitario; });
+                setEditedPrices(priceMap);
+                setEditingPrices(true);
+              }}>
+                <Pencil className="w-3.5 h-3.5" />
+                Editar precios
+              </Button>
+            )}
+            {editingPrices && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => { setEditingPrices(false); setEditedPrices({}); }}>
+                  Cancelar
+                </Button>
+                <Button size="sm" className="gap-1.5" onClick={handleSaveEditedPrices} disabled={savingPrices}>
+                  {savingPrices ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  Guardar precios
+                </Button>
+              </>
+            )}
+            {detailCompra.estado === "Confirmada" && detailCompra.estado_pago !== "Pagada" && !editingPrices && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => {
+                const remaining = detailCompra.total - (detailCompra.monto_pagado || 0);
+                setPaymentAmount(Math.max(0, Math.round(remaining * 100) / 100));
+                setPaymentMethod("Efectivo");
+                setPaymentCuentaBancariaId("");
+                setShowPaymentDialog(true);
+              }}>
+                <CreditCard className="w-3.5 h-3.5" />
+                Registrar Pago
+              </Button>
+            )}
+            {detailCompra.estado !== "Anulada" && !editingPrices && (
               <Button variant="outline" size="sm" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setAnularCompraDialog(true)}>
                 <X className="w-3.5 h-3.5" />
                 Anular compra
@@ -1533,7 +1977,7 @@ export default function ComprasPage() {
 
         <Card>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-xs text-muted-foreground block">Proveedor</span>
                 <span className="font-medium">{detailCompra.proveedores?.nombre || "---"}</span>
@@ -1548,13 +1992,49 @@ export default function ComprasPage() {
               </div>
               <div>
                 <span className="text-xs text-muted-foreground block">Estado pago</span>
-                <Badge variant={detailCompra.estado_pago === "Pagada" ? "outline" : "destructive"} className="text-xs mt-0.5">
+                <Badge
+                  variant="outline"
+                  className={`text-xs mt-0.5 ${
+                    detailCompra.estado_pago === "Pagada"
+                      ? "border-green-300 bg-green-50 text-green-700"
+                      : detailCompra.estado_pago === "Pago Parcial"
+                      ? "border-orange-300 bg-orange-50 text-orange-700"
+                      : "border-yellow-300 bg-yellow-50 text-yellow-700"
+                  }`}
+                >
                   {detailCompra.estado_pago || "---"}
                 </Badge>
               </div>
               <div>
+                <span className="text-xs text-muted-foreground block">Tipo comprobante</span>
+                {detailCompra.tipo_comprobante ? (
+                  <Badge variant="outline" className="text-xs mt-0.5">{detailCompra.tipo_comprobante}</Badge>
+                ) : (
+                  <span className="font-medium">---</span>
+                )}
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">N comprobante</span>
+                <span className="font-medium">{detailCompra.numero_comprobante || "---"}</span>
+              </div>
+              <div>
                 <span className="text-xs text-muted-foreground block">Total</span>
                 <span className="font-bold">{formatCurrency(detailCompra.total)}</span>
+                {detailCompra.descuento_porcentaje != null && detailCompra.descuento_porcentaje > 0 && (
+                  <span className="text-xs text-red-500 block">
+                    -{detailCompra.descuento_porcentaje}% s/ {formatCurrency(detailCompra.subtotal || 0)}
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">Pagado</span>
+                <span className="font-bold text-green-600">{formatCurrency(detailCompra.monto_pagado || 0)}</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">Saldo pendiente</span>
+                <span className={`font-bold ${(detailCompra.total - (detailCompra.monto_pagado || 0)) > 0 ? "text-red-600" : "text-green-600"}`}>
+                  {formatCurrency(Math.max(0, detailCompra.total - (detailCompra.monto_pagado || 0)))}
+                </span>
               </div>
             </div>
             {detailCompra.observacion && (
@@ -1577,20 +2057,51 @@ export default function ComprasPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detailItems.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{item.codigo}</td>
-                      <td className="py-3 px-4 font-medium">{item.descripcion}</td>
-                      <td className="py-3 px-4 text-center">{item.cantidad}</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(item.precio_unitario)}</td>
-                      <td className="py-3 px-4 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                    </tr>
-                  ))}
+                  {detailItems.map((item) => {
+                    const editedPrice = editedPrices[item.id];
+                    const currentPrice = editedPrice !== undefined ? editedPrice : item.precio_unitario;
+                    const currentSubtotal = editingPrices ? Math.round(currentPrice * item.cantidad * 100) / 100 : item.subtotal;
+                    return (
+                      <tr key={item.id} className={`border-b last:border-0 hover:bg-muted/50 transition-colors ${editingPrices && editedPrice !== undefined && editedPrice !== item.precio_unitario ? "bg-amber-50/50" : ""}`}>
+                        <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{item.codigo}</td>
+                        <td className="py-3 px-4 font-medium">{item.descripcion}</td>
+                        <td className="py-3 px-4 text-center">{item.cantidad}</td>
+                        <td className="py-3 px-4 text-right">
+                          {editingPrices ? (
+                            <Input
+                              type="number"
+                              min={0}
+                              value={currentPrice}
+                              onChange={(e) => setEditedPrices((prev) => ({ ...prev, [item.id]: Math.max(0, Number(e.target.value)) }))}
+                              className="w-24 ml-auto text-right h-8"
+                            />
+                          ) : (
+                            formatCurrency(item.precio_unitario)
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-semibold">{formatCurrency(currentSubtotal)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-              <div className="flex justify-end border-t pt-3 mt-1 px-4">
-                <span className="text-sm text-muted-foreground mr-4">Total:</span>
-                <span className="text-sm font-bold">{formatCurrency(detailCompra.total)}</span>
+              <div className="border-t pt-3 mt-1 px-4 space-y-1">
+                {detailCompra.descuento_porcentaje != null && detailCompra.descuento_porcentaje > 0 && (
+                  <>
+                    <div className="flex justify-end">
+                      <span className="text-sm text-muted-foreground mr-4">Subtotal:</span>
+                      <span className="text-sm tabular-nums">{formatCurrency(detailCompra.subtotal || 0)}</span>
+                    </div>
+                    <div className="flex justify-end text-red-500">
+                      <span className="text-sm mr-4">Descuento ({detailCompra.descuento_porcentaje}%):</span>
+                      <span className="text-sm tabular-nums">-{formatCurrency((detailCompra.subtotal || 0) - detailCompra.total)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-end">
+                  <span className="text-sm text-muted-foreground mr-4">Total:</span>
+                  <span className="text-sm font-bold">{formatCurrency(detailCompra.total)}</span>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -1622,6 +2133,169 @@ export default function ComprasPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Partial payment dialog */}
+        <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-emerald-600" />
+                Registrar Pago
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 rounded-lg bg-muted/50 p-3">
+                <div>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Total</span>
+                  <p className="font-bold text-sm">{formatCurrency(detailCompra.total)}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Pagado</span>
+                  <p className="font-bold text-sm text-green-600">{formatCurrency(detailCompra.monto_pagado || 0)}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Restante</span>
+                  <p className="font-bold text-sm text-red-600">{formatCurrency(Math.max(0, detailCompra.total - (detailCompra.monto_pagado || 0)))}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Monto a pagar</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(Math.max(0, Number(e.target.value)))}
+                  className="text-lg font-bold"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Metodo de pago</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["Efectivo", "Transferencia", "Cuenta Corriente"].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setPaymentMethod(m)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                        paymentMethod === m
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-background hover:bg-muted border-border"
+                      }`}
+                    >
+                      {m === "Cuenta Corriente" ? "Cta. Cte." : m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {paymentMethod === "Transferencia" && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Cuenta bancaria</Label>
+                  <Select value={paymentCuentaBancariaId || ""} onValueChange={(v) => setPaymentCuentaBancariaId(v || "")}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                    <SelectContent>
+                      {cuentasBancarias.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.nombre} {c.alias ? `(${c.alias})` : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button variant="outline" onClick={() => setShowPaymentDialog(false)} disabled={savingPayment}>Cancelar</Button>
+                <Button onClick={handleRegisterPayment} disabled={savingPayment || paymentAmount <= 0} className="gap-1.5">
+                  {savingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Registrar pago — {formatCurrency(paymentAmount)}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Devolucion (partial return) dialog */}
+        <Dialog open={devolucionDialog} onOpenChange={setDevolucionDialog}>
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-600">
+                <RotateCcw className="w-5 h-5" />
+                Devolución parcial — Compra #{detailCompra?.numero}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Indicá la cantidad a devolver de cada producto. Solo se procesarán los items con cantidad mayor a 0.
+              </p>
+              <div className="rounded-lg border divide-y max-h-72 overflow-y-auto">
+                {devolucionItems.map((item, idx) => (
+                  <div key={item.id} className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.descripcion}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">{item.codigo} &middot; Cant. original: {item.cantidad_original} &middot; {formatCurrency(item.precio_unitario)}/u</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Label className="text-xs text-muted-foreground whitespace-nowrap">Devolver</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={item.cantidad_original}
+                        value={item.cantidad_devolver}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(item.cantidad_original, Number(e.target.value) || 0));
+                          setDevolucionItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad_devolver: val } : it));
+                        }}
+                        className="w-20 text-center"
+                      />
+                    </div>
+                    {item.cantidad_devolver > 0 && (
+                      <span className="text-sm font-semibold text-amber-600 tabular-nums w-24 text-right flex-shrink-0">
+                        {formatCurrency(item.cantidad_devolver * item.precio_unitario)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <Label className="text-sm">Motivo de la devolución</Label>
+                <Textarea
+                  value={devolucionMotivo}
+                  onChange={(e) => setDevolucionMotivo(e.target.value)}
+                  placeholder="Ej: Producto en mal estado, error en pedido..."
+                  rows={2}
+                  className="mt-1"
+                />
+              </div>
+
+              {devolucionTotal > 0 && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-amber-900">Total a devolver:</span>
+                    <span className="font-bold text-amber-900 text-lg">{formatCurrency(devolucionTotal)}</span>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    Se descontará del stock y {detailCompra?.forma_pago === "Cuenta Corriente" ? "se reducirá el saldo del proveedor en cuenta corriente" : detailCompra?.estado_pago === "Pagada" ? "se registrará un ingreso en caja" : "se actualizará el total de la compra"}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button variant="outline" onClick={() => setDevolucionDialog(false)} disabled={procesandoDevolucion}>Cancelar</Button>
+                <Button
+                  onClick={handleDevolucion}
+                  disabled={procesandoDevolucion || devolucionTotal === 0}
+                  className="gap-1.5 bg-amber-600 hover:bg-amber-700"
+                >
+                  {procesandoDevolucion ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  {procesandoDevolucion ? "Procesando..." : `Confirmar devolución — ${formatCurrency(devolucionTotal)}`}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
 
         {/* Prices dialog (also needed in detail view) */}
         <Dialog open={showPreciosDialog} onOpenChange={setShowPreciosDialog}>
@@ -1809,9 +2483,11 @@ export default function ComprasPage() {
                     <th className="text-left py-3 px-4 font-medium">N</th>
                     <th className="text-left py-3 px-4 font-medium">Fecha</th>
                     <th className="text-left py-3 px-4 font-medium">Proveedor</th>
+                    <th className="text-left py-3 px-4 font-medium">Comprobante</th>
                     <th className="text-left py-3 px-4 font-medium">Forma pago</th>
                     <th className="text-right py-3 px-4 font-medium">Total</th>
                     <th className="text-center py-3 px-4 font-medium">Estado</th>
+                    <th className="text-center py-3 px-4 font-medium">Pago</th>
                     <th className="text-right py-3 px-4 font-medium w-16"></th>
                   </tr>
                 </thead>
@@ -1825,6 +2501,13 @@ export default function ComprasPage() {
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.numero}</td>
                       <td className="py-3 px-4 text-muted-foreground">{new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                       <td className="py-3 px-4 font-medium">{p.proveedores?.nombre || "---"}</td>
+                      <td className="py-3 px-4">
+                        {p.tipo_comprobante ? (
+                          <Badge variant="outline" className="text-[10px] font-normal">{p.tipo_comprobante}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">---</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-muted-foreground text-xs">{p.forma_pago || "---"}</td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(p.total)}</td>
                       <td className="py-3 px-4 text-center">
@@ -1834,6 +2517,22 @@ export default function ComprasPage() {
                         >
                           {p.estado || "---"}
                         </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {p.estado_pago && (
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-normal ${
+                              p.estado_pago === "Pagada"
+                                ? "border-green-300 bg-green-50 text-green-700"
+                                : p.estado_pago === "Pago Parcial"
+                                ? "border-orange-300 bg-orange-50 text-orange-700"
+                                : "border-yellow-300 bg-yellow-50 text-yellow-700"
+                            }`}
+                          >
+                            {p.estado_pago}
+                          </Badge>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openDetail(p); }}>

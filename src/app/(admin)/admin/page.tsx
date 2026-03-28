@@ -68,11 +68,7 @@ import {
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
 import { useWhiteLabel } from "@/hooks/use-white-label";
-import { formatCurrency } from "@/lib/formatters";
-
-function todayARG() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-}
+import { formatCurrency, todayARG } from "@/lib/formatters";
 
 const PIE_COLORS = ["oklch(0.55 0.2 264)", "oklch(0.65 0.18 160)", "oklch(0.7 0.15 50)", "oklch(0.6 0.2 300)"];
 
@@ -399,8 +395,19 @@ export default function DashboardPage() {
     if (regularVentaIds.length > 0) {
       const ids = regularVentaIds.map((v) => v.id);
       const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, unidades_por_presentacion, presentacion, productos(costo)").in("venta_id", ids);
+      // Also fetch presentation-specific costs for accurate margin
+      const presIds = (items || []).filter((i: any) => i.presentacion && i.presentacion !== "Unidad").map((i: any) => i.productos?.id).filter(Boolean);
+      let presCostMap: Record<string, Record<string, number>> = {};
+      if (presIds.length > 0) {
+        const uniqueIds = [...new Set(presIds)];
+        const { data: presRows } = await supabase.from("presentaciones").select("producto_id, nombre, costo").in("producto_id", uniqueIds);
+        for (const p of presRows || []) {
+          if (!presCostMap[p.producto_id]) presCostMap[p.producto_id] = {};
+          if ((p as any).costo > 0) presCostMap[p.producto_id][(p as any).nombre] = (p as any).costo;
+        }
+      }
       gananciaTotal = (items || []).reduce((acc, item: any) => {
-        const costoUnitario = item.productos?.costo ?? 0;
+        const costoBase = item.productos?.costo ?? 0;
         const cantidad = Number(item.cantidad) || 0;
         const precioUnitario = Number(item.precio_unitario) || 0;
         const descPct = Number(item.descuento) || 0;
@@ -408,7 +415,10 @@ export default function DashboardPage() {
         let unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
         const presTxt = (item.presentacion || "").toLowerCase();
         if (presTxt.includes("medio") && unidadesPorPres === 1) unidadesPorPres = 0.5;
-        return acc + (precioConDesc - costoUnitario * unidadesPorPres) * cantidad;
+        // Use presentation-specific cost if available
+        const presCost = item.presentacion && presCostMap[item.productos?.id]?.[item.presentacion];
+        const costoReal = presCost || (costoBase * unidadesPorPres);
+        return acc + (precioConDesc - costoReal) * cantidad;
       }, 0);
     }
     setGananciaPeriodo(gananciaTotal);
@@ -418,7 +428,7 @@ export default function DashboardPage() {
       supabase.from("clientes").select("saldo").eq("activo", true),
       supabase.from("proveedores").select("saldo").eq("activo", true),
     ]);
-    setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo || p.precio), 0));
+    setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo > 0 ? p.costo : p.precio), 0));
     setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
     setCuentasCobrar((cls || []).reduce((a, c) => a + (c.saldo > 0 ? c.saldo : 0), 0));
     setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));

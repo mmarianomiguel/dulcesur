@@ -194,7 +194,7 @@ export default function NotaDebitoPage() {
         total,
         estado: "cerrada",
         observacion: observacion || null,
-        remito_origen_id: origenId || null,
+        remito_origen_id: origenId && origenId !== "none" ? origenId : null,
       })
       .select()
       .single();

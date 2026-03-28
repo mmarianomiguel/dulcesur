@@ -339,9 +339,10 @@ export default function HojaDeRutaPage() {
 
       if (!existingCC || existingCC.length === 0) {
         const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
-        const saldoActual = freshCli?.saldo ?? venta.clientes?.saldo ?? 0;
+        const saldoActual = freshCli?.saldo ?? 0;
         const nuevoSaldo = saldoActual + pendiente;
-        await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
+        const { error: saldoErr } = await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id).eq("saldo", saldoActual);
+        if (saldoErr) { const { data: retry } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single(); await supabase.from("clientes").update({ saldo: (retry?.saldo ?? 0) + pendiente }).eq("id", venta.cliente_id); }
         await supabase.from("cuenta_corriente").insert({
           cliente_id: venta.cliente_id,
           fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
@@ -471,7 +472,7 @@ export default function HojaDeRutaPage() {
           fecha: hoy, hora, tipo: "ingreso",
           descripcion: `Cobro entrega #${payVenta.numero} (Transferencia) — ${payVenta.clientes?.nombre || ""}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
           metodo_pago: "Transferencia",
-          monto: Math.min(payTransferencia, debe - Math.min(payEfectivo, debe)),
+          monto: Math.max(0, Math.min(payTransferencia, debe - Math.min(payEfectivo, debe))),
           referencia_id: payVenta.id, referencia_tipo: "venta",
           ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
         });

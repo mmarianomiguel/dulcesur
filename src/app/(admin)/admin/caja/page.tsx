@@ -89,23 +89,31 @@ async function abrirTurno(efectivoInicial: number, operador: string): Promise<Tu
   // Verify no open turno exists (prevents concurrent opens from different browsers)
   const existing = await getTurnoAbierto();
   if (existing) throw new Error("Ya existe un turno abierto. Cerralo antes de abrir uno nuevo.");
-  // Get next number atomically by reading max and letting unique constraint handle collisions
-  const { data: maxRow } = await supabase.from("turnos_caja").select("numero").order("numero", { ascending: false }).limit(1);
-  const numero = maxRow && maxRow.length > 0 ? (maxRow[0] as { numero: number }).numero + 1 : 1;
-  const { data, error } = await supabase
-    .from("turnos_caja")
-    .insert({
-      numero,
-      fecha_apertura: todayARG(),
-      hora_apertura: nowTimeARG(),
-      operador,
-      efectivo_inicial: efectivoInicial,
-      estado: "abierto",
-    })
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as TurnoCaja;
+  // Get next number and retry on unique constraint violation (race condition)
+  const maxRetries = 3;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const { data: maxRow } = await supabase.from("turnos_caja").select("numero").order("numero", { ascending: false }).limit(1);
+    const numero = maxRow && maxRow.length > 0 ? (maxRow[0] as { numero: number }).numero + 1 : 1;
+    const { data, error } = await supabase
+      .from("turnos_caja")
+      .insert({
+        numero,
+        fecha_apertura: todayARG(),
+        hora_apertura: nowTimeARG(),
+        operador,
+        efectivo_inicial: efectivoInicial,
+        estado: "abierto",
+      })
+      .select()
+      .single();
+    if (error) {
+      // Unique constraint violation - retry with new number
+      if (error.code === "23505" && attempt < maxRetries - 1) continue;
+      throw new Error(error.message);
+    }
+    return data as TurnoCaja;
+  }
+  throw new Error("No se pudo crear el turno después de varios intentos");
 }
 
 async function cerrarTurno(
@@ -218,7 +226,7 @@ export default function CajaPage() {
   const movDialog = useDialog<"ingreso" | "egreso">();
   const cierreDialog = useDialog();
   const abrirDialog = useDialog();
-  const [movForm, setMovForm] = useState({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "" });
+  const [movForm, setMovForm] = useState({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "", sub_tipo: "gasto" });
   const [cierreForm, setCierreForm] = useState({ efectivo_real: 0, notas: "" });
   const [proveedores, setProveedores] = useState<{ id: string; nombre: string }[]>([]);
 
@@ -297,7 +305,7 @@ export default function CajaPage() {
   };
 
   const openMovDialog = (type: "ingreso" | "egreso") => {
-    setMovForm({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "" });
+    setMovForm({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "", sub_tipo: "gasto" });
     movDialog.onOpen(type);
   };
 
@@ -317,7 +325,7 @@ export default function CajaPage() {
       if (type === "ingreso") {
         await cajaService.registrarIngreso(opts);
       } else {
-        await cajaService.registrarEgreso(opts);
+        await cajaService.registrarEgreso({ ...opts, subTipo: movForm.sub_tipo });
       }
       movDialog.onClose();
       refetchMov();
@@ -334,7 +342,7 @@ export default function CajaPage() {
   };
 
   const openCierreDialog = () => {
-    setCierreForm({ efectivo_real: efectivoEsperado, notas: "" });
+    setCierreForm({ efectivo_real: 0, notas: "" });
     cierreDialog.onOpen();
   };
 
@@ -384,14 +392,12 @@ export default function CajaPage() {
         ? new Date(`${t.fecha_cierre}T${t.hora_cierre}-03:00`)
         : null;
 
-    // If turno crosses midnight, also fetch next day's data
+    // If turno crosses midnight (or spans multiple days), fetch full range
     const fechaCierre = t.fecha_cierre || fecha;
-    const fechas = [fecha];
-    if (fechaCierre !== fecha) fechas.push(fechaCierre);
 
     const [{ data: movs }, { data: vts }] = await Promise.all([
-      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").in("fecha", fechas).order("hora", { ascending: false }),
-      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").in("fecha", fechas).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
+      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").gte("fecha", fecha).lte("fecha", fechaCierre).order("hora", { ascending: false }),
+      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
     ]);
 
     // Filter by turno time range using Date comparison
@@ -647,9 +653,10 @@ export default function CajaPage() {
     for (const v of ventasSinMov) {
       const ef = (v as any).monto_efectivo || 0;
       const cc = (v as any).monto_cuenta_corriente || 0;
-      const montoTransf = v.forma_pago === "Transferencia" ? v.total
-        : v.forma_pago === "Mixto" ? (v.total - ef - cc)
-        : 0;
+      const tr = (v as any).monto_transferencia || 0;
+      let montoTransf = 0;
+      if (v.forma_pago === "Transferencia") montoTransf = v.total;
+      else if (v.forma_pago === "Mixto") montoTransf = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
       if (montoTransf > 0) {
         const cuenta = (v as any).cuenta_transferencia_alias || "Sin asignar";
         transferenciaPorCuenta[cuenta] = (transferenciaPorCuenta[cuenta] || 0) + montoTransf;
@@ -672,12 +679,20 @@ export default function CajaPage() {
       }, 0);
     const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
 
-    const depositos = movements
+    const depositosEfectivo = movements
       .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta")
       .reduce((a, m) => a + m.monto, 0);
+    const depositosOtros = movements
+      .filter((m) => m.tipo === "ingreso" && m.metodo_pago !== "Efectivo" && m.referencia_tipo !== "venta")
+      .reduce((a, m) => a + m.monto, 0);
+    const depositos = depositosEfectivo + depositosOtros;
 
     const gastos = movements
-      .filter((m) => m.tipo === "egreso" && (m.descripcion || "").toLowerCase().includes("gasto"))
+      .filter((m) => m.tipo === "egreso" && (
+        (m as any).sub_tipo
+          ? (m as any).sub_tipo === "gasto"
+          : (m.descripcion || "").toLowerCase().includes("gasto")
+      ))
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const notasCreditoEgresos = movements
@@ -689,11 +704,15 @@ export default function CajaPage() {
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const retiros = movements
-      .filter((m) => m.tipo === "egreso" && !(m.descripcion || "").toLowerCase().includes("gasto"))
+      .filter((m) => m.tipo === "egreso" && (
+        (m as any).sub_tipo
+          ? (m as any).sub_tipo !== "gasto"
+          : !(m.descripcion || "").toLowerCase().includes("gasto")
+      ))
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const efectivoInicial = turno?.efectivo_inicial ?? 0;
-    const efectivoEsperado = efectivoInicial + ventasEfectivo + depositos - gastos - retiros - notasCreditoEgresos - anulaciones;
+    const efectivoEsperado = efectivoInicial + ventasEfectivo + depositosEfectivo - gastos - retiros - notasCreditoEgresos - anulaciones;
 
     return {
       ventasEfectivo,
@@ -769,9 +788,10 @@ export default function CajaPage() {
                 <Label>Efectivo Inicial</Label>
                 <Input
                   type="number"
+                  min={0}
                   value={abrirForm.efectivo_inicial}
                   onChange={(e) =>
-                    setAbrirForm({ ...abrirForm, efectivo_inicial: Number(e.target.value) })
+                    setAbrirForm({ ...abrirForm, efectivo_inicial: Math.max(0, Number(e.target.value)) })
                   }
                   placeholder="0"
                 />
@@ -877,7 +897,7 @@ export default function CajaPage() {
                             <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
                             {anulMovs.map((m) => (
                               <div key={m.id} className="flex justify-between text-xs text-orange-600">
-                                <span className="truncate mr-2">{m.descripcion}</span>
+                                <span className="truncate mr-2">{m.descripcion} ({m.metodo_pago || "Efectivo"})</span>
                                 <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
                               </div>
                             ))}
@@ -1209,6 +1229,23 @@ export default function CajaPage() {
                 </Select>
               </div>
             </div>
+            {movDialog.data === "egreso" && (
+              <div className="space-y-2">
+                <Label>Tipo de egreso</Label>
+                <Select
+                  value={movForm.sub_tipo}
+                  onValueChange={(v) => setMovForm({ ...movForm, sub_tipo: v ?? "gasto" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gasto">Gasto</SelectItem>
+                    <SelectItem value="retiro">Retiro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {movDialog.data === "egreso" && proveedores.length > 0 && (
               <div className="space-y-2">
                 <Label>Proveedor (opcional)</Label>
@@ -1338,13 +1375,25 @@ export default function CajaPage() {
                       + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
                     const hTransf = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
                       + hVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
-                      + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
+                      + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => {
+                        const tr = (v as any).monto_transferencia || 0;
+                        if (tr > 0) return a + tr;
+                        const ef = (v as any).monto_efectivo || 0;
+                        const cc = (v as any).monto_cuenta_corriente || 0;
+                        const rest = v.total - ef - cc;
+                        return a + (rest > 0 ? rest : 0);
+                      }, 0);
                     // Per-account
                     const hPorCuenta: Record<string, number> = {};
                     histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
                       .forEach((m) => { const c = (m as any).cuenta_bancaria || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + m.monto; });
                     for (const v of hVentasSinMov) {
-                      const mt = v.forma_pago === "Transferencia" ? v.total : v.forma_pago === "Mixto" ? ((v as any).monto_transferencia || 0) : 0;
+                      const ef = (v as any).monto_efectivo || 0;
+                      const cc = (v as any).monto_cuenta_corriente || 0;
+                      const tr = (v as any).monto_transferencia || 0;
+                      let mt = 0;
+                      if (v.forma_pago === "Transferencia") mt = v.total;
+                      else if (v.forma_pago === "Mixto") mt = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
                       if (mt > 0) { const c = (v as any).cuenta_transferencia_alias || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + mt; }
                     }
                     if (hEfectivo === 0 && hTransf === 0) return null;
@@ -1412,7 +1461,7 @@ export default function CajaPage() {
                           <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
                           {anulMovs.map((m) => (
                             <div key={m.id} className="flex justify-between text-xs text-orange-600">
-                              <span className="truncate mr-2">{m.descripcion}</span>
+                              <span className="truncate mr-2">{m.descripcion} ({m.metodo_pago || "Efectivo"})</span>
                               <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
                             </div>
                           ))}
@@ -1593,10 +1642,27 @@ export default function CajaPage() {
                     <span className="text-red-500">-{formatCurrency(retiros)}</span>
                   </div>
                   {anulaciones > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Anulaciones</span>
-                      <span className="text-red-500">-{formatCurrency(anulaciones)}</span>
-                    </div>
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Anulaciones</span>
+                        <span className="text-red-500">-{formatCurrency(anulaciones)}</span>
+                      </div>
+                      {/* Anulaciones breakdown by metodo_pago */}
+                      {(() => {
+                        const anulMovs = movements.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
+                        const porMetodo: Record<string, number> = {};
+                        anulMovs.forEach((m) => {
+                          const k = m.metodo_pago || "Efectivo";
+                          porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto);
+                        });
+                        return Object.entries(porMetodo).map(([metodo, monto]) => (
+                          <div key={metodo} className="flex justify-between pl-3 text-xs">
+                            <span className="text-muted-foreground">→ {metodo}</span>
+                            <span className="text-red-400">-{formatCurrency(monto)}</span>
+                          </div>
+                        ));
+                      })()}
+                    </>
                   )}
                   {notasCreditoEgresos > 0 && (
                     <>

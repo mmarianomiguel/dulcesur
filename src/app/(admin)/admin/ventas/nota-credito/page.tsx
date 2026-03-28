@@ -348,7 +348,8 @@ export default function NotaCreditoPage() {
   const total = items.reduce((acc, i) => acc + i.subtotal, 0);
 
   const handleSave = async () => {
-    if (!clientId || items.length === 0) return;
+    const validItems = items.filter((i) => i.qty > 0 && i.subtotal > 0);
+    if (!clientId || validItems.length === 0) { showAdminToast("Agregá al menos un item con cantidad mayor a 0", "error"); setSaving(false); return; }
     setSaving(true);
 
     const letra = getTipoFactura(selectedClient);

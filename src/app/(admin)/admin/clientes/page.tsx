@@ -266,7 +266,8 @@ export default function ClientesPage() {
   const openNew = () => {
     resetForm();
     const defaultZona = zonas.find((z) => z.nombre.toLowerCase().includes("zona 1") || z.nombre === "1") || zonas[0];
-    setForm((prev) => ({ ...prev, vendedor_id: vendedores[0]?.id || "", zona_entrega: defaultZona?.id || "" }));
+    const defaultVendedor = vendedores.find((v) => v.nombre === "Mariano Miguel")?.id || vendedores[0]?.id || "";
+    setForm((prev) => ({ ...prev, vendedor_id: defaultVendedor, zona_entrega: defaultZona?.id || "" }));
     setDialogOpen(true);
   };
 

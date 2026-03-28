@@ -255,7 +255,7 @@ export default function ResumenMensualPage() {
       }
       setRentabilidadProductos(
         Object.values(prodRent)
-          .map((p) => ({ ...p, ganancia: p.vendido - p.costo, margen: p.costo > 0 ? ((p.vendido - p.costo) / p.costo) * 100 : 0 }))
+          .map((p) => ({ ...p, ganancia: p.vendido - p.costo, margen: p.vendido > 0 ? ((p.vendido - p.costo) / p.vendido) * 100 : 0 }))
           .sort((a, b) => b.ganancia - a.ganancia)
           .slice(0, 10)
       );

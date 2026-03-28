@@ -334,7 +334,9 @@ export default function CargaManualPage() {
           saldoChange = total;
         }
 
-        const newSaldo = (selectedClient?.saldo || 0) + saldoChange;
+        // Fresh saldo read from DB to avoid stale data
+        const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+        const newSaldo = (freshCli?.saldo || 0) + saldoChange;
 
         await supabase.from("cuenta_corriente").insert({
           cliente_id: clientId,
@@ -358,11 +360,19 @@ export default function CargaManualPage() {
       const isNC = tipoComprobante.startsWith("Nota de Crédito");
       for (const item of items) {
         if (item.producto_id) {
-          const prod = products.find((p) => p.id === item.producto_id);
-          if (prod) {
+          // Read fresh stock from DB to avoid stale data
+          const { data: freshProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+          if (freshProd) {
+            // Get unidades_por_presentacion for the item's unit
+            let unitsMultiplier = 1;
+            if (item.unit && item.unit !== "Unidad") {
+              const { data: pres } = await supabase.from("presentaciones").select("cantidad").eq("producto_id", item.producto_id).eq("nombre", item.unit).limit(1).single();
+              if (pres?.cantidad) unitsMultiplier = pres.cantidad;
+            }
+            const totalUnits = item.qty * unitsMultiplier;
             const newStock = isNC
-              ? prod.stock + item.qty
-              : prod.stock - item.qty;
+              ? freshProd.stock + totalUnits
+              : freshProd.stock - totalUnits;
             await supabase
               .from("productos")
               .update({ stock: newStock })
@@ -370,9 +380,9 @@ export default function CargaManualPage() {
             await supabase.from("stock_movimientos").insert({
               producto_id: item.producto_id,
               tipo: isNC ? "devolucion" : "venta",
-              cantidad_antes: prod.stock,
+              cantidad_antes: freshProd.stock,
               cantidad_despues: newStock,
-              cantidad: item.qty,
+              cantidad: totalUnits,
               referencia: `${tipoComprobante} ${num}`,
               descripcion: `${isNC ? "Devolucion" : "Venta"} - ${item.description}`,
               usuario: currentUser?.nombre || "Admin Sistema",

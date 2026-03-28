@@ -73,7 +73,6 @@ export default function UsuariosPage() {
     const { data } = await supabase
       .from("usuarios")
       .select("*, roles(nombre)")
-      .eq("activo", true)
       .order("nombre");
     setUsuarios(data || []);
     setLoading(false);
@@ -254,7 +253,7 @@ export default function UsuariosPage() {
                   {filtered.map((u) => (
                     <tr
                       key={u.id}
-                      className="border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                      className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors${!u.activo ? " opacity-50" : ""}`}
                     >
                       <td className="py-3 px-4 font-medium">{u.nombre}</td>
                       <td className="py-3 px-4 text-muted-foreground">

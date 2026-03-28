@@ -124,6 +124,7 @@ export default function AjustesStockPage() {
   const [rows, setRows] = useState<AjusteRow[]>([]);
   const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tipoAjuste, setTipoAjuste] = useState<"egreso" | "ingreso">("egreso");
 
   // Product search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -197,6 +198,7 @@ export default function AjustesStockPage() {
     setUsuario(currentUserName);
     setMotivoGlobal(MOTIVOS_GLOBALES[0]);
     setObservacion("");
+    setTipoAjuste("egreso");
     setRows([]);
     setSelectedRowIdx(null);
     setDialogOpen(true);
@@ -276,7 +278,9 @@ export default function AjustesStockPage() {
         const upp = row.unidades_por_presentacion || 1;
         const totalUnits = row.cantidad * upp;
         const stockAntes = prod.stock;
-        const stockDespues = Math.max(0, stockAntes - totalUnits);
+        const stockDespues = tipoAjuste === "ingreso"
+          ? stockAntes + totalUnits
+          : stockAntes - totalUnits;
         const motivo = motivoGlobal;
 
         await supabase.from("ajuste_stock_items").insert({
@@ -291,7 +295,7 @@ export default function AjustesStockPage() {
 
         await supabase.from("stock_movimientos").insert({
           producto_id: row.producto_id,
-          tipo: "ajuste",
+          tipo: tipoAjuste === "ingreso" ? "ajuste_ingreso" : "ajuste_egreso",
           cantidad_antes: stockAntes,
           cantidad_despues: stockDespues,
           cantidad: totalUnits,
@@ -458,7 +462,9 @@ export default function AjustesStockPage() {
                         <p className="text-xs text-muted-foreground font-mono">{item.producto?.codigo}</p>
                       </td>
                       <td className="py-2 px-3 text-center">
-                        <Badge variant="destructive">-{item.cantidad}</Badge>
+                        <Badge variant={item.stock_despues >= item.stock_antes ? "default" : "destructive"}>
+                          {item.stock_despues >= item.stock_antes ? "+" : "-"}{item.cantidad}
+                        </Badge>
                       </td>
                       <td className="py-2 px-3 text-right text-xs text-muted-foreground">
                         {item.stock_antes} → {item.stock_despues}
@@ -517,6 +523,18 @@ export default function AjustesStockPage() {
                     {MOTIVOS_GLOBALES.map((m) => (
                       <SelectItem key={m} value={m}>{m}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground font-medium">Tipo de ajuste</label>
+                <Select value={tipoAjuste} onValueChange={(v) => v && setTipoAjuste(v as "egreso" | "ingreso")}>
+                  <SelectTrigger className="h-8 w-40 text-sm">
+                    <SelectValue placeholder="Tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="egreso">Egreso</SelectItem>
+                    <SelectItem value="ingreso">Ingreso</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

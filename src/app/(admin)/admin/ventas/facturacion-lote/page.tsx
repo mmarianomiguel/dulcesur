@@ -129,7 +129,8 @@ export default function FacturacionLotePage() {
     for (let i = 0; i < seleccionados.length; i++) {
       const r = seleccionados[i];
       try {
-        const tipoFactura = r.clientes?.tipo_factura || "Factura B";
+        const rawTipo = r.clientes?.tipo_factura || "B";
+        const tipoFactura = rawTipo.startsWith("Factura") ? rawTipo : `Factura ${rawTipo}`;
         const { data: numData } = await supabase.rpc("next_numero", { p_tipo: tipoFactura });
         const nuevoNumero = numData as string;
 

@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const ADMIN_ROLES = ["admin", "vendedor", "cajero", "encargado"];
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -57,6 +59,38 @@ export async function middleware(request: NextRequest) {
     const response = NextResponse.redirect(url);
     response.cookies.set("admin_login_allowed", "1", { maxAge: 300, path: "/" });
     return response;
+  }
+
+  // Role-based protection for /admin routes
+  if (pathname.startsWith("/admin") && user) {
+    const supabaseService = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll() { return []; },
+          setAll() {},
+        },
+      }
+    );
+    const { data: usuario } = await supabaseService
+      .from("usuarios")
+      .select("rol, es_admin, activo")
+      .eq("auth_id", user.id)
+      .single();
+
+    if (!usuario || !usuario.activo) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/cuenta";
+      return NextResponse.redirect(url);
+    }
+
+    const hasAdminAccess = usuario.es_admin === true || ADMIN_ROLES.includes(usuario.rol);
+    if (!hasAdminAccess) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/cuenta";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

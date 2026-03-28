@@ -175,7 +175,7 @@ export default function ConfiguracionPage() {
         alwaysEnabled.forEach((m) => (merged[m] = true));
         setModulos(merged);
       }
-    } catch (err) { showAdminToast("Error al guardar configuración", "error"); }
+    } catch (err) { showAdminToast("Error al cargar configuración", "error"); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

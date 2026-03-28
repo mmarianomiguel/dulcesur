@@ -168,8 +168,11 @@ export function ReceiptPrintView({
           </div>
         </div>
         <div style={{ width: "55px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", borderLeft: "2px solid #000", borderRight: "2px solid #000", padding: "0 8px" }}>
-          <div style={{ fontSize: "30px", fontWeight: "bold", lineHeight: 1 }}>X</div>
-          <div style={{ fontSize: "8px", textAlign: "center", lineHeight: "1.2", marginTop: "2px" }}>Documento no valido como factura</div>
+          <div style={{ fontSize: "30px", fontWeight: "bold", lineHeight: 1 }}>{(() => {
+            const match = sale.tipoComprobante.match(/[ABC]$/);
+            return match ? match[0] : "X";
+          })()}</div>
+          <div style={{ fontSize: "8px", textAlign: "center", lineHeight: "1.2", marginTop: "2px" }}>{sale.tipoComprobante.match(/[ABC]$/) ? "Documento fiscal" : "Documento no valido como factura"}</div>
         </div>
         <div style={{ flex: 1, paddingLeft: "10px" }}>
           <div style={{ fontSize: `${fsEmpresa + 4}px`, fontWeight: "bold", marginBottom: "4px" }}>

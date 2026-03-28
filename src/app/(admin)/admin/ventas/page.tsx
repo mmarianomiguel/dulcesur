@@ -1467,7 +1467,7 @@ export default function VentasPage() {
       if (numError) { setErrorModal({ open: true, message: `Error al generar número: ${numError.message}` }); setSaving(false); return; }
       const numero = numData || "00001-00000000";
 
-      const { data: venta, error: ventaError } = await supabase
+      let { data: venta, error: ventaError } = await supabase
         .from("ventas")
         .insert({
           numero,
@@ -1499,7 +1499,7 @@ export default function VentasPage() {
           const { data: retryNum } = await supabase.rpc("next_numero", { p_tipo: "venta" });
           if (retryNum) {
             const { data: retryVenta, error: retryErr } = await supabase.from("ventas").insert({ ...{ numero: retryNum, tipo_comprobante: tipoComprobante, fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), cliente_id: clientId || null, vendedor_id: vendedorId || null, forma_pago: formaPago, subtotal, descuento_porcentaje: descuento, recargo_porcentaje: recargo, total, estado: "cerrada", observacion: despacho, metodo_entrega: deliveryMethod === "delivery" ? "envio" : "retiro", lista_precio_id: listaPrecioId || null } }).select().single();
-            if (!retryErr && retryVenta) { Object.assign(venta || {}, retryVenta); } else { setErrorModal({ open: true, message: `Error al crear venta: ${retryErr?.message || ventaError.message}` }); setSaving(false); return; }
+            if (!retryErr && retryVenta) { venta = retryVenta; } else { setErrorModal({ open: true, message: `Error al crear venta: ${retryErr?.message || ventaError.message}` }); setSaving(false); return; }
           }
         } else {
           setErrorModal({ open: true, message: `Error al crear venta: ${ventaError.message}` }); setSaving(false); return;
@@ -1699,16 +1699,51 @@ export default function VentasPage() {
           const saldoActualDB = saldoRealAntesDeTodo;
           if (saldoActualDB > 0) {
             const saldoPendiente = saldoActualDB;
-            await supabase.from("caja_movimientos").insert({
-              fecha: hoy,
-              hora,
-              tipo: "ingreso",
-              descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
-              metodo_pago: formaPago === "Mixto" ? "Efectivo" : formaPago,
-              monto: saldoPendiente,
-              referencia_id: venta.id,
-              referencia_tipo: "venta",
-            });
+            if (formaPago === "Mixto") {
+              // Split cobro saldo across Efectivo and Transferencia portions proportionally
+              const mixtoTotal = mixtoEfectivo + mixtoTransferencia;
+              const efectivoPortion = mixtoTotal > 0 ? Math.round((mixtoEfectivo / mixtoTotal) * saldoPendiente * 100) / 100 : saldoPendiente;
+              const transferenciaPortion = Math.round((saldoPendiente - efectivoPortion) * 100) / 100;
+              if (efectivoPortion > 0) {
+                await supabase.from("caja_movimientos").insert({
+                  fecha: hoy,
+                  hora,
+                  tipo: "ingreso",
+                  descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero}) (Efectivo)`,
+                  metodo_pago: "Efectivo",
+                  monto: efectivoPortion,
+                  referencia_id: venta.id,
+                  referencia_tipo: "venta",
+                });
+              }
+              if (transferenciaPortion > 0) {
+                const cobroCuenta = cuentaBancariaId
+                  ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
+                  : null;
+                await supabase.from("caja_movimientos").insert({
+                  fecha: hoy,
+                  hora,
+                  tipo: "ingreso",
+                  descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero}) (Transferencia)${cobroCuenta ? ` → ${cobroCuenta.nombre}` : ""}`,
+                  metodo_pago: "Transferencia",
+                  monto: transferenciaPortion,
+                  referencia_id: venta.id,
+                  referencia_tipo: "venta",
+                  ...(cobroCuenta ? { cuenta_bancaria: cobroCuenta.nombre } : {}),
+                });
+              }
+            } else {
+              await supabase.from("caja_movimientos").insert({
+                fecha: hoy,
+                hora,
+                tipo: "ingreso",
+                descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
+                metodo_pago: formaPago,
+                monto: saldoPendiente,
+                referencia_id: venta.id,
+                referencia_tipo: "venta",
+              });
+            }
             // Re-read current DB saldo (may include new CC from this sale)
             const { data: freshAfterCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
             const saldoDBNow = freshAfterCC?.saldo ?? saldoActualDB;
@@ -1725,7 +1760,7 @@ export default function VentasPage() {
               venta_id: venta.id,
             });
             await supabase.from("clientes").update({ saldo: newSaldoAfterCobro }).eq("id", clientId);
-            if (selectedClient) Object.assign(selectedClient, { saldo: newSaldoAfterCobro });
+            if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoAfterCobro } : c));
           }
         }
 

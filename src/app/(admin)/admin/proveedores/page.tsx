@@ -367,8 +367,9 @@ export default function ProveedoresPage() {
       });
       if (pagoError) throw new Error(pagoError.message);
 
-      // 2. Update proveedor saldo
-      const newSaldo = pagoDialog.data.saldo - monto;
+      // 2. Update proveedor saldo (fresh read to avoid stale data)
+      const { data: freshProv } = await supabase.from("proveedores").select("saldo").eq("id", provId).single();
+      const newSaldo = (freshProv?.saldo ?? pagoDialog.data.saldo) - monto;
       await proveedorService.update(provId, { saldo: newSaldo } as Partial<Proveedor>);
 
       // 3. Mark selected compras as paid

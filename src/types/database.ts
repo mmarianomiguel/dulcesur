@@ -227,6 +227,7 @@ export interface Compra {
   estado: string;
   forma_pago: string | null;
   estado_pago: string;
+  monto_pagado: number | null;
   observacion: string | null;
   created_at: string;
 }

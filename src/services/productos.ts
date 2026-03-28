@@ -44,9 +44,9 @@ class ProductoService extends BaseService<Producto> {
       .from(this.table)
       .select("*")
       .eq("activo", true)
-      .filter("stock", "lte", "stock_minimo" as unknown as string)
+      .gt("stock_minimo", 0)
       .order("stock");
-    return (data as Producto[]) || [];
+    return ((data as Producto[]) || []).filter((p) => p.stock <= p.stock_minimo);
   }
 }
 
