@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { formatCurrency } from "@/lib/formatters";
 import {
   Receipt,
   ShoppingCart,
@@ -75,10 +76,6 @@ export interface VentaDetailData {
   comboIds?: Set<string>;
 }
 
-// ─── Helpers ───
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
-}
 
 const estadoBadge: Record<string, { bg: string; text: string; label: string }> = {
   pendiente: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", label: "Pendiente" },

@@ -3,7 +3,7 @@
 import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG ,  nowTimeARG } from "@/lib/formatters";
+import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,9 +55,6 @@ interface CuentaMovimiento {
   ventas?: { tipo_comprobante: string; numero: string } | null;
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2 }).format(value);
-}
 
 export default function CobranzasPage() {
   const [clients, setClients] = useState<ClienteDeuda[]>([]);
@@ -245,7 +242,7 @@ export default function CobranzasPage() {
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-orange-500" /></div>
-            <div><p className="text-xs text-muted-foreground">Total pendiente</p><p className="text-xl font-bold text-orange-500">{formatCurrency(totalPendiente)}</p></div>
+            <div><p className="text-xs text-muted-foreground">Total pendiente</p><p className="text-xl font-bold text-orange-500">{formatCurrency(totalPendiente, true)}</p></div>
           </CardContent>
         </Card>
         <Card>
@@ -290,7 +287,7 @@ export default function CobranzasPage() {
                     <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="py-3 px-4 font-medium">{c.nombre}</td>
                       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{c.cuit || "—"}</td>
-                      <td className="py-3 px-4 text-right font-semibold text-orange-500">{formatCurrency(c.saldo)}</td>
+                      <td className="py-3 px-4 text-right font-semibold text-orange-500">{formatCurrency(c.saldo, true)}</td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm" onClick={() => openDetail(c)}>
@@ -307,7 +304,7 @@ export default function CobranzasPage() {
               </table>
               <div className="flex justify-end border-t pt-3 px-4">
                 <span className="text-sm text-muted-foreground mr-4">Saldo total:</span>
-                <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente)}</span>
+                <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente, true)}</span>
               </div>
             </div>
           )}
@@ -354,10 +351,10 @@ export default function CobranzasPage() {
                     <tr key={m.id} className="border-b last:border-0">
                       <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                       <td className="py-2 px-3 font-mono text-xs">{m.comprobante || "—"}</td>
-                      <td className="py-2 px-3 text-right">{m.debe > 0 ? formatCurrency(m.debe) : ""}</td>
-                      <td className="py-2 px-3 text-right">{m.haber > 0 ? formatCurrency(m.haber) : ""}</td>
+                      <td className="py-2 px-3 text-right">{m.debe > 0 ? formatCurrency(m.debe, true) : ""}</td>
+                      <td className="py-2 px-3 text-right">{m.haber > 0 ? formatCurrency(m.haber, true) : ""}</td>
                       <td className={`py-2 px-3 text-right font-semibold ${m.saldo < 0 ? "text-red-500" : ""}`}>
-                        {formatCurrency(m.saldo)}
+                        {formatCurrency(m.saldo, true)}
                       </td>
                       <td className="py-2 px-3 text-xs text-muted-foreground">{m.forma_pago || ""}</td>
                     </tr>
@@ -370,7 +367,7 @@ export default function CobranzasPage() {
           {selectedClient && (
             <div className="flex justify-between items-center pt-4 border-t">
               <span className="text-sm font-semibold">Saldo deudor actual</span>
-              <span className="text-lg font-bold text-orange-500">{formatCurrency(selectedClient.saldo)}</span>
+              <span className="text-lg font-bold text-orange-500">{formatCurrency(selectedClient.saldo, true)}</span>
             </div>
           )}
         </DialogContent>
@@ -392,7 +389,7 @@ export default function CobranzasPage() {
                 </p>
               </div>
               <p className={`text-xl font-bold ${cobroClient && cobroClient.saldo > 0 ? "text-orange-500" : cobroClient && cobroClient.saldo < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
-                {cobroClient ? formatCurrency(Math.abs(cobroClient.saldo)) : "$0"}
+                {cobroClient ? formatCurrency(Math.abs(cobroClient.saldo), true) : "$0"}
               </p>
             </div>
 
@@ -409,7 +406,7 @@ export default function CobranzasPage() {
               />
               {cobroClient && cobroMonto > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Saldo después: <span className={`font-semibold ${cobroClient.saldo - cobroMonto <= 0 ? "text-emerald-600" : ""}`}>{formatCurrency(cobroClient.saldo - cobroMonto)}</span>
+                  Saldo después: <span className={`font-semibold ${cobroClient.saldo - cobroMonto <= 0 ? "text-emerald-600" : ""}`}>{formatCurrency(cobroClient.saldo - cobroMonto, true)}</span>
                   {cobroClient.saldo - cobroMonto < 0 && <span className="text-emerald-600 ml-1">(a favor)</span>}
                 </p>
               )}
@@ -467,7 +464,7 @@ export default function CobranzasPage() {
                 disabled={saving || cobroMonto <= 0 || (cobroFormaPago === "Transferencia" && cuentasBancarias.length > 0 && !cobroCuentaBancariaId)}
               >
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <DollarSign className="w-4 h-4 mr-2" />}
-                Cobrar {cobroMonto > 0 ? formatCurrency(cobroMonto) : ""}
+                Cobrar {cobroMonto > 0 ? formatCurrency(cobroMonto, true) : ""}
               </Button>
             </div>
           </div>

@@ -36,7 +36,7 @@ import {
   Download,
   Loader2,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+
 
 import { formatCurrency, formatDateARG, todayARG } from "@/lib/formatters";
 import type { Proveedor, Compra, PagoProveedor, CuentaCorrienteProveedor } from "@/types/database";
@@ -427,6 +427,7 @@ export default function ProveedoresPage() {
     if (!file) return;
     e.target.value = "";
     try {
+      const XLSX = await import("xlsx");
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -503,7 +504,8 @@ export default function ProveedoresPage() {
         description={`${providers.length} proveedores registrados`}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => {
+            <Button variant="outline" size="sm" onClick={async () => {
+              const XLSX = await import("xlsx");
               const ws = XLSX.utils.json_to_sheet(providers.map((p: any) => ({
                 "Nombre": p.nombre,
                 "Razón Social": p.razon_social || "",
@@ -835,8 +837,9 @@ export default function ProveedoresPage() {
               .replace(/Compra\s+(\d{5})-(\d{8})/i, (_, _a, b) => `Compra #${parseInt(b)}`)
               .replace(/Pago\s+(Efectivo|Transferencia)/i, (_, m) => `Pago ${m}`);
             const saldoAct = Math.round(ccTotals.saldo);
-            const exportExcel = () => {
+            const exportExcel = async () => {
               if (!ccDialog.data || ccMovimientos.length === 0) return;
+              const XLSX = await import("xlsx");
               const rows = ccMovimientos.map((m) => ({
                 Fecha: formatDateARG(m.fecha),
                 Tipo: m.tipo === "compra" ? "Compra" : m.tipo === "pago" ? "Pago" : "Ajuste",

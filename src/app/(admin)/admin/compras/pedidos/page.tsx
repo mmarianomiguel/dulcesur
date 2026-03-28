@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { showAdminToast } from "@/components/admin-toast";
-import { todayARG, nowTimeARG, currentMonthPadded } from "@/lib/formatters";
+import { todayARG, nowTimeARG, currentMonthPadded, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,14 +102,6 @@ interface SuggestedItem {
 }
 
 /* ───────── helpers ───────── */
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 function estadoConfig(estado: string) {
   switch (estado) {

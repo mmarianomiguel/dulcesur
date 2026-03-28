@@ -150,9 +150,9 @@ export default function CuentaPage() {
   };
 
   const inputClass =
-    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all placeholder:text-gray-400";
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-gray-400";
   const selectClass =
-    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all bg-white text-gray-900";
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all bg-white text-gray-900";
 
   if (!cliente) {
     return (
@@ -168,7 +168,7 @@ export default function CuentaPage() {
                   className="h-16 object-contain"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-xl bg-pink-600 flex items-center justify-center text-white font-bold text-2xl">
+                <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-2xl">
                   C
                 </div>
               )}
@@ -238,7 +238,7 @@ export default function CuentaPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-pink-600 text-white py-3 rounded-xl font-semibold text-sm hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-primary text-white py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <span className="flex items-center justify-center gap-2">
@@ -398,7 +398,7 @@ export default function CuentaPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-pink-600 text-white py-3 rounded-xl font-semibold text-sm hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-primary text-white py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <span className="flex items-center justify-center gap-2">
@@ -433,7 +433,7 @@ export default function CuentaPage() {
       {/* Welcome header */}
       <div className="mb-8">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-pink-600 to-pink-400 flex items-center justify-center text-white text-xl font-bold shrink-0">
+          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white text-xl font-bold shrink-0">
             {initials}
           </div>
           <div className="min-w-0">
@@ -449,36 +449,36 @@ export default function CuentaPage() {
       <div className="space-y-3">
         <Link
           href="/cuenta/perfil"
-          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-pink-200 hover:shadow-md transition-all duration-200 p-5 group"
+          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-primary/20 hover:shadow-md transition-all duration-200 p-5 group"
         >
           <div className="flex items-center gap-4">
             <div className="w-11 h-11 bg-purple-50 rounded-xl flex items-center justify-center">
               <User className="w-5 h-5 text-purple-600" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900 group-hover:text-pink-600 transition-colors">Mi Perfil</h2>
+              <h2 className="font-semibold text-gray-900 group-hover:text-primary transition-colors">Mi Perfil</h2>
               <p className="text-gray-400 text-sm">Datos personales, dirección y contraseña</p>
             </div>
           </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors" />
+          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
         </Link>
 
         <Link
           href="/cuenta/pedidos"
-          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-pink-200 hover:shadow-md transition-all duration-200 p-5 group"
+          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-primary/20 hover:shadow-md transition-all duration-200 p-5 group"
         >
           <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-pink-50 rounded-xl flex items-center justify-center">
-              <Package className="w-5 h-5 text-pink-600" />
+            <div className="w-11 h-11 bg-primary/5 rounded-xl flex items-center justify-center">
+              <Package className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900 group-hover:text-pink-600 transition-colors">Mis Pedidos</h2>
+              <h2 className="font-semibold text-gray-900 group-hover:text-primary transition-colors">Mis Pedidos</h2>
               <p className="text-gray-400 text-sm">
                 {orderCount > 0 ? `${orderCount} ${orderCount === 1 ? "pedido" : "pedidos"} realizados` : "Historial de compras"}
               </p>
             </div>
           </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-pink-400 transition-colors" />
+          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
         </Link>
 
         <button

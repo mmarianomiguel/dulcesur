@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { showToast } from "@/components/tienda/toast";
+import { formatCurrency } from "@/lib/formatters";
 import {
   Package,
   ShoppingCart,
@@ -95,12 +96,6 @@ function resolveIcon(name: string): LucideIcon {
 
 /* ──────────────── helpers ──────────────── */
 
-const formatPrice = (value: number) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
 
 /* ──────────────── skeleton helpers ──────────────── */
 
@@ -134,7 +129,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
       <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
         {children}
       </h2>
-      <div className="w-16 h-1 bg-pink-600 rounded-full mx-auto mt-2" />
+      <div className="w-16 h-1 bg-primary rounded-full mx-auto mt-2" />
     </div>
   );
 }
@@ -142,8 +137,8 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 /* ──────────────── block renderers ──────────────── */
 
 function HeroBlock({ config }: { config: Record<string, any> }) {
-  const colorInicio = config.color_inicio || "#be185d";
-  const colorFin = config.color_fin || "#ec4899";
+  const colorInicio = config.color_inicio || "hsl(var(--primary))";
+  const colorFin = config.color_fin || "hsl(var(--primary) / 0.7)";
 
   return (
     <section
@@ -173,7 +168,7 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
             {config.boton_texto && (
               <Link
                 href={config.boton_link || "/productos"}
-                className="bg-white text-pink-600 rounded-full px-8 py-3.5 font-semibold shadow-lg hover:shadow-xl transition-shadow"
+                className="bg-white text-primary rounded-full px-8 py-3.5 font-semibold shadow-lg hover:shadow-xl transition-shadow"
               >
                 {config.boton_texto}
               </Link>
@@ -207,7 +202,7 @@ function TrustBadgesBlock({ config }: { config: Record<string, any> }) {
             const Icon = resolveIcon(b.icono);
             return (
               <div key={i} className="flex items-center gap-2 md:gap-3 py-2">
-                <div className="w-9 h-9 md:w-12 md:h-12 rounded-full bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 md:w-12 md:h-12 rounded-full bg-primary/5 text-primary flex items-center justify-center shrink-0">
                   <Icon className="w-4 h-4 md:w-5 md:h-5" />
                 </div>
                 <div className="min-w-0">
@@ -236,7 +231,7 @@ const categoryIcons: Record<string, LucideIcon> = {
 };
 
 const categoryColors: Record<string, string> = {
-  kiosco: "bg-pink-50 text-pink-600 group-hover:bg-pink-100",
+  kiosco: "bg-primary/5 text-primary group-hover:bg-primary/10",
   almacen: "bg-amber-50 text-amber-600 group-hover:bg-amber-100",
   libreria: "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
   cigarros: "bg-gray-100 text-gray-600 group-hover:bg-gray-200",
@@ -280,7 +275,7 @@ function CategoriasDestacadasBlock({
                 <Link
                   key={cat.id}
                   href={`/productos?categoria=${cat.id}`}
-                  className="group cursor-pointer rounded-2xl border border-gray-100 bg-white p-5 text-center hover:shadow-lg hover:border-pink-200 transition-all duration-300 flex flex-col items-center gap-3"
+                  className="group cursor-pointer rounded-2xl border border-gray-100 bg-white p-5 text-center hover:shadow-lg hover:border-primary/20 transition-all duration-300 flex flex-col items-center gap-3"
                 >
                   {cat.imagen_url ? (
                     <div className="w-14 h-14 rounded-xl overflow-hidden">
@@ -299,7 +294,7 @@ function CategoriasDestacadasBlock({
                   )}
                   <div>
                     <p className="font-semibold text-gray-800 text-sm">{cat.nombre}</p>
-                    <p className="text-[11px] text-pink-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <p className="text-[11px] text-primary mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       Ver productos →
                     </p>
                   </div>
@@ -404,7 +399,7 @@ function ProductosDestacadosBlock({
                       {/* Badges */}
                       <div className="absolute top-2 left-2 flex flex-col gap-1">
                         {prod.es_combo && (
-                          <span className="bg-gradient-to-r from-pink-500 to-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          <span className="bg-gradient-to-r from-primary/80 to-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                             COMBO
                           </span>
                         )}
@@ -419,7 +414,7 @@ function ProductosDestacadosBlock({
                     {/* content */}
                     <div className="p-4">
                       {prod.categorias && (
-                        <span className="inline-block text-[11px] font-medium text-pink-600 bg-pink-50 rounded-full px-2.5 py-0.5">
+                        <span className="inline-block text-[11px] font-medium text-primary bg-primary/5 rounded-full px-2.5 py-0.5">
                           {prod.categorias.nombre}
                         </span>
                       )}
@@ -441,7 +436,7 @@ function ProductosDestacadosBlock({
                                     key={pr.id}
                                     onClick={(e) => { e.preventDefault(); setSelectedPres((p) => ({ ...p, [prod.id]: idx })); }}
                                     className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition ${
-                                      presIdx === idx ? "bg-pink-600 text-white border-pink-600" : "bg-white text-gray-500 border-gray-200"
+                                      presIdx === idx ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"
                                     }`}
                                   >
                                     {pr.nombre || (pr.cantidad === 1 ? "Unidad" : `Caja x${pr.cantidad}`)}
@@ -449,7 +444,7 @@ function ProductosDestacadosBlock({
                                 ))}
                               </div>
                             )}
-                            <p className="text-xl font-bold text-gray-900 mt-2">{formatPrice(price)}</p>
+                            <p className="text-xl font-bold text-gray-900 mt-2">{formatCurrency(price)}</p>
                           </>
                         );
                       })()}
@@ -493,11 +488,11 @@ function ProductosDestacadosBlock({
                                   <Plus className="w-3 h-3" />
                                 </button>
                               </div>
-                              <span className="text-sm font-bold text-gray-900">{formatPrice(price * qty)}</span>
+                              <span className="text-sm font-bold text-gray-900">{formatCurrency(price * qty)}</span>
                             </div>
                             <button
                               onClick={() => { agregarAlCarrito(prod, qty); setQty(prod.id, 1); }}
-                              className="w-full bg-pink-600 hover:bg-pink-700 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
+                              className="w-full bg-primary hover:bg-primary/90 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
                             >
                               <ShoppingCart className="w-3.5 h-3.5" />
                               Agregar
@@ -519,7 +514,7 @@ function ProductosDestacadosBlock({
           <div className="text-center mt-10">
             <Link
               href="/productos"
-              className="inline-block border-2 border-pink-600 text-pink-600 hover:bg-pink-600 hover:text-white rounded-full px-8 py-3 font-semibold transition-all"
+              className="inline-block border-2 border-primary text-primary hover:bg-primary hover:text-white rounded-full px-8 py-3 font-semibold transition-all"
             >
               Ver todos los productos
             </Link>
@@ -531,7 +526,7 @@ function ProductosDestacadosBlock({
 }
 
 function BannerPromoBlock({ config }: { config: Record<string, any> }) {
-  const colorFondo = config.color_fondo || "#db2777";
+  const colorFondo = config.color_fondo || "hsl(var(--primary))";
 
   return (
     <section className="py-12">
@@ -556,7 +551,7 @@ function BannerPromoBlock({ config }: { config: Record<string, any> }) {
           {config.boton_texto && (
             <Link
               href={config.link || "/productos"}
-              className="bg-white text-pink-600 rounded-full px-8 py-3.5 font-semibold shadow-lg hover:shadow-xl transition-shadow shrink-0"
+              className="bg-white text-primary rounded-full px-8 py-3.5 font-semibold shadow-lg hover:shadow-xl transition-shadow shrink-0"
             >
               {config.boton_texto}
             </Link>
@@ -587,7 +582,7 @@ function PorQueElegirnosBlock({ config }: { config: Record<string, any> }) {
                 key={i}
                 className="bg-white rounded-2xl p-5 md:p-8 flex md:flex-col items-center md:text-center gap-4 md:gap-0 shadow-sm hover:shadow-md transition-shadow"
               >
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-pink-50 text-pink-600 flex items-center justify-center shrink-0 md:mx-auto md:mb-5">
+                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary/5 text-primary flex items-center justify-center shrink-0 md:mx-auto md:mb-5">
                   <Icon className="w-5 h-5 md:w-6 md:h-6" />
                 </div>
                 <div>
@@ -617,7 +612,7 @@ function TextoLibreBlock({ config }: { config: Record<string, any> }) {
     <section className="py-12">
       <div className="max-w-7xl mx-auto px-4">
         <div
-          className="prose prose-pink max-w-none"
+          className="prose prose-primary max-w-none"
           dangerouslySetInnerHTML={{ __html: sanitizeHtml(contenido) }}
         />
       </div>

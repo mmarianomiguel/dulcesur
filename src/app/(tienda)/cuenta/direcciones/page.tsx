@@ -142,13 +142,13 @@ export default function DireccionesPage() {
   };
 
   const inputClass =
-    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all placeholder:text-gray-400";
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-gray-400";
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <Link
         href="/cuenta"
-        className="inline-flex items-center gap-2 text-gray-500 hover:text-pink-600 transition-colors mb-6 text-sm font-medium"
+        className="inline-flex items-center gap-2 text-gray-500 hover:text-primary transition-colors mb-6 text-sm font-medium"
       >
         <ArrowLeft className="w-4 h-4" />
         Volver a mi cuenta
@@ -166,7 +166,7 @@ export default function DireccionesPage() {
               setEditingId(null);
               setShowForm(true);
             }}
-            className="flex items-center gap-2 bg-pink-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-pink-700 transition-colors"
+            className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Agregar dirección
@@ -274,7 +274,7 @@ export default function DireccionesPage() {
                   type="checkbox"
                   checked={form.predeterminada}
                   onChange={(e) => setForm({ ...form, predeterminada: e.target.checked })}
-                  className="accent-pink-600 w-4 h-4 rounded"
+                  className="accent-primary w-4 h-4 rounded"
                 />
                 <span className="text-sm font-medium text-gray-700">Usar como dirección predeterminada</span>
               </label>
@@ -282,7 +282,7 @@ export default function DireccionesPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 bg-pink-600 text-white py-3 rounded-xl font-semibold text-sm hover:bg-pink-700 transition-colors disabled:opacity-50"
+                  className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {saving ? "Guardando..." : "Guardar dirección"}
                 </button>
@@ -325,17 +325,17 @@ export default function DireccionesPage() {
             <div
               key={dir.id}
               className={`bg-white rounded-2xl border p-5 transition-all hover:shadow-md ${
-                dir.predeterminada ? "border-pink-200 bg-pink-50/30" : "border-gray-100"
+                dir.predeterminada ? "border-primary/20 bg-primary/5" : "border-gray-100"
               }`}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-pink-50 rounded-lg flex items-center justify-center">
-                    <MapPin className="w-4 h-4 text-pink-600" />
+                  <div className="w-8 h-8 bg-primary/5 rounded-lg flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-primary" />
                   </div>
                   <span className="font-bold text-gray-900">{dir.alias}</span>
                   {dir.predeterminada && (
-                    <span className="text-xs bg-pink-100 text-pink-700 px-2.5 py-0.5 rounded-full font-semibold">
+                    <span className="text-xs bg-primary/10 text-primary/90 px-2.5 py-0.5 rounded-full font-semibold">
                       Predeterminada
                     </span>
                   )}
@@ -350,7 +350,7 @@ export default function DireccionesPage() {
               <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
                 <button
                   onClick={() => handleEdit(dir)}
-                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-pink-600 transition-colors font-medium"
+                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-primary transition-colors font-medium"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                   Editar
@@ -377,7 +377,7 @@ export default function DireccionesPage() {
             <p className="text-sm text-gray-500 mt-2">¿Eliminar esta dirección?</p>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancelar</button>
-              <button onClick={executeDelete} className="px-4 py-2 text-sm font-medium text-white bg-pink-600 rounded-xl hover:bg-pink-700 transition-colors">Confirmar</button>
+              <button onClick={executeDelete} className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary/90 transition-colors">Confirmar</button>
             </div>
           </div>
         </div>

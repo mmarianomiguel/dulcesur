@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
+import { formatCurrency } from "@/lib/formatters";
 import {
   User,
   Mail,
@@ -62,12 +63,6 @@ interface TiendaConfig {
   costo_envio: number;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
 
 const formatThousands = (n: number): string =>
   n === 0 ? "" : n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -859,7 +854,7 @@ export default function CheckoutPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm text-gray-500">N.° de pedido</span>
-              <span className="font-mono font-bold text-pink-600 text-lg">{orderNumber}</span>
+              <span className="font-mono font-bold text-primary text-lg">{orderNumber}</span>
             </div>
 
             {/* Desglose */}
@@ -945,10 +940,10 @@ export default function CheckoutPage() {
 
           {/* Action buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <Link href="/cuenta/pedidos" className="flex-1 inline-flex items-center justify-center gap-2 border-2 border-pink-600 text-pink-600 px-6 py-3 rounded-xl font-semibold hover:bg-pink-50 transition text-sm">
+            <Link href="/cuenta/pedidos" className="flex-1 inline-flex items-center justify-center gap-2 border-2 border-primary text-primary px-6 py-3 rounded-xl font-semibold hover:bg-primary/5 transition text-sm">
               Ver mis pedidos
             </Link>
-            <Link href="/productos" className="flex-1 inline-flex items-center justify-center gap-2 bg-pink-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-pink-700 transition text-sm">
+            <Link href="/productos" className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary/90 transition text-sm">
               Seguir comprando
             </Link>
           </div>
@@ -967,7 +962,7 @@ export default function CheckoutPage() {
           <p className="text-gray-500 mb-6">Agregá productos para continuar</p>
           <Link
             href="/productos"
-            className="inline-flex items-center gap-2 bg-pink-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-pink-700 transition"
+            className="inline-flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary/90 transition"
           >
             Ver productos
           </Link>
@@ -977,7 +972,7 @@ export default function CheckoutPage() {
   }
 
   const inputClass =
-    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition";
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition";
   const labelClass = "block text-sm font-medium text-gray-700 mb-1.5";
 
   return (
@@ -991,7 +986,7 @@ export default function CheckoutPage() {
         ].map((step, i) => (
           <div key={step.n} className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
-              <div className="w-7 h-7 rounded-full bg-pink-600 text-white flex items-center justify-center text-xs font-bold">{step.n}</div>
+              <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold">{step.n}</div>
               <span className="text-sm font-medium text-gray-700 hidden sm:inline">{step.label}</span>
             </div>
             {i < 2 && <div className="w-8 h-px bg-gray-300" />}
@@ -1011,7 +1006,7 @@ export default function CheckoutPage() {
           {stockFixes && (
             <button
               onClick={adjustCart}
-              className="mt-3 bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+              className="mt-3 bg-primary hover:bg-primary/90 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
             >
               Ajustar carrito automáticamente
             </button>
@@ -1025,17 +1020,17 @@ export default function CheckoutPage() {
         <div className="space-y-6">
           {/* Login REQUIRED if not logged in */}
           {!clienteId && (
-            <div className="bg-white border-2 border-pink-200 rounded-2xl p-6 sm:p-8 text-center">
-              <div className="w-16 h-16 bg-pink-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <User className="h-8 w-8 text-pink-600" />
+            <div className="bg-white border-2 border-primary/20 rounded-2xl p-6 sm:p-8 text-center">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <User className="h-8 w-8 text-primary" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Iniciá sesión para comprar</h2>
               <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">Para completar tu pedido necesitás tener una cuenta. Así podemos guardar tus datos, direcciones y el historial de tus compras.</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
-                <a href="/cuenta" className="bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-8 py-3 rounded-xl transition-colors">
+                <a href="/cuenta" className="bg-primary hover:bg-primary/90 text-white text-sm font-semibold px-8 py-3 rounded-xl transition-colors">
                   Iniciar sesión
                 </a>
-                <a href="/cuenta" className="border-2 border-pink-300 text-pink-700 text-sm font-semibold px-8 py-3 rounded-xl hover:bg-pink-50 transition-colors">
+                <a href="/cuenta" className="border-2 border-primary/30 text-primary/90 text-sm font-semibold px-8 py-3 rounded-xl hover:bg-primary/5 transition-colors">
                   Crear cuenta nueva
                 </a>
               </div>
@@ -1047,8 +1042,8 @@ export default function CheckoutPage() {
           {/* 1. Información de Contacto */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
               </div>
               <h2 className="text-base sm:text-lg font-bold text-gray-900">Información de Contacto</h2>
               <span className="ml-auto text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">✓ Datos cargados</span>
@@ -1107,8 +1102,8 @@ export default function CheckoutPage() {
           {/* 2. Método de Entrega */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
               </div>
               <h2 className="text-base sm:text-lg font-bold text-gray-900">Método de entrega</h2>
             </div>
@@ -1119,17 +1114,17 @@ export default function CheckoutPage() {
                 onClick={() => { setMetodoEntrega("retiro"); setFechaEntrega(""); }}
                 className={`flex items-start gap-3 p-4 rounded-xl border-2 transition text-left ${
                   metodoEntrega === "retiro"
-                    ? "border-pink-500 bg-pink-50"
-                    : "border-gray-200 hover:border-pink-300"
+                    ? "border-primary/80 bg-primary/5"
+                    : "border-gray-200 hover:border-primary/30"
                 }`}
               >
                 <div
                   className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                    metodoEntrega === "retiro" ? "border-pink-500" : "border-gray-300"
+                    metodoEntrega === "retiro" ? "border-primary/80" : "border-gray-300"
                   }`}
                 >
                   {metodoEntrega === "retiro" && (
-                    <div className="w-2.5 h-2.5 rounded-full bg-pink-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1150,17 +1145,17 @@ export default function CheckoutPage() {
                   !clienteId
                     ? "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
                     : metodoEntrega === "envio"
-                      ? "border-pink-500 bg-pink-50"
-                      : "border-gray-200 hover:border-pink-300"
+                      ? "border-primary/80 bg-primary/5"
+                      : "border-gray-200 hover:border-primary/30"
                 }`}
               >
                 <div
                   className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                    metodoEntrega === "envio" ? "border-pink-500" : "border-gray-300"
+                    metodoEntrega === "envio" ? "border-primary/80" : "border-gray-300"
                   }`}
                 >
                   {metodoEntrega === "envio" && (
-                    <div className="w-2.5 h-2.5 rounded-full bg-pink-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1197,8 +1192,8 @@ export default function CheckoutPage() {
                         }}
                         className={`w-full text-left p-3 rounded-xl border-2 transition text-sm ${
                           !showNewAddress && selectedAddressId === a.id
-                            ? "border-pink-500 bg-pink-50"
-                            : "border-gray-200 hover:border-pink-300"
+                            ? "border-primary/80 bg-primary/5"
+                            : "border-gray-200 hover:border-primary/30"
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -1206,12 +1201,12 @@ export default function CheckoutPage() {
                             <div
                               className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                                 !showNewAddress && selectedAddressId === a.id
-                                  ? "border-pink-500"
+                                  ? "border-primary/80"
                                   : "border-gray-300"
                               }`}
                             >
                               {!showNewAddress && selectedAddressId === a.id && (
-                                <div className="w-2 h-2 rounded-full bg-pink-500" />
+                                <div className="w-2 h-2 rounded-full bg-primary/80" />
                               )}
                             </div>
                             <span className="text-gray-900">
@@ -1222,7 +1217,7 @@ export default function CheckoutPage() {
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             {a.predeterminada && (
-                              <span className="text-[10px] bg-pink-100 text-pink-600 px-2 py-0.5 rounded-full font-medium">
+                              <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                                 Predeterminada
                               </span>
                             )}
@@ -1242,7 +1237,7 @@ export default function CheckoutPage() {
                 {!showNewAddress && (
                   <button
                     onClick={() => setShowNewAddress(true)}
-                    className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-300 text-sm text-pink-600 font-medium hover:border-pink-400 hover:bg-pink-50 transition"
+                    className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-300 text-sm text-primary font-medium hover:border-primary hover:bg-primary/5 transition"
                   >
                     <Plus className="h-4 w-4" />
                     {savedAddresses.length === 0 ? "Agregar dirección de envío" : "Agregar otra dirección"}
@@ -1347,8 +1342,8 @@ export default function CheckoutPage() {
           {/* 3. Instrucciones de entrega */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
               </div>
               <h2 className="text-base sm:text-lg font-bold text-gray-900">Instrucciones de entrega</h2>
               <span className="text-xs text-gray-400">(opcional)</span>
@@ -1369,8 +1364,8 @@ export default function CheckoutPage() {
           {metodoEntrega === "envio" && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2.5 mb-4 sm:mb-6">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-100 rounded-lg flex items-center justify-center">
-                <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-pink-600" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
               </div>
               <h2 className="text-base sm:text-lg font-bold text-gray-900">Fecha de entrega</h2>
             </div>
@@ -1385,25 +1380,25 @@ export default function CheckoutPage() {
                       onClick={() => setFechaEntrega(d.value)}
                       className={`flex-shrink-0 flex flex-col items-center rounded-xl border-2 transition min-w-[76px] overflow-hidden ${
                         isSelected
-                          ? "border-pink-500 shadow-md shadow-pink-100"
-                          : "border-gray-200 hover:border-pink-300"
+                          ? "border-primary/80 shadow-md shadow-primary/10"
+                          : "border-gray-200 hover:border-primary/30"
                       }`}
                     >
                       {/* Day name header */}
                       <div className={`w-full text-center py-1.5 text-xs font-semibold ${
-                        d.isToday && isSelected ? "bg-pink-500 text-white"
-                        : d.isToday ? "bg-pink-100 text-pink-600"
-                        : isSelected ? "bg-pink-50 text-pink-600"
+                        d.isToday && isSelected ? "bg-primary/80 text-white"
+                        : d.isToday ? "bg-primary/10 text-primary"
+                        : isSelected ? "bg-primary/5 text-primary"
                         : "bg-gray-50 text-gray-500"
                       }`}>
                         {d.isToday ? "Hoy" : d.dayAbbr}
                       </div>
                       {/* Number + month */}
                       <div className="px-4 py-2.5 flex flex-col items-center">
-                        <span className={`text-2xl font-bold leading-none ${isSelected ? "text-pink-600" : "text-gray-900"}`}>
+                        <span className={`text-2xl font-bold leading-none ${isSelected ? "text-primary" : "text-gray-900"}`}>
                           {d.dayNum}
                         </span>
-                        <span className={`text-[11px] mt-1 ${isSelected ? "text-pink-500" : "text-gray-400"}`}>
+                        <span className={`text-[11px] mt-1 ${isSelected ? "text-primary/80" : "text-gray-400"}`}>
                           {d.monthAbbr}
                         </span>
                       </div>
@@ -1489,7 +1484,7 @@ export default function CheckoutPage() {
                   {hiddenCount > 0 && (
                     <button
                       onClick={() => setShowItemsDetail(!showItemsDetail)}
-                      className="w-full text-center text-sm font-medium text-pink-600 hover:text-pink-700 py-2 transition-colors"
+                      className="w-full text-center text-sm font-medium text-primary hover:text-primary/90 py-2 transition-colors"
                     >
                       {showItemsDetail ? "Ver menos" : `Ver ${hiddenCount} producto${hiddenCount !== 1 ? "s" : ""} más`}
                     </button>
@@ -1506,11 +1501,11 @@ export default function CheckoutPage() {
                 <button
                   onClick={() => { setMetodoPago("efectivo"); setMixtoEfectivo(0); setMixtoTransferencia(0); }}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition text-left text-sm ${
-                    metodoPago === "efectivo" ? "border-pink-500 bg-pink-50/50" : "border-gray-200 hover:border-pink-300"
+                    metodoPago === "efectivo" ? "border-primary/80 bg-primary/5" : "border-gray-200 hover:border-primary/30"
                   }`}
                 >
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${metodoPago === "efectivo" ? "border-pink-500" : "border-gray-300"}`}>
-                    {metodoPago === "efectivo" && <div className="w-2.5 h-2.5 rounded-full bg-pink-500" />}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${metodoPago === "efectivo" ? "border-primary/80" : "border-gray-300"}`}>
+                    {metodoPago === "efectivo" && <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />}
                   </div>
                   <Banknote className="h-4 w-4 text-gray-500 flex-shrink-0" />
                   <span className="font-medium text-gray-900">Efectivo</span>
@@ -1520,11 +1515,11 @@ export default function CheckoutPage() {
                 <button
                   onClick={() => { setMetodoPago("transferencia"); setMixtoEfectivo(0); setMixtoTransferencia(0); }}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition text-left text-sm ${
-                    metodoPago === "transferencia" ? "border-pink-500 bg-pink-50/50" : "border-gray-200 hover:border-pink-300"
+                    metodoPago === "transferencia" ? "border-primary/80 bg-primary/5" : "border-gray-200 hover:border-primary/30"
                   }`}
                 >
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${metodoPago === "transferencia" ? "border-pink-500" : "border-gray-300"}`}>
-                    {metodoPago === "transferencia" && <div className="w-2.5 h-2.5 rounded-full bg-pink-500" />}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${metodoPago === "transferencia" ? "border-primary/80" : "border-gray-300"}`}>
+                    {metodoPago === "transferencia" && <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />}
                   </div>
                   <Building className="h-4 w-4 text-gray-500 flex-shrink-0" />
                   <div>
@@ -1539,11 +1534,11 @@ export default function CheckoutPage() {
                 <button
                   onClick={() => setMetodoPago("mixto")}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition text-left text-sm ${
-                    metodoPago === "mixto" ? "border-pink-500 bg-pink-50/50" : "border-gray-200 hover:border-pink-300"
+                    metodoPago === "mixto" ? "border-primary/80 bg-primary/5" : "border-gray-200 hover:border-primary/30"
                   }`}
                 >
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${metodoPago === "mixto" ? "border-pink-500" : "border-gray-300"}`}>
-                    {metodoPago === "mixto" && <div className="w-2.5 h-2.5 rounded-full bg-pink-500" />}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${metodoPago === "mixto" ? "border-primary/80" : "border-gray-300"}`}>
+                    {metodoPago === "mixto" && <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />}
                   </div>
                   <ArrowLeftRight className="h-4 w-4 text-gray-500 flex-shrink-0" />
                   <span className="font-medium text-gray-900">Pago Mixto</span>
@@ -1590,7 +1585,7 @@ export default function CheckoutPage() {
                           setMixtoTransferencia(Math.max(0, (subtotal + costoEnvio) - val));
                         }}
                         placeholder="0"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                       />
                     </div>
                     <div>
@@ -1651,7 +1646,7 @@ export default function CheckoutPage() {
                 </div>
               )}
               {config && metodoEntrega === "envio" && config.monto_minimo_envio > 0 && subtotal < config.monto_minimo_envio && (
-                <p className="text-xs text-pink-600">
+                <p className="text-xs text-primary">
                   Mínimo: {formatCurrency(config.monto_minimo_envio)} (faltan {formatCurrency(config.monto_minimo_envio - subtotal)})
                 </p>
               )}
@@ -1696,7 +1691,7 @@ export default function CheckoutPage() {
               <button
                 onClick={handleConfirm}
                 disabled={submitting || (metodoEntrega === "retiro" && !!config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) || (metodoEntrega === "envio" && !!config && subtotal < config.monto_minimo_envio)}
-                className="mt-5 w-full bg-pink-600 hover:bg-pink-700 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-5 w-full bg-primary hover:bg-primary/90 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>
@@ -1708,7 +1703,7 @@ export default function CheckoutPage() {
                 )}
               </button>
             ) : (
-              <a href="/cuenta" className="mt-5 w-full bg-pink-600 hover:bg-pink-700 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 block text-center">
+              <a href="/cuenta" className="mt-5 w-full bg-primary hover:bg-primary/90 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 block text-center">
                 Iniciar sesión para comprar
               </a>
             )}

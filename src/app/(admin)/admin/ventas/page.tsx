@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { todayARG, nowTimeARG } from "@/lib/formatters";
+import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { logAudit } from "@/lib/audit";
 import type { Cliente, Producto, Usuario } from "@/types/database";
@@ -116,13 +116,6 @@ interface LineItem {
 }
 
 // ---------- helpers ----------
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 function initials(name: string) {
   return name

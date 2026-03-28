@@ -5,10 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, User, Lock, Check, AlertCircle, MapPin, DollarSign } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
-
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
+import { formatCurrency } from "@/lib/formatters";
 
 const PROVINCIAS = [
   "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes",
@@ -242,9 +239,9 @@ export default function PerfilPage() {
   };
 
   const inputClass =
-    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all placeholder:text-gray-400";
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-gray-400";
   const selectClass =
-    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all bg-white text-gray-900";
+    "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all bg-white text-gray-900";
 
   const initials = nombre
     ? nombre.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -257,7 +254,7 @@ export default function PerfilPage() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <Link
         href="/cuenta"
-        className="inline-flex items-center gap-2 text-gray-500 hover:text-pink-600 transition-colors mb-6 text-sm font-medium"
+        className="inline-flex items-center gap-2 text-gray-500 hover:text-primary transition-colors mb-6 text-sm font-medium"
       >
         <ArrowLeft className="w-4 h-4" />
         Volver a mi cuenta
@@ -273,7 +270,7 @@ export default function PerfilPage() {
       <div className="space-y-6">
         {/* Avatar section */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 flex items-center gap-5">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pink-600 to-pink-400 flex items-center justify-center text-white text-2xl font-bold shrink-0">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white text-2xl font-bold shrink-0">
             {initials}
           </div>
           <div className="flex-1">
@@ -343,8 +340,8 @@ export default function PerfilPage() {
         {/* Profile info */}
         <form onSubmit={handleSave} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <div className="flex items-center gap-3 p-6 border-b border-gray-100">
-            <div className="w-10 h-10 bg-pink-50 rounded-xl flex items-center justify-center">
-              <User className="w-5 h-5 text-pink-600" />
+            <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center">
+              <User className="w-5 h-5 text-primary" />
             </div>
             <h2 className="font-bold text-gray-900 text-lg">Datos personales</h2>
           </div>
@@ -421,7 +418,7 @@ export default function PerfilPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="bg-pink-600 text-white px-8 py-3 rounded-full font-semibold text-sm hover:bg-pink-700 transition-colors disabled:opacity-50"
+                className="bg-primary text-white px-8 py-3 rounded-full font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {saving ? "Guardando..." : "Guardar cambios"}
               </button>
@@ -464,7 +461,7 @@ export default function PerfilPage() {
             <button
               type="submit"
               disabled={pwSaving}
-              className="bg-pink-600 text-white px-8 py-3 rounded-xl font-semibold text-sm hover:bg-pink-700 transition-colors disabled:opacity-50"
+              className="bg-primary text-white px-8 py-3 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {pwSaving ? "Cambiando..." : "Cambiar contraseña"}
             </button>

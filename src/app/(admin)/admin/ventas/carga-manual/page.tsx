@@ -3,7 +3,7 @@
 import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG ,  nowTimeARG } from "@/lib/formatters";
+import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import type { Cliente, Producto, Usuario, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,14 +72,6 @@ const FORMAS_PAGO = [
   "Cuenta Corriente",
   "Mixto",
 ];
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 export default function CargaManualPage() {
   const currentUser = useCurrentUser();

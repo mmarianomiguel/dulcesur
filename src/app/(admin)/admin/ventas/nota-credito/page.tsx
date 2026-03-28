@@ -3,7 +3,7 @@
 import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { todayARG, currentMonthPadded } from "@/lib/formatters";
+import { todayARG, currentMonthPadded, formatCurrency } from "@/lib/formatters";
 import type { Cliente, Producto, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,13 +73,6 @@ interface NCDetail {
 
 type MetodoDev = "Efectivo" | "Transferencia" | "Cuenta Corriente";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 function getTipoFactura(cliente: Cliente | undefined): string {
   if (!cliente || !cliente.tipo_factura) return "B";

@@ -150,7 +150,7 @@ export default function EnviosDinamico() {
         <h3 className="mb-2 text-lg font-semibold text-gray-900">Seguimiento del pedido</h3>
         <p className="text-gray-600">
           Podés consultar el estado de tu pedido en cualquier momento desde la sección{" "}
-          <a href="/cuenta/pedidos" className="font-medium text-pink-600 hover:text-pink-700">
+          <a href="/cuenta/pedidos" className="font-medium text-primary hover:text-primary/90">
             &quot;Mis pedidos&quot;
           </a>{" "}
           en tu cuenta.

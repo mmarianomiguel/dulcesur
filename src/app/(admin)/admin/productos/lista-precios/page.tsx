@@ -3,7 +3,8 @@
 import { SearchableSelect } from "@/components/searchable-select";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { jsPDF } from "jspdf";
+import { formatCurrency } from "@/lib/formatters";
+
 import {
   ArrowLeft,
   Search,
@@ -128,9 +129,6 @@ const DEFAULT_CONFIG: PdfConfig = {
   poster_tamañoNombre: 36, poster_tamañoPrecio: 72, poster_mostrarLogo: true, poster_mostrarWeb: true, poster_mostrarPrecioUnitario: true,
 };
 
-function formatPrice(n: number): string {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
-}
 
 function clasificarProducto(nombre: string): { categoria: string; subcategoria: string } {
   const n = nombre.toLowerCase();
@@ -443,10 +441,11 @@ export default function ListaPreciosPage() {
     setShowStylePicker(false);
     setGenerating(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const selectedProducts = products.filter((_, i) => selected.has(i));
       if (selectedProducts.length === 0) { setGenerating(false); return; }
 
+      const { jsPDF } = await import("jspdf");
       const isLandscape = style === "poster";
       const pdf = new jsPDF({ orientation: isLandscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
@@ -527,10 +526,10 @@ export default function ListaPreciosPage() {
           pdf.setTextColor(0);
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(7);
-          pdf.text(formatPrice(displayPrice), x + pad, efectPriceY);
+          pdf.text(formatCurrency(displayPrice), x + pad, efectPriceY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
             pdf.setFontSize(6.5);
-            pdf.text(formatPrice(boxPrice), x + cellW - pad, efectPriceY, { align: "right" });
+            pdf.text(formatCurrency(boxPrice), x + cellW - pad, efectPriceY, { align: "right" });
           }
 
           // TRANSF row
@@ -547,10 +546,10 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(7);
           pdf.setTextColor(100);
-          pdf.text(formatPrice(transferPrice), x + pad, transfPriceY);
+          pdf.text(formatCurrency(transferPrice), x + pad, transfPriceY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
             pdf.setFontSize(6.5);
-            pdf.text(formatPrice(transferBox), x + cellW - pad, transfPriceY, { align: "right" });
+            pdf.text(formatCurrency(transferBox), x + cellW - pad, transfPriceY, { align: "right" });
           }
           pdf.setTextColor(0);
 
@@ -603,7 +602,7 @@ export default function ListaPreciosPage() {
           const priceZoneCenter = nameEnd + (dividerY - nameEnd) / 2;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.combinado_tamañoPrecio);
-          pdf.text(formatPrice(displayPrice), x + cellW / 2, priceZoneCenter + config.combinado_tamañoPrecio * 0.15, { align: "center" });
+          pdf.text(formatCurrency(displayPrice), x + cellW / 2, priceZoneCenter + config.combinado_tamañoPrecio * 0.15, { align: "center" });
         });
       }
 
@@ -646,14 +645,14 @@ export default function ListaPreciosPage() {
           pdf.setFontSize(config.poster_tamañoPrecio);
           pdf.setTextColor(0);
           const mainPrice = hasUnits ? boxPrice : displayPrice;
-          pdf.text(String(`${formatPrice(mainPrice)}`), pageW / 2, priceY, { align: "center" });
+          pdf.text(String(`${formatCurrency(mainPrice)}`), pageW / 2, priceY, { align: "center" });
 
           if (config.poster_mostrarPrecioUnitario && hasUnits) {
-            const mainPriceW = pdf.getTextWidth(`${formatPrice(mainPrice)}`);
+            const mainPriceW = pdf.getTextWidth(`${formatCurrency(mainPrice)}`);
             const unitX = pageW / 2 + mainPriceW / 2 + 3;
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(14);
-            pdf.text(String(`${formatPrice(displayPrice)} Final c/u`), unitX, priceY);
+            pdf.text(String(`${formatCurrency(displayPrice)} Final c/u`), unitX, priceY);
           }
 
           pdf.setDrawColor(180);
@@ -1135,7 +1134,7 @@ export default function ListaPreciosPage() {
                       {p.subcategoria && <span className="text-muted-foreground/50 text-xs block">{p.subcategoria}</span>}
                     </td>
                     <td className="px-3 py-3 text-muted-foreground text-xs">{p.marca}</td>
-                    <td className="px-3 py-3 text-right font-semibold">{formatPrice(p.precioUnitario)}</td>
+                    <td className="px-3 py-3 text-right font-semibold">{formatCurrency(p.precioUnitario)}</td>
                     <td className="px-3 py-3 text-center text-xs text-muted-foreground">
                       {p.fechaActualizacion ? (() => { const d = new Date(p.fechaActualizacion); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }); })() : "—"}
                     </td>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, AlertTriangle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
+import { formatCurrency } from "@/lib/formatters";
 
 interface CartItem {
   id: string;
@@ -20,12 +21,6 @@ interface CartItem {
   unidades_por_presentacion?: number;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
 
 export default function CarritoPage() {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -161,7 +156,7 @@ export default function CarritoPage() {
         </p>
         <Link
           href="/productos"
-          className="inline-flex items-center gap-2 bg-pink-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-pink-700 transition"
+          className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-medium hover:bg-primary/90 transition"
         >
           <ArrowLeft className="h-4 w-4" />
           Ver productos
@@ -263,7 +258,7 @@ export default function CarritoPage() {
       <div className="mt-4">
         <Link
           href="/productos"
-          className="inline-flex items-center gap-1.5 text-sm text-pink-600 hover:text-pink-700 font-medium transition"
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/90 font-medium transition"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Seguir comprando
@@ -284,7 +279,7 @@ export default function CarritoPage() {
         ) : (
           <Link
             href="/checkout"
-            className="bg-pink-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-pink-700 transition shadow-lg shadow-pink-600/20"
+            className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-primary/90 transition shadow-lg shadow-primary/20"
           >
             Ir al checkout
           </Link>

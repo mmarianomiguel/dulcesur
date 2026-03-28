@@ -1,6 +1,6 @@
 "use client";
 
-import { nowTimeARG } from "@/lib/formatters";
+import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -86,8 +86,6 @@ interface ProductoSearch {
   unidad_medida?: string;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
 
 const estadoBadge: Record<string, { bg: string; text: string; label: string }> = {
   pendiente: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", label: "Pendiente" },

@@ -98,19 +98,19 @@ export default function TiendaFooter() {
               <div className="flex items-center gap-3">
                 {config.instagram_url && (
                   <a href={config.instagram_url} target="_blank" rel="noopener noreferrer"
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-700 text-gray-400 transition hover:border-pink-500 hover:text-pink-400" aria-label="Instagram">
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-700 text-gray-400 transition hover:border-primary hover:text-primary" aria-label="Instagram">
                     <Instagram className="h-4 w-4" />
                   </a>
                 )}
                 {config.facebook_url && (
                   <a href={config.facebook_url} target="_blank" rel="noopener noreferrer"
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-700 text-gray-400 transition hover:border-pink-500 hover:text-pink-400" aria-label="Facebook">
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-700 text-gray-400 transition hover:border-primary hover:text-primary" aria-label="Facebook">
                     <Facebook className="h-4 w-4" />
                   </a>
                 )}
                 {config.whatsapp_url && (
                   <a href={config.whatsapp_url} target="_blank" rel="noopener noreferrer"
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-700 text-gray-400 transition hover:border-pink-500 hover:text-pink-400" aria-label="WhatsApp">
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-700 text-gray-400 transition hover:border-primary hover:text-primary" aria-label="WhatsApp">
                     <Phone className="h-4 w-4" />
                   </a>
                 )}
@@ -123,7 +123,7 @@ export default function TiendaFooter() {
               <ul className="space-y-2.5">
                 {categoryLinks.map((link) => (
                   <li key={link.href}>
-                    <Link href={link.href} className="group flex items-center gap-1 text-sm text-gray-400 transition hover:text-pink-400">
+                    <Link href={link.href} className="group flex items-center gap-1 text-sm text-gray-400 transition hover:text-primary">
                       <ChevronRight className="h-3 w-3 opacity-0 transition group-hover:opacity-100" />{link.label}
                     </Link>
                   </li>
@@ -137,7 +137,7 @@ export default function TiendaFooter() {
               <ul className="space-y-2.5">
                 {accountLinks.map((link) => (
                   <li key={link.href}>
-                    <Link href={link.href} className="group flex items-center gap-1 text-sm text-gray-400 transition hover:text-pink-400">
+                    <Link href={link.href} className="group flex items-center gap-1 text-sm text-gray-400 transition hover:text-primary">
                       <ChevronRight className="h-3 w-3 opacity-0 transition group-hover:opacity-100" />{link.label}
                     </Link>
                   </li>
@@ -153,8 +153,8 @@ export default function TiendaFooter() {
                   const Icon = link.icon;
                   return (
                     <li key={link.href}>
-                      <Link href={link.href} className="group flex items-center gap-2 text-sm text-gray-400 transition hover:text-pink-400">
-                        <Icon className="h-3.5 w-3.5 text-gray-500 transition group-hover:text-pink-400" />
+                      <Link href={link.href} className="group flex items-center gap-2 text-sm text-gray-400 transition hover:text-primary">
+                        <Icon className="h-3.5 w-3.5 text-gray-500 transition group-hover:text-primary" />
                         {link.label}
                       </Link>
                     </li>
@@ -171,7 +171,7 @@ export default function TiendaFooter() {
                 {config.direccion && (
                   <div className="flex items-start gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-800">
-                      <MapPin className="h-4 w-4 text-pink-500" />
+                      <MapPin className="h-4 w-4 text-primary/80" />
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-500">Dirección</p>
@@ -182,22 +182,22 @@ export default function TiendaFooter() {
                 {config.telefono && (
                   <div className="flex items-start gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-800">
-                      <Phone className="h-4 w-4 text-pink-500" />
+                      <Phone className="h-4 w-4 text-primary/80" />
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-500">Teléfono</p>
-                      <a href={`tel:${config.telefono}`} className="text-sm text-gray-300 transition hover:text-pink-400">{config.telefono}</a>
+                      <a href={`tel:${config.telefono}`} className="text-sm text-gray-300 transition hover:text-primary">{config.telefono}</a>
                     </div>
                   </div>
                 )}
                 {config.email && (
                   <div className="flex items-start gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-800">
-                      <Mail className="h-4 w-4 text-pink-500" />
+                      <Mail className="h-4 w-4 text-primary/80" />
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-500">Email</p>
-                      <a href={`mailto:${config.email}`} className="text-sm text-gray-300 transition hover:text-pink-400">{config.email}</a>
+                      <a href={`mailto:${config.email}`} className="text-sm text-gray-300 transition hover:text-primary">{config.email}</a>
                     </div>
                   </div>
                 )}
@@ -221,7 +221,7 @@ export default function TiendaFooter() {
                 const Icon = badgeIcons[label] || Shield;
                 return (
                   <div key={label} className="flex flex-col items-center gap-2 text-center">
-                    <Icon className="h-6 w-6 text-pink-500" />
+                    <Icon className="h-6 w-6 text-primary/80" />
                     <span className="text-xs font-medium text-gray-400">{label}</span>
                   </div>
                 );

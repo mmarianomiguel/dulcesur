@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { todayARG ,  nowTimeARG } from "@/lib/formatters";
+import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { Cliente, ZonaEntrega } from "@/types/database";
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { showAdminToast } from "@/components/admin-toast";
-import * as XLSX from "xlsx";
+
 import {
   Select,
   SelectContent,
@@ -65,9 +65,6 @@ const PROVINCIAS = [
 
 const DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(value);
-}
 
 const emptyForm = {
   codigo_cliente: "",
@@ -676,7 +673,8 @@ export default function ClientesPage() {
     a.click();
   };
 
-  const handleExportClients = () => {
+  const handleExportClients = async () => {
+    const XLSX = await import("xlsx");
     const rows = filtered.map((c) => {
       const zona = zonas.find((z) => z.id === c.zona_entrega);
       const vendedor = vendedores.find((v) => v.id === (c as any).vendedor_id);
@@ -738,6 +736,7 @@ export default function ClientesPage() {
     setImportProgress("Leyendo archivo...");
 
     try {
+      const XLSX = await import("xlsx");
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -1524,8 +1523,9 @@ export default function ClientesPage() {
                     .replace(/Ajuste por edición\s*\((aumento|reducción)\)/i, (_, t) => t === "aumento" ? "Ajuste débito" : "Ajuste crédito")
                     .replace(/\(saldo a favor aplicado:.*?\)/i, "");
                 };
-                const exportCCExcel = () => {
+                const exportCCExcel = async () => {
                   if (!movClient || movCCRows.length === 0) return;
+                  const XLSX = await import("xlsx");
                   const rows = movCCRows.map((r) => ({
                     Fecha: new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR"),
                     Comprobante: cleanComprobante(r.comprobante),

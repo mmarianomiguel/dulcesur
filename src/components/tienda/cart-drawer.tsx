@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ShoppingBag, X, Minus, Plus, Trash2, Package } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
+import { formatCurrency } from "@/lib/formatters";
 
 interface CartItem {
   id: string;
@@ -41,12 +42,6 @@ export function useCart() {
   return ctx;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -220,7 +215,7 @@ function CartDrawer() {
               Mi carrito
             </h2>
             {itemCount > 0 && (
-              <span className="rounded-full bg-pink-100 px-2.5 py-0.5 text-xs font-semibold text-pink-600">
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
                 {itemCount}
               </span>
             )}
@@ -250,7 +245,7 @@ function CartDrawer() {
             <p className="mt-4 text-gray-500">Tu carrito está vacío</p>
             <button
               onClick={closeCart}
-              className="mt-3 text-sm text-pink-600 underline hover:text-pink-700 transition-colors"
+              className="mt-3 text-sm text-primary underline hover:text-primary/90 transition-colors"
             >
               Descubrí nuestros productos
             </button>
@@ -298,7 +293,7 @@ function CartDrawer() {
                           <span className="text-xs text-gray-400 line-through">
                             {formatCurrency(item.precio_original)}
                           </span>
-                          <span className="rounded bg-pink-100 px-1.5 py-0.5 text-[10px] font-semibold text-pink-600">
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                             -{item.descuento}%
                           </span>
                         </>
@@ -317,7 +312,7 @@ function CartDrawer() {
                         <button
                           onClick={() => updateQuantity(item.id, item.cantidad - 1)}
                           aria-label="Disminuir cantidad"
-                          className="flex h-8 w-8 items-center justify-center text-gray-400 hover:bg-pink-50 hover:text-pink-600 transition-colors rounded-l-lg"
+                          className="flex h-8 w-8 items-center justify-center text-gray-400 hover:bg-primary/5 hover:text-primary transition-colors rounded-l-lg"
                         >
                           <Minus className="h-3.5 w-3.5" />
                         </button>
@@ -328,7 +323,7 @@ function CartDrawer() {
                           onClick={() => updateQuantity(item.id, Math.min(item.cantidad + 1, maxQty))}
                           disabled={atMax}
                           aria-label="Aumentar cantidad"
-                          className="flex h-8 w-8 items-center justify-center text-gray-400 hover:bg-pink-50 hover:text-pink-600 transition-colors rounded-r-lg disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                          className="flex h-8 w-8 items-center justify-center text-gray-400 hover:bg-primary/5 hover:text-primary transition-colors rounded-r-lg disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </button>
@@ -412,13 +407,13 @@ function CartDrawer() {
               <Link
                 href="/checkout"
                 onClick={closeCart}
-                className="block w-full rounded-xl bg-pink-600 py-3.5 text-center text-base font-semibold text-white transition-all hover:bg-pink-700 hover:shadow-lg"
+                className="block w-full rounded-xl bg-primary py-3.5 text-center text-base font-semibold text-white transition-all hover:bg-primary/90 hover:shadow-lg"
               >
                 Iniciar compra
               </Link>
               <button
                 onClick={closeCart}
-                className="block w-full text-center text-sm text-gray-500 underline-offset-4 hover:text-pink-600 hover:underline transition-colors"
+                className="block w-full text-center text-sm text-gray-500 underline-offset-4 hover:text-primary hover:underline transition-colors"
               >
                 Seguir comprando
               </button>
@@ -435,7 +430,7 @@ function CartDrawer() {
             <p className="text-sm text-gray-500 mt-2">¿Vaciar todo el carrito?</p>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setShowClearConfirm(false)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancelar</button>
-              <button onClick={() => { setShowClearConfirm(false); clearCart(); }} className="px-4 py-2 text-sm font-medium text-white bg-pink-600 rounded-xl hover:bg-pink-700 transition-colors">Confirmar</button>
+              <button onClick={() => { setShowClearConfirm(false); clearCart(); }} className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary/90 transition-colors">Confirmar</button>
             </div>
           </div>
         </div>

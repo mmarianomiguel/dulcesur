@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
+import { formatCurrency } from "@/lib/formatters";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import { addRecentlyViewed } from "@/hooks/use-recently-viewed";
 import {
@@ -59,12 +60,6 @@ interface Presentacion {
   sku: string;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
 
 export default function ProductoDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -519,7 +514,7 @@ export default function ProductoDetallePage() {
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <Package className="h-20 w-20 text-gray-200" />
           <h2 className="mt-6 text-xl font-bold text-gray-800">Producto no encontrado</h2>
-          <Link href="/productos" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-pink-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-pink-700">
+          <Link href="/productos" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary/90">
             Volver a productos
           </Link>
         </div>
@@ -531,12 +526,12 @@ export default function ProductoDetallePage() {
     <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
       {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-1.5 text-sm text-gray-400">
-        <Link href="/" className="hover:text-pink-600 transition">Inicio</Link>
+        <Link href="/" className="hover:text-primary transition">Inicio</Link>
         <ChevronRight className="h-3.5 w-3.5" />
-        <Link href="/productos" className="hover:text-pink-600 transition">Productos</Link>
+        <Link href="/productos" className="hover:text-primary transition">Productos</Link>
         {producto.categorias?.nombre && <>
           <ChevronRight className="h-3.5 w-3.5" />
-          <Link href={`/productos?categoria=${producto.categoria_id}`} className="hover:text-pink-600 transition">{producto.categorias.nombre}</Link>
+          <Link href={`/productos?categoria=${producto.categoria_id}`} className="hover:text-primary transition">{producto.categorias.nombre}</Link>
         </>}
         <ChevronRight className="h-3.5 w-3.5" />
         <span className="text-gray-700 font-medium truncate max-w-[200px]">{producto.nombre}</span>
@@ -567,7 +562,7 @@ export default function ProductoDetallePage() {
               </div>
             )}
             {producto.stock > 0 && producto.stock <= 10 && (
-              <span className="absolute top-4 left-4 bg-pink-600 text-white text-[11px] font-bold uppercase px-3 py-1 rounded-md">
+              <span className="absolute top-4 left-4 bg-primary text-white text-[11px] font-bold uppercase px-3 py-1 rounded-md">
                 {producto.stock <= 5 ? "Últimas unidades" : "Últimas cajas"}
               </span>
             )}
@@ -596,7 +591,7 @@ export default function ProductoDetallePage() {
 
           {producto.es_combo && (
             <div className="mt-2">
-              <span className="inline-flex items-center gap-1.5 bg-pink-50 text-pink-700 text-xs font-semibold px-3 py-1.5 rounded-lg border border-pink-200">
+              <span className="inline-flex items-center gap-1.5 bg-primary/5 text-primary/90 text-xs font-semibold px-3 py-1.5 rounded-lg border border-primary/20">
                 <Layers className="w-3.5 h-3.5" />
                 Producto combo
               </span>
@@ -614,7 +609,7 @@ export default function ProductoDetallePage() {
                 {currentDiscount > 0 ? formatCurrency(discountedPrice) : formatCurrency(currentPrice)}
               </p>
               {currentDiscount > 0 && (
-                <span className="bg-pink-100 text-pink-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                <span className="bg-primary/10 text-primary/90 text-xs font-bold px-2.5 py-1 rounded-full">
                   {currentDiscount}% OFF
                 </span>
               )}
@@ -675,11 +670,11 @@ export default function ProductoDetallePage() {
               const totalUnidades = comboComponentes.reduce((acc, c) => acc + c.cantidad, 0);
               const precioPorUnidad = totalUnidades > 0 ? currentPrice / totalUnidades : 0;
               return (
-                <div className="mt-2 inline-flex items-center gap-2 bg-pink-50 border border-pink-100 rounded-lg px-3 py-1.5">
-                  <Box className="w-3.5 h-3.5 text-pink-500 flex-shrink-0" />
-                  <span className="text-sm text-pink-700">
+                <div className="mt-2 inline-flex items-center gap-2 bg-primary/5 border border-primary/10 rounded-lg px-3 py-1.5">
+                  <Box className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />
+                  <span className="text-sm text-primary/90">
                     <span className="font-semibold">{formatCurrency(precioPorUnidad)}</span>
-                    <span className="text-pink-500"> por unidad · {totalUnidades} un. totales</span>
+                    <span className="text-primary/80"> por unidad · {totalUnidades} un. totales</span>
                   </span>
                 </div>
               );
@@ -711,7 +706,7 @@ export default function ProductoDetallePage() {
                         disabled
                           ? "border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed"
                           : selected
-                          ? "border-pink-600 bg-pink-50 text-pink-700"
+                          ? "border-primary bg-primary/5 text-primary/90"
                           : "border-gray-200 text-gray-600 hover:border-gray-300 bg-white"
                       }`}
                     >
@@ -750,7 +745,7 @@ export default function ProductoDetallePage() {
               <button
                 onClick={handleAddToCart}
                 disabled={!canBuy}
-                className="flex-1 rounded-xl bg-pink-600 py-3.5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-xl bg-primary py-3.5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {canBuy ? `Agregar · ${formatCurrency((currentDiscount > 0 ? discountedPrice : currentPrice) * cantidad)}` : presQty > 1 ? "Stock insuficiente" : "Sin stock"}
               </button>
@@ -814,15 +809,15 @@ export default function ProductoDetallePage() {
             const totalUnidades = comboComponentes.reduce((a, c) => a + c.cantidad, 0);
             const valorIndividual = comboComponentes.reduce((a, c) => a + c.precio * c.cantidad, 0);
             return (
-              <div className="mt-6 border border-pink-100 rounded-2xl overflow-hidden bg-pink-50/40">
+              <div className="mt-6 border border-primary/10 rounded-2xl overflow-hidden bg-primary/5">
                 {/* Header toggle */}
                 <button
                   onClick={() => setComboOpen((o) => !o)}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-pink-50/60 transition"
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-primary/5/60 transition"
                 >
                   <span className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-pink-100">
-                      <Layers className="w-4 h-4 text-pink-600" />
+                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">
+                      <Layers className="w-4 h-4 text-primary" />
                     </span>
                     <span className="text-left">
                       <p className="text-sm font-semibold text-gray-900">¿Qué incluye este combo?</p>
@@ -833,7 +828,7 @@ export default function ProductoDetallePage() {
                 </button>
 
                 {comboOpen && (
-                  <div className="border-t border-pink-100 bg-white">
+                  <div className="border-t border-primary/10 bg-white">
                     <p className="px-5 pt-4 pb-3 text-sm font-semibold text-gray-800">Productos incluidos en este combo</p>
                     <div className="px-4 space-y-3 pb-4">
                       {comboComponentes.map((c) => (
@@ -850,7 +845,7 @@ export default function ProductoDetallePage() {
                             <p className="text-xs text-gray-500 mt-0.5">Presentación: Unidad</p>
                             <p className="text-xs text-gray-500">Precio unitario: {formatCurrency(c.precio)}</p>
                           </div>
-                          <span className="shrink-0 bg-pink-100 text-pink-700 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap">
+                          <span className="shrink-0 bg-primary/10 text-primary/90 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap">
                             {c.cantidad} {c.cantidad === 1 ? "unidad" : "unidades"}
                           </span>
                         </div>
@@ -981,8 +976,8 @@ export default function ProductoDetallePage() {
                                 onClick={() => setRelSelectedPres((prev) => ({ ...prev, [rel.id]: idx }))}
                                 className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
                                   isActive
-                                    ? "bg-pink-600 text-white border-pink-600"
-                                    : "bg-white text-gray-600 border-gray-200 hover:border-pink-300"
+                                    ? "bg-primary text-white border-primary"
+                                    : "bg-white text-gray-600 border-gray-200 hover:border-primary/30"
                                 }`}
                               >
                                 {label}
@@ -1029,7 +1024,7 @@ export default function ProductoDetallePage() {
                                 setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
                               }}
                               disabled={outOfStock}
-                              className={`flex-1 text-xs py-2 rounded-lg font-semibold transition-colors ${outOfStock ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-pink-600 hover:bg-pink-700 text-white"}`}
+                              className={`flex-1 text-xs py-2 rounded-lg font-semibold transition-colors ${outOfStock ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white"}`}
                             >
                               {outOfStock ? "Sin stock" : `Agregar ${formatCurrency((relDiscount > 0 ? relDiscountedPrice : price) * qty)}`}
                             </button>

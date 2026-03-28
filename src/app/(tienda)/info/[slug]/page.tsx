@@ -45,14 +45,14 @@ export default function InfoPage() {
         <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Página no encontrada</h1>
         <p className="text-gray-500 mb-6">La página que buscás no existe o fue desactivada.</p>
-        <Link href="/" className="text-pink-600 hover:text-pink-700 font-medium">Volver al inicio</Link>
+        <Link href="/" className="text-primary hover:text-primary/90 font-medium">Volver al inicio</Link>
       </div>
     );
   }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <Link href="/" className="inline-flex items-center gap-2 text-gray-500 hover:text-pink-600 transition-colors mb-6 text-sm font-medium">
+      <Link href="/" className="inline-flex items-center gap-2 text-gray-500 hover:text-primary transition-colors mb-6 text-sm font-medium">
         <ArrowLeft className="w-4 h-4" />Volver al inicio
       </Link>
       <h1 className="text-3xl font-bold text-gray-900 mb-8">{pagina?.titulo}</h1>
@@ -64,7 +64,7 @@ export default function InfoPage() {
         <ContactoDinamico />
       ) : (
         <div
-          className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-pink-600"
+          className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-p:text-gray-600 prose-p:leading-relaxed prose-li:text-gray-600 prose-strong:text-gray-900 prose-a:text-primary"
           dangerouslySetInnerHTML={{ __html: sanitizeHtml(pagina?.contenido || "") }}
         />
       )}

@@ -102,11 +102,11 @@ export default function ContactoDinamico() {
             href={config.instagram_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="group rounded-xl border border-gray-200 p-5 transition hover:border-pink-300 hover:bg-pink-50"
+            className="group rounded-xl border border-gray-200 p-5 transition hover:border-primary/30 hover:bg-primary/5"
           >
             <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-pink-50 group-hover:bg-pink-100">
-                <Instagram className="h-5 w-5 text-pink-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/5 group-hover:bg-primary/10">
+                <Instagram className="h-5 w-5 text-primary" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">Instagram</h3>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { nowTimeARG } from "@/lib/formatters";
+import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -88,13 +88,6 @@ interface VentaItemRow {
   unidad_medida: string | null;
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 function getArgentinaToday() {
   return new Date().toLocaleDateString("en-CA", {

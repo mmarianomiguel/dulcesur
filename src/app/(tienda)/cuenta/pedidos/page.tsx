@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Package, ChevronDown, ChevronUp, ChevronRight, Calendar, Hash, AlertCircle, ShoppingBag, DollarSign, Globe, Store } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
+import { formatCurrency } from "@/lib/formatters";
 
 interface ComboComponent {
   producto_id: string;
@@ -68,12 +69,6 @@ interface Pedido {
   venta?: VentaRecord;
 }
 
-const formatPrice = (value: number) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
 
 const estadoBadge: Record<string, { bg: string; text: string; dot: string }> = {
   pendiente: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
@@ -366,13 +361,13 @@ export default function PedidosPage() {
       <div className="mb-6 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <DollarSign className="w-5 h-5 text-orange-600" />
-          <span className="font-bold text-orange-800">Saldo pendiente: {formatPrice(totalDeuda)}</span>
+          <span className="font-bold text-orange-800">Saldo pendiente: {formatCurrency(totalDeuda)}</span>
         </div>
         <div className="space-y-1.5">
           {deudas.map((d) => (
             <div key={d.numero} className="flex justify-between items-center text-sm">
               <span className="text-orange-700">{d.tipo} {d.numero}</span>
-              <span className="font-semibold text-orange-800">{formatPrice(d.monto)}</span>
+              <span className="font-semibold text-orange-800">{formatCurrency(d.monto)}</span>
             </div>
           ))}
         </div>
@@ -389,7 +384,7 @@ export default function PedidosPage() {
       <div
         key={pedido.id}
         className={`bg-white rounded-2xl border transition-all duration-200 ${
-          isExpanded ? "border-pink-200 shadow-lg" : "border-gray-100 hover:border-gray-200"
+          isExpanded ? "border-primary/20 shadow-lg" : "border-gray-100 hover:border-gray-200"
         }`}
       >
         <button
@@ -416,7 +411,7 @@ export default function PedidosPage() {
                 {pedido.venta && pedido.venta.saldo_pendiente > 0 && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
                     <DollarSign className="w-3 h-3" />
-                    Saldo pendiente: {formatPrice(pedido.venta.saldo_pendiente)}
+                    Saldo pendiente: {formatCurrency(pedido.venta.saldo_pendiente)}
                   </span>
                 )}
               </div>
@@ -435,20 +430,20 @@ export default function PedidosPage() {
               <div className="text-right">
                 {pedido.venta?.notas_credito && pedido.venta.notas_credito.length > 0 ? (
                   <>
-                    <span className="text-sm text-gray-400 line-through">{formatPrice(pedido.total)}</span>
-                    <span className="text-lg font-bold text-pink-600 ml-1">
-                      {formatPrice(pedido.total - pedido.venta.notas_credito.reduce((s, nc) => s + nc.total, 0))}
+                    <span className="text-sm text-gray-400 line-through">{formatCurrency(pedido.total)}</span>
+                    <span className="text-lg font-bold text-primary ml-1">
+                      {formatCurrency(pedido.total - pedido.venta.notas_credito.reduce((s, nc) => s + nc.total, 0))}
                     </span>
                   </>
                 ) : (
-                  <span className="text-lg font-bold text-gray-900">{formatPrice(pedido.total)}</span>
+                  <span className="text-lg font-bold text-gray-900">{formatCurrency(pedido.total)}</span>
                 )}
               </div>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                isExpanded ? "bg-pink-50" : "bg-gray-50"
+                isExpanded ? "bg-primary/5" : "bg-gray-50"
               }`}>
                 {isExpanded ? (
-                  <ChevronUp className={`w-4 h-4 ${isExpanded ? "text-pink-600" : "text-gray-400"}`} />
+                  <ChevronUp className={`w-4 h-4 ${isExpanded ? "text-primary" : "text-gray-400"}`} />
                 ) : (
                   <ChevronDown className="w-4 h-4 text-gray-400" />
                 )}
@@ -518,14 +513,14 @@ export default function PedidosPage() {
                         <div className="flex items-center gap-1.5">
                           {hasComboDetail && (
                             <button onClick={() => toggleCombo(comboKey)} className="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-gray-100 transition-colors">
-                              {isComboExpanded ? <ChevronDown className="w-3.5 h-3.5 text-pink-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+                              {isComboExpanded ? <ChevronDown className="w-3.5 h-3.5 text-primary/80" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
                             </button>
                           )}
                           <div>
                             <span className="flex items-center gap-1.5">
                               {displayName}
                               {isCombo && (
-                                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-pink-100 text-pink-700">
+                                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary/90">
                                   COMBO
                                 </span>
                               )}
@@ -549,11 +544,11 @@ export default function PedidosPage() {
                         )}
                       </td>
                       <td className="py-3 text-right text-gray-500">
-                        {formatPrice(displayPrice)}
+                        {formatCurrency(displayPrice)}
                         {(isBox || isMedio) && <span className="block text-[10px] text-gray-400">{item.presentacion}</span>}
                       </td>
                       <td className="py-3 text-right font-semibold text-gray-900">
-                        {formatPrice(item.precio_unitario * item.cantidad)}
+                        {formatCurrency(item.precio_unitario * item.cantidad)}
                       </td>
                     </tr>
                     {hasComboDetail && isComboExpanded && item.combo_items!.map((ci, ciIdx) => (
@@ -579,8 +574,8 @@ export default function PedidosPage() {
                     <td colSpan={4} className="py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider">
                       Total
                     </td>
-                    <td className="py-3 text-right font-bold text-pink-600 text-base">
-                      {formatPrice(pedido.total)}
+                    <td className="py-3 text-right font-bold text-primary text-base">
+                      {formatCurrency(pedido.total)}
                     </td>
                   </tr>
                 </tfoot>
@@ -613,7 +608,7 @@ export default function PedidosPage() {
                           </span>
                         )}
                       </div>
-                      <span className="font-semibold text-gray-900">{formatPrice(p.monto)}</span>
+                      <span className="font-semibold text-gray-900">{formatCurrency(p.monto)}</span>
                     </div>
                     );
                   })}
@@ -621,7 +616,7 @@ export default function PedidosPage() {
                 {pedido.venta.saldo_pendiente > 0 && (
                   <div className="mt-2 pt-2 border-t border-orange-200 flex justify-between text-sm">
                     <span className="text-orange-600 font-medium">Saldo pendiente</span>
-                    <span className="font-bold text-orange-600">{formatPrice(pedido.venta.saldo_pendiente)}</span>
+                    <span className="font-bold text-orange-600">{formatCurrency(pedido.venta.saldo_pendiente)}</span>
                   </div>
                 )}
               </div>
@@ -645,14 +640,14 @@ export default function PedidosPage() {
                         <span className="text-sm font-semibold text-red-700">Nota de Crédito</span>
                         <span className="text-xs text-red-500 font-mono">{nc.numero}</span>
                       </div>
-                      <span className="text-sm font-bold text-red-600">-{formatPrice(nc.total)}</span>
+                      <span className="text-sm font-bold text-red-600">-{formatCurrency(nc.total)}</span>
                     </div>
                     {nc.items.length > 0 && (
                       <div className="space-y-1">
                         {nc.items.map((ni, idx) => (
                           <div key={idx} className="flex justify-between text-xs text-red-600">
                             <span>{ni.cantidad}x {ni.descripcion.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)$/, "").replace(/(\([^)]+\))\s*\1/gi, "$1")}</span>
-                            <span>-{formatPrice(ni.subtotal)}</span>
+                            <span>-{formatCurrency(ni.subtotal)}</span>
                           </div>
                         ))}
                       </div>
@@ -661,8 +656,8 @@ export default function PedidosPage() {
                 ))}
                 <div className="flex justify-between items-center mt-3 pt-3 border-t border-red-200">
                   <span className="text-sm font-semibold text-gray-700">Total final</span>
-                  <span className="text-lg font-bold text-pink-600">
-                    {formatPrice(pedido.total - pedido.venta!.notas_credito.reduce((s, nc) => s + nc.total, 0))}
+                  <span className="text-lg font-bold text-primary">
+                    {formatCurrency(pedido.total - pedido.venta!.notas_credito.reduce((s, nc) => s + nc.total, 0))}
                   </span>
                 </div>
               </div>
@@ -694,7 +689,7 @@ export default function PedidosPage() {
                     window.dispatchEvent(new Event("cart-updated"));
                     showToast("Productos agregados al carrito", { subtitle: `${pedido.items.length} productos del pedido #${pedido.numero}` });
                   }}
-                  className="w-full text-sm font-medium text-pink-600 hover:bg-pink-50 rounded-xl py-2.5 transition"
+                  className="w-full text-sm font-medium text-primary hover:bg-primary/5 rounded-xl py-2.5 transition"
                 >
                   Volver a pedir
                 </button>
@@ -753,7 +748,7 @@ export default function PedidosPage() {
                 {v.saldo_pendiente > 0 && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
                     <DollarSign className="w-3 h-3" />
-                    Saldo pendiente: {formatPrice(v.saldo_pendiente)}
+                    Saldo pendiente: {formatCurrency(v.saldo_pendiente)}
                   </span>
                 )}
               </div>
@@ -772,13 +767,13 @@ export default function PedidosPage() {
               <div className="text-right">
                 {v.notas_credito.length > 0 ? (
                   <>
-                    <span className="text-sm text-gray-400 line-through">{formatPrice(v.total)}</span>
+                    <span className="text-sm text-gray-400 line-through">{formatCurrency(v.total)}</span>
                     <span className="text-lg font-bold text-indigo-600 ml-1">
-                      {formatPrice(v.total - v.notas_credito.reduce((s, nc) => s + nc.total, 0))}
+                      {formatCurrency(v.total - v.notas_credito.reduce((s, nc) => s + nc.total, 0))}
                     </span>
                   </>
                 ) : (
-                  <span className="text-lg font-bold text-gray-900">{formatPrice(v.total)}</span>
+                  <span className="text-lg font-bold text-gray-900">{formatCurrency(v.total)}</span>
                 )}
               </div>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${isExp ? "bg-indigo-50" : "bg-gray-50"}`}>
@@ -831,7 +826,7 @@ export default function PedidosPage() {
                             <span className="flex items-center gap-1.5">
                               {displayName}
                               {isCombo && (
-                                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-pink-100 text-pink-700">
+                                <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary/90">
                                   COMBO
                                 </span>
                               )}
@@ -855,10 +850,10 @@ export default function PedidosPage() {
                         )}
                       </td>
                       <td className="py-3 text-right text-gray-500">
-                        {formatPrice(displayPriceV)}
+                        {formatCurrency(displayPriceV)}
                         {(isBox || isMedioV) && item.presentacion && <span className="block text-[10px] text-gray-400">{item.presentacion}</span>}
                       </td>
-                      <td className="py-3 text-right font-semibold text-gray-900">{formatPrice(item.subtotal)}</td>
+                      <td className="py-3 text-right font-semibold text-gray-900">{formatCurrency(item.subtotal)}</td>
                     </tr>
                     {hasComboDetail && isComboExpanded && item.combo_items!.map((ci, ciIdx) => (
                       <tr key={`${idx}-ci-${ciIdx}`} className="bg-gray-50/50">
@@ -881,7 +876,7 @@ export default function PedidosPage() {
                 <tfoot>
                   <tr className="border-t border-gray-200">
                     <td colSpan={4} className="py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider">Total</td>
-                    <td className="py-3 text-right font-bold text-indigo-600 text-base">{formatPrice(v.total)}</td>
+                    <td className="py-3 text-right font-bold text-indigo-600 text-base">{formatCurrency(v.total)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -913,7 +908,7 @@ export default function PedidosPage() {
                           </span>
                         )}
                       </div>
-                      <span className="font-semibold text-gray-900">{formatPrice(p.monto)}</span>
+                      <span className="font-semibold text-gray-900">{formatCurrency(p.monto)}</span>
                     </div>
                     );
                   })}
@@ -921,7 +916,7 @@ export default function PedidosPage() {
                 {v.saldo_pendiente > 0 && (
                   <div className="mt-2 pt-2 border-t border-orange-200 flex justify-between text-sm">
                     <span className="text-orange-600 font-medium">Saldo pendiente</span>
-                    <span className="font-bold text-orange-600">{formatPrice(v.saldo_pendiente)}</span>
+                    <span className="font-bold text-orange-600">{formatCurrency(v.saldo_pendiente)}</span>
                   </div>
                 )}
               </div>
@@ -944,14 +939,14 @@ export default function PedidosPage() {
                         <span className="text-sm font-semibold text-red-700">Nota de Crédito</span>
                         <span className="text-xs text-red-500 font-mono">{nc.numero}</span>
                       </div>
-                      <span className="text-sm font-bold text-red-600">-{formatPrice(nc.total)}</span>
+                      <span className="text-sm font-bold text-red-600">-{formatCurrency(nc.total)}</span>
                     </div>
                     {nc.items.length > 0 && (
                       <div className="space-y-1">
                         {nc.items.map((ni, idx) => (
                           <div key={idx} className="flex justify-between text-xs text-red-600">
                             <span>{ni.cantidad}x {ni.descripcion.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)$/, "").replace(/(\([^)]+\))\s*\1/gi, "$1")}</span>
-                            <span>-{formatPrice(ni.subtotal)}</span>
+                            <span>-{formatCurrency(ni.subtotal)}</span>
                           </div>
                         ))}
                       </div>
@@ -961,7 +956,7 @@ export default function PedidosPage() {
                 <div className="flex justify-between items-center mt-3 pt-3 border-t border-red-200">
                   <span className="text-sm font-semibold text-gray-700">Total final</span>
                   <span className="text-lg font-bold text-indigo-600">
-                    {formatPrice(v.total - v.notas_credito.reduce((s, nc) => s + nc.total, 0))}
+                    {formatCurrency(v.total - v.notas_credito.reduce((s, nc) => s + nc.total, 0))}
                   </span>
                 </div>
               </div>
@@ -977,7 +972,7 @@ export default function PedidosPage() {
       {/* Back button */}
       <Link
         href="/cuenta"
-        className="inline-flex items-center gap-2 text-gray-500 hover:text-pink-600 transition-colors mb-6 text-sm font-medium"
+        className="inline-flex items-center gap-2 text-gray-500 hover:text-primary transition-colors mb-6 text-sm font-medium"
       >
         <ArrowLeft className="w-4 h-4" />
         Volver a mi cuenta
@@ -1011,7 +1006,7 @@ export default function PedidosPage() {
             <Globe className="w-4 h-4" />
             Pedidos Web
             {pedidos.length > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === "web" ? "bg-pink-100 text-pink-700" : "bg-gray-200 text-gray-500"}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === "web" ? "bg-primary/10 text-primary/90" : "bg-gray-200 text-gray-500"}`}>
                 {pedidos.length}
               </span>
             )}
@@ -1056,7 +1051,7 @@ export default function PedidosPage() {
           <p className="text-gray-400 text-sm mt-1">Cuando hagas tu primera compra, aparecerá acá</p>
           <Link
             href="/"
-            className="inline-block mt-5 bg-pink-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-pink-700 transition-colors"
+            className="inline-block mt-5 bg-primary text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
           >
             Ir a la tienda
           </Link>

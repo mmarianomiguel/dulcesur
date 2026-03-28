@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
-import { jsPDF } from "jspdf";
+
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useDialog } from "@/hooks/use-dialog";
@@ -405,7 +405,8 @@ export default function CajaPage() {
   };
 
   // ─── Export turno to PDF ───
-  const exportTurnoPDF = (t: TurnoCaja, tvts: Venta[], tmovs: CajaMovimiento[]) => {
+  const exportTurnoPDF = async (t: TurnoCaja, tvts: Venta[], tmovs: CajaMovimiento[]) => {
+    const { jsPDF } = await import("jspdf");
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const w = pdf.internal.pageSize.getWidth();
     const margin = 15;

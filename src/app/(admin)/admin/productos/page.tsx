@@ -66,7 +66,7 @@ import {
   LockOpen,
   Store,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+
 import { ImageUpload } from "@/components/image-upload";
 import { showAdminToast } from "@/components/admin-toast";
 import { APP_NAME } from "@/lib/constants";
@@ -1009,6 +1009,7 @@ export default function ProductosPage() {
 
   // Export Excel
   const handleExport = async () => {
+    const XLSX = await import("xlsx");
     // Load proveedores for all products
     const [{ data: allProdProv }, { data: allPresData }] = await Promise.all([
       supabase.from("producto_proveedores").select("producto_id, proveedores(nombre)"),
@@ -1118,6 +1119,7 @@ export default function ProductosPage() {
     setImportResult(null);
 
     try {
+      const XLSX = await import("xlsx");
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
       const ws = wb.Sheets[wb.SheetNames[0]];

@@ -6,7 +6,31 @@ import { supabase } from "@/lib/supabase";
 import { logAudit } from "@/lib/audit";
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from "lucide-react";
 import { useWhiteLabel } from "@/hooks/use-white-label";
-import Image from "next/image";
+
+function LogoImage({ src, alt, size, className }: { src: string; alt: string; size: number; className?: string }) {
+  const [errored, setErrored] = useState(false);
+  if (!src || errored) {
+    return (
+      <div
+        className={`flex items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-pink-500 text-white font-bold ${className || ""}`}
+        style={{ width: size, height: size, fontSize: size * 0.45 }}
+      >
+        {alt.charAt(0).toUpperCase()}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      className={`rounded-xl object-contain ${className || ""}`}
+      onError={() => setErrored(true)}
+    />
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,6 +40,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const logoSrc = wl.logo_url || "/logo-dulcesur.jpg";
+  const appName = wl.system_name || "DulceSur";
+  const appSubtitle = wl.system_subtitle || "Gestion Comercial";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,10 +91,10 @@ export default function LoginPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
           <div>
             <div className="flex items-center gap-3">
-              <Image src="/icon.png" alt="DulceSur" width={48} height={48} className="rounded-2xl shadow-lg" />
+              <LogoImage src={logoSrc} alt={appName} size={48} className="shadow-lg" />
               <div>
-                <span className="text-2xl font-bold tracking-tight">DulceSur</span>
-                <p className="text-white/50 text-xs tracking-wider uppercase">Gestión Comercial</p>
+                <span className="text-2xl font-bold tracking-tight">{appName}</span>
+                <p className="text-white/50 text-xs tracking-wider uppercase">{appSubtitle}</p>
               </div>
             </div>
           </div>
@@ -102,7 +130,7 @@ export default function LoginPage() {
 
           <div className="flex items-center justify-between">
             <p className="text-white/20 text-sm">
-              &copy; {new Date().getFullYear()} DulceSur. Todos los derechos reservados.
+              &copy; {new Date().getFullYear()} {appName}. Todos los derechos reservados.
             </p>
             <p className="text-white/20 text-xs">Francisco Canaro 4012 · Longchamps</p>
           </div>
@@ -114,10 +142,10 @@ export default function LoginPage() {
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-10">
-            <Image src="/icon.png" alt="DulceSur" width={40} height={40} className="rounded-xl" />
+            <LogoImage src={logoSrc} alt={appName} size={40} />
             <div>
-              <span className="text-xl font-semibold text-gray-900 tracking-tight">DulceSur</span>
-              <p className="text-gray-400 text-xs">Software de Gestión</p>
+              <span className="text-xl font-semibold text-gray-900 tracking-tight">{appName}</span>
+              <p className="text-gray-400 text-xs">{appSubtitle}</p>
             </div>
           </div>
 

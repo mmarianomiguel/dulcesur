@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { showToast } from "@/components/tienda/toast";
 import { supabase } from "@/lib/supabase";
+import { formatCurrency } from "@/lib/formatters";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import {
   Search,
@@ -23,12 +24,6 @@ import {
 
 const PER_PAGE = 12;
 
-const formatPrice = (value: number) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
 
 interface Categoria {
   id: string;
@@ -612,10 +607,10 @@ function ProductosContent() {
   const RadioCircle = ({ selected }: { selected: boolean }) => (
     <span
       className={`shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-        selected ? "border-pink-600" : "border-gray-300"
+        selected ? "border-primary" : "border-gray-300"
       }`}
     >
-      {selected && <span className="w-2.5 h-2.5 rounded-full bg-pink-600" />}
+      {selected && <span className="w-2.5 h-2.5 rounded-full bg-primary" />}
     </span>
   );
 
@@ -630,77 +625,77 @@ function ProductosContent() {
           </h4>
           <div className="flex flex-wrap gap-2">
             {categoriaId && activeCategoryName && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
                 {activeCategoryName}
                 <button
                   onClick={() => updateParams({ categoria: null, subcategoria: null })}
-                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {subcategoriaId && activeSubcategoryName && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
                 {activeSubcategoryName}
                 <button
                   onClick={() => updateParams({ subcategoria: null })}
-                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {marcaParam && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
                 {marcas.find((m) => m.id === marcaParam)?.nombre || "Marca"}
                 <button
                   onClick={() => updateParams({ marca: null })}
-                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {(precioMin || precioMax) && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
-                Precio{precioMin ? ` desde ${formatPrice(Number(precioMin))}` : ""}{precioMax ? ` hasta ${formatPrice(Number(precioMax))}` : ""}
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
+                Precio{precioMin ? ` desde ${formatCurrency(Number(precioMin))}` : ""}{precioMax ? ` hasta ${formatCurrency(Number(precioMax))}` : ""}
                 <button
                   onClick={() => updateParams({ precio_min: null, precio_max: null })}
-                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {tipoFilter && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
                 {tipoFilter === "combos" ? "Combos" : "Precio actualizado"}
                 <button
                   onClick={() => updateParams({ tipo: null })}
-                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {disponibilidad && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
                 {disponibilidad === "en_stock" ? "En stock" : "Sin stock"}
                 <button
                   onClick={() => updateParams({ disponibilidad: null })}
-                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             )}
             {searchQuery && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-pink-50 text-pink-600 rounded-full px-3 py-1.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
                 &quot;{searchQuery}&quot;
                 <button
                   onClick={() => updateParams({ q: null })}
-                  className="hover:bg-pink-100 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -723,7 +718,7 @@ function ProductosContent() {
               if (e.key === "Enter")
                 updateParams({ q: (e.target as HTMLInputElement).value || null });
             }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-gray-400"
           />
         </div>
       </div>
@@ -759,7 +754,7 @@ function ProductosContent() {
               className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
             >
               <RadioCircle selected={!categoriaId} />
-              <span className={`text-sm ${!categoriaId ? "font-semibold text-pink-600" : "text-gray-600"}`}>
+              <span className={`text-sm ${!categoriaId ? "font-semibold text-primary" : "text-gray-600"}`}>
                 Todas
               </span>
               <span className="text-gray-400 text-sm ml-auto">
@@ -811,7 +806,7 @@ function ProductosContent() {
                       <RadioCircle selected={isSelected} />
                       <span
                         className={`text-sm truncate ${
-                          isSelected ? "font-semibold text-pink-600" : "text-gray-600"
+                          isSelected ? "font-semibold text-primary" : "text-gray-600"
                         }`}
                       >
                         {cat.nombre}
@@ -842,7 +837,7 @@ function ProductosContent() {
                             <span
                               className={`text-sm truncate ${
                                 subSelected
-                                  ? "font-semibold text-pink-600"
+                                  ? "font-semibold text-primary"
                                   : "text-gray-500"
                               }`}
                             >
@@ -902,7 +897,7 @@ function ProductosContent() {
                   placeholder="Buscar marca..."
                   value={marcaSearch}
                   onChange={(e) => setMarcaSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-gray-50 border-0 text-xs focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400 mb-1"
+                  className="w-full px-3 py-1.5 rounded-lg bg-gray-50 border-0 text-xs focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-gray-400 mb-1"
                 />
                 {!marcaSearch && (
                 <button
@@ -910,7 +905,7 @@ function ProductosContent() {
                   className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
                 >
                   <RadioCircle selected={!marcaParam} />
-                  <span className={`text-sm ${!marcaParam ? "font-semibold text-pink-600" : "text-gray-600"}`}>
+                  <span className={`text-sm ${!marcaParam ? "font-semibold text-primary" : "text-gray-600"}`}>
                     Todas las marcas
                   </span>
                   <span className="text-gray-400 text-sm ml-auto">
@@ -931,7 +926,7 @@ function ProductosContent() {
                       <RadioCircle selected={isSelected} />
                       <span
                         className={`text-sm truncate ${
-                          isSelected ? "font-semibold text-pink-600" : "text-gray-600"
+                          isSelected ? "font-semibold text-primary" : "text-gray-600"
                         }`}
                       >
                         {marca.nombre}
@@ -971,7 +966,7 @@ function ProductosContent() {
                 className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
               >
                 <RadioCircle selected={isSelected} />
-                <span className={`text-sm ${isSelected ? "font-semibold text-pink-600" : "text-gray-600"}`}>
+                <span className={`text-sm ${isSelected ? "font-semibold text-primary" : "text-gray-600"}`}>
                   {opt.label}
                 </span>
               </button>
@@ -999,7 +994,7 @@ function ProductosContent() {
                 className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
               >
                 <RadioCircle selected={isSelected} />
-                <span className={`text-sm ${isSelected ? "font-semibold text-pink-600" : "text-gray-600"}`}>
+                <span className={`text-sm ${isSelected ? "font-semibold text-primary" : "text-gray-600"}`}>
                   {opt.label}
                 </span>
               </button>
@@ -1019,7 +1014,7 @@ function ProductosContent() {
             placeholder="Min"
             value={localPrecioMin}
             onChange={(e) => setLocalPrecioMin(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-gray-50 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400"
+            className="w-full px-3 py-2 rounded-xl bg-gray-50 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-gray-400"
           />
           <span className="text-gray-300 text-sm shrink-0">a</span>
           <input
@@ -1027,7 +1022,7 @@ function ProductosContent() {
             placeholder="Max"
             value={localPrecioMax}
             onChange={(e) => setLocalPrecioMax(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-gray-50 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400"
+            className="w-full px-3 py-2 rounded-xl bg-gray-50 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-gray-400"
           />
         </div>
         <button
@@ -1037,7 +1032,7 @@ function ProductosContent() {
               precio_max: localPrecioMax || null,
             })
           }
-          className="mt-2.5 w-full text-xs font-semibold text-pink-600 bg-pink-50 hover:bg-pink-100 rounded-lg py-2 transition-colors"
+          className="mt-2.5 w-full text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 rounded-lg py-2 transition-colors"
         >
           Aplicar
         </button>
@@ -1049,11 +1044,11 @@ function ProductosContent() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       {/* ─── Breadcrumb ─── */}
       <nav className="flex items-center gap-1.5 text-sm text-gray-400 mb-6">
-        <Link href="/" className="hover:text-pink-600 transition-colors">
+        <Link href="/" className="hover:text-primary transition-colors">
           Inicio
         </Link>
         <ChevronRight className="h-3.5 w-3.5" />
-        <Link href="/productos" className="hover:text-pink-600 transition-colors">
+        <Link href="/productos" className="hover:text-primary transition-colors">
           Productos
         </Link>
         {activeCategoryName && (
@@ -1088,7 +1083,7 @@ function ProductosContent() {
               if (e.key === "Enter")
                 updateParams({ q: (e.target as HTMLInputElement).value || null });
             }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 placeholder:text-gray-400"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-gray-400"
           />
         </div>
 
@@ -1102,7 +1097,7 @@ function ProductosContent() {
             <SlidersHorizontal className="h-4 w-4" />
             Filtros
             {activeFilterCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-pink-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+              <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
                 {activeFilterCount}
               </span>
             )}
@@ -1111,7 +1106,7 @@ function ProductosContent() {
           <select
             value={sort}
             onChange={(e) => updateParams({ sort: e.target.value })}
-            className="text-sm bg-white border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none cursor-pointer pr-8 font-medium text-gray-700"
+            className="text-sm bg-white border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none cursor-pointer pr-8 font-medium text-gray-700"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
               backgroundRepeat: "no-repeat",
@@ -1129,7 +1124,7 @@ function ProductosContent() {
               onClick={() => setView("grid")}
               className={`p-2.5 transition-colors ${
                 view === "grid"
-                  ? "bg-pink-50 text-pink-600"
+                  ? "bg-primary/5 text-primary"
                   : "text-gray-400 hover:text-gray-600"
               }`}
             >
@@ -1139,7 +1134,7 @@ function ProductosContent() {
               onClick={() => setView("list")}
               className={`p-2.5 transition-colors ${
                 view === "list"
-                  ? "bg-pink-50 text-pink-600"
+                  ? "bg-primary/5 text-primary"
                   : "text-gray-400 hover:text-gray-600"
               }`}
             >
@@ -1181,7 +1176,7 @@ function ProductosContent() {
               <div className="p-5 border-t border-gray-100">
                 <button
                   onClick={() => setMobileFilters(false)}
-                  className="w-full bg-pink-600 hover:bg-pink-700 text-white font-semibold py-3 rounded-xl transition-colors"
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-3 rounded-xl transition-colors"
                 >
                   Aplicar Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
                 </button>
@@ -1209,7 +1204,7 @@ function ProductosContent() {
               </p>
               <button
                 onClick={() => router.push("/productos")}
-                className="text-sm font-semibold text-pink-600 bg-pink-50 hover:bg-pink-100 px-6 py-2.5 rounded-xl transition-colors"
+                className="text-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 px-6 py-2.5 rounded-xl transition-colors"
               >
                 Limpiar filtros
               </button>
@@ -1280,12 +1275,12 @@ function ProductosContent() {
                       {/* Badge - one per product, priority: combo > discount > box > price change */}
                       {(() => {
                         if (producto.es_combo) return (
-                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary/80 to-purple-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
                             COMBO
                           </span>
                         );
                         if (disc > 0) return (
-                          <span className="absolute top-2.5 left-2.5 bg-pink-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-primary text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
                             {disc}% OFF
                           </span>
                         );
@@ -1344,7 +1339,7 @@ function ProductosContent() {
                     {/* Content */}
                     <div className="flex flex-col flex-1 p-3.5 pt-2.5">
                       <Link href={`/productos/${producto.id}`} className="flex-1">
-                        <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-pink-700 transition-colors">
+                        <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-primary/90 transition-colors">
                           {producto.nombre}
                         </h3>
                       </Link>
@@ -1353,10 +1348,10 @@ function ProductosContent() {
                       <div className="mb-3">
                         <div className="flex items-baseline gap-2">
                           <span className="text-lg font-bold text-gray-900">
-                            {disc > 0 ? formatPrice(discountedPrice) : formatPrice(activePrice)}
+                            {disc > 0 ? formatCurrency(discountedPrice) : formatCurrency(activePrice)}
                           </span>
                           {disc > 0 && (
-                            <span className="text-xs text-gray-400 line-through">{formatPrice(activePrice)}</span>
+                            <span className="text-xs text-gray-400 line-through">{formatCurrency(activePrice)}</span>
                           )}
                         </div>
                         {(() => {
@@ -1440,11 +1435,11 @@ function ProductosContent() {
                                 <Plus className="w-3 h-3" />
                               </button>
                             </div>
-                            <span className="text-sm font-bold text-gray-900">{formatPrice(discountedPrice * qty)}</span>
+                            <span className="text-sm font-bold text-gray-900">{formatCurrency(discountedPrice * qty)}</span>
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="w-full bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-sm py-2.5 rounded-xl font-semibold transition-all shadow-sm shadow-pink-600/20"
+                            className="w-full bg-primary hover:bg-primary/90 active:scale-[0.98] text-white text-sm py-2.5 rounded-xl font-semibold transition-all shadow-sm shadow-primary/20"
                           >
                             Agregar
                           </button>
@@ -1493,7 +1488,7 @@ function ProductosContent() {
                       )}
                       {(() => {
                         const d = getProductDiscount(producto, listPresLabel, qty);
-                        if (d > 0) return <span className="absolute top-2 left-2 bg-pink-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{d}% OFF</span>;
+                        if (d > 0) return <span className="absolute top-2 left-2 bg-primary text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{d}% OFF</span>;
                         const boxPres = pres?.find((p) => p.cantidad > 1);
                         if (!boxPres) return null;
                         const boxLabel = presLabel(boxPres);
@@ -1507,7 +1502,7 @@ function ProductosContent() {
                         {(producto.categorias?.nombre || producto.marcas?.nombre || producto.es_combo) && (
                           <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                             {producto.es_combo && (
-                              <span className="text-[10px] bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] bg-gradient-to-r from-primary/80 to-purple-500 text-white font-bold px-2 py-0.5 rounded-full">
                                 COMBO
                               </span>
                             )}
@@ -1524,7 +1519,7 @@ function ProductosContent() {
                           </div>
                         )}
                         <Link href={`/productos/${producto.id}`}>
-                          <h3 className="font-medium text-gray-800 line-clamp-2 text-sm leading-snug group-hover:text-pink-700 transition-colors">
+                          <h3 className="font-medium text-gray-800 line-clamp-2 text-sm leading-snug group-hover:text-primary/90 transition-colors">
                             {producto.nombre}
                           </h3>
                         </Link>
@@ -1533,11 +1528,11 @@ function ProductosContent() {
                           const dp = d > 0 ? Math.round(activePrice * (1 - d / 100)) : activePrice;
                           return d > 0 ? (
                             <div className="flex items-baseline gap-2 mt-1.5">
-                              <span className="text-lg font-bold text-gray-900">{formatPrice(dp)}</span>
-                              <span className="text-xs text-gray-400 line-through">{formatPrice(activePrice)}</span>
+                              <span className="text-lg font-bold text-gray-900">{formatCurrency(dp)}</span>
+                              <span className="text-xs text-gray-400 line-through">{formatCurrency(activePrice)}</span>
                             </div>
                           ) : (
-                            <p className="text-lg font-bold text-gray-900 mt-1.5">{formatPrice(activePrice)}</p>
+                            <p className="text-lg font-bold text-gray-900 mt-1.5">{formatCurrency(activePrice)}</p>
                           );
                         })()}
                         {pres && pres.length > 1 && (
@@ -1589,9 +1584,9 @@ function ProductosContent() {
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="bg-pink-600 hover:bg-pink-700 active:scale-[0.98] text-white text-sm py-2.5 px-5 rounded-xl font-semibold transition-all shadow-sm shadow-pink-600/20"
+                            className="bg-primary hover:bg-primary/90 active:scale-[0.98] text-white text-sm py-2.5 px-5 rounded-xl font-semibold transition-all shadow-sm shadow-primary/20"
                           >
-                            Agregar {formatPrice((() => { const d2 = getProductDiscount(producto, listPresLabel, qty); return d2 > 0 ? Math.round(activePrice * (1 - d2 / 100)) : activePrice; })() * qty)}
+                            Agregar {formatCurrency((() => { const d2 = getProductDiscount(producto, listPresLabel, qty); return d2 > 0 ? Math.round(activePrice * (1 - d2 / 100)) : activePrice; })() * qty)}
                           </button>
                         </div>
                       ) : (
@@ -1629,7 +1624,7 @@ function ProductosContent() {
                     onClick={() => updateParams({ page: String(p) })}
                     className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-medium transition-colors ${
                       page === p
-                        ? "bg-pink-600 text-white shadow-md"
+                        ? "bg-primary text-white shadow-md"
                         : "border border-gray-200 text-gray-600 hover:bg-gray-50"
                     }`}
                   >

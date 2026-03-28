@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { showAdminToast } from "@/components/admin-toast";
-import { todayARG, nowTimeARG, currentMonthPadded } from "@/lib/formatters";
+import { todayARG, nowTimeARG, currentMonthPadded, formatCurrency } from "@/lib/formatters";
 import type { Proveedor } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ import {
   Copy,
   MessageCircle,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logAudit } from "@/lib/audit";
 
@@ -103,14 +103,6 @@ interface CompraItem {
 }
 
 /* ───────── helpers ───────── */
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-  }).format(value);
-}
 
 function todayString() {
   return todayARG();

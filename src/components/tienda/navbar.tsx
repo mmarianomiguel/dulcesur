@@ -121,11 +121,11 @@ export default function TiendaNavbar() {
             Atención: {config?.dias_atencion ? `${config.dias_atencion[0]} a ${config.dias_atencion[config.dias_atencion.length - 1]}` : "Lunes a Sábados"} de {config?.horario_atencion_inicio?.slice(0, 5)?.replace(/^0/, "") || "8"} a {config?.horario_atencion_fin?.slice(0, 5)?.replace(/^0/, "") || "14"}hs
           </span>
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/cuenta" className="hover:text-pink-400 transition">
+            <Link href="/cuenta" className="hover:text-primary transition">
               Mi cuenta
             </Link>
             {config?.telefono && (
-              <a href={`tel:${config.telefono.replace(/[^+\d]/g, "")}`} className="flex items-center gap-1 hover:text-pink-400 transition" suppressHydrationWarning>
+              <a href={`tel:${config.telefono.replace(/[^+\d]/g, "")}`} className="flex items-center gap-1 hover:text-primary transition" suppressHydrationWarning>
                 <Phone className="h-3 w-3" />
                 <span suppressHydrationWarning>{config.telefono}</span>
               </a>
@@ -170,11 +170,11 @@ export default function TiendaNavbar() {
                 onChange={(e) => handleQueryChange(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                 placeholder="¿Qué estás buscando?"
-                className="h-10 w-full rounded-full border border-gray-300 pl-4 pr-12 text-sm text-gray-700 placeholder-gray-400 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                className="h-10 w-full rounded-full border border-gray-300 pl-4 pr-12 text-sm text-gray-700 placeholder-gray-400 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               <button
                 type="submit"
-                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-pink-600 text-white transition hover:bg-pink-700"
+                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-primary text-white transition hover:bg-primary/90"
                 aria-label="Buscar"
               >
                 <Search className="h-4 w-4" />
@@ -205,7 +205,7 @@ export default function TiendaNavbar() {
                   ))}
                   <button
                     type="submit"
-                    className="w-full px-4 py-2 text-xs text-pink-600 font-medium hover:bg-pink-50 transition border-t border-gray-100"
+                    className="w-full px-4 py-2 text-xs text-primary font-medium hover:bg-primary/5 transition border-t border-gray-100"
                   >
                     Ver todos los resultados →
                   </button>
@@ -219,7 +219,7 @@ export default function TiendaNavbar() {
             {/* Account (desktop) */}
             <Link
               href="/cuenta"
-              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-pink-600 lg:flex"
+              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-primary lg:flex"
             >
               <User className="h-5 w-5" />
               Mi cuenta
@@ -228,12 +228,12 @@ export default function TiendaNavbar() {
             {/* Cart */}
             <button
               onClick={openCart}
-              className="relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-gray-700 transition hover:bg-gray-100 hover:text-pink-600"
+              className="relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-gray-700 transition hover:bg-gray-100 hover:text-primary"
               aria-label="Carrito"
             >
               <ShoppingCart className="h-5 w-5" />
               {itemCount > 0 && (
-                <span key={itemCount} suppressHydrationWarning className="absolute -right-0.5 -top-0.5 flex h-5 w-5 animate-bounce items-center justify-center rounded-full bg-pink-600 text-[10px] font-bold text-white shadow-sm [animation-duration:0.6s] [animation-iteration-count:2]">
+                <span key={itemCount} suppressHydrationWarning className="absolute -right-0.5 -top-0.5 flex h-5 w-5 animate-bounce items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white shadow-sm [animation-duration:0.6s] [animation-iteration-count:2]">
                   {itemCount > 99 ? "99+" : itemCount}
                 </span>
               )}
@@ -241,7 +241,7 @@ export default function TiendaNavbar() {
                 Carrito
               </span>
               {subtotal > 0 && (
-                <span suppressHydrationWarning className="text-[10px] lg:text-xs font-semibold text-pink-600 ml-0.5">
+                <span suppressHydrationWarning className="text-[10px] lg:text-xs font-semibold text-primary ml-0.5">
                   {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(subtotal)}
                 </span>
               )}
@@ -259,15 +259,15 @@ export default function TiendaNavbar() {
               <Link
                 key={cat.id}
                 href={`/productos?categoria=${cat.id}`}
-                className="group relative flex-shrink-0 px-3 py-2.5 text-sm font-medium text-gray-600 transition hover:text-pink-600"
+                className="group relative flex-shrink-0 px-3 py-2.5 text-sm font-medium text-gray-600 transition hover:text-primary"
               >
                 {cat.nombre}
-                <span className="absolute bottom-0 left-0 h-0.5 w-full origin-left scale-x-0 bg-pink-600 transition-transform group-hover:scale-x-100" />
+                <span className="absolute bottom-0 left-0 h-0.5 w-full origin-left scale-x-0 bg-primary transition-transform group-hover:scale-x-100" />
               </Link>
             ))}
             <Link
               href="/productos"
-              className="flex flex-shrink-0 items-center gap-0.5 px-3 py-2.5 text-sm font-medium text-pink-600 transition hover:text-pink-700"
+              className="flex flex-shrink-0 items-center gap-0.5 px-3 py-2.5 text-sm font-medium text-primary transition hover:text-primary/90"
             >
               Ver todo
               <ChevronRight className="h-3.5 w-3.5" />
@@ -318,11 +318,11 @@ export default function TiendaNavbar() {
               value={mobileQuery}
               onChange={(e) => setMobileQuery(e.target.value)}
               placeholder="¿Qué estás buscando?"
-              className="h-10 w-full rounded-full border border-gray-300 pl-4 pr-10 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-pink-500"
+              className="h-10 w-full rounded-full border border-gray-300 pl-4 pr-10 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-primary"
             />
             <button
               type="submit"
-              className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-pink-600 text-white"
+              className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-primary text-white"
               aria-label="Buscar"
             >
               <Search className="h-4 w-4" />
@@ -340,7 +340,7 @@ export default function TiendaNavbar() {
               key={cat.id}
               href={`/productos?categoria=${cat.id}`}
               onClick={() => setMobileOpen(false)}
-              className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-pink-50 hover:text-pink-600"
+              className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-primary/5 hover:text-primary"
             >
               {cat.nombre}
               <ChevronRight className="h-4 w-4 text-gray-400" />
@@ -349,7 +349,7 @@ export default function TiendaNavbar() {
           <Link
             href="/productos"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-1 px-3 py-2.5 text-sm font-semibold text-pink-600"
+            className="flex items-center gap-1 px-3 py-2.5 text-sm font-semibold text-primary"
           >
             Ver todo
             <ChevronRight className="h-4 w-4" />
