@@ -145,7 +145,9 @@ export default function ComprasPage() {
   const [formaPago, setFormaPago] = useState("Transferencia");
   const [saving, setSaving] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
+  const confirmDialogRef = useRef<() => void>(() => {});
   const [saveError, setSaveError] = useState("");
+  const [pendingCompraId, setPendingCompraId] = useState<string | null>(null);
   const [confirmCuentaBancariaId, setConfirmCuentaBancariaId] = useState("");
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
 
@@ -454,7 +456,7 @@ export default function ComprasPage() {
       // Determine estado_pago based on forma de pago
       const estadoPago = formaPago === "Cuenta Corriente" ? "Pendiente" : "Pagada";
 
-      const pendingId = (window as any).__pendingCompraId as string | undefined;
+      const pendingId = pendingCompraId;
       let compra: { id: string };
 
       if (pendingId) {
@@ -480,7 +482,7 @@ export default function ComprasPage() {
         // Delete old items
         await supabase.from("compra_items").delete().eq("compra_id", pendingId);
         compra = { id: pendingId };
-        delete (window as any).__pendingCompraId;
+        setPendingCompraId(null);
       } else {
         // Create new compra
         const { data, error } = await supabase
@@ -726,7 +728,7 @@ export default function ComprasPage() {
     setNumeroCompra("");
     setFormaPago("Transferencia");
     setSaveError("");
-    delete (window as any).__pendingCompraId;
+    setPendingCompraId(null);
   };
 
   /* ── open detail ── */
@@ -770,7 +772,7 @@ export default function ComprasPage() {
       setObservacion(compra.observacion || "");
       setFecha(compra.fecha);
       // Store the pending compra ID so we can update instead of creating new
-      (window as any).__pendingCompraId = compra.id;
+      setPendingCompraId(compra.id);
       setMode("new");
       return;
     }
@@ -1237,20 +1239,26 @@ export default function ComprasPage() {
               Al confirmar se actualizara el stock y se registrara el movimiento de caja.
             </p>
             <div className="flex gap-2">
-              {(window as any).__pendingCompraId && (
+              {pendingCompraId && (
                 <Button variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => {
-                  setConfirmDialog({ open: true, title: "Eliminar compra pendiente", message: "¿Eliminar esta compra pendiente? No se ingresó mercadería.", onConfirm: async () => {
-                    const pid = (window as any).__pendingCompraId;
+                  const pid = pendingCompraId;
+                  const doDelete = async () => {
                     if (pid) {
-                      await supabase.from("compra_items").delete().eq("compra_id", pid);
-                      await supabase.from("compras").delete().eq("id", pid);
-                      delete (window as any).__pendingCompraId;
+                      const { error: e1 } = await supabase.from("compra_items").delete().eq("compra_id", pid);
+                      const { error: e2 } = await supabase.from("compras").delete().eq("id", pid);
+                      if (e1 || e2) {
+                        showAdminToast("Error al eliminar: " + (e1?.message || e2?.message), "error");
+                        return;
+                      }
+                      setPendingCompraId(null);
                     }
                     resetForm();
                     setMode("list");
                     fetchData();
                     showAdminToast("Compra pendiente eliminada", "success");
-                  }});
+                  };
+                  confirmDialogRef.current = doDelete;
+                  setConfirmDialog({ open: true, title: "Eliminar compra pendiente", message: "¿Eliminar esta compra pendiente? No se ingresó mercadería.", onConfirm: doDelete });
                 }}>
                   <Trash2 className="w-3.5 h-3.5" />
                   Eliminar
@@ -1465,11 +1473,7 @@ export default function ComprasPage() {
             )}
             {detailCompra.estado === "Pendiente" && (
               <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                setConfirmDialog({
-                  open: true,
-                  title: "Confirmar ingreso",
-                  message: "¿Confirmar ingreso al stock? Se actualizará stock, caja y precios.",
-                  onConfirm: async () => {
+                const doConfirm = async () => {
                 setSaving(true);
                 try {
                   // Execute stock, caja, price updates for pending purchase
@@ -1514,8 +1518,9 @@ export default function ComprasPage() {
                   }
                 } catch (err) { showAdminToast("Error al confirmar ingreso", "error"); }
                 setSaving(false);
-                  },
-                });
+                };
+                confirmDialogRef.current = doConfirm;
+                setConfirmDialog({ open: true, title: "Confirmar ingreso", message: "¿Confirmar ingreso al stock? Se actualizará stock, caja y precios.", onConfirm: doConfirm });
               }}>
                 <Package className="w-3.5 h-3.5" />
                 Confirmar ingreso al stock
@@ -2099,7 +2104,7 @@ export default function ComprasPage() {
           <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
-            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+            <Button variant="destructive" onClick={() => { confirmDialogRef.current(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
         </DialogContent>
       </Dialog>

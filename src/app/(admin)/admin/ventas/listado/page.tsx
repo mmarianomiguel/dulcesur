@@ -1539,135 +1539,142 @@ export default function ListadoVentasPage() {
 
       {/* Unified Filters */}
       <Card>
-        <CardContent className="pt-6 space-y-4 overflow-visible">
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
-              <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Buscar numero, cliente o email..." value={searchClient} onChange={(e) => setSearchClient(e.target.value)} className="pl-9 h-9" />
-              </div>
+        <CardContent className="pt-5 pb-4 space-y-3 overflow-visible">
+          {/* Row 1: Search + Date period */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Buscar número, cliente o email..." value={searchClient} onChange={(e) => setSearchClient(e.target.value)} className="pl-9 h-9" />
             </div>
-            <Button variant={showFilters ? "default" : "outline"} className={showFilters ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-blue-600 border-blue-600 hover:bg-blue-50"} onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="w-4 h-4 mr-2" />Filtros
-            </Button>
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+              {([["today", "Hoy"], ["week", "Esta semana"], ["month", "Este mes"], ["custom", "Personalizado"]] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setQuickPeriod(key)} className={`px-3 py-1.5 text-sm rounded-md transition-all ${quickPeriod === key ? "bg-white text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                  {key === "custom" && <Calendar className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />}
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Origin filter pills */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground font-semibold mr-1">ORIGEN:</span>
-            {([["todos", "Todos", ""], ["pos", "POS", "border-gray-400 text-gray-700 bg-gray-50"], ["online", "Online", "border-blue-400 text-blue-700 bg-blue-50"]] as const).map(([val, label, colors]) => (
-              <button
-                key={val}
-                onClick={() => setFilterSource(val)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                  filterSource === val
-                    ? (val === "todos" ? "bg-foreground text-background border-foreground" : colors + " ring-2 ring-offset-1 ring-current")
-                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                {val === "pos" && <Store className="w-3 h-3 inline mr-1" />}
-                {val === "online" && <Globe className="w-3 h-3 inline mr-1" />}
-                {label}
-              </button>
-            ))}
+          {/* Custom date controls */}
+          {quickPeriod === "custom" && (
+            <div className="flex items-center gap-2 flex-wrap pl-1">
+              <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as any)}>
+                <SelectTrigger className="w-28 h-8 text-sm">
+                  {filterMode === "day" ? "Día" : filterMode === "month" ? "Mes" : filterMode === "range" ? "Rango" : "Todos"}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day">Día</SelectItem>
+                  <SelectItem value="month">Mes</SelectItem>
+                  <SelectItem value="range">Rango</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                </SelectContent>
+              </Select>
+              {filterMode === "day" && (
+                <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-40 h-8 text-sm" />
+              )}
+              {filterMode === "month" && (
+                <>
+                  <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
+                    <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Mes" /></SelectTrigger>
+                    <SelectContent>
+                      {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                  <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-20 h-8 text-sm" />
+                </>
+              )}
+              {filterMode === "range" && (
+                <>
+                  <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-8 text-sm" />
+                  <span className="text-muted-foreground text-sm">a</span>
+                  <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-8 text-sm" />
+                </>
+              )}
+            </div>
+          )}
 
-            <span className="text-xs text-muted-foreground font-semibold ml-4 mr-1">ESTADO:</span>
-            {([["todos", "Todos"], ["pendiente", "Pendiente"], ["armado", "Armado"], ["entregado", "Entregado"], ["cerrada", "Completado"], ["cancelado", "Cancelado"]] as const).map(([val, label]) => {
-              const eb = estadoBadge[val];
-              return (
+          {/* Row 2: Filters - Origin, Estado, Cobro, Comprobante */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 border-t">
+            {/* Origin */}
+            <div className="flex items-center gap-1.5 pt-2">
+              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Origen</span>
+              {([["todos", "Todos", null], ["pos", "POS", Store], ["online", "Online", Globe]] as const).map(([val, label, Icon]) => (
+                <button
+                  key={val}
+                  onClick={() => setFilterSource(val as any)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                    filterSource === val
+                      ? "bg-foreground text-background shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {Icon && <Icon className="w-3 h-3 inline mr-1 -mt-0.5" />}
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Separator */}
+            <div className="hidden sm:block w-px h-6 bg-border mt-2" />
+
+            {/* Estado */}
+            <div className="flex items-center gap-1.5 pt-2">
+              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Estado</span>
+              {([["todos", "Todos"], ["pendiente", "Pendiente"], ["armado", "Armado"], ["entregado", "Entregado"], ["cerrada", "Completado"], ["cancelado", "Cancelado"]] as const).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setPoFilterEstado(val)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                     poFilterEstado === val
-                      ? (val === "todos" ? "bg-foreground text-background border-foreground" : (eb ? eb.bg + " " + eb.text + " ring-2 ring-offset-1 ring-current" : "bg-foreground text-background border-foreground"))
-                      : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                      ? "bg-foreground text-background shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
                   {label}
                 </button>
-              );
-            })}
-          </div>
-
-          {showFilters && (
-            <div className="border-t pt-4 space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Forma de cobro</Label>
-                  <Select value={filterPayment} onValueChange={(v) => setFilterPayment(v ?? "all")}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      <SelectItem value="Efectivo">Efectivo</SelectItem>
-                      <SelectItem value="Transferencia">Transferencia</SelectItem>
-                      <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
-                      <SelectItem value="Mixto">Mixto</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Tipo comprobante</Label>
-                  <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="Remito X">Remito X</SelectItem>
-                      <SelectItem value="Pedido Web">Pedido Web</SelectItem>
-                      <SelectItem value="Nota de Crédito B">Nota de Crédito B</SelectItem>
-                      <SelectItem value="Nota de Crédito C">Nota de Crédito C</SelectItem>
-                      <SelectItem value="Nota de Débito B">Nota de Débito B</SelectItem>
-                      <SelectItem value="Nota de Débito C">Nota de Débito C</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 rounded-lg border p-1">
-                {([["today", "Hoy"], ["week", "Esta semana"], ["month", "Este mes"], ["custom", "Personalizado"]] as const).map(([key, label]) => (
-                  <button key={key} onClick={() => setQuickPeriod(key)} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${quickPeriod === key ? "bg-foreground text-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {quickPeriod === "custom" && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as any)}>
-                    <SelectTrigger className="w-28 h-9">
-                      {filterMode === "day" ? "Día" : filterMode === "month" ? "Mes" : filterMode === "range" ? "Rango" : "Todos"}
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="day">Día</SelectItem>
-                      <SelectItem value="month">Mes</SelectItem>
-                      <SelectItem value="range">Rango</SelectItem>
-                      <SelectItem value="all">Todos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {filterMode === "day" && (
-                    <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-40 h-9" />
-                  )}
-                  {filterMode === "month" && (
-                    <>
-                      <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
-                        <SelectTrigger className="w-32 h-9"><SelectValue placeholder="Mes" /></SelectTrigger>
-                        <SelectContent>
-                          {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                      <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-20 h-9" />
-                    </>
-                  )}
-                  {filterMode === "range" && (
-                    <>
-                      <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-9" />
-                      <span className="text-muted-foreground text-sm">a</span>
-                      <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-9" />
-                    </>
-                  )}
-                </div>
-              )}
+              ))}
             </div>
-          )}
+
+            {/* Separator */}
+            <div className="hidden sm:block w-px h-6 bg-border mt-2" />
+
+            {/* Forma de cobro */}
+            <div className="flex items-center gap-1.5 pt-2">
+              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Cobro</span>
+              <Select value={filterPayment} onValueChange={(v) => setFilterPayment(v ?? "all")}>
+                <SelectTrigger className="h-7 w-auto min-w-[90px] text-xs border-dashed">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="Efectivo">Efectivo</SelectItem>
+                  <SelectItem value="Transferencia">Transferencia</SelectItem>
+                  <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
+                  <SelectItem value="Mixto">Mixto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tipo comprobante */}
+            <div className="flex items-center gap-1.5 pt-2">
+              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Tipo</span>
+              <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
+                <SelectTrigger className="h-7 w-auto min-w-[90px] text-xs border-dashed">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="Remito X">Remito X</SelectItem>
+                  <SelectItem value="Pedido Web">Pedido Web</SelectItem>
+                  <SelectItem value="Nota de Crédito B">NC B</SelectItem>
+                  <SelectItem value="Nota de Crédito C">NC C</SelectItem>
+                  <SelectItem value="Nota de Débito B">ND B</SelectItem>
+                  <SelectItem value="Nota de Débito C">ND C</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
