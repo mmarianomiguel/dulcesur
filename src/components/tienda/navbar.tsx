@@ -23,7 +23,7 @@ interface Categoria {
   nombre: string;
 }
 
-const FALLBACK_LOGO = "/logo-dulcesur.jpg";
+const FALLBACK_LOGO = "https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png";
 
 export default function TiendaNavbar() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);

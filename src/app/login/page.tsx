@@ -41,7 +41,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const logoSrc = wl.logo_url || "/logo-dulcesur.jpg";
+  const logoSrc = wl.logo_url || "https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png";
   const appName = wl.system_name || "DulceSur";
   const appSubtitle = wl.system_subtitle || "Gestion Comercial";
 

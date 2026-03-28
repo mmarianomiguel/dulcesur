@@ -213,7 +213,7 @@ export default function ListaPreciosPage() {
         setLogoBase64(savedLogo);
       } else {
         // Auto-load default logo
-        fetch("https://res.cloudinary.com/dss3lnovd/image/upload/v1774505786/dulcesur/logo-dulcesur-negro.jpg")
+        fetch("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png")
           .then((r) => r.blob())
           .then((blob) => {
             const reader = new FileReader();

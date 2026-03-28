@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import {
   Truck, Shield, CreditCard, Headphones, Instagram, Facebook, Phone, Mail,
@@ -89,11 +88,7 @@ export default function TiendaFooter() {
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-12">
             {/* Brand */}
             <div className="lg:col-span-3">
-              {config.logo_url ? (
-                <Image src={config.logo_url} alt={tiendaNombre} width={130} height={44} className="mb-4 h-10 w-auto" />
-              ) : (
-                <h3 className="mb-4 text-lg font-bold text-white">{tiendaNombre}</h3>
-              )}
+              <img src={config.logo_url || "https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png"} alt={tiendaNombre} className="mb-4 h-10 w-auto" />
               <p className="mb-5 text-sm leading-relaxed text-gray-400">{config.descripcion}</p>
               <div className="flex items-center gap-3">
                 {config.instagram_url && (

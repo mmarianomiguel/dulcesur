@@ -25,7 +25,7 @@ export default function CuentaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [orderCount, setOrderCount] = useState(0);
-  const [logoUrl, setLogoUrl] = useState<string>("/logo-dulcesur.jpg");
+  const [logoUrl, setLogoUrl] = useState<string>("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png");
   const [logoError, setLogoError] = useState(false);
 
   // Login fields
@@ -168,8 +168,8 @@ export default function CuentaPage() {
                   alt="Logo"
                   className="h-16 object-contain"
                   onError={() => {
-                    if (logoUrl !== "/logo-dulcesur.jpg") {
-                      setLogoUrl("/logo-dulcesur.jpg");
+                    if (logoUrl !== "https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png") {
+                      setLogoUrl("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png");
                     } else {
                       setLogoError(true);
                     }
