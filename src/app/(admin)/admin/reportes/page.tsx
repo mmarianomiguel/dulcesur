@@ -25,7 +25,7 @@ function fc(v: number) {
 interface VentaRow { id: string; fecha: string; total: number; forma_pago: string; tipo_comprobante: string; created_at: string; cliente_id: string | null; origen: string | null; clientes: { nombre: string } | null; }
 interface CompraRow { id: string; fecha: string; total: number; forma_pago: string; proveedor_id: string | null; observacion: string | null; proveedores: { nombre: string } | null; }
 interface CompraItemRow { compra_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; }
-interface VentaItemDetail { venta_id: string; producto_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidades_por_presentacion: number; productos: { costo: number; nombre: string } | null; }
+interface VentaItemDetail { venta_id: string; producto_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidades_por_presentacion: number; presentacion?: string; descuento?: number; productos: { costo: number; nombre: string; categoria_id: string | null; subcategoria_id: string | null } | null; }
 interface ClienteOption { id: string; nombre: string; }
 
 export default function ReportesPage() {
@@ -148,7 +148,7 @@ export default function ReportesPage() {
       const [{ data: items }, { data: movs }] = await Promise.all([
         supabase
           .from("venta_items")
-          .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, productos(costo, nombre)")
+          .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, productos(costo, nombre, categoria_id, subcategoria_id)")
           .in("venta_id", ids),
         supabase
           .from("caja_movimientos")
@@ -316,6 +316,61 @@ export default function ReportesPage() {
     return map;
   }, [compraItems]);
 
+  // --- Category breakdown ---
+  const [catFilter, setCatFilter] = useState("");
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+
+  interface CatProductRow { producto_id: string; nombre: string; unidades: number; venta: number; costo: number; ganancia: number; }
+  interface CatRow { categoria_id: string; nombre: string; unidades: number; venta: number; costo: number; ganancia: number; margen: number; productos: CatProductRow[]; }
+
+  const catBreakdown = useMemo(() => {
+    const catMap: Record<string, { nombre: string; productos: Record<string, CatProductRow> }> = {};
+    const catNames: Record<string, string> = {};
+    for (const c of categorias) catNames[c.id] = c.nombre;
+
+    for (const item of ventaItems as any[]) {
+      const catId = item.productos?.categoria_id || "__sin_categoria";
+      const catName = catId === "__sin_categoria" ? "Sin categoría" : (catNames[catId] || "Sin categoría");
+      if (!catMap[catId]) catMap[catId] = { nombre: catName, productos: {} };
+
+      const prodId = item.producto_id || item.descripcion;
+      const prodName = item.productos?.nombre || item.descripcion || "Producto";
+      if (!catMap[catId].productos[prodId]) catMap[catId].productos[prodId] = { producto_id: prodId, nombre: prodName, unidades: 0, venta: 0, costo: 0, ganancia: 0 };
+
+      const costoU = item.productos?.costo || 0;
+      const unidadesPres = getUnidadesPres(item);
+      const presCosts = presCostMap[item.producto_id];
+      const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
+      const descPct = Number(item.descuento) || 0;
+      const precioVenta = item.precio_unitario * (1 - descPct / 100);
+      const cantidad = Number(item.cantidad) || 0;
+
+      const row = catMap[catId].productos[prodId];
+      row.unidades += cantidad * unidadesPres;
+      row.venta += precioVenta * cantidad;
+      row.costo += costoPres * cantidad;
+      row.ganancia += (precioVenta - costoPres) * cantidad;
+    }
+
+    const result: CatRow[] = Object.entries(catMap).map(([catId, { nombre, productos }]) => {
+      const prods = Object.values(productos).sort((a, b) => b.venta - a.venta);
+      const totalVenta = prods.reduce((a, p) => a + p.venta, 0);
+      const totalCosto = prods.reduce((a, p) => a + p.costo, 0);
+      const totalGanancia = prods.reduce((a, p) => a + p.ganancia, 0);
+      const totalUnidades = prods.reduce((a, p) => a + p.unidades, 0);
+      return { categoria_id: catId, nombre, unidades: totalUnidades, venta: totalVenta, costo: totalCosto, ganancia: totalGanancia, margen: totalVenta > 0 ? (totalGanancia / totalVenta) * 100 : 0, productos: prods };
+    }).sort((a, b) => b.venta - a.venta);
+
+    return catFilter ? result.filter((c) => c.categoria_id === catFilter) : result;
+  }, [ventaItems, categorias, presCostMap, catFilter]);
+
+  const catTotals = useMemo(() => ({
+    venta: catBreakdown.reduce((a, c) => a + c.venta, 0),
+    costo: catBreakdown.reduce((a, c) => a + c.costo, 0),
+    ganancia: catBreakdown.reduce((a, c) => a + c.ganancia, 0),
+    unidades: catBreakdown.reduce((a, c) => a + c.unidades, 0),
+  }), [catBreakdown]);
+
   const toggleExpandCompra = (id: string) => {
     setExpandedCompras((prev) => {
       const next = new Set(prev);
@@ -451,6 +506,7 @@ export default function ReportesPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="ventas">Ventas</TabsTrigger>
+          <TabsTrigger value="categorias">Por Categoría</TabsTrigger>
           <TabsTrigger value="compras">Compras</TabsTrigger>
           <TabsTrigger value="stock">Stock Valorizado</TabsTrigger>
           <TabsTrigger value="pagos">Por Forma de Pago</TabsTrigger>
@@ -633,6 +689,120 @@ export default function ReportesPage() {
                   );
                 })}
               </tbody>
+            </table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="categorias" className="mt-4 space-y-4">
+          {/* Filter */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Categoría</Label>
+              <Select value={catFilter} onValueChange={(v) => setCatFilter(v === "todas" ? "" : (v ?? ""))}>
+                <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas las categorías</SelectItem>
+                  {categorias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                  <SelectItem value="__sin_categoria">Sin categoría</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="ml-auto flex gap-4 text-sm pt-5">
+              <span>{catBreakdown.length} categoría{catBreakdown.length !== 1 ? "s" : ""}</span>
+              <span className="text-muted-foreground">{Math.round(catTotals.unidades)} unidades vendidas</span>
+            </div>
+          </div>
+
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card><CardContent className="pt-5 pb-4">
+              <p className="text-xs text-muted-foreground">Venta total</p>
+              <p className="text-lg font-bold">{fc(catTotals.venta)}</p>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <p className="text-xs text-muted-foreground">Costo total</p>
+              <p className="text-lg font-bold">{fc(catTotals.costo)}</p>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <p className="text-xs text-muted-foreground">Ganancia</p>
+              <p className="text-lg font-bold text-green-600">{fc(catTotals.ganancia)}</p>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <p className="text-xs text-muted-foreground">Margen promedio</p>
+              <p className="text-lg font-bold">{catTotals.venta > 0 ? ((catTotals.ganancia / catTotals.venta) * 100).toFixed(1) : "0"}%</p>
+            </CardContent></Card>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left p-3 font-medium w-8"></th>
+                  <th className="text-left p-3 font-medium">Categoría</th>
+                  <th className="text-right p-3 font-medium">Unidades</th>
+                  <th className="text-right p-3 font-medium">Venta</th>
+                  <th className="text-right p-3 font-medium">Costo</th>
+                  <th className="text-right p-3 font-medium">Ganancia</th>
+                  <th className="text-right p-3 font-medium">Margen</th>
+                  <th className="text-right p-3 font-medium">% del total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {catBreakdown.map((cat) => {
+                  const isExpanded = expandedCats.has(cat.categoria_id);
+                  return (
+                    <React.Fragment key={cat.categoria_id}>
+                      <tr
+                        className="border-t hover:bg-muted/30 cursor-pointer transition-colors"
+                        onClick={() => setExpandedCats((prev) => { const next = new Set(prev); if (next.has(cat.categoria_id)) next.delete(cat.categoria_id); else next.add(cat.categoria_id); return next; })}
+                      >
+                        <td className="p-3 text-muted-foreground">{isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</td>
+                        <td className="p-3 font-medium">{cat.nombre}</td>
+                        <td className="p-3 text-right tabular-nums">{Math.round(cat.unidades)}</td>
+                        <td className="p-3 text-right tabular-nums">{fc(cat.venta)}</td>
+                        <td className="p-3 text-right tabular-nums text-muted-foreground">{fc(cat.costo)}</td>
+                        <td className={`p-3 text-right tabular-nums font-medium ${cat.ganancia >= 0 ? "text-green-600" : "text-red-600"}`}>{fc(cat.ganancia)}</td>
+                        <td className="p-3 text-right tabular-nums">
+                          <Badge variant={cat.margen >= 30 ? "default" : cat.margen >= 15 ? "secondary" : "destructive"} className="text-xs">
+                            {cat.margen.toFixed(1)}%
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right tabular-nums text-muted-foreground">{catTotals.venta > 0 ? ((cat.venta / catTotals.venta) * 100).toFixed(1) : "0"}%</td>
+                      </tr>
+                      {isExpanded && cat.productos.map((prod, idx) => (
+                        <tr key={prod.producto_id + idx} className="bg-muted/20 border-t border-dashed">
+                          <td className="p-2"></td>
+                          <td className="p-2 pl-8 text-muted-foreground text-xs">{prod.nombre}</td>
+                          <td className="p-2 text-right text-xs tabular-nums">{Math.round(prod.unidades)}</td>
+                          <td className="p-2 text-right text-xs tabular-nums">{fc(prod.venta)}</td>
+                          <td className="p-2 text-right text-xs tabular-nums text-muted-foreground">{fc(prod.costo)}</td>
+                          <td className={`p-2 text-right text-xs tabular-nums ${prod.ganancia >= 0 ? "text-green-600" : "text-red-600"}`}>{fc(prod.ganancia)}</td>
+                          <td className="p-2 text-right text-xs tabular-nums">{prod.venta > 0 ? ((prod.ganancia / prod.venta) * 100).toFixed(1) : "0"}%</td>
+                          <td className="p-2 text-right text-xs tabular-nums text-muted-foreground">{cat.venta > 0 ? ((prod.venta / cat.venta) * 100).toFixed(1) : "0"}%</td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+                {catBreakdown.length === 0 && (
+                  <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">No hay ventas en el período seleccionado</td></tr>
+                )}
+              </tbody>
+              {catBreakdown.length > 0 && (
+                <tfoot className="bg-muted/50 font-medium border-t-2">
+                  <tr>
+                    <td className="p-3"></td>
+                    <td className="p-3">Total</td>
+                    <td className="p-3 text-right tabular-nums">{Math.round(catTotals.unidades)}</td>
+                    <td className="p-3 text-right tabular-nums">{fc(catTotals.venta)}</td>
+                    <td className="p-3 text-right tabular-nums">{fc(catTotals.costo)}</td>
+                    <td className="p-3 text-right tabular-nums text-green-600">{fc(catTotals.ganancia)}</td>
+                    <td className="p-3 text-right tabular-nums">{catTotals.venta > 0 ? ((catTotals.ganancia / catTotals.venta) * 100).toFixed(1) : "0"}%</td>
+                    <td className="p-3 text-right tabular-nums">100%</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </TabsContent>
