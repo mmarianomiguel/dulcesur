@@ -32,6 +32,7 @@ import {
   Eye,
   CreditCard,
   Download,
+  Building2,
 } from "lucide-react";
 
 interface ClienteDeuda {
@@ -78,6 +79,8 @@ export default function CobranzasPage() {
   const [cobroMonto, setCobroMonto] = useState(0);
   const [cobroFormaPago, setCobroFormaPago] = useState("Efectivo");
   const [cobroObs, setCobroObs] = useState("");
+  const [cobroCuentaBancariaId, setCobroCuentaBancariaId] = useState("");
+  const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [cobroMovimientos, setCobroMovimientos] = useState<CuentaMovimiento[]>([]);
   const [loadingCobro, setLoadingCobro] = useState(false);
@@ -101,7 +104,10 @@ export default function CobranzasPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchClients(); }, [fetchClients]);
+  useEffect(() => {
+    fetchClients();
+    supabase.from("cuentas_bancarias").select("id, nombre, alias, tipo_cuenta").eq("activo", true).order("nombre").then(({ data }) => setCuentasBancarias(data || []));
+  }, [fetchClients]);
 
   const totalPendiente = clients.reduce((a, c) => a + c.saldo, 0);
 
@@ -127,8 +133,9 @@ export default function CobranzasPage() {
 
   const openCobro = async (client: ClienteDeuda) => {
     setCobroClient(client);
-    setCobroMonto(client.saldo);
+    setCobroMonto(client.saldo > 0 ? client.saldo : 0);
     setCobroFormaPago("Efectivo");
+    setCobroCuentaBancariaId("");
     setCobroObs("");
     setCobroMovimientos([]);
     setCobroOpen(true);
@@ -180,13 +187,15 @@ export default function CobranzasPage() {
       .eq("id", cobroClient.id);
 
     // Register caja movement
+    const cuentaSeleccionada = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
     await supabase.from("caja_movimientos").insert({
       fecha: hoy,
       hora: nowTimeARG(),
       tipo: "ingreso",
-      descripcion: `Cobro a ${cobroClient.nombre}`,
+      descripcion: `Cobro CC — ${cobroClient.nombre}${cobroFormaPago === "Transferencia" && cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
       metodo_pago: cobroFormaPago,
       monto: cobroMonto,
+      ...(cobroFormaPago === "Transferencia" && cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
     });
 
     setSaving(false);
@@ -369,72 +378,96 @@ export default function CobranzasPage() {
 
       {/* Cobro Dialog */}
       <Dialog open={cobroOpen} onOpenChange={setCobroOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Registrar cobro — {cobroClient?.nombre}</DialogTitle>
+            <DialogTitle className="text-lg">Registrar cobro</DialogTitle>
           </DialogHeader>
-          <div className="space-y-5 mt-2">
-            {/* Saldo claro */}
-            {cobroClient && cobroClient.saldo > 0 && (
-              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-orange-800">Deuda pendiente</p>
-                  <p className="text-xs text-orange-600 mt-0.5">El cliente debe abonar este monto</p>
-                </div>
-                <p className="text-2xl font-bold text-orange-600">{formatCurrency(cobroClient.saldo)}</p>
+          <div className="space-y-4 mt-1">
+            {/* Client + debt header */}
+            <div className="rounded-lg bg-muted/50 p-3 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-sm">{cobroClient?.nombre}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {cobroClient && cobroClient.saldo > 0 ? "Deuda pendiente" : cobroClient && cobroClient.saldo < 0 ? "Saldo a favor" : "Sin deuda"}
+                </p>
               </div>
-            )}
-            {cobroClient && cobroClient.saldo < 0 && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-emerald-800">Saldo a favor</p>
-                  <p className="text-xs text-emerald-600 mt-0.5">El cliente tiene crédito disponible</p>
-                </div>
-                <p className="text-2xl font-bold text-emerald-600">{formatCurrency(Math.abs(cobroClient.saldo))}</p>
-              </div>
-            )}
-            {cobroClient && cobroClient.saldo === 0 && (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
-                <p className="text-sm font-medium text-gray-600">Este cliente no tiene deuda pendiente</p>
-              </div>
-            )}
+              <p className={`text-xl font-bold ${cobroClient && cobroClient.saldo > 0 ? "text-orange-500" : cobroClient && cobroClient.saldo < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                {cobroClient ? formatCurrency(Math.abs(cobroClient.saldo)) : "$0"}
+              </p>
+            </div>
 
-            {/* Monto */}
-            <div className="space-y-2">
-              <Label>Monto a cobrar</Label>
-              <Input type="number" value={cobroMonto} onChange={(e) => setCobroMonto(Number(e.target.value))} />
+            {/* Amount */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Monto a cobrar</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                value={cobroMonto ? cobroMonto.toLocaleString("es-AR") : ""}
+                onChange={(e) => { const v = e.target.value.replace(/\./g, "").replace(/[^0-9]/g, ""); setCobroMonto(Number(v) || 0); }}
+                className="text-lg font-semibold h-11"
+              />
               {cobroClient && cobroMonto > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Saldo después del cobro: <span className="font-semibold">{formatCurrency(cobroClient.saldo - cobroMonto)}</span>
-                  {cobroClient.saldo - cobroMonto < 0 && <span className="text-emerald-600 ml-1">(queda a favor)</span>}
+                  Saldo después: <span className={`font-semibold ${cobroClient.saldo - cobroMonto <= 0 ? "text-emerald-600" : ""}`}>{formatCurrency(cobroClient.saldo - cobroMonto)}</span>
+                  {cobroClient.saldo - cobroMonto < 0 && <span className="text-emerald-600 ml-1">(a favor)</span>}
                 </p>
               )}
             </div>
 
-            {/* Forma de pago */}
-            <div className="space-y-2">
-              <Label>Forma de pago</Label>
-              <Select value={cobroFormaPago} onValueChange={(v) => setCobroFormaPago(v || "Efectivo")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Efectivo">Efectivo</SelectItem>
-                  <SelectItem value="Transferencia">Transferencia</SelectItem>
-                  <SelectItem value="Tarjeta">Tarjeta</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Payment method */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Método de pago</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(["Efectivo", "Transferencia"] as const).map((m) => (
+                  <button key={m} type="button" onClick={() => { setCobroFormaPago(m); if (m === "Efectivo") setCobroCuentaBancariaId(""); }}
+                    className={`flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all ${cobroFormaPago === m ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/30 text-muted-foreground"}`}>
+                    {m === "Efectivo" ? <DollarSign className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                    {m}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Observación */}
-            <div className="space-y-2">
-              <Label>Observación</Label>
-              <Input value={cobroObs} onChange={(e) => setCobroObs(e.target.value)} placeholder="Opcional" />
+            {/* Bank account selector */}
+            {cobroFormaPago === "Transferencia" && cuentasBancarias.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Cuenta destino</Label>
+                <div className="grid gap-1.5">
+                  {cuentasBancarias.map((cb) => (
+                    <button
+                      key={cb.id}
+                      type="button"
+                      onClick={() => setCobroCuentaBancariaId(cb.id)}
+                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-all text-left ${cobroCuentaBancariaId === cb.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary/30"}`}
+                    >
+                      <Building2 className={`w-4 h-4 shrink-0 ${cobroCuentaBancariaId === cb.id ? "text-primary" : "text-muted-foreground"}`} />
+                      <div>
+                        <p className="font-medium">{cb.nombre}</p>
+                        {cb.alias && <p className="text-xs text-muted-foreground">{cb.alias}</p>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Observation */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Observación <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+              <Input value={cobroObs} onChange={(e) => setCobroObs(e.target.value)} placeholder="Detalle del cobro..." />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setCobroOpen(false)}>Cancelar</Button>
-              <Button onClick={handleCobro} disabled={saving || cobroMonto <= 0}>
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Registrar cobro
+            {/* Actions */}
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setCobroOpen(false)}>Cancelar</Button>
+              <Button
+                className="flex-1"
+                onClick={handleCobro}
+                disabled={saving || cobroMonto <= 0 || (cobroFormaPago === "Transferencia" && cuentasBancarias.length > 0 && !cobroCuentaBancariaId)}
+              >
+                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <DollarSign className="w-4 h-4 mr-2" />}
+                Cobrar {cobroMonto > 0 ? formatCurrency(cobroMonto) : ""}
               </Button>
             </div>
           </div>
