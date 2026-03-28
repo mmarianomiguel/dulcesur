@@ -85,20 +85,13 @@ async function getTurnoAbierto(): Promise<TurnoCaja | null> {
   return data && data.length > 0 ? (data[0] as TurnoCaja) : null;
 }
 
-async function getNextTurnoNumero(): Promise<number> {
-  const { data } = await supabase
-    .from("turnos_caja")
-    .select("numero")
-    .order("numero", { ascending: false })
-    .limit(1);
-  return data && data.length > 0 ? (data[0] as { numero: number }).numero + 1 : 1;
-}
-
 async function abrirTurno(efectivoInicial: number, operador: string): Promise<TurnoCaja> {
   // Verify no open turno exists (prevents concurrent opens from different browsers)
   const existing = await getTurnoAbierto();
   if (existing) throw new Error("Ya existe un turno abierto. Cerralo antes de abrir uno nuevo.");
-  const numero = await getNextTurnoNumero();
+  // Get next number atomically by reading max and letting unique constraint handle collisions
+  const { data: maxRow } = await supabase.from("turnos_caja").select("numero").order("numero", { ascending: false }).limit(1);
+  const numero = maxRow && maxRow.length > 0 ? (maxRow[0] as { numero: number }).numero + 1 : 1;
   const { data, error } = await supabase
     .from("turnos_caja")
     .insert({
@@ -141,8 +134,17 @@ async function cerrarTurno(
 // ─── Component ───
 
 export default function CajaPage() {
-  const today = todayARG();
+  const [today, setToday] = useState(todayARG());
   const currentUser = useCurrentUser();
+
+  // Keep today fresh if the page stays open past midnight
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = todayARG();
+      if (now !== today) setToday(now);
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [today]);
 
   // ─── Turno state ───
   const [turno, setTurno] = useState<TurnoCaja | null>(null);
@@ -382,9 +384,14 @@ export default function CajaPage() {
         ? new Date(`${t.fecha_cierre}T${t.hora_cierre}-03:00`)
         : null;
 
+    // If turno crosses midnight, also fetch next day's data
+    const fechaCierre = t.fecha_cierre || fecha;
+    const fechas = [fecha];
+    if (fechaCierre !== fecha) fechas.push(fechaCierre);
+
     const [{ data: movs }, { data: vts }] = await Promise.all([
-      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("fecha", fecha).order("hora", { ascending: false }),
-      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").eq("fecha", fecha).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
+      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").in("fecha", fechas).order("hora", { ascending: false }),
+      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").in("fecha", fechas).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
     ]);
 
     // Filter by turno time range using Date comparison
@@ -619,9 +626,13 @@ export default function CajaPage() {
     const ventasTransferencia = movPorMetodo("Transferencia")
       + ventasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
       + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => {
+        const tr = (v as any).monto_transferencia || 0;
+        if (tr > 0) return a + tr;
+        // Fallback: total - efectivo - cc (for older records without monto_transferencia)
         const ef = (v as any).monto_efectivo || 0;
         const cc = (v as any).monto_cuenta_corriente || 0;
-        return a + (v.total - ef - cc);  // Everything not cash or CC goes to transfer
+        const rest = v.total - ef - cc;
+        return a + (rest > 0 ? rest : 0);
       }, 0);
 
     // Group transfers by bank account
@@ -670,11 +681,11 @@ export default function CajaPage() {
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const notasCreditoEgresos = movements
-      .filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito")
+      .filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito" && m.metodo_pago === "Efectivo")
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const anulaciones = movements
-      .filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion")
+      .filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion" && m.metodo_pago === "Efectivo")
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const retiros = movements
@@ -1079,7 +1090,7 @@ export default function CajaPage() {
                               <Badge variant="secondary" className="text-xs font-normal">
                                 {v.forma_pago}
                               </Badge>
-                              {(v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") && !(v as any).cuenta_transferencia_alias && (
+                              {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && !(v as any).cuenta_transferencia_alias && (
                                 <span className="ml-1 inline-flex items-center gap-0.5 text-[9px] text-amber-600 font-medium bg-amber-50 border border-amber-200 px-1 py-0 rounded">
                                   <AlertTriangle className="w-2.5 h-2.5" />
                                   Sin cuenta
