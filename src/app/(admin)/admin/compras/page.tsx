@@ -390,14 +390,68 @@ export default function ComprasPage() {
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [searchHighlight, setSearchHighlight] = useState(0);
 
+  // Keyboard navigation for items table
+  const [selectedItemIdx, setSelectedItemIdx] = useState<number | null>(null);
+  const itemsTableRef = useRef<HTMLTableElement>(null);
+
   useEffect(() => {
     if (mode !== "new") return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F1") { e.preventDefault(); { setProductSearchOpen(true); searchProducts(""); setSearchHighlight(0); }; }
+      if (e.key === "F1") { e.preventDefault(); setProductSearchOpen(true); searchProducts(""); setSearchHighlight(0); return; }
+
+      // Don't intercept if typing in an input/textarea/select
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (productSearchOpen) return;
+
+      const len = items.length;
+      if (len === 0) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedItemIdx((prev) => prev === null ? 0 : Math.min(prev + 1, len - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedItemIdx((prev) => prev === null ? 0 : Math.max(prev - 1, 0));
+      } else if (e.key === "ArrowRight" || e.key === "+") {
+        e.preventDefault();
+        if (selectedItemIdx === null || selectedItemIdx >= len) return;
+        setItems((prev) => prev.map((it, i) => {
+          if (i !== selectedItemIdx) return it;
+          if (it.unidades_por_caja > 0) {
+            const newCajas = it.cajas + 1;
+            const newTotal = newCajas * it.unidades_por_caja + it.sueltas;
+            return { ...it, cajas: newCajas, cantidad: newTotal, subtotal: it.costo_unitario * newTotal };
+          }
+          const newQty = it.cantidad + 1;
+          return { ...it, cantidad: newQty, sueltas: newQty, subtotal: it.costo_unitario * newQty };
+        }));
+      } else if (e.key === "ArrowLeft" || e.key === "-") {
+        e.preventDefault();
+        if (selectedItemIdx === null || selectedItemIdx >= len) return;
+        setItems((prev) => prev.map((it, i) => {
+          if (i !== selectedItemIdx) return it;
+          if (it.unidades_por_caja > 0) {
+            const newCajas = Math.max(0, it.cajas - 1);
+            const newTotal = newCajas * it.unidades_por_caja + it.sueltas;
+            return { ...it, cajas: newCajas, cantidad: newTotal, subtotal: it.costo_unitario * newTotal };
+          }
+          const newQty = Math.max(1, it.cantidad - 1);
+          return { ...it, cantidad: newQty, sueltas: newQty, subtotal: it.costo_unitario * newQty };
+        }));
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        if (selectedItemIdx !== null && selectedItemIdx < len) {
+          removeItem(selectedItemIdx);
+          setSelectedItemIdx((prev) => prev !== null && prev >= len - 1 ? Math.max(0, len - 2) : prev);
+        }
+      } else if (e.key === "Escape") {
+        setSelectedItemIdx(null);
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [mode]);
+  }, [mode, items.length, selectedItemIdx, productSearchOpen]);
 
   // Registrar en caja state
   const [registrarEnCaja, setRegistrarEnCaja] = useState(true);
@@ -557,6 +611,7 @@ export default function ComprasPage() {
     setProductSearch("");
     setProductResults([]);
     setProductSearchOpen(false);
+    setSelectedItemIdx(items.length); // select the newly added item (it will be at the end)
   };
 
   // Load presentaciones when search results change
@@ -1440,8 +1495,13 @@ export default function ComprasPage() {
                   <tbody>
                     {items.map((item, idx) => {
                       const costoChanged = item.costo_unitario !== item.costo_original;
+                      const isSelected = selectedItemIdx === idx;
                       return (
-                        <tr key={item.producto_id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <tr
+                          key={item.producto_id}
+                          className={`border-b last:border-0 transition-colors cursor-pointer ${isSelected ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted/50"}`}
+                          onClick={() => setSelectedItemIdx(idx)}
+                        >
                           <td className="py-2 px-2">
                             <div className="w-8 h-8 rounded bg-muted flex items-center justify-center overflow-hidden">
                               {item.imagen_url ? (
@@ -1563,6 +1623,13 @@ export default function ComprasPage() {
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex gap-6 text-xs text-muted-foreground">
                       <span>{items.length} producto(s) | {totalUnidades} unidad(es)</span>
+                      {items.length > 0 && (
+                        <span className="hidden sm:inline text-muted-foreground/60">
+                          <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">↑↓</kbd> navegar
+                          <kbd className="ml-1.5 px-1 py-0.5 bg-muted rounded text-[10px]">←→</kbd> cantidad
+                          <kbd className="ml-1.5 px-1 py-0.5 bg-muted rounded text-[10px]">Del</kbd> eliminar
+                        </span>
+                      )}
                       {items.filter((i) => i.costo_unitario !== i.costo_original).length > 0 && (
                         <span className="text-amber-600 dark:text-amber-400">
                           {items.filter((i) => i.costo_unitario !== i.costo_original).length} con costo modificado
