@@ -8,8 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { VentaDetailDialog } from "@/components/venta-detail-dialog";
-import type { VentaDetailData, VentaDetailItem } from "@/components/venta-detail-dialog";
+import { useRouter } from "next/navigation";
 import {
   DollarSign,
   TrendingUp,
@@ -34,6 +33,11 @@ import {
   Shuffle,
   BookOpen,
   Landmark,
+  PrinterCheck,
+  ExternalLink,
+  Phone,
+  Banknote,
+  User,
 } from "lucide-react";
 import {
   Dialog,
@@ -147,8 +151,24 @@ function cleanItemDescription(desc: string, presentacion?: string | null): strin
   return clean;
 }
 
+// ─── Printed pedidos tracking ───
+function getPrintedPedidos(): Set<string> {
+  try {
+    const stored = localStorage.getItem("printed_pedidos");
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch { return new Set(); }
+}
+function markPedidoPrinted(numero: string) {
+  const printed = getPrintedPedidos();
+  printed.add(numero);
+  // Keep only last 200 to avoid localStorage bloat
+  const arr = [...printed].slice(-200);
+  localStorage.setItem("printed_pedidos", JSON.stringify(arr));
+}
+
 export default function DashboardPage() {
   const { config: wl } = useWhiteLabel();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
 
   // ─── Filter state ───
@@ -184,6 +204,7 @@ export default function DashboardPage() {
   const [pedidoDetailOpen, setPedidoDetailOpen] = useState(false);
   const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
   const [pedidoDetailPagos, setPedidoDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
+  const [printedPedidos, setPrintedPedidos] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMixtoEf?: number; cobroMixtoTr?: number; cobroCuentaBancaria?: string }>({ open: false, venta: null, pendiente: 0, type: "paid" });
   const [deliveryCuentasBancarias, setDeliveryCuentasBancarias] = useState<{ id: string; nombre: string; alias?: string }[]>([]);
@@ -321,8 +342,9 @@ export default function DashboardPage() {
     try {
     const { start, end } = getDateRange();
 
-    // Load receipt config from localStorage
+    // Load receipt config and printed pedidos from localStorage
     setReceiptConfig(loadReceiptConfig());
+    setPrintedPedidos(getPrintedPedidos());
 
     // Fetch tienda config for delivery days
     const { data: tiendaConfig } = await supabase.from("tienda_config").select("dias_entrega").single();
@@ -681,6 +703,9 @@ export default function DashboardPage() {
       pagoCuentaCorriente: pagoCC || undefined,
     };
     setPrintSale(sale);
+    // Mark as printed
+    markPedidoPrinted(venta.numero);
+    setPrintedPedidos(getPrintedPedidos());
   };
 
   // ─── Filtered pedidos ───
@@ -969,9 +994,10 @@ export default function DashboardPage() {
                                 }}>
                                 <Eye className="w-3.5 h-3.5" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Imprimir remito"
+                              <Button variant="ghost" size="sm" className={`h-7 w-7 p-0 ${printedPedidos.has(p.numero) ? "text-emerald-600" : ""}`}
+                                title={printedPedidos.has(p.numero) ? "Ya impreso — reimprimir" : "Imprimir remito"}
                                 onClick={() => handlePrintRemito(p)}>
-                                <Printer className="w-3.5 h-3.5" />
+                                {printedPedidos.has(p.numero) ? <PrinterCheck className="w-3.5 h-3.5" /> : <Printer className="w-3.5 h-3.5" />}
                               </Button>
                               {isRetiro && !isArmado && (
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
@@ -1093,59 +1119,142 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* Pedido Detail Dialog */}
-      <VentaDetailDialog
-        open={pedidoDetailOpen}
-        onOpenChange={setPedidoDetailOpen}
-        data={pedidoDetail ? {
-          numero: pedidoDetail.numero,
-          created_at: pedidoDetail.created_at,
-          fecha: pedidoDetail.fecha,
-          estado: pedidoEstadoMap[pedidoDetail.numero] || "pendiente",
-          forma_pago: pedidoDetail.forma_pago,
-          metodo_entrega: pedidoDetail.metodo_entrega || undefined,
-          total: pedidoDetail.total,
-          subtotal: pedidoDetail.subtotal,
-          observacion: pedidoDetail.observacion,
-          entregado: pedidoDetail.entregado,
-          nombre_cliente: pedidoDetail.clientes?.nombre || "Consumidor Final",
-          telefono: pedidoDetail.clientes?.telefono || undefined,
-          domicilio: [pedidoDetail.clientes?.domicilio, pedidoDetail.clientes?.localidad].filter(Boolean).join(", ") || undefined,
-          fecha_entrega: pedidoEntregaMap[pedidoDetail.numero] || null,
-          cuenta_transferencia_alias: (pedidoDetail as any).cuenta_transferencia_alias || null,
-          origen: "pedidos",
-          comboIds: comboProductIds,
-        } : null}
-        items={pedidoDetail?.venta_items.map((item) => ({
-          id: item.id,
-          producto_id: item.producto_id,
-          codigo: item.codigo || undefined,
-          descripcion: item.descripcion,
-          cantidad: item.cantidad,
-          precio_unitario: item.precio_unitario,
-          descuento: item.descuento,
-          subtotal: item.subtotal,
-          unidades_por_presentacion: item.unidades_por_presentacion ?? undefined,
-        })) || []}
-        pagos={pedidoDetailPagos}
-        onPrint={pedidoDetail ? () => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); } : undefined}
-        footerExtra={pedidoDetail ? (
-          <div className="flex gap-2">
-            {pedidoDetail.metodo_entrega === "retiro" && (pedidoEstadoMap[pedidoDetail.numero] || "pendiente") !== "armado" && (
-              <Button variant="outline" size="sm" className="gap-1.5 text-violet-600 border-violet-200 hover:bg-violet-50"
-                disabled={actionLoading === pedidoDetail.id}
-                onClick={() => handleMarkArmado(pedidoDetail)}>
-                <PackageCheck className="w-3.5 h-3.5" /> Marcar Armado
-              </Button>
-            )}
-            <Button variant="default" size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-              disabled={actionLoading === pedidoDetail.id}
-              onClick={() => { setPedidoDetailOpen(false); handleMarkDelivered(pedidoDetail); }}>
-              <CheckCircle className="w-3.5 h-3.5" /> Marcar Entregado
-            </Button>
-          </div>
-        ) : undefined}
-      />
+      {/* Pedido Detail Dialog — Vista simple */}
+      <Dialog open={pedidoDetailOpen} onOpenChange={setPedidoDetailOpen}>
+        <DialogContent className="max-w-md p-0 gap-0">
+          {pedidoDetail && (() => {
+            const cliente = pedidoDetail.clientes;
+            const estado = pedidoEstadoMap[pedidoDetail.numero] || "pendiente";
+            const isEnvio = pedidoDetail.metodo_entrega === "envio";
+            const items = pedidoDetail.venta_items;
+            const isPrinted = printedPedidos.has(pedidoDetail.numero);
+            return (
+              <>
+                {/* Header */}
+                <div className="px-5 pt-5 pb-3 border-b bg-muted/30">
+                  <DialogHeader className="p-0 space-y-0">
+                    <DialogTitle className="text-base font-semibold flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-primary" />
+                      Pedido #{pedidoDetail.numero}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(pedidoDetail.created_at).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
+                    </span>
+                    <Badge variant={estado === "armado" ? "default" : "outline"} className={`text-[10px] px-1.5 py-0 ${estado === "armado" ? "bg-violet-100 text-violet-700 hover:bg-violet-100" : ""}`}>
+                      {estado.charAt(0).toUpperCase() + estado.slice(1)}
+                    </Badge>
+                    {isPrinted && <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-600"><PrinterCheck className="w-3 h-3 mr-0.5" />Impreso</Badge>}
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                  {/* Cliente */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <User className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="font-medium text-sm">{cliente?.nombre || "Consumidor Final"}</span>
+                    </div>
+                    {cliente?.telefono && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Phone className="w-3 h-3" />
+                        {cliente.telefono}
+                      </div>
+                    )}
+                    {(cliente?.domicilio || cliente?.localidad) && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <MapPin className="w-3 h-3" />
+                        {[cliente?.domicilio, cliente?.localidad].filter(Boolean).join(", ")}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Entrega */}
+                  <div className="flex items-center gap-2 text-xs">
+                    {isEnvio ? <Truck className="w-3.5 h-3.5 text-blue-500" /> : <Store className="w-3.5 h-3.5 text-amber-500" />}
+                    <span className="font-medium">{isEnvio ? "Envío" : "Retiro en local"}</span>
+                    {pedidoEntregaMap[pedidoDetail.numero] && (
+                      <span className="text-muted-foreground ml-1">
+                        — {new Date(pedidoEntregaMap[pedidoDetail.numero] + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Items */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="divide-y">
+                      {items.map((item, i) => {
+                        const qty = item.unidades_por_presentacion && item.unidades_por_presentacion > 1
+                          ? item.cantidad / item.unidades_por_presentacion
+                          : item.cantidad;
+                        const desc = cleanItemDescription(item.descripcion, item.presentacion);
+                        return (
+                          <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium">{qty % 1 === 0 ? qty : qty.toFixed(1)}x</span>
+                              <span className="ml-1.5 text-muted-foreground truncate">{desc}</span>
+                            </div>
+                            <span className="font-medium ml-2 shrink-0">{formatCurrency(item.subtotal)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Pago */}
+                  <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Banknote className="w-3.5 h-3.5 text-muted-foreground" />
+                      {pedidoDetailPagos.length > 0 ? (
+                        <span>{pedidoDetailPagos.map((p) => `${p.metodo}: ${formatCurrency(p.monto)}`).join(" + ")}</span>
+                      ) : (
+                        <span>{pedidoDetail.forma_pago}</span>
+                      )}
+                    </div>
+                    <span className="font-bold text-sm">{formatCurrency(pedidoDetail.total)}</span>
+                  </div>
+
+                  {/* Observacion */}
+                  {pedidoDetail.observacion && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                      <strong>Nota:</strong> {pedidoDetail.observacion}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+                    onClick={() => { setPedidoDetailOpen(false); router.push(`/admin/ventas/listado?buscar=${pedidoDetail.numero}`); }}>
+                    <ExternalLink className="w-3.5 h-3.5" /> Ver en historial
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className={`gap-1.5 text-xs ${isPrinted ? "text-emerald-600 border-emerald-200" : ""}`}
+                      onClick={() => { setPedidoDetailOpen(false); handlePrintRemito(pedidoDetail); }}>
+                      {isPrinted ? <PrinterCheck className="w-3.5 h-3.5" /> : <Printer className="w-3.5 h-3.5" />}
+                      {isPrinted ? "Reimprimir" : "Imprimir"}
+                    </Button>
+                    {pedidoDetail.metodo_entrega === "retiro" && estado !== "armado" && (
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs text-violet-600 border-violet-200 hover:bg-violet-50"
+                        disabled={actionLoading === pedidoDetail.id}
+                        onClick={() => handleMarkArmado(pedidoDetail)}>
+                        <PackageCheck className="w-3.5 h-3.5" /> Armado
+                      </Button>
+                    )}
+                    <Button size="sm" className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700"
+                      disabled={actionLoading === pedidoDetail.id}
+                      onClick={() => { setPedidoDetailOpen(false); handleMarkDelivered(pedidoDetail); }}>
+                      <CheckCircle className="w-3.5 h-3.5" /> Entregado
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Delivery confirmation modal */}
       <Dialog open={deliveryConfirm.open} onOpenChange={(v) => !v && setDeliveryConfirm({ open: false, venta: null, pendiente: 0, type: "paid" })}>

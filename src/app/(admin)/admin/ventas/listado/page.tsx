@@ -63,6 +63,7 @@ import {
   ArrowLeftRight,
   Shuffle,
   BookOpen,
+  PrinterCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -226,6 +227,9 @@ export default function ListadoVentasPage() {
   const [anularMotivo, setAnularMotivo] = useState("");
   const [anulando, setAnulando] = useState(false);
 
+  // Printed tracking
+  const [printedPedidos, setPrintedPedidos] = useState<Set<string>>(new Set());
+
   // Print
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([]);
   const [receiptConfig, setReceiptConfig] = useState(defaultReceiptConfig);
@@ -332,11 +336,15 @@ export default function ListadoVentasPage() {
 
   useEffect(() => {
     supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data }) => setVendedores(data || []));
-    // Load saved receipt config
+    // Load saved receipt config + printed tracking
     try {
       const stored = localStorage.getItem("receipt_config");
       if (stored) setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
     } catch (err) { console.error("Error loading receipt config:", err); }
+    try {
+      const printed = localStorage.getItem("printed_pedidos");
+      if (printed) setPrintedPedidos(new Set(JSON.parse(printed)));
+    } catch {}
     // Load empresa data for receipt fallback
     supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single().then(({ data: emp }) => {
       if (emp) {
@@ -706,6 +714,14 @@ export default function ListadoVentasPage() {
     setPrintItems(items);
     setPrintLineItems(lineItems);
     setPrintReady(true);
+    // Mark as printed
+    try {
+      const printed = new Set(printedPedidos);
+      printed.add(v.numero);
+      const arr = [...printed].slice(-200);
+      localStorage.setItem("printed_pedidos", JSON.stringify(arr));
+      setPrintedPedidos(new Set(arr));
+    } catch {}
   };
 
   useEffect(() => {
@@ -1801,7 +1817,7 @@ export default function ListadoVentasPage() {
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(order)} title="Ver detalle">
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={async () => {
+                      <Button variant="ghost" size="sm" className={`h-8 w-8 p-0 ${printedPedidos.has(order.numero) ? "text-emerald-600" : ""}`} onClick={async () => {
                         try {
                           let v = ventas.find((vr) => vr.id === order._ventaId);
                           if (!v && order._ventaId) {
@@ -1822,8 +1838,8 @@ export default function ListadoVentasPage() {
                         } catch (err) {
                           showAdminToast("Error al preparar impresión", "error");
                         }
-                      }} title="Imprimir">
-                        <Printer className="w-4 h-4" />
+                      }} title={printedPedidos.has(order.numero) ? "Ya impreso — reimprimir" : "Imprimir"}>
+                        {printedPedidos.has(order.numero) ? <PrinterCheck className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
                       </Button>
                       {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
                         <>
@@ -2423,7 +2439,8 @@ export default function ListadoVentasPage() {
                       showAdminToast("Error al preparar impresión", "error");
                     }
                   }}>
-                    <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir
+                    {poSelectedPedido && printedPedidos.has(poSelectedPedido.numero) ? <PrinterCheck className="w-3.5 h-3.5 mr-1.5" /> : <Printer className="w-3.5 h-3.5 mr-1.5" />}
+                    {poSelectedPedido && printedPedidos.has(poSelectedPedido.numero) ? "Reimprimir" : "Imprimir"}
                   </Button>
                   <Button variant="outline" onClick={() => {
                     if (poHasChanges) {
