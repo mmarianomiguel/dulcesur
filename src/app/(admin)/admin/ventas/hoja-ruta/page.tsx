@@ -289,7 +289,11 @@ export default function HojaDeRutaPage() {
   const historialTotalVentas = filteredHistorial.reduce((s, v) => s + v.total, 0);
   const historialTotalCobrado = filteredHistorial.reduce((s, v) => {
     const pagos = historialPagos[v.id] || [];
-    return s + pagos.reduce((a, p) => a + p.monto, 0);
+    return s + pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+  }, 0);
+  const historialTotalNC = filteredHistorial.reduce((s, v) => {
+    const pagos = historialPagos[v.id] || [];
+    return s + pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
   }, 0);
 
   // Group historial by day
@@ -697,6 +701,9 @@ export default function HojaDeRutaPage() {
                   Total Cobrado
                 </div>
                 <div className="text-2xl font-bold text-green-600">{formatCurrency(historialTotalCobrado)}</div>
+                {historialTotalNC > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">NC devoluciones: -{formatCurrency(historialTotalNC)}</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -726,7 +733,7 @@ export default function HojaDeRutaPage() {
                 const dayTotal = dayVentas.reduce((s, v) => s + v.total, 0);
                 const dayCobrado = dayVentas.reduce((s, v) => {
                   const pagos = historialPagos[v.id] || [];
-                  return s + pagos.reduce((a, p) => a + p.monto, 0);
+                  return s + pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
                 }, 0);
                 const dayPendiente = dayTotal - dayCobrado;
                 const dayLabel = new Date(day + "T12:00:00").toLocaleDateString("es-AR", {
@@ -737,7 +744,8 @@ export default function HojaDeRutaPage() {
                 const clientesDeudores = dayVentas.filter((v) => {
                   const pagos = historialPagos[v.id] || [];
                   const cobrado = pagos.reduce((a, p) => a + p.monto, 0);
-                  return v.total - cobrado > 0;
+                  const ncAmount = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                  return v.total - cobrado > 0 && (v.total - cobrado - ncAmount) !== 0;
                 });
 
                 return (
@@ -801,8 +809,10 @@ export default function HojaDeRutaPage() {
                           <tbody>
                             {dayVentas.map((venta) => {
                               const pagos = historialPagos[venta.id] || [];
-                              const totalCobrado = pagos.reduce((a, p) => a + p.monto, 0);
-                              const metodos = [...new Set(pagos.map((p) => p.metodo))].join(", ") || venta.forma_pago;
+                              const cobradoReal = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                              const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                              const totalCobrado = cobradoReal + ncMonto;
+                              const metodos = [...new Set(pagos.filter(p => !p.metodo.includes("Nota de Cr")).map((p) => p.metodo))].join(", ") || venta.forma_pago;
                               const debe = venta.total - totalCobrado;
 
                               return (
@@ -823,7 +833,8 @@ export default function HojaDeRutaPage() {
                                     {formatCurrency(venta.total)}
                                   </td>
                                   <td className={`py-2.5 px-3 text-right font-medium ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
-                                    {formatCurrency(totalCobrado)}
+                                    {cobradoReal > 0 ? formatCurrency(cobradoReal) : "$0"}
+                                    {ncMonto > 0 && <span className="block text-xs text-amber-600">NC -{formatCurrency(ncMonto)}</span>}
                                     {debe > 0 && <span className="block text-xs text-orange-500">Debe {formatCurrency(debe)}</span>}
                                   </td>
                                   <td className="py-2.5 px-3">
