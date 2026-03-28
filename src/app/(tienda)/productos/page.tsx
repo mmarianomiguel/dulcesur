@@ -202,7 +202,7 @@ function ProductosContent() {
     [searchParams, router]
   );
 
-  // Fetch categorias with counts
+  // Fetch categorias with counts (only visible products, respecting stock cutoff)
   useEffect(() => {
     async function load() {
       const { data: cats } = await supabase
@@ -210,11 +210,19 @@ function ProductosContent() {
         .select("id, nombre, restringida");
       if (!cats) return;
 
-      const { data: prods } = await supabase
+      let query = supabase
         .from("productos")
         .select("categoria_id")
         .eq("activo", true)
         .eq("visibilidad", "visible");
+
+      // Apply same stock visibility filter as the product grid
+      if (diasOcultarSinStock > 0) {
+        const cutoff = new Date(Date.now() - diasOcultarSinStock * 24 * 60 * 60 * 1000).toISOString();
+        query = query.or(`stock.gt.0,updated_at.gt.${cutoff}`);
+      }
+
+      const { data: prods } = await query;
 
       const countMap: Record<string, number> = {};
       prods?.forEach((p: { categoria_id: string }) => {
@@ -229,7 +237,7 @@ function ProductosContent() {
       );
     }
     load();
-  }, []);
+  }, [diasOcultarSinStock]);
 
   // Fetch config for dias_ocultar_sin_stock
   useEffect(() => {
@@ -246,9 +254,18 @@ function ProductosContent() {
         .select("id, nombre, categoria_id");
       if (!subs) return;
 
-      const { data: prods } = await supabase
+      let subQuery = supabase
         .from("productos")
-        .select("subcategoria_id");
+        .select("subcategoria_id")
+        .eq("activo", true)
+        .eq("visibilidad", "visible");
+
+      if (diasOcultarSinStock > 0) {
+        const cutoff = new Date(Date.now() - diasOcultarSinStock * 24 * 60 * 60 * 1000).toISOString();
+        subQuery = subQuery.or(`stock.gt.0,updated_at.gt.${cutoff}`);
+      }
+
+      const { data: prods } = await subQuery;
 
       const countMap: Record<string, number> = {};
       prods?.forEach((p: { subcategoria_id: string | null }) => {
