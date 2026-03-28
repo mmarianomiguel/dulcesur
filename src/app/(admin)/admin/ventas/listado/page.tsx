@@ -683,8 +683,18 @@ export default function ListadoVentasPage() {
         else if (m.metodo_pago === "Cuenta Corriente") pagoCC += m.monto;
       }
     }
-    // If no movimientos found, estimate from forma_pago
-    if ((movs || []).length === 0) {
+    // For Mixto orders: get original payment split from pedidos_tienda
+    if (v.forma_pago === "Mixto") {
+      const { data: pedido } = await supabase.from("pedidos_tienda")
+        .select("monto_efectivo, monto_transferencia, recargo_transferencia")
+        .eq("numero", v.numero)
+        .maybeSingle();
+      if (pedido) {
+        pagoEf = pedido.monto_efectivo || pagoEf;
+        pagoTr = pedido.monto_transferencia || pagoTr;
+      }
+    } else if ((movs || []).length === 0) {
+      // If no movimientos found, estimate from forma_pago
       if (v.forma_pago === "Efectivo") pagoEf = v.total;
       else if (v.forma_pago === "Transferencia") pagoTr = v.total;
       else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
