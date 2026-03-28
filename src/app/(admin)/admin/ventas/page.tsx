@@ -150,6 +150,7 @@ export default function VentasPage() {
   const [listaPrecioId, setListaPrecioId] = useState("");
   const [descuento, setDescuento] = useState(0);
   const [recargo, setRecargo] = useState(0);
+  const [fechaVenta, setFechaVenta] = useState(todayARG());
   const [despacho, setDespacho] = useState("Retira en local");
   const [saving, setSaving] = useState(false);
   const [cobrarSaldo, setCobrarSaldo] = useState(false);
@@ -1162,6 +1163,7 @@ export default function VentasPage() {
     setFormaPago("Efectivo");
     setDescuento(0);
     setRecargo(0);
+    setFechaVenta(todayARG());
     setMixtoEfectivo(0);
     setMixtoTransferencia(0);
     setMixtoCuentaCorriente(0);
@@ -1485,7 +1487,7 @@ export default function VentasPage() {
         .insert({
           numero,
           tipo_comprobante: tipoComprobante,
-          fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
+          fecha: fechaVenta,
           cliente_id: clientId || null,
           vendedor_id: vendedorId || null,
           forma_pago: formaPago,
@@ -1614,7 +1616,7 @@ export default function VentasPage() {
           }
         }
 
-        const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+        const hoy = fechaVenta;
         const hora = nowTimeARG();
 
         // Pendiente de cobro: skip all payment processing
@@ -1822,7 +1824,7 @@ export default function VentasPage() {
           clienteCondicionIva: selectedClient?.situacion_iva || null,
           vendedor: sellers.find((s) => s.id === vendedorId)?.nombre || "",
           items: [...items],
-          fecha: new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Argentina/Buenos_Aires" }),
+          fecha: (() => { const [y, m, d] = fechaVenta.split("-"); return `${d}/${m}/${y}`; })(),
           saldoAnterior,
           saldoNuevo,
           cobroSaldoMonto: montoCobroSaldo > 0 ? montoCobroSaldo : undefined,
@@ -2628,6 +2630,20 @@ export default function VentasPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Fecha */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Fecha</span>
+            <Input
+              type="date"
+              value={fechaVenta}
+              onChange={(e) => setFechaVenta(e.target.value)}
+              className="h-7 text-xs flex-1"
+            />
+            {fechaVenta !== todayARG() && (
+              <button onClick={() => setFechaVenta(todayARG())} className="text-xs text-primary hover:underline whitespace-nowrap">Hoy</button>
+            )}
+          </div>
 
           {/* Totals */}
           <Card>
