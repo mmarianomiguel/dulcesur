@@ -75,15 +75,18 @@ export default function ProductoDetallePage() {
       setResolvedId(slug);
       return;
     }
-    // Extract the short ID (last segment after the final dash, 8 hex chars)
+    // Extract the short ID (last 8 hex chars = first segment of UUID)
     const parts = slug.split("-");
     const shortId = parts[parts.length - 1];
     if (/^[0-9a-f]{8}$/i.test(shortId)) {
-      // Find product whose ID starts with this short ID
+      // Build UUID range: shortId-0000-0000-0000-000000000000 to shortId-ffff-ffff-ffff-ffffffffffff
+      const lower = `${shortId}-0000-0000-0000-000000000000`;
+      const upper = `${shortId}-ffff-ffff-ffff-ffffffffffff`;
       supabase
         .from("productos")
         .select("id")
-        .ilike("id", `${shortId}%`)
+        .gte("id", lower)
+        .lte("id", upper)
         .limit(1)
         .single()
         .then(({ data }) => {
