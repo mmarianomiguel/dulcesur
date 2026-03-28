@@ -336,21 +336,31 @@ export default function HojaDeRutaPage() {
     setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" });
 
     if (type === "unpaid" && pendiente > 0 && venta.cliente_id) {
-      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
-      const saldoActual = freshCli?.saldo ?? venta.clientes?.saldo ?? 0;
-      const nuevoSaldo = saldoActual + pendiente;
-      await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
-      await supabase.from("cuenta_corriente").insert({
-        cliente_id: venta.cliente_id,
-        fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
-        comprobante: `Entrega #${venta.numero}`,
-        descripcion: `Saldo pendiente de entrega`,
-        debe: pendiente,
-        haber: 0,
-        saldo: nuevoSaldo,
-        forma_pago: venta.forma_pago || "Efectivo",
-        venta_id: venta.id,
-      });
+      // Check if cuenta_corriente entry already exists for this venta (e.g. from partial payment)
+      const { data: existingCC } = await supabase
+        .from("cuenta_corriente")
+        .select("id")
+        .eq("venta_id", venta.id)
+        .gt("debe", 0)
+        .limit(1);
+
+      if (!existingCC || existingCC.length === 0) {
+        const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
+        const saldoActual = freshCli?.saldo ?? venta.clientes?.saldo ?? 0;
+        const nuevoSaldo = saldoActual + pendiente;
+        await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id);
+        await supabase.from("cuenta_corriente").insert({
+          cliente_id: venta.cliente_id,
+          fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
+          comprobante: `Entrega #${venta.numero}`,
+          descripcion: `Saldo pendiente de entrega`,
+          debe: pendiente,
+          haber: 0,
+          saldo: nuevoSaldo,
+          forma_pago: venta.forma_pago || "Efectivo",
+          venta_id: venta.id,
+        });
+      }
     }
 
     const { error } = await supabase
