@@ -1423,6 +1423,17 @@ export default function VentasPage() {
       setErrorModal({ open: true, message: "Los montos del pago mixto no suman el total." });
       return;
     }
+    // Bank account validation for Transferencia payments
+    if (cuentasBancarias.length > 0 && !cuentaBancariaId) {
+      if (formaPago === "Transferencia") {
+        showAdminToast("Seleccioná una cuenta bancaria para la transferencia", "error");
+        return;
+      }
+      if (formaPago === "Mixto" && mixtoTransferencia > 0) {
+        showAdminToast("Seleccioná una cuenta bancaria para la parte de transferencia", "error");
+        return;
+      }
+    }
     // Credit limit check - always refresh from DB to avoid stale state
     if (selectedClient) {
       const ccAmount = formaPago === "Cuenta Corriente" ? total : formaPago === "Mixto" ? mixtoCuentaCorriente : 0;

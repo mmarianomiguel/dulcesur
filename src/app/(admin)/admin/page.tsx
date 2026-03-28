@@ -33,6 +33,7 @@ import {
   ArrowLeftRight,
   Shuffle,
   BookOpen,
+  Landmark,
 } from "lucide-react";
 import {
   Dialog,
@@ -184,7 +185,8 @@ export default function DashboardPage() {
   const [pedidoDetail, setPedidoDetail] = useState<PedidoVenta | null>(null);
   const [pedidoDetailPagos, setPedidoDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMixtoEf?: number; cobroMixtoTr?: number }>({ open: false, venta: null, pendiente: 0, type: "paid" });
+  const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMixtoEf?: number; cobroMixtoTr?: number; cobroCuentaBancaria?: string }>({ open: false, venta: null, pendiente: 0, type: "paid" });
+  const [deliveryCuentasBancarias, setDeliveryCuentasBancarias] = useState<{ id: string; nombre: string; alias?: string }[]>([]);
 
   // ─── Combo data for preview ───
   const [comboProductIds, setComboProductIds] = useState<Set<string>>(new Set());
@@ -438,6 +440,7 @@ export default function DashboardPage() {
   }, [getDateRange, fetchPedidosOnline]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { supabase.from("cuentas_bancarias").select("id, nombre, alias").eq("activo", true).order("nombre").then(({ data }) => setDeliveryCuentasBancarias(data || [])); }, []);
 
   // ─── Realtime: new online orders notification ───
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
@@ -477,16 +480,14 @@ export default function DashboardPage() {
 
   // ─── Pedido actions ───
   const handleMarkDelivered = async (venta: PedidoVenta) => {
-    // Check how much is already paid in caja + cuenta corriente + NC refunds
-    const [{ data: cajaMovs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
+    // Check how much is already paid in caja + cuenta corriente (NC excluded — handled separately)
+    const [{ data: cajaMovs }, { data: ccMovs }] = await Promise.all([
       supabase.from("caja_movimientos").select("monto").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
       supabase.from("cuenta_corriente").select("debe").eq("venta_id", venta.id),
-      supabase.from("ventas").select("id, total").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
     ]);
     const pagadoCaja = (cajaMovs || []).reduce((s: number, m: any) => s + m.monto, 0);
     const pagadoCC = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
-    const ncRefunded = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
-    const pagado = pagadoCaja + pagadoCC + ncRefunded;
+    const pagado = pagadoCaja + pagadoCC;
     const pendiente = Math.max(0, venta.total - pagado);
 
     if (pendiente > 0 && !(venta as any).cliente_id) {
@@ -501,7 +502,7 @@ export default function DashboardPage() {
   };
 
   const confirmDelivery = async () => {
-    const { venta, pendiente, type, cobroMetodo, cobroMixtoEf, cobroMixtoTr } = deliveryConfirm;
+    const { venta, pendiente, type, cobroMetodo, cobroMixtoEf, cobroMixtoTr, cobroCuentaBancaria } = deliveryConfirm;
     if (!venta) return;
     try {
     setActionLoading(venta.id);
@@ -517,7 +518,7 @@ export default function DashboardPage() {
 
       if (metodo === "Mixto") {
         if ((cobroMixtoEf || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: venta.id, referencia_tipo: "venta" });
-        if ((cobroMixtoTr || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: venta.id, referencia_tipo: "venta" });
+        if ((cobroMixtoTr || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: venta.id, referencia_tipo: "venta", ...(cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
       } else if (metodo === "Cuenta Corriente") {
         const clienteId = (venta as any).cliente_id;
         if (clienteId) {
@@ -527,7 +528,7 @@ export default function DashboardPage() {
           await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Entrega #${venta.numero}`, descripcion: `Cobro entrega — ${clienteNombre}`, debe: pendiente, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: venta.id });
         }
       } else {
-        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: metodo, monto: pendiente, referencia_id: venta.id, referencia_tipo: "venta" });
+        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: metodo, monto: pendiente, referencia_id: venta.id, referencia_tipo: "venta", ...(metodo === "Transferencia" && cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
       }
       if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
     }
@@ -1208,6 +1209,20 @@ export default function DashboardPage() {
                       <div>
                         <label className="text-[10px] text-gray-500">Transferencia</label>
                         <input type="number" value={mixTr || ""} onChange={(e) => setField("cobroMixtoTr", Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
+                      </div>
+                    </div>
+                  )}
+                  {(metodo === "Transferencia" || metodo === "Mixto") && deliveryCuentasBancarias.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground">Cuenta bancaria</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {deliveryCuentasBancarias.map((cb) => (
+                          <button key={cb.id} onClick={() => setField("cobroCuentaBancaria", cb.nombre)}
+                            className={`flex items-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-xs transition-all text-left ${deliveryConfirm.cobroCuentaBancaria === cb.nombre ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>
+                            <Landmark className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{cb.alias || cb.nombre}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}

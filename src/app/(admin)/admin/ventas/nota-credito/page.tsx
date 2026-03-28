@@ -476,6 +476,23 @@ export default function NotaCreditoPage() {
         referencia_id: venta.id,
         referencia_tipo: "nota_credito",
       });
+      // Reducir saldo del cliente (la NC reduce la deuda)
+      if (clientId) {
+        const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+        const nuevoSaldo = (freshCliente?.saldo ?? selectedClient?.saldo ?? 0) - total;
+        await supabase.from("cuenta_corriente").insert({
+          cliente_id: clientId,
+          fecha: hoy,
+          comprobante: `NC ${numero}`,
+          descripcion: `Nota de Crédito ${numero} — devolución por ${metodoDev}`,
+          debe: 0,
+          haber: total,
+          saldo: nuevoSaldo,
+          forma_pago: metodoDev,
+          venta_id: venta.id,
+        });
+        await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clientId);
+      }
     }
     // ── Cuenta corriente: solo si el método es Cuenta Corriente ──
     if (metodoDev === "Cuenta Corriente" && clientId) {
@@ -507,7 +524,7 @@ export default function NotaCreditoPage() {
     fetchFormData();
 
     let saldoMsg = "";
-    if (metodoDev === "Cuenta Corriente" && clientId) {
+    if (clientId) {
       const nuevoSaldo = (selectedClient?.saldo || 0) - total;
       saldoMsg = nuevoSaldo < 0
         ? ` — Saldo a favor: ${formatCurrency(Math.abs(nuevoSaldo))}`

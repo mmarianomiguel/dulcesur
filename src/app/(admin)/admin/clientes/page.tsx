@@ -161,6 +161,7 @@ export default function ClientesPage() {
   const [payMovVenta, setPayMovVenta] = useState<any>(null);
   const [payMovMonto, setPayMovMonto] = useState(0);
   const [payMovMetodo, setPayMovMetodo] = useState<"Efectivo" | "Transferencia">("Efectivo");
+  const [payMovCuentaBancariaId, setPayMovCuentaBancariaId] = useState("");
   const [payMovSaving, setPayMovSaving] = useState(false);
   const vendedorRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -494,6 +495,7 @@ export default function ClientesPage() {
     setPayMovVenta(m);
     setPayMovMonto(m.saldo_pendiente || 0);
     setPayMovMetodo("Efectivo");
+    setPayMovCuentaBancariaId("");
     setPayMovOpen(true);
   };
 
@@ -507,13 +509,15 @@ export default function ClientesPage() {
     const montoReal = Math.min(payMovMonto, saldoPend);
     const restante = saldoPend - montoReal;
 
+    const payMovCuentaSel = payMovCuentaBancariaId ? cuentasBancarias.find((c) => c.id === payMovCuentaBancariaId) : null;
     await supabase.from("caja_movimientos").insert({
       fecha: hoy, hora, tipo: "ingreso",
-      descripcion: `Cobro deuda ${payMovVenta.descripcion} — ${clients.find((c) => c.id === movClient?.id)?.nombre || ""}`,
+      descripcion: `Cobro deuda ${payMovVenta.descripcion} — ${clients.find((c) => c.id === movClient?.id)?.nombre || ""}${payMovMetodo === "Transferencia" && payMovCuentaSel ? ` → ${payMovCuentaSel.nombre}` : ""}`,
       metodo_pago: payMovMetodo,
       monto: montoReal,
       referencia_id: payMovVenta.id,
       referencia_tipo: "venta",
+      ...(payMovMetodo === "Transferencia" && payMovCuentaSel ? { cuenta_bancaria: payMovCuentaSel.nombre } : {}),
     });
 
     const cli = clients.find((c) => c.id === movClient?.id);
@@ -1720,6 +1724,27 @@ export default function ClientesPage() {
                   ))}
                 </div>
               </div>
+              {payMovMetodo === "Transferencia" && cuentasBancarias.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Cuenta destino</Label>
+                  <div className="grid gap-1.5">
+                    {cuentasBancarias.map((cb) => (
+                      <button
+                        key={cb.id}
+                        type="button"
+                        onClick={() => setPayMovCuentaBancariaId(cb.id)}
+                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-all text-left ${payMovCuentaBancariaId === cb.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary/30"}`}
+                      >
+                        <Building2 className={`w-4 h-4 shrink-0 ${payMovCuentaBancariaId === cb.id ? "text-primary" : "text-muted-foreground"}`} />
+                        <div>
+                          <p className="font-medium">{cb.nombre}</p>
+                          {cb.alias && <p className="text-xs text-muted-foreground">{cb.alias}</p>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Monto a cobrar</Label>
                 <Input type="number" value={payMovMonto} onChange={(e) => setPayMovMonto(Math.max(0, Math.min(payMovVenta.saldo_pendiente, Number(e.target.value))))} />
@@ -1731,7 +1756,7 @@ export default function ClientesPage() {
               )}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setPayMovOpen(false)}>Cancelar</Button>
-                <Button size="sm" onClick={handlePayMov} disabled={payMovSaving || payMovMonto <= 0}>
+                <Button size="sm" onClick={handlePayMov} disabled={payMovSaving || payMovMonto <= 0 || (payMovMetodo === "Transferencia" && cuentasBancarias.length > 0 && !payMovCuentaBancariaId)}>
                   {payMovSaving && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
                   Confirmar — {formatCurrency(payMovMonto)}
                 </Button>
