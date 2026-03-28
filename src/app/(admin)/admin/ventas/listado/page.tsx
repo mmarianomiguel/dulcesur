@@ -206,12 +206,12 @@ export default function ListadoVentasPage() {
   const [filterType, setFilterType] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
   const [quickPeriod, setQuickPeriod] = useState<"today" | "week" | "month" | "custom">("today");
-  const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("month");
+  const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("range");
   const [filterDay, setFilterDay] = useState(todayARG());
   const [filterMonth, setFilterMonth] = useState(currentMonthPadded());
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [filterFrom, setFilterFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
+  const [filterTo, setFilterTo] = useState(todayARG);
   const [searchClient, setSearchClient] = useState(() => {
     if (typeof window !== "undefined") {
       return new URLSearchParams(window.location.search).get("buscar") || "";
