@@ -6,6 +6,7 @@ import { norm } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { showAdminToast } from "@/components/admin-toast";
@@ -590,12 +591,10 @@ export default function AjustesStockPage() {
                     </td>
                     <td className="py-1 px-3 text-center text-xs text-muted-foreground">{row.unidad}</td>
                     <td className="py-1 px-3">
-                      <Input
-                        type="number"
-                        min={0}
+                      <MoneyInput
                         value={row.costo}
-                        onChange={(e) => updateRow(idx, "costo", Number(e.target.value))}
-                        onClick={(e) => e.stopPropagation()}
+                        onValueChange={(v) => updateRow(idx, "costo", v)}
+                        min={0}
                         className="h-7 w-full text-right text-sm"
                       />
                     </td>

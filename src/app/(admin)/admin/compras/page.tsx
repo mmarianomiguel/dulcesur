@@ -8,6 +8,7 @@ import type { Proveedor } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -1559,11 +1560,10 @@ export default function ComprasPage() {
                             )}
                           </td>
                           <td className="py-2 px-3 text-right">
-                            <Input
-                              type="number"
+                            <MoneyInput
                               min={0}
                               value={item.costo_unitario}
-                              onChange={(e) => updateItemField(idx, "costo_unitario", Math.max(0, Number(e.target.value)))}
+                              onValueChange={(val) => updateItemField(idx, "costo_unitario", val)}
                               className="w-24 ml-auto text-right h-8"
                             />
                           </td>
@@ -2135,11 +2135,10 @@ export default function ComprasPage() {
                         <td className="py-3 px-4 text-center">{item.cantidad}</td>
                         <td className="py-3 px-4 text-right">
                           {editingPrices ? (
-                            <Input
-                              type="number"
+                            <MoneyInput
                               min={0}
                               value={currentPrice}
-                              onChange={(e) => setEditedPrices((prev) => ({ ...prev, [item.id]: Math.max(0, Number(e.target.value)) }))}
+                              onValueChange={(val) => setEditedPrices((prev) => ({ ...prev, [item.id]: val }))}
                               className="w-24 ml-auto text-right h-8"
                             />
                           ) : (
@@ -2228,12 +2227,10 @@ export default function ComprasPage() {
 
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Monto a pagar</Label>
-                <Input
-                  type="number"
+                <MoneyInput
                   min={0}
-                  step={0.01}
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(Math.max(0, Number(e.target.value)))}
+                  onValueChange={(val) => setPaymentAmount(val)}
                   className="text-lg font-bold"
                 />
               </div>

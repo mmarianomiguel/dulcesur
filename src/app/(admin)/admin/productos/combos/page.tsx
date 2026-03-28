@@ -7,6 +7,7 @@ import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { showAdminToast } from "@/components/admin-toast";
@@ -557,18 +558,16 @@ export default function CombosPage() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1">
                 <Label className="text-xs">Costo (calculado)</Label>
-                <Input
-                  type="number"
+                <MoneyInput
                   value={form.costo}
-                  onChange={(e) => setForm({ ...form, costo: Number(e.target.value) })}
+                  onValueChange={(v) => setForm({ ...form, costo: v })}
                 />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Precio de venta</Label>
-                <Input
-                  type="number"
+                <MoneyInput
                   value={form.precio}
-                  onChange={(e) => setForm({ ...form, precio: Number(e.target.value) })}
+                  onValueChange={(v) => setForm({ ...form, precio: v })}
                 />
               </div>
               <div className="space-y-1">

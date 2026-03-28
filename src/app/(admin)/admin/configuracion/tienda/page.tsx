@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -405,11 +406,10 @@ export default function TiendaConfigPage() {
                         <Label className="text-xs text-muted-foreground font-normal">
                           Monto mínimo para retiro en local
                         </Label>
-                        <Input
-                          type="number"
+                        <MoneyInput
                           value={config?.monto_minimo_pedido ?? 0}
-                          onChange={(e) =>
-                            update("monto_minimo_pedido", Number(e.target.value))
+                          onValueChange={(v) =>
+                            update("monto_minimo_pedido", v)
                           }
                           className="h-9"
                         />
@@ -433,11 +433,10 @@ export default function TiendaConfigPage() {
                         <Label className="text-xs text-muted-foreground font-normal">
                           Monto mínimo de compra para envíos
                         </Label>
-                        <Input
-                          type="number"
+                        <MoneyInput
                           value={config?.umbral_envio_gratis ?? 0}
-                          onChange={(e) =>
-                            update("umbral_envio_gratis", Number(e.target.value))
+                          onValueChange={(v) =>
+                            update("umbral_envio_gratis", v)
                           }
                           className="h-9"
                         />

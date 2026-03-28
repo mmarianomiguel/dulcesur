@@ -6,6 +6,7 @@ import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -60,7 +61,7 @@ const emptyForm = {
   dias_entrega: "", plazo_pago: "", observacion: "",
 };
 
-const emptyPagoForm = { monto: "", forma_pago: "Efectivo", compra_ids: [] as string[], observacion: "", registrar_caja: true, cuenta_bancaria_id: "" };
+const emptyPagoForm = { monto: 0, forma_pago: "Efectivo", compra_ids: [] as string[], observacion: "", registrar_caja: true, cuenta_bancaria_id: "" };
 
 export default function ProveedoresPage() {
   const [search, setSearch] = useState("");
@@ -325,14 +326,14 @@ export default function ProveedoresPage() {
       const total = comprasPendientes
         .filter((c) => ids.includes(c.id))
         .reduce((a, c) => a + c.total, 0);
-      return { ...prev, compra_ids: ids, monto: total > 0 ? String(total) : prev.monto };
+      return { ...prev, compra_ids: ids, monto: total > 0 ? total : prev.monto };
     });
   };
 
   const handlePago = () => {
     if (saving) return;
     if (!pagoDialog.data) return;
-    const monto = parseFloat(pagoForm.monto);
+    const monto = pagoForm.monto;
     if (!monto || monto <= 0) return;
     if (monto > pagoDialog.data.saldo && pagoDialog.data.saldo > 0) {
       setConfirmDialog({
@@ -348,7 +349,7 @@ export default function ProveedoresPage() {
 
   const executePago = async () => {
     if (!pagoDialog.data) return;
-    const monto = parseFloat(pagoForm.monto);
+    const monto = pagoForm.monto;
     setSaving(true);
     try {
       const provId = pagoDialog.data.id;
@@ -1056,13 +1057,10 @@ export default function ProveedoresPage() {
 
               <div className="space-y-2">
                 <Label>Monto</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0"
+                <MoneyInput
                   value={pagoForm.monto}
-                  onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })}
+                  onValueChange={(v) => setPagoForm({ ...pagoForm, monto: v })}
+                  min={0}
                 />
               </div>
 
@@ -1121,7 +1119,7 @@ export default function ProveedoresPage() {
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={pagoDialog.onClose}>Cancelar</Button>
-                <Button onClick={handlePago} disabled={saving || !pagoForm.monto || parseFloat(pagoForm.monto) <= 0}>
+                <Button onClick={handlePago} disabled={saving || !pagoForm.monto || pagoForm.monto <= 0}>
                   {saving ? "Registrando..." : "Registrar Pago"}
                 </Button>
               </div>

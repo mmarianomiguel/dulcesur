@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -786,14 +787,12 @@ export default function CajaPage() {
               </div>
               <div className="space-y-2">
                 <Label>Efectivo Inicial</Label>
-                <Input
-                  type="number"
+                <MoneyInput
                   min={0}
                   value={abrirForm.efectivo_inicial}
-                  onChange={(e) =>
-                    setAbrirForm({ ...abrirForm, efectivo_inicial: Math.max(0, Number(e.target.value)) })
+                  onValueChange={(val) =>
+                    setAbrirForm({ ...abrirForm, efectivo_inicial: val })
                   }
-                  placeholder="0"
                 />
               </div>
               <div className="flex justify-end gap-2">
@@ -1206,10 +1205,9 @@ export default function CajaPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Monto</Label>
-                <Input
-                  type="number"
+                <MoneyInput
                   value={movForm.monto}
-                  onChange={(e) => setMovForm({ ...movForm, monto: Number(e.target.value) })}
+                  onValueChange={(val) => setMovForm({ ...movForm, monto: val })}
                 />
               </div>
               <div className="space-y-2">
@@ -1707,11 +1705,10 @@ export default function CajaPage() {
               {/* Efectivo real contado */}
               <div className="space-y-2">
                 <Label className="font-semibold">Efectivo Real Contado</Label>
-                <Input
-                  type="number"
+                <MoneyInput
                   value={cierreForm.efectivo_real}
-                  onChange={(e) =>
-                    setCierreForm({ ...cierreForm, efectivo_real: Number(e.target.value) })
+                  onValueChange={(val) =>
+                    setCierreForm({ ...cierreForm, efectivo_real: val })
                   }
                   className="text-lg font-semibold"
                 />

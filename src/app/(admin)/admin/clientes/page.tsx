@@ -11,6 +11,7 @@ import type { Cliente, ZonaEntrega } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { showAdminToast } from "@/components/admin-toast";
@@ -1753,7 +1754,7 @@ export default function ClientesPage() {
               )}
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Monto a cobrar</Label>
-                <Input type="number" value={payMovMonto} onChange={(e) => setPayMovMonto(Math.max(0, Math.min(payMovVenta.saldo_pendiente, Number(e.target.value))))} />
+                <MoneyInput value={payMovMonto} onValueChange={(v) => setPayMovMonto(Math.max(0, Math.min(payMovVenta.saldo_pendiente, v)))} />
               </div>
               {payMovMonto < payMovVenta.saldo_pendiente && payMovMonto > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -2161,7 +2162,7 @@ export default function ClientesPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Límite de crédito</Label>
-                  <Input type="number" min={0} value={form.limite_credito || ""} onChange={(e) => setForm((prev) => ({ ...prev, limite_credito: Math.max(0, Number(e.target.value)) }))} placeholder="0 = sin límite" />
+                  <MoneyInput value={form.limite_credito || 0} onValueChange={(v) => setForm((prev) => ({ ...prev, limite_credito: Math.max(0, v) }))} min={0} />
                 </div>
                 <div className="space-y-2">
                   <Label>Observación</Label>

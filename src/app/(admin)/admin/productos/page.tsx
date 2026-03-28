@@ -7,6 +7,7 @@ import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -2505,12 +2506,11 @@ export default function ProductosPage() {
                   </div>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                    <Input
-                      type="number"
-                      min="0"
+                    <MoneyInput
+                      min={0}
                       value={form.costo}
-                      onChange={(e) => {
-                        const newCosto = Math.max(0, Number(e.target.value));
+                      onValueChange={(v) => {
+                        const newCosto = Math.max(0, v);
                         const oldCosto = form.costo || 0;
                         let newPrecio = form.precio;
                         if (oldCosto > 0) {
@@ -2541,12 +2541,11 @@ export default function ProductosPage() {
                   </div>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                    <Input
-                      type="number"
-                      min="0"
+                    <MoneyInput
+                      min={0}
                       value={form.precio}
-                      onChange={(e) => {
-                        const newPrecio = Math.max(0, Number(e.target.value));
+                      onValueChange={(v) => {
+                        const newPrecio = Math.max(0, v);
                         setForm({ ...form, precio: newPrecio });
                         setPresentaciones((prev) =>
                           prev.map((p) => {
@@ -2978,7 +2977,7 @@ export default function ProductosPage() {
                             </div>
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                              <Input type="number" min="0" value={pres.costo} onChange={(e) => updatePresentacion(idx, "costo", Math.max(0, Number(e.target.value)))} className="h-9 pl-5 text-sm font-semibold bg-white" />
+                              <MoneyInput min={0} value={pres.costo} onValueChange={(v) => updatePresentacion(idx, "costo", Math.max(0, v))} className="h-9 pl-5 text-sm font-semibold bg-white" />
                             </div>
                           </div>
                           <div className="rounded-lg border border-emerald-100 bg-white/80 p-2.5 space-y-1">
@@ -2990,7 +2989,7 @@ export default function ProductosPage() {
                             </div>
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                              <Input type="number" min="0" value={pres.precio} onChange={(e) => updatePresentacion(idx, "precio", Math.max(0, Number(e.target.value)))} className="h-9 pl-5 text-sm font-semibold bg-white" />
+                              <MoneyInput min={0} value={pres.precio} onValueChange={(v) => updatePresentacion(idx, "precio", Math.max(0, v))} className="h-9 pl-5 text-sm font-semibold bg-white" />
                             </div>
                           </div>
                           <div className="rounded-lg border border-violet-100 bg-white/80 p-2.5 space-y-1">
@@ -3015,7 +3014,7 @@ export default function ProductosPage() {
                           </div>
                           <div className="space-y-1">
                             <label className="text-[10px] text-muted-foreground font-medium">Oferta</label>
-                            <Input type="number" value={pres.precio_oferta ?? ""} onChange={(e) => updatePresentacion(idx, "precio_oferta", e.target.value ? Number(e.target.value) : null)} className="h-8 text-xs" placeholder="—" />
+                            <MoneyInput value={pres.precio_oferta ?? 0} onValueChange={(v) => updatePresentacion(idx, "precio_oferta", v > 0 ? v : null)} className="h-8 text-xs" />
                           </div>
                           <div className="space-y-1">
                             <label className="text-[10px] text-muted-foreground font-medium">Código</label>
