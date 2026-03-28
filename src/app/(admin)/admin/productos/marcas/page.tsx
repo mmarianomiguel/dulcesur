@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -331,9 +332,9 @@ export default function MarcasPage() {
   };
 
   // ─── Derived ───
-  const filtered = marcas.filter((m) => m.nombre.toLowerCase().includes(search.toLowerCase()));
-  const filteredCats = categorias.filter((c) => c.nombre.toLowerCase().includes(search.toLowerCase()));
-  const filteredSubs = subcategorias.filter((s) => s.nombre.toLowerCase().includes(search.toLowerCase()) || (s.categoria_nombre || "").toLowerCase().includes(search.toLowerCase()));
+  const filtered = marcas.filter((m) => norm(m.nombre).includes(norm(search)));
+  const filteredCats = categorias.filter((c) => norm(c.nombre).includes(norm(search)));
+  const filteredSubs = subcategorias.filter((s) => norm(s.nombre).includes(norm(search)) || norm(s.categoria_nombre || "").includes(norm(search)));
 
   // Options for reassignment selects (exclude the one being deleted)
   const reassignOptions = () => {

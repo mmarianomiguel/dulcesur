@@ -3,6 +3,7 @@
 import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import type { Cliente, Producto, Usuario, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -154,9 +155,9 @@ export default function CargaManualPage() {
 
   const filteredProducts = products.filter(
     (p) =>
-      p.nombre.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.codigo.toLowerCase().includes(productSearch.toLowerCase()) ||
-      (presMap[p.id] || []).some((pr) => (pr.codigo || "").toLowerCase().includes(productSearch.toLowerCase()))
+      norm(p.nombre).includes(norm(productSearch)) ||
+      norm(p.codigo).includes(norm(productSearch)) ||
+      (presMap[p.id] || []).some((pr) => norm(pr.codigo || "").includes(norm(productSearch)))
   );
 
   const addItem = (product: Producto) => {

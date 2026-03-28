@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import Link from "next/link";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
@@ -551,8 +552,8 @@ export default function ClientesPage() {
 
   const filteredCobranzas = useMemo(() => {
     if (!cobranzasSearch) return clientsConDeuda;
-    const s = cobranzasSearch.toLowerCase();
-    return clientsConDeuda.filter((c) => c.nombre.toLowerCase().includes(s));
+    const s = norm(cobranzasSearch);
+    return clientsConDeuda.filter((c) => norm(c.nombre).includes(s));
   }, [clientsConDeuda, cobranzasSearch]);
 
   const openCobranzaDetail = async (client: Cliente) => {
@@ -853,14 +854,13 @@ export default function ClientesPage() {
   };
 
   const filtered = useMemo(() => {
-    const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const searchNorm = norm(search);
-    const domicilioLower = filterDomicilio.toLowerCase();
+    const domicilioNorm = norm(filterDomicilio);
     const result = clients.filter(
       (c) =>
         (norm(c.nombre).includes(searchNorm) || (c.cuit || "").includes(search) || ((c as any).codigo_cliente || "").includes(search)) &&
         (!vendedorFilter || (c as any).vendedor_id === vendedorFilter) &&
-        (!filterDomicilio || (c.domicilio || "").toLowerCase().includes(domicilioLower)) &&
+        (!filterDomicilio || norm(c.domicilio || "").includes(domicilioNorm)) &&
         (!filterZona || c.zona_entrega === filterZona)
     );
     switch (sortOrder) {

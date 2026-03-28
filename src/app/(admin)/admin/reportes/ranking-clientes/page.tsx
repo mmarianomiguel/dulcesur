@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,7 +139,7 @@ export default function RankingClientesPage() {
   useEffect(() => { fetchRanking(); }, [fetchRanking]);
 
   const sorted = [...clientes]
-    .filter((c) => !busqueda || c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+    .filter((c) => !busqueda || norm(c.nombre).includes(norm(busqueda)))
     .sort((a, b) => {
       const dir = sortAsc ? 1 : -1;
       if (sortBy === "nombre") return dir * a.nombre.localeCompare(b.nombre);

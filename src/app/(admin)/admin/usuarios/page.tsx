@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,8 +91,8 @@ export default function UsuariosPage() {
 
   const filtered = usuarios.filter(
     (u) =>
-      u.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      (u.email || "").toLowerCase().includes(search.toLowerCase())
+      norm(u.nombre).includes(norm(search)) ||
+      norm(u.email || "").includes(norm(search))
   );
 
   const openNew = () => {

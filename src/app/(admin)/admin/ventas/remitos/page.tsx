@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { todayARG, formatCurrency, formatDatePDF } from "@/lib/formatters";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -118,11 +119,11 @@ export default function RemitosPage() {
     let results = (data as unknown as RemitoRow[]) || [];
 
     if (search) {
-      const s = search.toLowerCase();
+      const s = norm(search);
       results = results.filter(
         (r) =>
-          r.numero.toLowerCase().includes(s) ||
-          (r.clientes?.nombre || "").toLowerCase().includes(s)
+          norm(r.numero).includes(s) ||
+          norm(r.clientes?.nombre || "").includes(s)
       );
     }
 

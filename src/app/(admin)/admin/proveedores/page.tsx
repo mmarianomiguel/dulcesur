@@ -2,6 +2,7 @@
 
 import { showAdminToast } from "@/components/admin-toast";
 import { useState, useCallback, useRef, useEffect } from "react";
+import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -416,7 +417,7 @@ export default function ProveedoresPage() {
 
   // ─── Derived ───
   const filtered = providers.filter(
-    (p) => p.nombre.toLowerCase().includes(search.toLowerCase()) || (p.cuit || "").includes(search)
+    (p) => norm(p.nombre).includes(norm(search)) || (p.cuit || "").includes(search)
   );
   const totalDebt = providers.reduce((a, p) => a + p.saldo, 0);
   const conDeuda = providers.filter((p) => p.saldo > 0).length;

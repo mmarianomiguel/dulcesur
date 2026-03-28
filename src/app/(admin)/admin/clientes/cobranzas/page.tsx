@@ -3,6 +3,7 @@
 import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -201,7 +202,7 @@ export default function CobranzasPage() {
   };
 
   const filtered = search
-    ? clients.filter((c) => c.nombre.toLowerCase().includes(search.toLowerCase()))
+    ? clients.filter((c) => norm(c.nombre).includes(norm(search)))
     : clients;
 
   const exportCSV = () => {

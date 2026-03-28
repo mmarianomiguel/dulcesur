@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { showAdminToast } from "@/components/admin-toast";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { todayARG } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -213,8 +214,8 @@ export default function ReportesPage() {
   // Filtered client options for searchable dropdown
   const filteredClienteOptions = useMemo(() => {
     if (!ventaClienteSearch) return clienteOptions;
-    const q = ventaClienteSearch.toLowerCase();
-    return clienteOptions.filter((c) => c.nombre.toLowerCase().includes(q));
+    const q = norm(ventaClienteSearch);
+    return clienteOptions.filter((c) => norm(c.nombre).includes(q));
   }, [clienteOptions, ventaClienteSearch]);
 
   // --- Derived ---
@@ -970,13 +971,13 @@ export default function ReportesPage() {
                 {stockCatOpen && !stockFilterCat && (
                   <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                     <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setStockFilterCat(""); setStockCatSearch(""); setStockCatOpen(false); }}>Todas</button>
-                    {categorias.filter((c) => c.nombre.toLowerCase().includes(stockCatSearch.toLowerCase())).map((c) => (
+                    {categorias.filter((c) => norm(c.nombre).includes(norm(stockCatSearch))).map((c) => (
                       <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                         onClick={() => { setStockFilterCat(c.id); setStockCatSearch(""); setStockCatOpen(false); setStockFilterSubcat(""); }}>
                         {c.nombre}
                       </button>
                     ))}
-                    {categorias.filter((c) => c.nombre.toLowerCase().includes(stockCatSearch.toLowerCase())).length === 0 && (
+                    {categorias.filter((c) => norm(c.nombre).includes(norm(stockCatSearch))).length === 0 && (
                       <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                     )}
                   </div>
@@ -1002,13 +1003,13 @@ export default function ReportesPage() {
                 {stockSubcatOpen && !stockFilterSubcat && (
                   <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                     <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setStockFilterSubcat(""); setStockSubcatSearch(""); setStockSubcatOpen(false); }}>Todas</button>
-                    {subcategorias.filter((s) => (!stockFilterCat || s.categoria_id === stockFilterCat) && s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).map((s) => (
+                    {subcategorias.filter((s) => (!stockFilterCat || s.categoria_id === stockFilterCat) && norm(s.nombre).includes(norm(stockSubcatSearch))).map((s) => (
                       <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                         onClick={() => { setStockFilterSubcat(s.id); setStockSubcatSearch(""); setStockSubcatOpen(false); }}>
                         {s.nombre}
                       </button>
                     ))}
-                    {subcategorias.filter((s) => (!stockFilterCat || s.categoria_id === stockFilterCat) && s.nombre.toLowerCase().includes(stockSubcatSearch.toLowerCase())).length === 0 && (
+                    {subcategorias.filter((s) => (!stockFilterCat || s.categoria_id === stockFilterCat) && norm(s.nombre).includes(norm(stockSubcatSearch))).length === 0 && (
                       <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                     )}
                   </div>
@@ -1034,13 +1035,13 @@ export default function ReportesPage() {
                 {stockMarcaOpen && !stockFilterMarca && (
                   <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                     <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setStockFilterMarca(""); setStockMarcaSearch(""); setStockMarcaOpen(false); }}>Todas</button>
-                    {marcas.filter((m) => m.nombre.toLowerCase().includes(stockMarcaSearch.toLowerCase())).map((m) => (
+                    {marcas.filter((m) => norm(m.nombre).includes(norm(stockMarcaSearch))).map((m) => (
                       <button key={m.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                         onClick={() => { setStockFilterMarca(m.id); setStockMarcaSearch(""); setStockMarcaOpen(false); }}>
                         {m.nombre}
                       </button>
                     ))}
-                    {marcas.filter((m) => m.nombre.toLowerCase().includes(stockMarcaSearch.toLowerCase())).length === 0 && (
+                    {marcas.filter((m) => norm(m.nombre).includes(norm(stockMarcaSearch))).length === 0 && (
                       <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                     )}
                   </div>

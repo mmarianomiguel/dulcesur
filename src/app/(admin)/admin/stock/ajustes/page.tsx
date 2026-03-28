@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -331,7 +332,7 @@ export default function AjustesStockPage() {
   };
 
   const filteredSearch = productos.filter(
-    (p) => p.nombre.toLowerCase().includes(productSearch.toLowerCase()) || p.codigo.toLowerCase().includes(productSearch.toLowerCase())
+    (p) => norm(p.nombre).includes(norm(productSearch)) || norm(p.codigo).includes(norm(productSearch))
   );
 
   return (

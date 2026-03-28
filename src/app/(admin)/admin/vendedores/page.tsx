@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -466,7 +467,7 @@ export default function VendedoresPage() {
   };
 
   const filteredCategorias = categorias.filter((c) =>
-    c.nombre.toLowerCase().includes(catSearch.toLowerCase())
+    norm(c.nombre).includes(norm(catSearch))
   );
 
   // Period label for summary

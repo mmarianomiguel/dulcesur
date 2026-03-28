@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { showAdminToast } from "@/components/admin-toast";
 import { todayARG, nowTimeARG, currentMonthPadded, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
@@ -945,8 +946,8 @@ export default function PedidosProveedorPage() {
 
   const filtered = pedidos.filter((p) => {
     const matchSearch =
-      pedidoDisplayNum(p.id).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.proveedores?.nombre || "").toLowerCase().includes(searchTerm.toLowerCase());
+      norm(pedidoDisplayNum(p.id)).includes(norm(searchTerm)) ||
+      norm(p.proveedores?.nombre || "").includes(norm(searchTerm));
     const matchEstado = filterEstado === "all" || p.estado === filterEstado;
     return matchSearch && matchEstado;
   });
@@ -990,13 +991,13 @@ export default function PedidosProveedorPage() {
                   )}
                   {provOpen && !selectedProveedorId && (
                     <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
-                      {proveedores.filter((p) => p.nombre.toLowerCase().includes(provSearch.toLowerCase())).map((p) => (
+                      {proveedores.filter((p) => norm(p.nombre).includes(norm(provSearch))).map((p) => (
                         <button key={p.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                           onClick={() => { setSelectedProveedorId(p.id); setProvSearch(""); setProvOpen(false); }}>
                           {p.nombre}
                         </button>
                       ))}
-                      {proveedores.filter((p) => p.nombre.toLowerCase().includes(provSearch.toLowerCase())).length === 0 && (
+                      {proveedores.filter((p) => norm(p.nombre).includes(norm(provSearch))).length === 0 && (
                         <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                       )}
                     </div>
@@ -1022,7 +1023,7 @@ export default function PedidosProveedorPage() {
                   {catOpen && selectedCategoriaId === "all" && (
                     <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                       <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setSelectedCategoriaId("all"); setCatSearch(""); setCatOpen(false); }}>Todas</button>
-                      {categorias.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).map((c) => (
+                      {categorias.filter((c) => norm(c.nombre).includes(norm(catSearch))).map((c) => (
                         <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                           onClick={() => { setSelectedCategoriaId(c.id); setCatSearch(""); setCatOpen(false); }}>
                           {c.nombre}

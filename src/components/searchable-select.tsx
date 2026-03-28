@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { norm } from "@/lib/utils";
 
 interface SearchableSelectProps {
   label: string;
@@ -21,7 +22,7 @@ export function SearchableSelect({ label, value, onChange, allLabel, options }: 
   const selectedLabel = value === "all" || !value ? allLabel : options.find((o) => o.value === value)?.label ?? allLabel;
 
   const filtered = search
-    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    ? options.filter((o) => norm(o.label).includes(norm(search)))
     : options;
 
   useEffect(() => {

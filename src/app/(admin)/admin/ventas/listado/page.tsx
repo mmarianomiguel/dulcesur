@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -320,8 +321,8 @@ export default function ListadoVentasPage() {
 
     if (searchClient) {
       results = results.filter((v) =>
-        (v.clientes?.nombre || "").toLowerCase().includes(searchClient.toLowerCase()) ||
-        v.numero.toLowerCase().includes(searchClient.toLowerCase())
+        norm(v.clientes?.nombre || "").includes(norm(searchClient)) ||
+        norm(v.numero).includes(norm(searchClient))
       );
     }
 

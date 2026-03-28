@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { todayARG, formatCurrency } from "@/lib/formatters";
+import { norm } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -334,7 +335,7 @@ export default function DescuentosPage() {
   // category helpers
   const subsForCat = (catId: string) => subcategorias.filter((s) => s.categoria_id === catId);
   const filteredCats = categorias.filter((c) =>
-    c.nombre.toLowerCase().includes(catSearch.toLowerCase())
+    norm(c.nombre).includes(norm(catSearch))
   );
 
   const toggleCatExpand = (id: string) => {
@@ -351,8 +352,8 @@ export default function DescuentosPage() {
 
   // product helpers
   const filteredProds = productosAll.filter((p) =>
-    p.nombre.toLowerCase().includes(prodSearch.toLowerCase()) ||
-    p.codigo.toLowerCase().includes(prodSearch.toLowerCase())
+    norm(p.nombre).includes(norm(prodSearch)) ||
+    norm(p.codigo).includes(norm(prodSearch))
   );
 
   const toggleProdSelect = (id: string) => {

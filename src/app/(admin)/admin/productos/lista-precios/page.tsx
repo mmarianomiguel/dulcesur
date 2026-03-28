@@ -3,6 +3,7 @@
 import { SearchableSelect } from "@/components/searchable-select";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 
 import {
@@ -375,7 +376,7 @@ export default function ListaPreciosPage() {
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
-      if (filters.search && !p.nombre.toLowerCase().includes(filters.search.toLowerCase())) return false;
+      if (filters.search && !norm(p.nombre).includes(norm(filters.search))) return false;
       if (filters.categoria && p.categoria !== filters.categoria) return false;
       if (filters.subcategoria && p.subcategoria !== filters.subcategoria) return false;
       if (filters.marca && p.marca !== filters.marca) return false;
