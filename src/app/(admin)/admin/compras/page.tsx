@@ -128,11 +128,14 @@ export default function ComprasPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [quickPeriod, setQuickPeriod] = useState<"today" | "week" | "month" | "custom">("today");
-  const [purchaseFilterMode, setPurchaseFilterMode] = useState<"day" | "month" | "range" | "all">("day");
+  const [purchaseFilterMode, setPurchaseFilterMode] = useState<"day" | "month" | "range" | "all">("range");
   const [purchaseFilterDay, setPurchaseFilterDay] = useState(todayString());
   const [purchaseFilterMonth, setPurchaseFilterMonth] = useState(currentMonthPadded());
   const [purchaseFilterYear, setPurchaseFilterYear] = useState(String(new Date().getFullYear()));
-  const [purchaseFilterFrom, setPurchaseFilterFrom] = useState(todayString());
+  const [purchaseFilterFrom, setPurchaseFilterFrom] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
   const [purchaseFilterTo, setPurchaseFilterTo] = useState(todayString());
 
   // New compra state

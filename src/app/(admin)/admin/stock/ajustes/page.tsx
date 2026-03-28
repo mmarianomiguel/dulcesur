@@ -134,11 +134,14 @@ export default function AjustesStockPage() {
   const [productSearch, setProductSearch] = useState("");
 
   // Filters
-  const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("day");
+  const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("range");
   const [filterDay, setFilterDay] = useState(todayARG());
   const [filterMonth, setFilterMonth] = useState(currentMonthPadded());
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
-  const [filterFrom, setFilterFrom] = useState(todayARG());
+  const [filterFrom, setFilterFrom] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
   const [filterTo, setFilterTo] = useState(todayARG());
 
   // Detail

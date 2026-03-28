@@ -96,12 +96,15 @@ export default function NotaCreditoPage() {
   const [ncDetail, setNcDetail] = useState<NCDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [listSearch, setListSearch] = useState("");
-  const [ncFilterMode, setNcFilterMode] = useState<"day" | "month" | "range" | "all">("day");
+  const [ncFilterMode, setNcFilterMode] = useState<"day" | "month" | "range" | "all">("range");
   const [ncFilterDay, setNcFilterDay] = useState(todayARG());
   const [ncFilterMonth, setNcFilterMonth] = useState(currentMonthPadded());
   const [ncFilterYear, setNcFilterYear] = useState(String(new Date().getFullYear()));
-  const [ncFilterFrom, setNcFilterFrom] = useState("");
-  const [ncFilterTo, setNcFilterTo] = useState("");
+  const [ncFilterFrom, setNcFilterFrom] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [ncFilterTo, setNcFilterTo] = useState(todayARG());
 
   // Form state
   const [clients, setClients] = useState<Cliente[]>([]);

@@ -130,11 +130,14 @@ export default function PedidosProveedorPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState("all");
-  const [pedFilterMode, setPedFilterMode] = useState<"day" | "month" | "range" | "all">("month");
+  const [pedFilterMode, setPedFilterMode] = useState<"day" | "month" | "range" | "all">("range");
   const [pedFilterDay, setPedFilterDay] = useState(todayARG());
   const [pedFilterMonth, setPedFilterMonth] = useState(currentMonthPadded());
   const [pedFilterYear, setPedFilterYear] = useState(String(new Date().getFullYear()));
-  const [pedFilterFrom, setPedFilterFrom] = useState(todayARG());
+  const [pedFilterFrom, setPedFilterFrom] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
   const [pedFilterTo, setPedFilterTo] = useState(todayARG());
 
   // New / edit pedido state
