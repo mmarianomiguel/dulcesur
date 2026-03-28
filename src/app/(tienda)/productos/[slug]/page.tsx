@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/formatters";
+import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import { addRecentlyViewed } from "@/hooks/use-recently-viewed";
 import {
@@ -62,7 +63,41 @@ interface Presentacion {
 
 
 export default function ProductoDetallePage() {
-  const { id } = useParams<{ id: string }>();
+  const { slug } = useParams<{ slug: string }>();
+  const [resolvedId, setResolvedId] = useState<string | null>(null);
+
+  // Resolve slug to product ID
+  useEffect(() => {
+    if (!slug) return;
+    // Check if the slug is a raw UUID (backwards compatibility)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(slug)) {
+      setResolvedId(slug);
+      return;
+    }
+    // Extract the short ID (last segment after the final dash, 8 hex chars)
+    const parts = slug.split("-");
+    const shortId = parts[parts.length - 1];
+    if (/^[0-9a-f]{8}$/i.test(shortId)) {
+      // Find product whose ID starts with this short ID
+      supabase
+        .from("productos")
+        .select("id")
+        .ilike("id", `${shortId}%`)
+        .limit(1)
+        .single()
+        .then(({ data }) => {
+          if (data) setResolvedId(data.id);
+          else setResolvedId(slug); // fallback
+        });
+    } else {
+      // Fallback: try as UUID anyway
+      setResolvedId(slug);
+    }
+  }, [slug]);
+
+  // Use resolvedId as "id" throughout the component
+  const id = resolvedId;
 
   const [producto, setProducto] = useState<Producto | null>(null);
   const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
@@ -531,7 +566,7 @@ export default function ProductoDetallePage() {
         <Link href="/productos" className="hover:text-primary transition">Productos</Link>
         {producto.categorias?.nombre && <>
           <ChevronRight className="h-3.5 w-3.5" />
-          <Link href={`/productos?categoria=${producto.categoria_id}`} className="hover:text-primary transition">{producto.categorias.nombre}</Link>
+          <Link href={`/productos?categoria=${slugify(producto.categorias.nombre)}`} className="hover:text-primary transition">{producto.categorias.nombre}</Link>
         </>}
         <ChevronRight className="h-3.5 w-3.5" />
         <span className="text-gray-700 font-medium truncate max-w-[200px]">{producto.nombre}</span>
@@ -909,7 +944,7 @@ export default function ProductoDetallePage() {
                     key={rel.id}
                     className="flex-shrink-0 w-[160px] sm:w-[180px] md:w-[200px] lg:w-[calc(20%-12.8px)] snap-start rounded-2xl border border-gray-100 bg-white overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow"
                   >
-                    <Link href={`/productos/${rel.id}`}>
+                    <Link href={`/productos/${productSlug(rel.nombre, rel.id)}`}>
                       <div className="aspect-square bg-gray-100 overflow-hidden relative group">
                         {relDiscount > 0 && (
                           <span className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
@@ -944,7 +979,7 @@ export default function ProductoDetallePage() {
                       <p className="text-[11px] text-gray-400 uppercase font-medium tracking-wide">
                         {rel.categorias?.nombre ?? ""}
                       </p>
-                      <Link href={`/productos/${rel.id}`}>
+                      <Link href={`/productos/${productSlug(rel.nombre, rel.id)}`}>
                         <p className="text-sm font-medium text-gray-800 line-clamp-2 min-h-[2.5rem] mt-0.5">
                           {rel.nombre}
                         </p>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { showToast } from "@/components/tienda/toast";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/formatters";
+import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import {
   Search,
@@ -147,10 +148,10 @@ function ProductosContent() {
   const [localPrecioMin, setLocalPrecioMin] = useState("");
   const [localPrecioMax, setLocalPrecioMax] = useState("");
 
-  // Read filters from URL
-  const categoriaId = searchParams.get("categoria");
-  const subcategoriaId = searchParams.get("subcategoria");
-  const marcaParam = searchParams.get("marca");
+  // Read filters from URL (now using slugified names instead of UUIDs)
+  const categoriaSlug = searchParams.get("categoria");
+  const subcategoriaSlug = searchParams.get("subcategoria");
+  const marcaSlug = searchParams.get("marca");
   const searchQuery = searchParams.get("q") || "";
   const sort = searchParams.get("sort") || "az";
   const page = Number(searchParams.get("page") || "1");
@@ -158,6 +159,24 @@ function ProductosContent() {
   const precioMax = searchParams.get("precio_max") || "";
   const disponibilidad = searchParams.get("disponibilidad") || "";
   const tipoFilter = searchParams.get("tipo") || "";
+
+  // Resolve slugs to IDs (supports both slugified names and legacy UUIDs)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const categoriaId = categoriaSlug
+    ? uuidRegex.test(categoriaSlug)
+      ? categoriaSlug
+      : categorias.find((c) => slugify(c.nombre) === categoriaSlug)?.id || null
+    : null;
+  const subcategoriaId = subcategoriaSlug
+    ? uuidRegex.test(subcategoriaSlug)
+      ? subcategoriaSlug
+      : allSubcategorias.find((s) => slugify(s.nombre) === subcategoriaSlug)?.id || null
+    : null;
+  const marcaParam = marcaSlug
+    ? uuidRegex.test(marcaSlug)
+      ? marcaSlug
+      : marcas.find((m) => slugify(m.nombre) === marcaSlug)?.id || null
+    : null;
 
   // Sync local price inputs with URL
   useEffect(() => {
@@ -574,16 +593,16 @@ function ProductosContent() {
     setQuantities((prev) => ({ ...prev, [producto.id]: 1 }));
   }
 
-  function selectMarca(marcaId: string) {
-    const isSame = marcaParam === marcaId;
-    updateParams({ marca: isSame ? null : String(marcaId) });
+  function selectMarca(marca: Marca) {
+    const isSame = marcaParam === marca.id;
+    updateParams({ marca: isSame ? null : slugify(marca.nombre) });
   }
 
   /* ───── Active filter count ───── */
   const activeFilterCount =
-    (categoriaId ? 1 : 0) +
-    (subcategoriaId ? 1 : 0) +
-    (marcaParam ? 1 : 0) +
+    (categoriaSlug ? 1 : 0) +
+    (subcategoriaSlug ? 1 : 0) +
+    (marcaSlug ? 1 : 0) +
     (precioMin ? 1 : 0) +
     (precioMax ? 1 : 0) +
     (searchQuery ? 1 : 0) +
@@ -794,7 +813,7 @@ function ProductosContent() {
                     <button
                       onClick={() => {
                         updateParams({
-                          categoria: String(cat.id),
+                          categoria: slugify(cat.nombre),
                           subcategoria: null,
                         });
                         if (hasSubcats && !isExpanded) {
@@ -827,8 +846,8 @@ function ProductosContent() {
                             key={sub.id}
                             onClick={() =>
                               updateParams({
-                                categoria: String(cat.id),
-                                subcategoria: String(sub.id),
+                                categoria: slugify(cat.nombre),
+                                subcategoria: slugify(sub.nombre),
                               })
                             }
                             className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
@@ -920,7 +939,7 @@ function ProductosContent() {
                   return (
                     <button
                       key={marca.id}
-                      onClick={() => selectMarca(marca.id)}
+                      onClick={() => selectMarca(marca)}
                       className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
                     >
                       <RadioCircle selected={isSelected} />
@@ -1255,7 +1274,7 @@ function ProductosContent() {
                     className="group relative bg-white rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/80 flex flex-col"
                   >
                     {/* Image */}
-                    <Link href={`/productos/${producto.id}`} className="relative block">
+                    <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`} className="relative block">
                       <div className="aspect-[4/3] bg-gradient-to-b from-gray-50 to-white overflow-hidden">
                         {producto.imagen_url ? (
                           <img
@@ -1338,7 +1357,7 @@ function ProductosContent() {
 
                     {/* Content */}
                     <div className="flex flex-col flex-1 p-3.5 pt-2.5">
-                      <Link href={`/productos/${producto.id}`} className="flex-1">
+                      <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`} className="flex-1">
                         <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-primary/90 transition-colors">
                           {producto.nombre}
                         </h3>
@@ -1470,7 +1489,7 @@ function ProductosContent() {
                     className="group bg-white rounded-2xl border border-gray-100/80 overflow-hidden hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all duration-300 flex gap-0"
                   >
                     <Link
-                      href={`/productos/${producto.id}`}
+                      href={`/productos/${productSlug(producto.nombre, producto.id)}`}
                       className="relative shrink-0 w-36 h-36 bg-gradient-to-b from-gray-50 to-white overflow-hidden"
                     >
                       {producto.imagen_url ? (
@@ -1518,7 +1537,7 @@ function ProductosContent() {
                             )}
                           </div>
                         )}
-                        <Link href={`/productos/${producto.id}`}>
+                        <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`}>
                           <h3 className="font-medium text-gray-800 line-clamp-2 text-sm leading-snug group-hover:text-primary/90 transition-colors">
                             {producto.nombre}
                           </h3>

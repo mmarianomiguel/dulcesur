@@ -25,7 +25,8 @@ export default function CuentaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [orderCount, setOrderCount] = useState(0);
-  const [logoUrl, setLogoUrl] = useState<string>("");
+  const [logoUrl, setLogoUrl] = useState<string>("/logo-dulcesur.jpg");
+  const [logoError, setLogoError] = useState(false);
 
   // Login fields
   const [loginEmail, setLoginEmail] = useState("");
@@ -161,15 +162,22 @@ export default function CuentaPage() {
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
             {/* Logo */}
             <div className="flex justify-center pt-8 pb-4">
-              {logoUrl ? (
+              {!logoError ? (
                 <img
                   src={logoUrl}
                   alt="Logo"
                   className="h-16 object-contain"
+                  onError={() => {
+                    if (logoUrl !== "/logo-dulcesur.jpg") {
+                      setLogoUrl("/logo-dulcesur.jpg");
+                    } else {
+                      setLogoError(true);
+                    }
+                  }}
                 />
               ) : (
                 <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-2xl">
-                  C
+                  D
                 </div>
               )}
             </div>

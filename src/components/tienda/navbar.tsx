@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef, FormEvent } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,6 +14,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { slugify, productSlug } from "@/lib/utils";
 import { useCart } from "./cart-drawer";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 
@@ -22,6 +22,8 @@ interface Categoria {
   id: string;
   nombre: string;
 }
+
+const FALLBACK_LOGO = "/logo-dulcesur.jpg";
 
 export default function TiendaNavbar() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -36,6 +38,8 @@ export default function TiendaNavbar() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [logoSrc, setLogoSrc] = useState<string>(FALLBACK_LOGO);
+  const [mobilLogoSrc, setMobilLogoSrc] = useState<string>(FALLBACK_LOGO);
 
   const [config, setConfig] = useState<{
     logo_url?: string; nombre?: string; telefono?: string;
@@ -51,6 +55,10 @@ export default function TiendaNavbar() {
     ]).then(([{ data: cats }, { data: emp }, { data: tc }]) => {
       if (cats) setCategorias(cats);
       if (emp || tc) setConfig({ ...emp, ...tc, logo_url: tc?.logo_url } as any);
+      if (tc?.logo_url) {
+        setLogoSrc(tc.logo_url);
+        setMobilLogoSrc(tc.logo_url);
+      }
     });
   }, []);
 
@@ -148,13 +156,13 @@ export default function TiendaNavbar() {
 
           {/* Logo */}
           <Link href="/" className="flex-shrink-0">
-            <Image
-              src={config?.logo_url || "https://www.dulcesur.com/assets/logotipo.png"}
+            <img
+              src={logoSrc}
               alt={config?.nombre || "Tienda"}
-              width={130}
-              height={44}
               className="h-10 w-auto"
-              priority
+              onError={() => {
+                if (logoSrc !== FALLBACK_LOGO) setLogoSrc(FALLBACK_LOGO);
+              }}
             />
           </Link>
 
@@ -184,7 +192,7 @@ export default function TiendaNavbar() {
                   {suggestions.map((s) => (
                     <Link
                       key={s.id}
-                      href={`/productos/${s.id}`}
+                      href={`/productos/${productSlug(s.nombre, s.id)}`}
                       onClick={() => { setShowSuggestions(false); setQuery(""); }}
                       className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition"
                     >
@@ -258,7 +266,7 @@ export default function TiendaNavbar() {
             {filtrarCategorias(categorias).map((cat) => (
               <Link
                 key={cat.id}
-                href={`/productos?categoria=${cat.id}`}
+                href={`/productos?categoria=${slugify(cat.nombre)}`}
                 className="group relative flex-shrink-0 px-3 py-2.5 text-sm font-medium text-gray-600 transition hover:text-primary"
               >
                 {cat.nombre}
@@ -294,12 +302,13 @@ export default function TiendaNavbar() {
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <Image
-            src={config?.logo_url || "https://www.dulcesur.com/assets/logotipo.png"}
+          <img
+            src={mobilLogoSrc}
             alt={config?.nombre || "Tienda"}
-            width={110}
-            height={37}
             className="h-8 w-auto"
+            onError={() => {
+              if (mobilLogoSrc !== FALLBACK_LOGO) setMobilLogoSrc(FALLBACK_LOGO);
+            }}
           />
           <button
             onClick={() => setMobileOpen(false)}
@@ -338,7 +347,7 @@ export default function TiendaNavbar() {
           {filtrarCategorias(categorias).map((cat) => (
             <Link
               key={cat.id}
-              href={`/productos?categoria=${cat.id}`}
+              href={`/productos?categoria=${slugify(cat.nombre)}`}
               onClick={() => setMobileOpen(false)}
               className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-primary/5 hover:text-primary"
             >

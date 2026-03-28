@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 
 /* ──────────────── types ──────────────── */
@@ -274,7 +275,7 @@ function CategoriasDestacadasBlock({
               return (
                 <Link
                   key={cat.id}
-                  href={`/productos?categoria=${cat.id}`}
+                  href={`/productos?categoria=${slugify(cat.nombre)}`}
                   className="group cursor-pointer rounded-2xl border border-gray-100 bg-white p-5 text-center hover:shadow-lg hover:border-primary/20 transition-all duration-300 flex flex-col items-center gap-3"
                 >
                   {cat.imagen_url ? (
@@ -374,7 +375,7 @@ function ProductosDestacadosBlock({
                   key={prod.id}
                   className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white transition-all duration-300 hover:shadow-xl hover:border-gray-200 flex flex-col"
                 >
-                  <Link href={`/productos/${prod.id}`}>
+                  <Link href={`/productos/${productSlug(prod.nombre, prod.id)}`}>
                     {/* image */}
                     <div className="relative aspect-square bg-gray-50 overflow-hidden">
                       {prod.imagen_url ? (
