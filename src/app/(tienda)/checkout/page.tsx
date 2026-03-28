@@ -440,29 +440,37 @@ export default function CheckoutPage() {
 
     // ── Server-side price validation: re-fetch real prices from DB ──
     const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
-    const { data: stockData } = await supabase.from("productos").select("id, stock, nombre, es_combo").in("id", productIds);
+    const { data: stockData } = await supabase.from("productos").select("id, stock, nombre, es_combo, costo").in("id", productIds);
     const stockMap: Record<string, { stock: number; nombre: string }> = {};
-    for (const p of stockData || []) stockMap[p.id] = { stock: p.stock, nombre: p.nombre };
+    const costoMap: Record<string, number> = {};
+    for (const p of stockData || []) { stockMap[p.id] = { stock: p.stock, nombre: p.nombre }; costoMap[p.id] = p.costo || 0; }
+    // Fetch presentation costs for accurate costo_unitario
+    const { data: presData } = await supabase.from("presentaciones").select("producto_id, cantidad, costo").in("producto_id", productIds);
+    const presCostMap: Record<string, Record<number, number>> = {};
+    for (const pr of presData || []) { if (!presCostMap[pr.producto_id]) presCostMap[pr.producto_id] = {}; if (pr.costo > 0) presCostMap[pr.producto_id][pr.cantidad] = pr.costo; }
 
     // For combo products, compute stock from components
     const comboIds = (stockData || []).filter((p: any) => p.es_combo).map((p: any) => p.id);
     if (comboIds.length > 0) {
       const { data: comboItems } = await supabase
         .from("combo_items")
-        .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)")
+        .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock, costo)")
         .in("combo_id", comboIds);
       const comboStockMap: Record<string, number> = {};
+      const comboCostMap: Record<string, number> = {};
       for (const ci of (comboItems || []) as any[]) {
         const compStock = ci.productos?.stock ?? 0;
         const maxFromComp = Math.floor(compStock / (ci.cantidad || 1));
         comboStockMap[ci.combo_id] = ci.combo_id in comboStockMap
           ? Math.min(comboStockMap[ci.combo_id], maxFromComp)
           : maxFromComp;
+        comboCostMap[ci.combo_id] = (comboCostMap[ci.combo_id] || 0) + (ci.productos?.costo || 0) * (ci.cantidad || 1);
       }
       for (const id of comboIds) {
         if (id in comboStockMap && stockMap[id]) {
           stockMap[id].stock = comboStockMap[id];
         }
+        if (id in comboCostMap) costoMap[id] = comboCostMap[id];
       }
     }
 
@@ -647,9 +655,14 @@ export default function CheckoutPage() {
         const ventaItemRows = items.map((item) => {
           const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
           const presUnitsVal = item.unidades_por_presentacion || (isMedio ? 0.5 : 1);
+          const prodId = item.id.split("_")[0];
+          // Frozen cost: presentation-specific > base cost × units (combos already have summed cost in costoMap)
+          const isCombo = (stockData || []).some((p: any) => p.id === prodId && p.es_combo);
+          const presCost = presCostMap[prodId]?.[presUnitsVal];
+          const costoUnit = presCost ? presCost : isCombo ? (costoMap[prodId] || 0) : (costoMap[prodId] || 0) * presUnitsVal;
           return {
             venta_id: venta.id,
-            producto_id: item.id.split("_")[0],
+            producto_id: prodId,
             descripcion: item.nombre.includes(item.presentacion || "") ? item.nombre : `${item.nombre} (${item.presentacion || "Unidad"})`,
             cantidad: item.cantidad,
             precio_unitario: item.precio,
@@ -657,6 +670,7 @@ export default function CheckoutPage() {
             unidad_medida: presUnitsVal > 1 ? `x${presUnitsVal} un` : "Un",
             presentacion: item.presentacion || "Unidad",
             unidades_por_presentacion: presUnitsVal,
+            costo_unitario: costoUnit,
           };
         });
         const { error: ventaItemsError } = await supabase.from("venta_items").insert(ventaItemRows);
