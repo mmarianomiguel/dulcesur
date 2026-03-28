@@ -142,6 +142,8 @@ export default function HojaDeRutaPage() {
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
       .neq("estado", "anulada")
+      .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+      .not("tipo_comprobante", "ilike", "NC%")
       .not("cliente_id", "is", null)
       .order("created_at", { ascending: false });
 
@@ -225,6 +227,8 @@ export default function HojaDeRutaPage() {
       .gte("fecha", historialDateFrom)
       .lt("fecha", endDate)
       .neq("estado", "anulada")
+      .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+      .not("tipo_comprobante", "ilike", "NC%")
       .order("fecha", { ascending: false });
 
     const rows = (data || []) as unknown as VentaRow[];
