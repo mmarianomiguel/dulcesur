@@ -134,6 +134,10 @@ async function handleRegister({
     return NextResponse.json({ error: "Ya existe una cuenta con ese email." }, { status: 409 });
   }
 
+  // Get default zona (Zona 1)
+  const { data: defaultZona } = await supabase.from("zonas_entrega").select("id").ilike("nombre", "%zona 1%").limit(1).maybeSingle();
+  const defaultZonaId = defaultZona?.id || null;
+
   // Create client record
   const { data: clienteData } = await supabase
     .from("clientes")
@@ -150,6 +154,7 @@ async function handleRegister({
       situacion_iva: "Consumidor final",
       origen: "tienda",
       vendedor_id: "94b3d01c-6be8-4a38-a8f0-c42b6502b19e", // Mariano Miguel (default)
+      zona_entrega: defaultZonaId || null,
     })
     .select("id")
     .single();

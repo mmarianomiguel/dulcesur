@@ -266,7 +266,12 @@ export default function ClientesPage() {
 
   const resetForm = () => { setForm(emptyForm); setEditingClient(null); setResetPw(""); setResetMsg(""); setAuthEmail(null); setAuthId(null); };
 
-  const openNew = () => { resetForm(); setForm((prev) => ({ ...prev, vendedor_id: vendedores[0]?.id || "" })); setDialogOpen(true); };
+  const openNew = () => {
+    resetForm();
+    const defaultZona = zonas.find((z) => z.nombre.toLowerCase().includes("zona 1") || z.nombre === "1") || zonas[0];
+    setForm((prev) => ({ ...prev, vendedor_id: vendedores[0]?.id || "", zona_entrega: defaultZona?.id || "" }));
+    setDialogOpen(true);
+  };
 
   const openEdit = async (c: Cliente) => {
     setEditingClient(c);
