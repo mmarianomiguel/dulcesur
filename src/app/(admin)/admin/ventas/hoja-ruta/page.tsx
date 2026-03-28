@@ -1,6 +1,7 @@
 "use client";
 
 import { nowTimeARG, formatCurrency } from "@/lib/formatters";
+import { norm } from "@/lib/utils";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -536,13 +537,36 @@ export default function HojaDeRutaPage() {
     });
   };
 
+  // Drag & drop reorder
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const handleDragStart = (id: string) => setDragId(id);
+  const handleDragOver = (e: React.DragEvent, id: string) => { e.preventDefault(); setDragOverId(id); };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) { handleDragEnd(); return; }
+    // Reorder: move dragId to targetId's position
+    const ids = sortedVentas.map((v) => v.id);
+    const fromIdx = ids.indexOf(dragId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) { handleDragEnd(); return; }
+    const reordered = [...ids];
+    reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, dragId);
+    const newOrden: Record<string, number> = {};
+    reordered.forEach((id, i) => { newOrden[id] = i + 1; });
+    setOrden(newOrden);
+    handleDragEnd();
+  };
+
   // Filter and sort ventas
   const filteredVentas = ventas.filter((v) => {
     if (filterEntrega === "envio" && v.metodo_entrega !== "envio") return false;
     if (filterEntrega === "retiro" && v.metodo_entrega !== "retiro" && v.metodo_entrega !== "retiro_local" && v.metodo_entrega !== null) return false;
     if (search) {
-      const s = search.toLowerCase();
-      if (!v.numero.toLowerCase().includes(s) && !(v.clientes?.nombre || "").toLowerCase().includes(s)) return false;
+      const s = norm(search);
+      if (!norm(v.numero).includes(s) && !norm(v.clientes?.nombre || "").includes(s)) return false;
     }
     return true;
   });
@@ -1190,7 +1214,15 @@ export default function HojaDeRutaPage() {
                 const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
 
                 return (
-                  <Card key={venta.id} className={`overflow-hidden ${estaPago ? "border-green-200" : "border-orange-200"}`}>
+                  <Card
+                    key={venta.id}
+                    draggable
+                    onDragStart={() => handleDragStart(venta.id)}
+                    onDragOver={(e) => handleDragOver(e, venta.id)}
+                    onDrop={() => handleDrop(venta.id)}
+                    onDragEnd={handleDragEnd}
+                    className={`overflow-hidden cursor-grab active:cursor-grabbing transition-all ${estaPago ? "border-green-200" : "border-orange-200"} ${dragId === venta.id ? "opacity-50 scale-95" : ""} ${dragOverId === venta.id && dragId !== venta.id ? "ring-2 ring-primary/50 scale-[1.01]" : ""}`}
+                  >
                     <CardContent className="p-0">
                       {/* Header row */}
                       <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b">
