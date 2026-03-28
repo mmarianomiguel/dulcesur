@@ -451,7 +451,7 @@ export default function ListaPreciosPage() {
       const pdf = new jsPDF({ orientation: isLandscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 5;
+      const margin = style === "combinado" ? 0 : 5;
       // Use the most recent product update date, not today
       const latestUpdate = selectedProducts.reduce((latest, p) => {
         const d = p.fechaActualizacion ? new Date(p.fechaActualizacion).getTime() : 0;
@@ -482,7 +482,7 @@ export default function ListaPreciosPage() {
           pdf.rect(x, y, cellW, cellH);
 
           // Layout with fixed zones anchored from bottom
-          const logoSize = config.combinado_mostrarLogo && logoBase64 ? Math.min(config.logoTamaño, cellH * 0.10) : 0;
+          const logoSize = config.combinado_mostrarLogo && logoBase64 ? config.logoTamaño : 0;
           const bottom = y + cellH;
 
           const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
@@ -1379,7 +1379,7 @@ export default function ListaPreciosPage() {
                     </div>
                     <div className="mt-3">
                       <label className="block text-xs text-muted-foreground mb-1">Tamaño del logo ({config.logoTamaño}mm)</label>
-                      <input type="range" min={4} max={20} step={1} value={config.logoTamaño} onChange={(e) => updateConfig("logoTamaño", Number(e.target.value))} className="w-full accent-primary" />
+                      <input type="range" min={4} max={30} step={1} value={config.logoTamaño} onChange={(e) => updateConfig("logoTamaño", Number(e.target.value))} className="w-full accent-primary" />
                     </div>
                   </div>
                 </>
