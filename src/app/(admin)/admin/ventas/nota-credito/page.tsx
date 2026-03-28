@@ -981,7 +981,7 @@ export default function NotaCreditoPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {ncDetail.items.map((item: any) => (
+                        {ncDetail.items.filter((item: any) => item.cantidad > 0 && item.subtotal > 0).map((item: any) => (
                           <tr key={item.id} className="border-b last:border-0">
                             <td className="py-2 px-3 font-mono text-muted-foreground">{item.codigo || "-"}</td>
                             <td className="py-2 px-3">{item.descripcion}</td>

@@ -832,11 +832,12 @@ export default function ClientesPage() {
   };
 
   const filtered = useMemo(() => {
-    const searchLower = search.toLowerCase();
+    const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const searchNorm = norm(search);
     const domicilioLower = filterDomicilio.toLowerCase();
     const result = clients.filter(
       (c) =>
-        (c.nombre.toLowerCase().includes(searchLower) || (c.cuit || "").includes(search) || ((c as any).codigo_cliente || "").includes(search)) &&
+        (norm(c.nombre).includes(searchNorm) || (c.cuit || "").includes(search) || ((c as any).codigo_cliente || "").includes(search)) &&
         (!vendedorFilter || (c as any).vendedor_id === vendedorFilter) &&
         (!filterDomicilio || (c.domicilio || "").toLowerCase().includes(domicilioLower)) &&
         (!filterZona || c.zona_entrega === filterZona)
