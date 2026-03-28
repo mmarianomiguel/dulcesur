@@ -394,30 +394,23 @@ export default function DashboardPage() {
     let gananciaTotal = 0;
     if (regularVentaIds.length > 0) {
       const ids = regularVentaIds.map((v) => v.id);
-      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, unidades_por_presentacion, presentacion, productos(costo)").in("venta_id", ids);
-      // Also fetch presentation-specific costs for accurate margin
-      const presIds = (items || []).filter((i: any) => i.presentacion && i.presentacion !== "Unidad").map((i: any) => i.productos?.id).filter(Boolean);
-      let presCostMap: Record<string, Record<string, number>> = {};
-      if (presIds.length > 0) {
-        const uniqueIds = [...new Set(presIds)];
-        const { data: presRows } = await supabase.from("presentaciones").select("producto_id, nombre, costo").in("producto_id", uniqueIds);
-        for (const p of presRows || []) {
-          if (!presCostMap[p.producto_id]) presCostMap[p.producto_id] = {};
-          if ((p as any).costo > 0) presCostMap[p.producto_id][(p as any).nombre] = (p as any).costo;
-        }
-      }
+      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, unidades_por_presentacion, presentacion, costo_unitario, productos(costo)").in("venta_id", ids);
       gananciaTotal = (items || []).reduce((acc, item: any) => {
-        const costoBase = item.productos?.costo ?? 0;
         const cantidad = Number(item.cantidad) || 0;
         const precioUnitario = Number(item.precio_unitario) || 0;
         const descPct = Number(item.descuento) || 0;
         const precioConDesc = precioUnitario * (1 - descPct / 100);
-        let unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
-        const presTxt = (item.presentacion || "").toLowerCase();
-        if (presTxt.includes("medio") && unidadesPorPres === 1) unidadesPorPres = 0.5;
-        // Use presentation-specific cost if available
-        const presCost = item.presentacion && presCostMap[item.productos?.id]?.[item.presentacion];
-        const costoReal = presCost || (costoBase * unidadesPorPres);
+        // Use frozen costo_unitario if available, fallback to product cost × units
+        let costoReal: number;
+        if (item.costo_unitario && item.costo_unitario > 0) {
+          costoReal = item.costo_unitario;
+        } else {
+          const costoBase = item.productos?.costo ?? 0;
+          let unidadesPorPres = Number(item.unidades_por_presentacion) || 1;
+          const presTxt = (item.presentacion || "").toLowerCase();
+          if (presTxt.includes("medio") && unidadesPorPres === 1) unidadesPorPres = 0.5;
+          costoReal = costoBase * unidadesPorPres;
+        }
         return acc + (precioConDesc - costoReal) * cantidad;
       }, 0);
     }

@@ -65,6 +65,7 @@ interface Presentacion {
   nombre: string;
   cantidad: number;
   precio: number;
+  costo: number;
   codigo: string; // maps to DB column "sku"
 }
 
@@ -96,6 +97,7 @@ interface ComboItemRef {
   cantidad: number;
   nombre: string;
   stock: number;
+  costo: number;
 }
 
 interface LineItem {
@@ -110,6 +112,7 @@ interface LineItem {
   subtotal: number;
   presentacion: string;
   unidades_por_presentacion: number;
+  costo_unitario: number;
   stock: number;
   es_combo?: boolean;
   comboItems?: ComboItemRef[];
@@ -301,7 +304,7 @@ export default function VentasPage() {
 
     // Pre-load combo items, discounts, and presentaciones in parallel
     const [{ data: allComboItems }, { data: descuentosData }, ...presBatches] = await Promise.all([
-      supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock)"),
+      supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, costo)"),
       supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", todayARG()),
       supabase.from("presentaciones").select("*").range(0, 999),
       supabase.from("presentaciones").select("*").range(1000, 1999),
@@ -313,7 +316,7 @@ export default function VentasPage() {
         const p = ci.productos;
         if (!p) continue;
         if (!cmap[ci.combo_id]) cmap[ci.combo_id] = [];
-        cmap[ci.combo_id].push({ producto_id: p.id, cantidad: ci.cantidad, nombre: p.nombre, stock: p.stock });
+        cmap[ci.combo_id].push({ producto_id: p.id, cantidad: ci.cantidad, nombre: p.nombre, stock: p.stock, costo: p.costo || 0 });
       }
       setComboItemsMap(cmap);
     }
@@ -323,7 +326,7 @@ export default function VentasPage() {
     const map: Record<string, Presentacion[]> = {};
     for (const batch of presBatches) {
       for (const raw of (batch as any).data || []) {
-        const pr = { ...raw, codigo: raw.sku || "" } as Presentacion;
+        const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
         if (!map[pr.producto_id]) map[pr.producto_id] = [];
         map[pr.producto_id].push(pr);
       }
@@ -450,7 +453,7 @@ export default function VentasPage() {
   const fetchPresentaciones = async (productoId: string) => {
     if (presentacionesMap[productoId]) return presentacionesMap[productoId];
     const { data } = await supabase.from("presentaciones").select("*").eq("producto_id", productoId);
-    const pres = (data || []).map((raw: any) => ({ ...raw, codigo: raw.sku || "" })) as Presentacion[];
+    const pres = (data || []).map((raw: any) => ({ ...raw, codigo: raw.sku || "", costo: raw.costo || 0 })) as Presentacion[];
     setPresentacionesMap((prev) => ({ ...prev, [productoId]: pres }));
     return pres;
   };
@@ -523,6 +526,15 @@ export default function VentasPage() {
     const comboStock = isCombo && components && components.length > 0
       ? Math.min(...components.map((c) => Math.floor(c.stock / c.cantidad)))
       : product.stock;
+    // Compute cost at sale time (frozen in venta_items)
+    let costoUnit: number;
+    if (isCombo && components && components.length > 0) {
+      costoUnit = components.reduce((a, c) => a + c.costo * c.cantidad, 0);
+    } else if (presentacion && presentacion.costo > 0) {
+      costoUnit = presentacion.costo;
+    } else {
+      costoUnit = product.costo * presUnits;
+    }
 
     setItems((prev) => {
       if (prev.length >= 500) {
@@ -561,6 +573,7 @@ export default function VentasPage() {
           subtotal: discountedSubtotal,
           presentacion: presName,
           unidades_por_presentacion: presUnits,
+          costo_unitario: costoUnit,
           stock: comboStock,
           es_combo: isCombo,
           comboItems: components,
@@ -1518,6 +1531,7 @@ export default function VentasPage() {
           subtotal: i.subtotal,
           presentacion: i.presentacion || "Unidad",
           unidades_por_presentacion: i.unidades_por_presentacion || 1,
+          costo_unitario: i.costo_unitario || 0,
         }));
         const { error: itemsError } = await supabase.from("venta_items").insert(ventaItems);
         if (itemsError) { setErrorModal({ open: true, message: `Error al guardar items: ${itemsError.message}` }); setSaving(false); return; }

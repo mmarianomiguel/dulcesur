@@ -25,7 +25,7 @@ function fc(v: number) {
 interface VentaRow { id: string; fecha: string; total: number; forma_pago: string; tipo_comprobante: string; created_at: string; cliente_id: string | null; origen: string | null; clientes: { nombre: string } | null; }
 interface CompraRow { id: string; fecha: string; total: number; forma_pago: string; proveedor_id: string | null; observacion: string | null; proveedores: { nombre: string } | null; }
 interface CompraItemRow { compra_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; }
-interface VentaItemDetail { venta_id: string; producto_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidades_por_presentacion: number; presentacion?: string; descuento?: number; productos: { costo: number; nombre: string; categoria_id: string | null; subcategoria_id: string | null } | null; }
+interface VentaItemDetail { venta_id: string; producto_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidades_por_presentacion: number; presentacion?: string; descuento?: number; costo_unitario?: number; productos: { costo: number; nombre: string; categoria_id: string | null; subcategoria_id: string | null } | null; }
 interface ClienteOption { id: string; nombre: string; }
 
 export default function ReportesPage() {
@@ -56,8 +56,6 @@ export default function ReportesPage() {
 
   // Caja movimientos for Mixto splitting
   const [cajaMovimientos, setCajaMovimientos] = useState<{ referencia_id: string; referencia_tipo: string; metodo_pago: string; monto: number }[]>([]);
-  // Presentation costs for profit calculation
-  const [presCostMap, setPresCostMap] = useState<Record<string, Record<number, number>>>({});
 
   // Compras report
   const [compras, setCompras] = useState<CompraRow[]>([]);
@@ -148,7 +146,7 @@ export default function ReportesPage() {
       const [{ data: items }, { data: movs }] = await Promise.all([
         supabase
           .from("venta_items")
-          .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, productos(costo, nombre, categoria_id, subcategoria_id)")
+          .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, costo_unitario, productos(costo, nombre, categoria_id, subcategoria_id)")
           .in("venta_id", ids),
         supabase
           .from("caja_movimientos")
@@ -159,17 +157,6 @@ export default function ReportesPage() {
       ]);
       setVentaItems((items || []) as any[]);
       setCajaMovimientos((movs || []) as any[]);
-      // Load presentation costs for profit calculation
-      const pIds = [...new Set((items || []).map((i: any) => i.producto_id).filter(Boolean))];
-      if (pIds.length > 0) {
-        const { data: presData } = await supabase.from("presentaciones").select("producto_id, cantidad, costo").in("producto_id", pIds);
-        const pMap: Record<string, Record<number, number>> = {};
-        for (const p of presData || []) {
-          if (!pMap[p.producto_id]) pMap[p.producto_id] = {};
-          if (p.costo > 0) pMap[p.producto_id][p.cantidad] = p.costo;
-        }
-        setPresCostMap(pMap);
-      }
     } else {
       setVentaItems([]);
       setCajaMovimientos([]);
@@ -244,16 +231,20 @@ export default function ReportesPage() {
     }
     return u;
   };
-  const ganancia = useMemo(() => ventaItems.reduce((a, item: any) => {
+  // Helper: get frozen cost per item (costo_unitario if available, fallback to product cost)
+  const getItemCost = (item: any) => {
+    if (item.costo_unitario && item.costo_unitario > 0) return item.costo_unitario;
+    // Fallback for old items without costo_unitario
     const costoU = item.productos?.costo || 0;
     const unidadesPres = getUnidadesPres(item);
-    // Use presentation-specific cost if available, fallback to unitario × units
-    const presCosts = presCostMap[item.producto_id];
-    const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
+    return costoU * unidadesPres;
+  };
+  const ganancia = useMemo(() => ventaItems.reduce((a, item: any) => {
+    const costoPres = getItemCost(item);
     const descPct = Number(item.descuento) || 0;
     const precioVenta = item.precio_unitario * (1 - descPct / 100);
     return a + (precioVenta - costoPres) * item.cantidad;
-  }, 0), [ventaItems, presCostMap]);
+  }, 0), [ventaItems]);
 
   // Split Mixto into Efectivo + Transferencia + CC using caja_movimientos
   const ventasPorPago = useMemo(() => {
@@ -316,53 +307,70 @@ export default function ReportesPage() {
     return map;
   }, [compraItems]);
 
-  // --- Category breakdown ---
+  // --- Category / Subcategory breakdown ---
   const [catFilter, setCatFilter] = useState("");
+  const [subcatFilter, setSubcatFilter] = useState("");
+  const [catViewMode, setCatViewMode] = useState<"categoria" | "subcategoria">("categoria");
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
 
   interface CatProductRow { producto_id: string; nombre: string; unidades: number; venta: number; costo: number; ganancia: number; }
   interface CatRow { categoria_id: string; nombre: string; unidades: number; venta: number; costo: number; ganancia: number; margen: number; productos: CatProductRow[]; }
 
-  const catBreakdown = useMemo(() => {
-    const catMap: Record<string, { nombre: string; productos: Record<string, CatProductRow> }> = {};
+  // Helper to build breakdown by a grouping key
+  const buildBreakdown = (groupBy: "categoria" | "subcategoria", filterCat: string, filterSubcat: string) => {
     const catNames: Record<string, string> = {};
     for (const c of categorias) catNames[c.id] = c.nombre;
+    const subcatNames: Record<string, string> = {};
+    for (const s of subcategorias) subcatNames[s.id] = s.nombre;
+
+    const groupMap: Record<string, { nombre: string; productos: Record<string, CatProductRow> }> = {};
 
     for (const item of ventaItems as any[]) {
-      const catId = item.productos?.categoria_id || "__sin_categoria";
-      const catName = catId === "__sin_categoria" ? "Sin categoría" : (catNames[catId] || "Sin categoría");
-      if (!catMap[catId]) catMap[catId] = { nombre: catName, productos: {} };
+      // Apply filters
+      const itemCatId = item.productos?.categoria_id || "__sin_categoria";
+      const itemSubcatId = item.productos?.subcategoria_id || "__sin_subcategoria";
+      if (filterCat && itemCatId !== filterCat) continue;
+      if (filterSubcat && itemSubcatId !== filterSubcat) continue;
+
+      let groupId: string;
+      let groupName: string;
+      if (groupBy === "subcategoria") {
+        groupId = itemSubcatId;
+        groupName = groupId === "__sin_subcategoria" ? "Sin subcategoría" : (subcatNames[groupId] || "Sin subcategoría");
+      } else {
+        groupId = itemCatId;
+        groupName = groupId === "__sin_categoria" ? "Sin categoría" : (catNames[groupId] || "Sin categoría");
+      }
+      if (!groupMap[groupId]) groupMap[groupId] = { nombre: groupName, productos: {} };
 
       const prodId = item.producto_id || item.descripcion;
       const prodName = item.productos?.nombre || item.descripcion || "Producto";
-      if (!catMap[catId].productos[prodId]) catMap[catId].productos[prodId] = { producto_id: prodId, nombre: prodName, unidades: 0, venta: 0, costo: 0, ganancia: 0 };
+      if (!groupMap[groupId].productos[prodId]) groupMap[groupId].productos[prodId] = { producto_id: prodId, nombre: prodName, unidades: 0, venta: 0, costo: 0, ganancia: 0 };
 
-      const costoU = item.productos?.costo || 0;
+      const costoPres = getItemCost(item);
       const unidadesPres = getUnidadesPres(item);
-      const presCosts = presCostMap[item.producto_id];
-      const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
       const descPct = Number(item.descuento) || 0;
       const precioVenta = item.precio_unitario * (1 - descPct / 100);
       const cantidad = Number(item.cantidad) || 0;
 
-      const row = catMap[catId].productos[prodId];
+      const row = groupMap[groupId].productos[prodId];
       row.unidades += cantidad * unidadesPres;
       row.venta += precioVenta * cantidad;
       row.costo += costoPres * cantidad;
       row.ganancia += (precioVenta - costoPres) * cantidad;
     }
 
-    const result: CatRow[] = Object.entries(catMap).map(([catId, { nombre, productos }]) => {
+    return Object.entries(groupMap).map(([gId, { nombre, productos }]) => {
       const prods = Object.values(productos).sort((a, b) => b.venta - a.venta);
       const totalVenta = prods.reduce((a, p) => a + p.venta, 0);
       const totalCosto = prods.reduce((a, p) => a + p.costo, 0);
       const totalGanancia = prods.reduce((a, p) => a + p.ganancia, 0);
       const totalUnidades = prods.reduce((a, p) => a + p.unidades, 0);
-      return { categoria_id: catId, nombre, unidades: totalUnidades, venta: totalVenta, costo: totalCosto, ganancia: totalGanancia, margen: totalVenta > 0 ? (totalGanancia / totalVenta) * 100 : 0, productos: prods };
+      return { categoria_id: gId, nombre, unidades: totalUnidades, venta: totalVenta, costo: totalCosto, ganancia: totalGanancia, margen: totalVenta > 0 ? (totalGanancia / totalVenta) * 100 : 0, productos: prods } as CatRow;
     }).sort((a, b) => b.venta - a.venta);
+  };
 
-    return catFilter ? result.filter((c) => c.categoria_id === catFilter) : result;
-  }, [ventaItems, categorias, presCostMap, catFilter]);
+  const catBreakdown = useMemo(() => buildBreakdown(catViewMode, catFilter, subcatFilter), [ventaItems, categorias, subcategorias, catViewMode, catFilter, subcatFilter]);
 
   const catTotals = useMemo(() => ({
     venta: catBreakdown.reduce((a, c) => a + c.venta, 0),
@@ -370,6 +378,9 @@ export default function ReportesPage() {
     ganancia: catBreakdown.reduce((a, c) => a + c.ganancia, 0),
     unidades: catBreakdown.reduce((a, c) => a + c.unidades, 0),
   }), [catBreakdown]);
+
+  // Filtered subcategorias based on selected category
+  const filteredSubcats = useMemo(() => catFilter ? subcategorias.filter((s) => s.categoria_id === catFilter) : subcategorias, [subcategorias, catFilter]);
 
   const toggleExpandCompra = (id: string) => {
     setExpandedCompras((prev) => {
@@ -396,15 +407,12 @@ export default function ReportesPage() {
   const filteredVentasGanancia = useMemo(() => {
     const filteredIds = new Set(filteredVentas.map((v) => v.id));
     return ventaItems.filter((item) => filteredIds.has(item.venta_id)).reduce((a, item: any) => {
-      const costoU = item.productos?.costo || 0;
-      const unidadesPres = getUnidadesPres(item);
-      const presCosts = presCostMap[item.producto_id];
-      const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
+      const costoPres = getItemCost(item);
       const descPct = Number(item.descuento) || 0;
       const precioVenta = item.precio_unitario * (1 - descPct / 100);
       return a + (precioVenta - costoPres) * item.cantidad;
     }, 0);
-  }, [filteredVentas, ventaItems, presCostMap]);
+  }, [filteredVentas, ventaItems]);
 
   const toggleExpand = (id: string) => {
     setExpandedVentas((prev) => {
@@ -415,14 +423,7 @@ export default function ReportesPage() {
   };
 
   const calcItemProfit = (item: VentaItemDetail) => {
-    const costoU = item.productos?.costo || 0;
-    const pres = (item as any).presentacion || "";
-    const isCombo = pres.toLowerCase().startsWith("combo");
-    // For combos: cost = unit cost (combo's own cost, not multiplied by units)
-    // For regular: cost = unit cost × units per presentation
-    const unidadesPres = isCombo ? 1 : getUnidadesPres(item);
-    const presCosts = presCostMap[(item as any).producto_id];
-    const costoPres = presCosts?.[unidadesPres] || (costoU * unidadesPres);
+    const costoPres = getItemCost(item);
     const descPct = Number((item as any).descuento) || 0;
     const precioVenta = item.precio_unitario * (1 - descPct / 100);
     return (precioVenta - costoPres) * item.cantidad;
@@ -694,11 +695,21 @@ export default function ReportesPage() {
         </TabsContent>
 
         <TabsContent value="categorias" className="mt-4 space-y-4">
-          {/* Filter */}
+          {/* View mode + Filters */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Agrupar por</Label>
+              <Select value={catViewMode} onValueChange={(v) => { setCatViewMode((v as any) || "categoria"); setSubcatFilter(""); setExpandedCats(new Set()); }}>
+                <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="categoria">Categoría</SelectItem>
+                  <SelectItem value="subcategoria">Subcategoría</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Categoría</Label>
-              <Select value={catFilter} onValueChange={(v) => setCatFilter(v === "todas" ? "" : (v ?? ""))}>
+              <Select value={catFilter || "todas"} onValueChange={(v) => { setCatFilter(v === "todas" ? "" : (v ?? "")); setSubcatFilter(""); }}>
                 <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todas">Todas las categorías</SelectItem>
@@ -707,8 +718,21 @@ export default function ReportesPage() {
                 </SelectContent>
               </Select>
             </div>
+            {catViewMode === "subcategoria" && filteredSubcats.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Subcategoría</Label>
+                <Select value={subcatFilter || "todas_sub"} onValueChange={(v) => setSubcatFilter(v === "todas_sub" ? "" : (v ?? ""))}>
+                  <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas_sub">Todas las subcategorías</SelectItem>
+                    {filteredSubcats.map((s) => <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>)}
+                    <SelectItem value="__sin_subcategoria">Sin subcategoría</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="ml-auto flex gap-4 text-sm pt-5">
-              <span>{catBreakdown.length} categoría{catBreakdown.length !== 1 ? "s" : ""}</span>
+              <span>{catBreakdown.length} {catViewMode === "subcategoria" ? "subcategoría" : "categoría"}{catBreakdown.length !== 1 ? "s" : ""}</span>
               <span className="text-muted-foreground">{Math.round(catTotals.unidades)} unidades vendidas</span>
             </div>
           </div>
@@ -739,7 +763,7 @@ export default function ReportesPage() {
               <thead className="bg-muted/50">
                 <tr>
                   <th className="text-left p-3 font-medium w-8"></th>
-                  <th className="text-left p-3 font-medium">Categoría</th>
+                  <th className="text-left p-3 font-medium">{catViewMode === "subcategoria" ? "Subcategoría" : "Categoría"}</th>
                   <th className="text-right p-3 font-medium">Unidades</th>
                   <th className="text-right p-3 font-medium">Venta</th>
                   <th className="text-right p-3 font-medium">Costo</th>

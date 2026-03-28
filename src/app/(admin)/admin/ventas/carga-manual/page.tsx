@@ -47,6 +47,7 @@ interface LineItem {
   price: number;
   discount: number;
   subtotal: number;
+  costo_unitario: number;
 }
 
 interface ManualRow extends Venta {
@@ -185,6 +186,7 @@ export default function CargaManualPage() {
           price: product.precio,
           discount: 0,
           subtotal: product.precio,
+          costo_unitario: product.costo || 0,
         },
       ]);
     }
@@ -206,6 +208,7 @@ export default function CargaManualPage() {
         price: freePrice,
         discount: 0,
         subtotal: freePrice * freeQty,
+        costo_unitario: 0,
       },
     ]);
     setFreeDesc("");
@@ -300,6 +303,7 @@ export default function CargaManualPage() {
         precio_unitario: i.price,
         descuento: i.discount,
         subtotal: i.subtotal,
+        costo_unitario: i.costo_unitario || 0,
       }));
       await supabase.from("venta_items").insert(ventaItems);
 

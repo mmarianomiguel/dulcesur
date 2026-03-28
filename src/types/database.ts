@@ -214,6 +214,7 @@ export interface VentaItem {
   subtotal: number;
   presentacion?: string;
   unidades_por_presentacion?: number;
+  costo_unitario?: number;
   created_at: string;
 }
 
