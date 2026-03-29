@@ -126,11 +126,11 @@ function SkeletonCategory() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-center mb-10">
+    <div className="text-center mb-10 animate-fade-in-up">
       <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
         {children}
       </h2>
-      <div className="w-16 h-1 bg-primary rounded-full mx-auto mt-2" />
+      <div className="w-16 h-1 bg-primary rounded-full mx-auto mt-3" />
     </div>
   );
 }
@@ -157,19 +157,19 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full">
         <div className="max-w-2xl">
-          <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight mb-5">
+          <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight mb-5 animate-fade-in-up">
             {config.titulo || "Bienvenido a nuestra tienda"}
           </h1>
           {config.subtitulo && (
-            <p className="text-lg text-white/90 mb-8 max-w-lg">
+            <p className="text-lg text-white/90 mb-8 max-w-lg animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
               {config.subtitulo}
             </p>
           )}
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
             {config.boton_texto && (
               <Link
                 href={config.boton_link || "/productos"}
-                className="bg-white text-primary rounded-full px-8 py-3.5 font-semibold shadow-lg hover:shadow-xl transition-shadow"
+                className="bg-white text-gray-900 rounded-full px-8 py-3.5 font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
               >
                 {config.boton_texto}
               </Link>
@@ -177,7 +177,7 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
             {config.boton_secundario_texto && (
               <Link
                 href={config.boton_secundario_link || "/productos"}
-                className="border-2 border-white text-white rounded-full px-8 py-3 font-semibold hover:bg-white/10 transition-colors"
+                className="border-2 border-white text-white rounded-full px-8 py-3 font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
               >
                 {config.boton_secundario_texto}
               </Link>
@@ -198,12 +198,12 @@ function TrustBadgesBlock({ config }: { config: Record<string, any> }) {
   return (
     <section className="bg-white border-y border-gray-100 py-4">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 stagger-children">
           {items.map((b, i) => {
             const Icon = resolveIcon(b.icono);
             return (
-              <div key={i} className="flex items-center gap-2 md:gap-3 py-2">
-                <div className="w-9 h-9 md:w-12 md:h-12 rounded-full bg-primary/5 text-primary flex items-center justify-center shrink-0">
+              <div key={i} className="flex items-center gap-2 md:gap-3 py-2 animate-fade-in-up">
+                <div className="w-9 h-9 md:w-12 md:h-12 rounded-full bg-primary/8 text-primary flex items-center justify-center shrink-0">
                   <Icon className="w-4 h-4 md:w-5 md:h-5" />
                 </div>
                 <div className="min-w-0">
@@ -267,7 +267,7 @@ function CategoriasDestacadasBlock({
             ))}
           </div>
         ) : cats.length > 0 ? (
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-4 stagger-children">
             {cats.map((cat) => {
               const key = cat.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
               const Icon = categoryIcons[key] || Package;
@@ -276,7 +276,7 @@ function CategoriasDestacadasBlock({
                 <Link
                   key={cat.id}
                   href={`/productos?categoria=${slugify(cat.nombre)}`}
-                  className="group cursor-pointer rounded-2xl border border-gray-100 bg-white p-5 text-center hover:shadow-lg hover:border-primary/20 transition-all duration-300 flex flex-col items-center gap-3"
+                  className="group animate-scale-in cursor-pointer rounded-2xl border border-gray-100 bg-white p-5 text-center hover:shadow-lg hover:border-primary/20 hover:-translate-y-1 transition-all duration-300 flex flex-col items-center gap-3"
                 >
                   {cat.imagen_url ? (
                     <div className="w-14 h-14 rounded-xl overflow-hidden">
@@ -365,7 +365,7 @@ function ProductosDestacadosBlock({
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 stagger-children">
             {visibleProds.map((prod) => {
               const qty = getQty(prod.id);
               const sinStock = prod.stock <= 0;
@@ -373,7 +373,7 @@ function ProductosDestacadosBlock({
               return (
                 <div
                   key={prod.id}
-                  className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white transition-all duration-300 hover:shadow-xl hover:border-gray-200 flex flex-col"
+                  className="card-product animate-fade-in-up group relative overflow-hidden rounded-2xl border border-gray-100 bg-white flex flex-col"
                 >
                   <Link href={`/productos/${productSlug(prod.nombre, prod.id)}`}>
                     {/* image */}
@@ -383,7 +383,7 @@ function ProductosDestacadosBlock({
                           src={prod.imagen_url}
                           alt={prod.nombre}
                           fill
-                          className="object-contain p-4 transition-transform duration-300 group-hover:scale-105"
+                          className="card-product-img object-contain p-4"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
@@ -400,7 +400,7 @@ function ProductosDestacadosBlock({
                       {/* Badges */}
                       <div className="absolute top-2 left-2 flex flex-col gap-1">
                         {prod.es_combo && (
-                          <span className="bg-gradient-to-r from-primary/80 to-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          <span className="bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
                             COMBO
                           </span>
                         )}
@@ -493,7 +493,7 @@ function ProductosDestacadosBlock({
                             </div>
                             <button
                               onClick={() => { agregarAlCarrito(prod, qty); setQty(prod.id, 1); }}
-                              className="w-full bg-primary hover:bg-primary/90 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
+                              className="btn-add-cart w-full bg-gray-900 hover:bg-primary text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors duration-200"
                             >
                               <ShoppingCart className="w-3.5 h-3.5" />
                               Agregar
@@ -515,7 +515,7 @@ function ProductosDestacadosBlock({
           <div className="text-center mt-10">
             <Link
               href="/productos"
-              className="inline-block border-2 border-primary text-primary hover:bg-primary hover:text-white rounded-full px-8 py-3 font-semibold transition-all"
+              className="inline-block border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white rounded-full px-8 py-3 font-semibold transition-all duration-200 active:scale-95"
             >
               Ver todos los productos
             </Link>
@@ -575,15 +575,15 @@ function PorQueElegirnosBlock({ config }: { config: Record<string, any> }) {
       <div className="max-w-7xl mx-auto px-4">
         <SectionTitle>{titulo}</SectionTitle>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 stagger-children">
           {cards.map((item, i) => {
             const Icon = resolveIcon(item.icono);
             return (
               <div
                 key={i}
-                className="bg-white rounded-2xl p-5 md:p-8 flex md:flex-col items-center md:text-center gap-4 md:gap-0 shadow-sm hover:shadow-md transition-shadow"
+                className="animate-fade-in-up bg-white rounded-2xl p-5 md:p-8 flex md:flex-col items-center md:text-center gap-4 md:gap-0 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
               >
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary/5 text-primary flex items-center justify-center shrink-0 md:mx-auto md:mb-5">
+                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary/8 text-primary flex items-center justify-center shrink-0 md:mx-auto md:mb-5">
                   <Icon className="w-5 h-5 md:w-6 md:h-6" />
                 </div>
                 <div>

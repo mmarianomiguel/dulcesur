@@ -83,6 +83,8 @@ export default function TiendaFooter() {
 
   return (
     <footer>
+      {/* Coral accent line */}
+      <div className="h-1 bg-gradient-to-r from-primary via-rose-400 to-primary" />
       <section className="bg-gray-900 text-gray-300">
         <div className="mx-auto max-w-7xl px-4 py-12">
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-12">

@@ -1311,7 +1311,7 @@ function ProductosContent() {
                       {/* Badge - one per product, priority: combo > discount > box > price change */}
                       {(() => {
                         if (producto.es_combo) return (
-                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary/80 to-purple-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
                             COMBO
                           </span>
                         );
@@ -1538,7 +1538,7 @@ function ProductosContent() {
                         {(producto.categorias?.nombre || producto.marcas?.nombre || producto.es_combo) && (
                           <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                             {producto.es_combo && (
-                              <span className="text-[10px] bg-gradient-to-r from-primary/80 to-purple-500 text-white font-bold px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] bg-gradient-to-r from-primary to-rose-400 text-white font-bold px-2 py-0.5 rounded-full">
                                 COMBO
                               </span>
                             )}

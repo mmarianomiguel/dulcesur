@@ -118,6 +118,9 @@ export default function TiendaNavbar() {
 
   return (
     <>
+      {/* ── Accent line ── */}
+      <div className="h-0.5 bg-gradient-to-r from-primary via-rose-400 to-primary" />
+
       {/* ── Top bar ── */}
       <div className="bg-gray-900 text-white">
         <div className="mx-auto flex max-w-7xl items-center justify-center md:justify-between px-4 py-1.5 text-[10px] md:text-xs">
@@ -182,7 +185,7 @@ export default function TiendaNavbar() {
               />
               <button
                 type="submit"
-                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-primary text-white transition hover:bg-primary/90"
+                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-gray-900 text-white transition hover:bg-primary"
                 aria-label="Buscar"
               >
                 <Search className="h-4 w-4" />
@@ -296,7 +299,7 @@ export default function TiendaNavbar() {
       />
       {/* Panel */}
       <div
-        className={`fixed left-0 top-0 z-[70] flex h-full w-80 max-w-[85vw] flex-col bg-white shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed left-0 top-0 z-[70] flex h-full w-80 max-w-[85vw] flex-col bg-white shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -331,7 +334,7 @@ export default function TiendaNavbar() {
             />
             <button
               type="submit"
-              className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-primary text-white"
+              className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-r-full bg-gray-900 text-white transition hover:bg-primary"
               aria-label="Buscar"
             >
               <Search className="h-4 w-4" />
