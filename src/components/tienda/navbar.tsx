@@ -50,14 +50,17 @@ export default function TiendaNavbar() {
   useEffect(() => {
     Promise.all([
       supabase.from("categorias").select("id, nombre, restringida").limit(12),
-      supabase.from("empresa").select("nombre, telefono").limit(1).single(),
+      supabase.from("empresa").select("nombre, telefono, white_label").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion").limit(1).single(),
     ]).then(([{ data: cats }, { data: emp }, { data: tc }]) => {
       if (cats) setCategorias(cats);
       if (emp || tc) setConfig({ ...emp, ...tc, logo_url: tc?.logo_url } as any);
-      if (tc?.logo_url) {
-        setLogoSrc(tc.logo_url);
-        setMobilLogoSrc(tc.logo_url);
+      // Use tienda_config logo, fall back to white-label logo
+      const wlLogo = (emp as any)?.white_label?.logo_url;
+      const logoUrl = tc?.logo_url || wlLogo;
+      if (logoUrl) {
+        setLogoSrc(logoUrl);
+        setMobilLogoSrc(logoUrl);
       }
     });
   }, []);

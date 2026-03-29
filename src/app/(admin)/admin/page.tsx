@@ -716,7 +716,7 @@ export default function DashboardPage() {
         return parts.join(", ") || null;
       })(),
       clienteTelefono: cliente?.telefono || (venta as any)._telefono || null,
-      clienteCondicionIva: cliente?.situacion_iva || "Consumidor final",
+      clienteCondicionIva: cliente?.situacion_iva || null,
       vendedor: "Mariano Miguel",
       items: saleItems,
       fecha: new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }),

@@ -87,8 +87,23 @@ function loadReceiptConfig(): ReceiptConfig {
   return defaultReceiptConfig;
 }
 
+// Load receipt config from DB (fallback when localStorage is empty or stale)
+async function loadReceiptConfigFromDB(): Promise<ReceiptConfig | null> {
+  try {
+    const { data: emp } = await supabase.from("empresa").select("receipt_config").limit(1).single();
+    if (emp && (emp as any).receipt_config) {
+      return { ...defaultReceiptConfig, ...(emp as any).receipt_config };
+    }
+  } catch {}
+  return null;
+}
+
 function saveReceiptConfig(config: ReceiptConfig) {
   localStorage.setItem("receipt_config", JSON.stringify(config));
+  // Also persist to DB for cross-device/browser robustness
+  supabase.from("empresa").select("id").limit(1).single().then(({ data: emp }) => {
+    if (emp) supabase.from("empresa").update({ receipt_config: config } as any).eq("id", emp.id);
+  });
 }
 
 type Section = "empresa" | "facturacion" | "impresion" | "comprobantes" | "cuentas" | "modulos" | "backup";
@@ -154,10 +169,20 @@ export default function ConfiguracionPage() {
 
   // Load receipt config, bank accounts and module config from localStorage on mount
   useEffect(() => {
-    setRcfg(loadReceiptConfig());
+    const localConfig = loadReceiptConfig();
+    setRcfg(localConfig);
+    // If localStorage had no config, try loading from DB
+    if (!localStorage.getItem("receipt_config")) {
+      loadReceiptConfigFromDB().then((dbConfig) => {
+        if (dbConfig) {
+          setRcfg(dbConfig);
+          localStorage.setItem("receipt_config", JSON.stringify(dbConfig));
+        }
+      });
+    }
     supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre").then(({ data }) => {
       if (data && data.length > 0) {
-        setCuentas(data.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo_cuenta || "Caja de Ahorro", cbu_cvu: c.cbu_cvu || "", alias: c.alias || "", titular: c.titular || "", origen: c.origen || "propia", proveedor_id: c.proveedor_id || "" })));
+        setCuentas(data.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo_cuenta || "Caja de Ahorro", cbu_cvu: c.cbu_cvu || "", alias: c.alias || "", titular: c.titular || "", origen: c.origen || "propia", proveedor_id: c.proveedor_id || "", logo_url: c.logo_url || "" })));
       } else {
         try { const stored = localStorage.getItem("cuentas_bancarias"); if (stored) setCuentas(JSON.parse(stored)); } catch {}
       }
@@ -937,8 +962,8 @@ export default function ConfiguracionPage() {
                                     return;
                                   }
                                   const data = await res.json();
-                                  if (data.url) {
-                                    setCuentaForm({ ...cuentaForm, logo_url: data.url });
+                                  if (data.secure_url || data.url) {
+                                    setCuentaForm({ ...cuentaForm, logo_url: data.secure_url || data.url });
                                     showAdminToast("Logo subido", "success");
                                   } else {
                                     showAdminToast("No se obtuvo URL del logo", "error");

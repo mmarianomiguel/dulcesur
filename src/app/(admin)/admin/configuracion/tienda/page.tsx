@@ -42,6 +42,7 @@ import {
   Settings,
   Image,
   CalendarDays,
+  Upload,
 } from "lucide-react";
 
 interface TiendaConfig {
@@ -352,14 +353,33 @@ export default function TiendaConfigPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Logo URL</Label>
+                    <Label>Logo</Label>
                     <div className="flex items-start gap-4">
-                      <div className="flex-1">
+                      <div className="flex-1 flex gap-2">
                         <Input
                           value={config?.logo_url || ""}
                           onChange={(e) => update("logo_url", e.target.value)}
-                          placeholder="https://ejemplo.com/logo.png"
+                          placeholder="https://... o subir imagen"
+                          className="flex-1"
                         />
+                        <label className="cursor-pointer shrink-0 inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9">
+                          <Upload className="w-4 h-4" />
+                          <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const formData = new FormData();
+                            formData.append("file", file);
+                            try {
+                              const res = await fetch("/api/upload", { method: "POST", body: formData });
+                              if (!res.ok) { showAdminToast("Error al subir imagen", "error"); return; }
+                              const data = await res.json();
+                              if (data.secure_url) {
+                                update("logo_url", data.secure_url);
+                                showAdminToast("Logo subido", "success");
+                              }
+                            } catch { showAdminToast("Error al subir imagen", "error"); }
+                          }} />
+                        </label>
                       </div>
                       {config?.logo_url ? (
                         <div className="w-16 h-16 rounded-xl border bg-muted/50 flex items-center justify-center overflow-hidden shrink-0">

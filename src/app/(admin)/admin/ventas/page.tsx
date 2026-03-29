@@ -346,11 +346,11 @@ export default function VentasPage() {
     if (emp) {
       setReceiptConfig((prev) => ({
         ...prev,
-        empresaNombre: emp.nombre || prev.empresaNombre,
-        empresaDomicilio: emp.domicilio || prev.empresaDomicilio,
-        empresaTelefono: emp.telefono || prev.empresaTelefono,
-        empresaCuit: emp.cuit || prev.empresaCuit,
-        empresaIva: emp.situacion_iva || prev.empresaIva,
+        empresaNombre: prev.empresaNombre || emp.nombre || "",
+        empresaDomicilio: prev.empresaDomicilio || emp.domicilio || "",
+        empresaTelefono: prev.empresaTelefono || emp.telefono || "",
+        empresaCuit: prev.empresaCuit || emp.cuit || "",
+        empresaIva: prev.empresaIva || emp.situacion_iva || "",
       }));
     }
     // Load logo and web URL from tienda_config

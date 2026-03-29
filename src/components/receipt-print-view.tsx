@@ -242,7 +242,10 @@ export function ReceiptPrintView({
           const isBox = !item.es_combo && item.unidades_por_presentacion > 1;
           const isMedio = (item.unidades_por_presentacion || 1) < 1;
           const displayQty = isMedio ? item.qty * (item.unidades_por_presentacion || 0.5) : item.qty;
-          const precioUnitario = item.price;
+          // For fractional presentations (e.g. 0.5 = medio cartón), show the full unit price
+          const precioUnitario = isMedio && item.unidades_por_presentacion > 0
+            ? item.price / item.unidades_por_presentacion
+            : item.price;
           return (
             <tr key={i} style={{ borderBottom: "1px solid #ccc", background: i % 2 === 1 ? altRowBg : "transparent" }}>
               <td style={{ padding: rowPad, textAlign: "left" }}>{displayQty}</td>

@@ -15,8 +15,10 @@ import {
   Palette,
   Eye,
   SunMedium,
+  Upload,
 } from "lucide-react";
 import { useWhiteLabel, type WhiteLabelConfig } from "@/hooks/use-white-label";
+import { showAdminToast } from "@/components/admin-toast";
 
 const PRESET_COLORS: { name: string; hue: number; sidebarL: number }[] = [
   { name: "Azul (Default)", hue: 264, sidebarL: 0.16 },
@@ -104,13 +106,34 @@ export default function WhiteLabelPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>URL del logo (opcional)</Label>
-              <Input
-                value={config.logo_url}
-                onChange={(e) => update({ logo_url: e.target.value })}
-                placeholder="https://..."
-              />
-              <p className="text-[11px] text-muted-foreground">Si se ingresa, reemplaza la inicial en el sidebar</p>
+              <Label>Logo (opcional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={config.logo_url}
+                  onChange={(e) => update({ logo_url: e.target.value })}
+                  placeholder="https://... o subir imagen"
+                  className="flex-1"
+                />
+                <label className="cursor-pointer inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9 shrink-0">
+                  <Upload className="w-4 h-4" />
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    try {
+                      const res = await fetch("/api/upload", { method: "POST", body: formData });
+                      if (!res.ok) { showAdminToast("Error al subir imagen", "error"); return; }
+                      const data = await res.json();
+                      if (data.secure_url) {
+                        update({ logo_url: data.secure_url });
+                        showAdminToast("Logo subido", "success");
+                      }
+                    } catch { showAdminToast("Error al subir imagen", "error"); }
+                  }} />
+                  </label>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Si se ingresa, reemplaza la inicial en el sidebar y se usa en la tienda online</p>
             </div>
           </div>
 

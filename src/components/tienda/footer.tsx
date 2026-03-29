@@ -67,14 +67,18 @@ export default function TiendaFooter() {
   const [tiendaNombre, setTiendaNombre] = useState("DulceSur");
 
   useEffect(() => {
-    supabase.from("tienda_config").select("nombre_tienda, logo_url, descripcion, footer_config").limit(1).single().then(({ data }) => {
+    Promise.all([
+      supabase.from("tienda_config").select("nombre_tienda, logo_url, descripcion, footer_config").limit(1).single(),
+      supabase.from("empresa").select("white_label").limit(1).single(),
+    ]).then(([{ data }, { data: emp }]) => {
       if (data) {
         setTiendaNombre(data.nombre_tienda || "DulceSur");
         const fc = (data as any).footer_config || {};
+        const wlLogo = (emp as any)?.white_label?.logo_url;
         setConfig({
           ...DEFAULT_CONFIG,
           ...fc,
-          logo_url: fc.logo_url || data.logo_url || "",
+          logo_url: fc.logo_url || data.logo_url || wlLogo || "",
           descripcion: fc.descripcion || data.descripcion || DEFAULT_CONFIG.descripcion,
         });
       }
