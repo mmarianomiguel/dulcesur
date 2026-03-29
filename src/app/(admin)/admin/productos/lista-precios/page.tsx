@@ -64,7 +64,6 @@ interface Product {
   precioPorCaja: boolean;
   unidadesCaja: number;
   hayStock: boolean;
-  aumento: boolean;
   id: string;
   categoria: string;
   subcategoria: string;
@@ -82,7 +81,6 @@ interface Filters {
   cajaEnOferta: string;
   precioPorCaja: string;
   hayStock: string;
-  aumento: string;
   fechaDesde: string;
   fechaHasta: string;
 }
@@ -118,7 +116,7 @@ interface PdfConfig {
 type PdfStyle = "combinado" | "poster" | "lista" | "variaciones";
 type ConfigTab = "general" | PdfStyle;
 
-const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", aumento: "", fechaDesde: "", fechaHasta: "" };
+const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", fechaDesde: "", fechaHasta: "" };
 
 const DEFAULT_CONFIG: PdfConfig = {
   porcentajeTransferencia: 2,
@@ -192,6 +190,7 @@ export default function ListaPreciosPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [sortOrder, setSortOrder] = useState<"nombre" | "modificacion">("nombre");
   const [page, setPage] = useState(1);
   const [config, setConfig] = useState<PdfConfig>(DEFAULT_CONFIG);
   const [showConfig, setShowConfig] = useState(false);
@@ -297,9 +296,7 @@ export default function ListaPreciosPage() {
       const dbMarca = p.marcas?.nombre || "";
       const clasificacion = clasificarProducto(p.nombre);
 
-      // Detect recent price modification (last 7 days)
       const fechaAct = p.fecha_actualizacion || "";
-      const isRecent = fechaAct ? (Date.now() - new Date(fechaAct).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
 
       return {
         nombre: p.nombre,
@@ -313,7 +310,6 @@ export default function ListaPreciosPage() {
         precioPorCaja: precioCaja > 0,
         unidadesCaja,
         hayStock: p.stock > 0,
-        aumento: isRecent,
         id: p.id,
         categoria: dbCategoria || "Sin categoría",
         subcategoria: (p.subcategoria_id && subcatMap[p.subcategoria_id]) || "",
@@ -363,7 +359,6 @@ export default function ListaPreciosPage() {
     if (filters.cajaEnOferta) c++;
     if (filters.precioPorCaja) c++;
     if (filters.hayStock) c++;
-    if (filters.aumento) c++;
     return c;
   }, [filters]);
 
@@ -375,7 +370,7 @@ export default function ListaPreciosPage() {
   }, [products, filters.categoria]);
 
   const filtered = useMemo(() => {
-    return products.filter((p) => {
+    const result = products.filter((p) => {
       if (filters.search && !norm(p.nombre).includes(norm(filters.search))) return false;
       if (filters.categoria && p.categoria !== filters.categoria) return false;
       if (filters.subcategoria && p.subcategoria !== filters.subcategoria) return false;
@@ -388,8 +383,6 @@ export default function ListaPreciosPage() {
       if (filters.precioPorCaja === "no" && p.precioPorCaja) return false;
       if (filters.hayStock === "si" && !p.hayStock) return false;
       if (filters.hayStock === "no" && p.hayStock) return false;
-      if (filters.aumento === "si" && !p.aumento) return false;
-      if (filters.aumento === "no" && p.aumento) return false;
       if (filters.fechaDesde && p.fechaActualizacion) {
         const d = new Date(p.fechaActualizacion);
         if (!isNaN(d.getTime()) && d < new Date(filters.fechaDesde + "T00:00:00")) return false;
@@ -401,7 +394,15 @@ export default function ListaPreciosPage() {
       }
       return true;
     });
-  }, [products, filters]);
+    if (sortOrder === "modificacion") {
+      result.sort((a, b) => {
+        const fa = a.fechaActualizacion ? new Date(a.fechaActualizacion).getTime() : 0;
+        const fb = b.fechaActualizacion ? new Date(b.fechaActualizacion).getTime() : 0;
+        return fb - fa;
+      });
+    }
+    return result;
+  }, [products, filters, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const paginated = useMemo(() => filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage), [filtered, page]);
@@ -1159,7 +1160,17 @@ export default function ListaPreciosPage() {
                   <input type="date" value={filters.fechaHasta} onChange={(e) => updateFilter("fechaHasta", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
                 <Toggle label="Con stock" value={filters.hayStock} onChange={(v) => updateFilter("hayStock", v)} />
-                <Toggle label="Precio actualizado" value={filters.aumento} onChange={(v) => updateFilter("aumento", v)} />
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Ordenar por</label>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as "nombre" | "modificacion")}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="nombre">Nombre A-Z</option>
+                    <option value="modificacion">Últ. modificación</option>
+                  </select>
+                </div>
               </div>
               {activeFilterCount > 0 && (
                 <button onClick={() => setFilters({ ...DEFAULT_FILTERS, search: filters.search })} className="mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
@@ -1229,9 +1240,7 @@ export default function ListaPreciosPage() {
                       {p.fechaActualizacion ? (() => { const d = new Date(p.fechaActualizacion); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }); })() : "—"}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      {p.aumento ? (
-                        <span className="inline-block bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Actualizado</span>
-                      ) : !p.hayStock ? (
+                      {!p.hayStock ? (
                         <span className="inline-block bg-red-100 text-red-600 text-[10px] font-medium px-2 py-0.5 rounded-full">Sin stock</span>
                       ) : (
                         <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>

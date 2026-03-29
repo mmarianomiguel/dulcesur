@@ -79,6 +79,7 @@ interface ProductoRow {
   categoria_id: string | null;
   subcategoria_id: string | null;
   marca_id: string | null;
+  fecha_actualizacion: string | null;
 }
 
 function SearchableSelect({
@@ -197,6 +198,7 @@ export default function EditarPreciosPage() {
   const [categoriaFilter, setCategoriaFilter] = useState("all");
   const [subcategoriaFilter, setSubcategoriaFilter] = useState("all");
   const [estadoFilter, setEstadoFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<"nombre" | "modificacion">("nombre");
   const [searchFilter, setSearchFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -315,7 +317,7 @@ export default function EditarPreciosPage() {
     async function load() {
       setLoading(true);
       const [prods, marcaRes, catRes, subcatRes, presData] = await Promise.all([
-        fetchAll("productos", "id, nombre, codigo, stock, precio, costo, activo, categoria_id, subcategoria_id, marca_id", (q: any) => q.eq("activo", true).order("nombre")),
+        fetchAll("productos", "id, nombre, codigo, stock, precio, costo, activo, categoria_id, subcategoria_id, marca_id, fecha_actualizacion", (q: any) => q.eq("activo", true).order("nombre")),
         supabase.from("marcas").select("*").order("nombre"),
         supabase.from("categorias").select("*").order("nombre"),
         supabase.from("subcategorias").select("*").order("nombre"),
@@ -344,7 +346,7 @@ export default function EditarPreciosPage() {
 
   // Filtered products
   const filteredProductos = useMemo(() => {
-    return productos.filter((p) => {
+    const result = productos.filter((p) => {
       if (searchFilter && !p.nombre.toLowerCase().includes(searchFilter.toLowerCase()) && !p.codigo.toLowerCase().includes(searchFilter.toLowerCase())) return false;
       if (marcaFilter !== "all" && p.marca_id !== marcaFilter) return false;
       if (categoriaFilter !== "all" && p.categoria_id !== categoriaFilter) return false;
@@ -353,7 +355,15 @@ export default function EditarPreciosPage() {
       if (estadoFilter === "sinstock" && p.stock > 0) return false;
       return true;
     });
-  }, [productos, searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter]);
+    if (sortOrder === "modificacion") {
+      result.sort((a, b) => {
+        const fa = a.fecha_actualizacion ? new Date(a.fecha_actualizacion).getTime() : 0;
+        const fb = b.fecha_actualizacion ? new Date(b.fecha_actualizacion).getTime() : 0;
+        return fb - fa;
+      });
+    }
+    return result;
+  }, [productos, searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter, sortOrder]);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -362,7 +372,7 @@ export default function EditarPreciosPage() {
   const paginatedProductos = useMemo(() => filteredProductos.slice((page - 1) * itemsPerPage, page * itemsPerPage), [filteredProductos, page]);
 
   // Reset page when filters change
-  useEffect(() => { setPage(1); }, [searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter]);
+  useEffect(() => { setPage(1); }, [searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter, sortOrder]);
 
   // Get caja price for a product
   const getCajaPrice = useCallback(
@@ -868,6 +878,17 @@ export default function EditarPreciosPage() {
                   options={[
                     { value: "stock", label: "En stock" },
                     { value: "sinstock", label: "Sin stock" },
+                  ]}
+                />
+                {/* Ordenar */}
+                <SearchableSelect
+                  label="Ordenar por"
+                  value={sortOrder}
+                  onChange={(v) => setSortOrder(v as "nombre" | "modificacion")}
+                  allLabel=""
+                  options={[
+                    { value: "nombre", label: "Nombre A-Z" },
+                    { value: "modificacion", label: "Últ. modificación" },
                   ]}
                 />
               </div>
