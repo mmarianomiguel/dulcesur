@@ -587,15 +587,9 @@ export default function EditarPreciosPage() {
 
       if (massTarget === "fijar_costo") {
         const newCosto = Math.max(0, Math.round(amount));
-        // Maintain margin
-        let newPrecio = currentPrecio;
-        if (currentCosto > 0) {
-          const marginRatio = currentPrecio / currentCosto;
-          newPrecio = Math.round(newCosto * marginRatio);
-        }
-        const diff = newPrecio - currentPrecio;
-        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
-        return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio, diff, diffPercent };
+        const diff = newCosto - currentCosto;
+        const diffPercent = currentCosto > 0 ? ((newCosto - currentCosto) / currentCosto) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio: currentPrecio, diff, diffPercent };
       }
 
       if (massTarget === "margen") {
@@ -689,8 +683,12 @@ export default function EditarPreciosPage() {
 
       for (const item of massEditPreview) {
         const prod = productos.find((p) => p.id === item.id);
-        const updateData: Record<string, unknown> = { precio: item.newPrecio, fecha_actualizacion: new Date().toISOString() };
-        if (prod) updateData.precio_anterior = prod.precio;
+        const updateData: Record<string, unknown> = {};
+        if (item.newPrecio !== (prod?.precio ?? 0)) {
+          updateData.precio = item.newPrecio;
+          updateData.fecha_actualizacion = new Date().toISOString();
+          if (prod) updateData.precio_anterior = prod.precio;
+        }
         if (massTarget === "costo" || massTarget === "fijar_costo") updateData.costo = item.newCosto;
         updates.push(supabase.from("productos").update(updateData).eq("id", item.id).then());
 
@@ -1247,16 +1245,20 @@ export default function EditarPreciosPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Producto</TableHead>
-                        {massTarget === "costo" && (
+                        {(massTarget === "costo" || massTarget === "fijar_costo") && (
                           <>
                             <TableHead className="text-right">Costo Actual</TableHead>
                             <TableHead className="text-center w-10"></TableHead>
                             <TableHead className="text-right">Costo Nuevo</TableHead>
                           </>
                         )}
-                        <TableHead className="text-right">Precio Actual</TableHead>
-                        <TableHead className="text-center w-10"></TableHead>
-                        <TableHead className="text-right">Precio Nuevo</TableHead>
+                        {massTarget !== "fijar_costo" && (
+                          <>
+                            <TableHead className="text-right">Precio Actual</TableHead>
+                            <TableHead className="text-center w-10"></TableHead>
+                            <TableHead className="text-right">Precio Nuevo</TableHead>
+                          </>
+                        )}
                         <TableHead className="text-right">Diferencia</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1264,7 +1266,7 @@ export default function EditarPreciosPage() {
                       {massEditPreview.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="text-sm font-medium">{item.nombre}</TableCell>
-                          {massTarget === "costo" && (
+                          {(massTarget === "costo" || massTarget === "fijar_costo") && (
                             <>
                               <TableCell className="text-right tabular-nums">
                                 {formatCurrency(item.currentCosto, true)}
@@ -1275,21 +1277,25 @@ export default function EditarPreciosPage() {
                               </TableCell>
                             </>
                           )}
-                          <TableCell className="text-right tabular-nums">
-                            {formatCurrency(item.currentPrecio)}
-                          </TableCell>
-                          <TableCell className="text-center text-muted-foreground">&rarr;</TableCell>
-                          <TableCell className="text-right tabular-nums font-medium">
-                            {formatCurrency(item.newPrecio)}
-                          </TableCell>
+                          {massTarget !== "fijar_costo" && (
+                            <>
+                              <TableCell className="text-right tabular-nums">
+                                {formatCurrency(item.currentPrecio)}
+                              </TableCell>
+                              <TableCell className="text-center text-muted-foreground">&rarr;</TableCell>
+                              <TableCell className="text-right tabular-nums font-medium">
+                                {formatCurrency(item.newPrecio)}
+                              </TableCell>
+                            </>
+                          )}
                           <TableCell className="text-right tabular-nums">
                             {item.diff >= 0 ? (
                               <span className="text-green-600">
-                                +{formatCurrency(item.diff)} (+{item.diffPercent.toFixed(1)}%)
+                                +{formatCurrency(Math.abs(item.diff))} (+{item.diffPercent.toFixed(1)}%)
                               </span>
                             ) : (
                               <span className="text-red-500">
-                                {formatCurrency(item.diff)} ({item.diffPercent.toFixed(1)}%)
+                                -{formatCurrency(Math.abs(item.diff))} ({item.diffPercent.toFixed(1)}%)
                               </span>
                             )}
                           </TableCell>
