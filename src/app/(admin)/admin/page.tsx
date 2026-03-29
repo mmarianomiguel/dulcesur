@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { showAdminToast } from "@/components/admin-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,7 @@ import {
   Banknote,
   User,
   Wallet,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   Dialog,
@@ -66,8 +67,9 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
+import { defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
+import { PrintPreviewDialog } from "@/components/print-preview-dialog";
 import { useWhiteLabel } from "@/hooks/use-white-label";
 import { formatCurrency, todayARG } from "@/lib/formatters";
 
@@ -207,6 +209,29 @@ export default function DashboardPage() {
   const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMixtoEf?: number; cobroMixtoTr?: number; cobroCuentaBancaria?: string }>({ open: false, venta: null, pendiente: 0, type: "paid" });
   const [deliveryCuentasBancarias, setDeliveryCuentasBancarias] = useState<{ id: string; nombre: string; alias?: string }[]>([]);
 
+  // ─── Widget visibility ───
+  const WIDGETS = [
+    { key: "stats", label: "Ventas, Ganancia, Gastos, Tickets" },
+    { key: "balance", label: "Capital, Cuentas a cobrar/pagar" },
+    { key: "charts", label: "Gráficos (ventas mensuales, formas de pago)" },
+    { key: "categories", label: "Ventas por categoría" },
+    { key: "pedidos", label: "Pedidos online" },
+    { key: "saldos", label: "Alertas de saldo" },
+  ];
+  const [widgetConfig, setWidgetConfig] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem("dashboard_widgets");
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+  const [showWidgetSettings, setShowWidgetSettings] = useState(false);
+  const isWidgetVisible = (key: string) => widgetConfig[key] !== false;
+  const toggleWidget = (key: string) => {
+    const next = { ...widgetConfig, [key]: !isWidgetVisible(key) };
+    setWidgetConfig(next);
+    localStorage.setItem("dashboard_widgets", JSON.stringify(next));
+  };
+
   // ─── Combo data for preview ───
   const [comboProductIds, setComboProductIds] = useState<Set<string>>(new Set());
   const [comboItemsMap, setComboItemsMap] = useState<Record<string, { nombre: string; cantidad: number }[]>>({});
@@ -214,7 +239,7 @@ export default function DashboardPage() {
   // ─── Print state ───
   const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
   const [printSale, setPrintSale] = useState<ReceiptSale | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
+  const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
 
   // ─── Compute date range from filter ───
   const getDateRange = useCallback((): { start: string; end: string } => {
@@ -523,6 +548,11 @@ export default function DashboardPage() {
   }, [getDateRange, fetchPedidosOnline]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
   useEffect(() => { supabase.from("cuentas_bancarias").select("id, nombre, alias").eq("activo", true).order("nombre").then(({ data }) => setDeliveryCuentasBancarias(data || [])); }, []);
 
   // ─── Realtime: new online orders notification ───
@@ -537,27 +567,22 @@ export default function DashboardPage() {
         setTimeout(() => setNewOrderAlert(null), 8000);
         // Play notification sound
         try { new Audio("/notification.mp3").play().catch(() => {}); } catch {}
+        // Browser push notification
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Nuevo pedido online", {
+            body: `#${v.numero} — $${Math.round(v.total).toLocaleString()}`,
+            icon: "/icon.png",
+          });
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchPedidosOnline]);
 
-  // ─── Print effect ───
+  // ─── Print preview effect ───
   useEffect(() => {
-    if (printSale && printRef.current) {
-      const timeout = setTimeout(() => {
-        const printWindow = window.open("", "_blank");
-        if (!printWindow || !printRef.current) return;
-        const content = printRef.current.innerHTML;
-        printWindow.document.write(`<!DOCTYPE html><html><head><title>${printSale.tipoComprobante} ${printSale.numero}</title>
-          <style>@page{size:A4;margin:0}body{margin:0;padding:0}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
-          </head><body>${content}</body></html>`);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        setPrintSale(null);
-      }, 150);
-      return () => clearTimeout(timeout);
+    if (printSale) {
+      setPrintPreviewOpen(true);
     }
   }, [printSale]);
 
@@ -822,8 +847,29 @@ export default function DashboardPage() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm">Resumen de actividad — {getFilterLabel()}</p>
         </div>
-        <Badge variant="outline" className="text-xs w-fit">{wl.system_name || "DulceSur"}</Badge>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setShowWidgetSettings(!showWidgetSettings)} className="gap-1.5 text-muted-foreground">
+            <SlidersHorizontal className="w-4 h-4" /> Personalizar
+          </Button>
+          <Badge variant="outline" className="text-xs w-fit">{wl.system_name || "DulceSur"}</Badge>
+        </div>
       </div>
+
+      {showWidgetSettings && (
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-sm font-medium mb-3">Widgets visibles</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {WIDGETS.map((w) => (
+                <label key={w.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={isWidgetVisible(w.key)} onChange={() => toggleWidget(w.key)} className="rounded" />
+                  {w.label}
+                </label>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Accesos Rápidos ─── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -878,7 +924,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ─── Saldos Descuadrados ─── */}
-      {saldoMismatches.length > 0 && (
+      {isWidgetVisible("saldos") && saldoMismatches.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -907,7 +953,7 @@ export default function DashboardPage() {
       )}
 
       {/* ─── Pedidos Online ─── */}
-      <Card>
+      {isWidgetVisible("pedidos") && <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -1122,7 +1168,7 @@ export default function DashboardPage() {
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* ─── Quick Actions ─── */}
       <div className="flex flex-wrap gap-2">
@@ -1187,21 +1233,26 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* Stats */}
+          {isWidgetVisible("stats") && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Ventas {periodLabel}</p><p className="text-2xl font-bold mt-1">{formatCurrency(ventasPeriodo)}</p></div><div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-primary" /></div></div></CardContent></Card>
             <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Ganancia</p><div className="flex items-baseline gap-2 mt-1"><p className="text-2xl font-bold">{formatCurrency(ganancia)}</p><span className={`text-sm font-semibold ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{ventasPeriodo > 0 ? `${((ganancia / ventasPeriodo) * 100).toFixed(1)}%` : "—"}</span></div></div><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ganancia >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}`}>{ganancia >= 0 ? <TrendingUp className="w-5 h-5 text-emerald-500" /> : <TrendingDown className="w-5 h-5 text-red-500" />}</div></div></CardContent></Card>
             <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Gastos</p><p className="text-2xl font-bold mt-1">{formatCurrency(gastosPeriodo)}</p></div><div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><TrendingDown className="w-5 h-5 text-orange-500" /></div></div></CardContent></Card>
             <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Tickets</p><p className="text-2xl font-bold mt-1">{ticketsPeriodo}</p></div><div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-violet-500" /></div></div></CardContent></Card>
           </div>
+          )}
 
           {/* Balance cards */}
+          {isWidgetVisible("balance") && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="bg-primary/5 border-primary/10"><CardContent className="pt-6 flex items-center gap-4"><PackageIcon className="w-8 h-8 text-primary/60" /><div><p className="text-xs text-muted-foreground">Capital en mercaderia</p><p className="text-lg font-semibold">{formatCurrency(capitalMercaderia)}</p></div></CardContent></Card>
             <Card className="bg-emerald-500/5 border-emerald-500/10"><CardContent className="pt-6 flex items-center gap-4"><Users className="w-8 h-8 text-emerald-500/60" /><div><p className="text-xs text-muted-foreground">Cuentas a cobrar</p><p className="text-lg font-semibold">{formatCurrency(cuentasCobrar)}</p></div></CardContent></Card>
             <Card className="bg-orange-500/5 border-orange-500/10"><CardContent className="pt-6 flex items-center gap-4"><CreditCard className="w-8 h-8 text-orange-500/60" /><div><p className="text-xs text-muted-foreground">Cuentas a pagar</p><p className="text-lg font-semibold">{formatCurrency(cuentasPagar)}</p></div></CardContent></Card>
           </div>
+          )}
 
           {/* Charts */}
+          {isWidgetVisible("charts") && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-2">
               <CardHeader><CardTitle className="text-base">Ventas y egresos — ultimos 6 meses</CardTitle></CardHeader>
@@ -1219,8 +1270,10 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Ventas por categoria */}
+          {isWidgetVisible("categories") && (
           <Card>
             <CardHeader><CardTitle className="text-base">Ventas por categoria — {periodLabel}</CardTitle></CardHeader>
             <CardContent>
@@ -1232,6 +1285,7 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
         </>
       )}
 
@@ -1467,10 +1521,16 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Hidden print container */}
-      <div ref={printRef} className="hidden">
-        {printSale && <ReceiptPrintView sale={printSale} config={receiptConfig} />}
-      </div>
+      {/* Print preview dialog */}
+      {printSale && (
+        <PrintPreviewDialog
+          open={printPreviewOpen}
+          onClose={() => { setPrintPreviewOpen(false); setPrintSale(null); }}
+          config={receiptConfig}
+          sale={printSale}
+          title={`Vista previa — ${printSale.tipoComprobante} N° ${printSale.numero}`}
+        />
+      )}
 
       {/* New order notification toast */}
       {newOrderAlert && (

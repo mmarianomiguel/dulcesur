@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
@@ -67,8 +67,9 @@ import {
   PrinterCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
-import type { ReceiptConfig, ReceiptLineItem } from "@/components/receipt-print-view";
+import { defaultReceiptConfig } from "@/components/receipt-print-view";
+import type { ReceiptConfig, ReceiptLineItem, ReceiptSale } from "@/components/receipt-print-view";
+import { PrintPreviewDialog } from "@/components/print-preview-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 // ─── Historial types ───
@@ -237,11 +238,11 @@ export default function ListadoVentasPage() {
   const [printVenta, setPrintVenta] = useState<VentaRow | null>(null);
   const [printItems, setPrintItems] = useState<VentaItemRow[]>([]);
   const [printLineItems, setPrintLineItems] = useState<ReceiptLineItem[]>([]);
-  const [printReady, setPrintReady] = useState(false);
+  const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
+  const [printSaleObj, setPrintSaleObj] = useState<ReceiptSale | null>(null);
   const [printClienteSaldo, setPrintClienteSaldo] = useState(0);
   const [printSaldoAnteriorCC, setPrintSaldoAnteriorCC] = useState(0);
   const [printPagos, setPrintPagos] = useState<{ efectivo: number; transferencia: number; cuentaCorriente: number; recibido: number; vuelto: number }>({ efectivo: 0, transferencia: 0, cuentaCorriente: 0, recibido: 0, vuelto: 0 });
-  const printRef = useRef<HTMLDivElement>(null);
 
   // ══════════════════════════════════════════════════════════════
   // PEDIDOS ONLINE STATE
@@ -719,7 +720,32 @@ export default function ListadoVentasPage() {
     setPrintVenta(v);
     setPrintItems(items);
     setPrintLineItems(lineItems);
-    setPrintReady(true);
+    // Build sale object and show preview
+    const vendedorName = getVendedorNombre(v.vendedor_id) === "—" && (v.origen === "tienda" || v.tipo_comprobante?.toLowerCase().includes("web")) ? "Tienda Online" : getVendedorNombre(v.vendedor_id);
+    setPrintSaleObj({
+      numero: v.numero,
+      total: v.total,
+      subtotal: v.subtotal,
+      descuento: Math.round(v.subtotal * (v.descuento_porcentaje || 0) / 100),
+      recargo: Math.round((v.subtotal - Math.round(v.subtotal * (v.descuento_porcentaje || 0) / 100)) * (v.recargo_porcentaje || 0) / 100),
+      transferSurcharge: 0,
+      tipoComprobante: v.tipo_comprobante,
+      formaPago: v.forma_pago,
+      moneda: v.moneda || "ARS",
+      cliente: v.clientes?.nombre || "Consumidor Final",
+      clienteDireccion: v.clientes?.domicilio || null,
+      clienteTelefono: v.clientes?.telefono || null,
+      clienteCondicionIva: v.clientes?.situacion_iva || null,
+      vendedor: vendedorName,
+      fecha: formatDatePDF(v.fecha),
+      saldoAnterior: saldoAnteriorCC || (saldo - (pagoCC || 0)),
+      saldoNuevo: saldo,
+      items: lineItems,
+      pagoEfectivo: pagoEf || undefined,
+      pagoTransferencia: pagoTr || undefined,
+      pagoCuentaCorriente: pagoCC || undefined,
+    });
+    setPrintPreviewOpen(true);
     // Mark as printed
     try {
       const printed = new Set(printedPedidos);
@@ -730,32 +756,22 @@ export default function ListadoVentasPage() {
     } catch {}
   };
 
-  useEffect(() => {
-    if (printReady && printRef.current) {
-      const timeout = setTimeout(() => {
-        const win = window.open("", "_blank");
-        if (!win) return;
-        const content = printRef.current!.innerHTML;
-        win.document.write(`<!DOCTYPE html><html><head><title>Remito ${printVenta?.numero || ""}</title><style>@page{size:A4;margin:0}body{margin:0}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${content}</body></html>`);
-        win.document.close();
-        win.focus();
-        win.print();
-        setPrintReady(false);
-      }, 100);
-      return () => clearTimeout(timeout);
-    }
-  }, [printReady, printVenta]);
-
-  const exportCSV = () => {
-    const header = "Tipo,N° Comprobante,Fecha,Cliente,Forma Pago,Total\n";
-    const rows = ventas.map((v) =>
-      `"${v.tipo_comprobante}","${v.numero}","${v.fecha}","${v.clientes?.nombre || ""}","${v.forma_pago}",${v.total}`
-    ).join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `ventas_${filterYear}_${filterMonth}.csv`;
-    a.click();
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const rows = ventas.map((v) => ({
+      "Número": v.numero,
+      "Fecha": v.fecha,
+      "Tipo Comprobante": v.tipo_comprobante,
+      "Cliente": v.clientes?.nombre || "",
+      "Total": v.total,
+      "Forma de Pago": v.forma_pago,
+      "Estado": v.estado,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 14 }, { wch: 18 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Ventas");
+    XLSX.writeFile(wb, `Ventas_${filterYear}_${filterMonth}.xlsx`);
   };
 
   // ─── Historial Derived ───
@@ -872,8 +888,8 @@ export default function ListadoVentasPage() {
     if (poFilterEstado !== "todos" && p.estado !== poFilterEstado) return false;
     if (poFilterEntrega !== "todos" && p.metodo_entrega !== poFilterEntrega) return false;
     if (poSearch) {
-      const q = poSearch.toLowerCase();
-      if (!p.numero.toLowerCase().includes(q) && !p.nombre_cliente.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q)) return false;
+      const q = norm(poSearch);
+      if (!norm(p.numero).includes(q) && !norm(p.nombre_cliente).includes(q) && !norm(p.email || "").includes(q)) return false;
     }
     return true;
   });
@@ -1488,11 +1504,11 @@ export default function ListadoVentasPage() {
       }
       // Search filter
       if (searchClient) {
-        const q = searchClient.toLowerCase();
+        const q = norm(searchClient);
         if (
-          !(o.nombre_cliente || "").toLowerCase().includes(q) &&
-          !(o.numero || "").toLowerCase().includes(q) &&
-          !(o.email || "").toLowerCase().includes(q)
+          !norm(o.nombre_cliente || "").includes(q) &&
+          !norm(o.numero || "").includes(q) &&
+          !norm(o.email || "").includes(q)
         ) return false;
       }
       return true;
@@ -1526,7 +1542,7 @@ export default function ListadoVentasPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={exportCSV}>
+          <Button variant="outline" size="sm" onClick={exportExcel}>
             <Download className="w-4 h-4 mr-2" />Exportar
           </Button>
           <Link href="/admin/ventas/carga-manual">
@@ -2564,36 +2580,15 @@ export default function ListadoVentasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Hidden print area */}
-      {printVenta && (
-        <div style={{ position: "fixed", left: "-9999px", top: 0 }} ref={printRef}>
-          <ReceiptPrintView
-            config={receiptConfig}
-            sale={{
-              numero: printVenta.numero,
-              total: printVenta.total,
-              subtotal: printVenta.subtotal,
-              descuento: Math.round(printVenta.subtotal * (printVenta.descuento_porcentaje || 0) / 100),
-              recargo: Math.round((printVenta.subtotal - Math.round(printVenta.subtotal * (printVenta.descuento_porcentaje || 0) / 100)) * (printVenta.recargo_porcentaje || 0) / 100),
-              transferSurcharge: 0,
-              tipoComprobante: printVenta.tipo_comprobante,
-              formaPago: printVenta.forma_pago,
-              moneda: printVenta.moneda || "ARS",
-              cliente: printVenta.clientes?.nombre || "Consumidor Final",
-              clienteDireccion: printVenta.clientes?.domicilio || null,
-              clienteTelefono: printVenta.clientes?.telefono || null,
-              clienteCondicionIva: printVenta.clientes?.situacion_iva || null,
-              vendedor: getVendedorNombre(printVenta.vendedor_id) === "—" && (printVenta.origen === "tienda" || printVenta.tipo_comprobante?.toLowerCase().includes("web")) ? "Tienda Online" : getVendedorNombre(printVenta.vendedor_id),
-              fecha: formatDatePDF(printVenta.fecha),
-              saldoAnterior: printSaldoAnteriorCC || (printClienteSaldo - (printPagos.cuentaCorriente || 0)),
-              saldoNuevo: printClienteSaldo,
-              items: printLineItems,
-              pagoEfectivo: printPagos.efectivo || undefined,
-              pagoTransferencia: printPagos.transferencia || undefined,
-              pagoCuentaCorriente: printPagos.cuentaCorriente || undefined,
-            }}
-          />
-        </div>
+      {/* Print preview dialog */}
+      {printSaleObj && (
+        <PrintPreviewDialog
+          open={printPreviewOpen}
+          onClose={() => { setPrintPreviewOpen(false); setPrintSaleObj(null); }}
+          config={receiptConfig}
+          sale={printSaleObj}
+          title={`Vista previa — ${printSaleObj.tipoComprobante} N° ${printSaleObj.numero}`}
+        />
       )}
 
       {/* Confirm Dialog */}

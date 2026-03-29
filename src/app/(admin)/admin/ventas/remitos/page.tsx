@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
 import { todayARG, formatCurrency, formatDatePDF } from "@/lib/formatters";
@@ -28,8 +28,9 @@ import {
   Printer,
   Download,
 } from "lucide-react";
-import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
-import type { ReceiptConfig, ReceiptLineItem } from "@/components/receipt-print-view";
+import { defaultReceiptConfig } from "@/components/receipt-print-view";
+import type { ReceiptConfig, ReceiptLineItem, ReceiptSale } from "@/components/receipt-print-view";
+import { PrintPreviewDialog } from "@/components/print-preview-dialog";
 
 interface ClienteInfo {
   id: string;
@@ -95,13 +96,13 @@ export default function RemitosPage() {
 
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([]);
 
-  // Print state - using ReceiptPrintView
+  // Print state - using PrintPreviewDialog
   const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
   const [printRemito, setPrintRemito] = useState<RemitoRow | null>(null);
   const [printLineItems, setPrintLineItems] = useState<ReceiptLineItem[]>([]);
-  const [printReady, setPrintReady] = useState(false);
+  const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
+  const [printSaleObj, setPrintSaleObj] = useState<ReceiptSale | null>(null);
   const [printClienteSaldo, setPrintClienteSaldo] = useState(0);
-  const printRef = useRef<HTMLDivElement>(null);
 
   const fetchRemitos = useCallback(async () => {
     setLoading(true);
@@ -317,41 +318,29 @@ export default function RemitosPage() {
     setPrintClienteSaldo(saldo);
     setPrintRemito(r);
     setPrintLineItems(lineItems);
-    setPrintReady(true);
+    // Build sale object and show preview
+    setPrintSaleObj({
+      numero: r.numero,
+      total: r.total,
+      subtotal: r.subtotal,
+      descuento: Math.round(r.subtotal * (r.descuento_porcentaje || 0) / 100),
+      recargo: Math.round(r.subtotal * (r.recargo_porcentaje || 0) / 100),
+      transferSurcharge: 0,
+      tipoComprobante: r.tipo_comprobante,
+      formaPago: r.forma_pago,
+      moneda: r.moneda || "ARS",
+      cliente: r.clientes?.nombre || "Consumidor Final",
+      clienteDireccion: [r.clientes?.domicilio, r.clientes?.localidad].filter(Boolean).join(", ") || null,
+      clienteTelefono: r.clientes?.telefono || null,
+      clienteCondicionIva: r.clientes?.situacion_iva || null,
+      vendedor: getVendedorNombre(r.vendedor_id),
+      fecha: formatDatePDF(r.fecha),
+      saldoAnterior: saldo,
+      saldoNuevo: saldo,
+      items: lineItems,
+    });
+    setPrintPreviewOpen(true);
   };
-
-  useEffect(() => {
-    if (printReady && printRef.current) {
-      const timeout = setTimeout(() => {
-        const printWindow = window.open("", "_blank");
-        if (!printWindow) return;
-
-        const content = printRef.current!.innerHTML;
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Remito ${printRemito?.numero || ""}</title>
-            <style>
-              @page { size: A4; margin: 0; }
-              body { margin: 0; padding: 0; }
-              @media print {
-                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              }
-            </style>
-          </head>
-          <body>${content}</body>
-          </html>
-        `);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-
-        setPrintReady(false);
-      }, 100);
-      return () => clearTimeout(timeout);
-    }
-  }, [printReady, printRemito]);
 
   const exportPDF = async (r: RemitoRow) => {
     await preparePrint(r);
@@ -557,33 +546,15 @@ export default function RemitosPage() {
         ) : undefined}
       />
 
-      {/* Hidden print view - using shared ReceiptPrintView */}
-      {printRemito && (
-        <div ref={printRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
-          <ReceiptPrintView
-            config={receiptConfig}
-            sale={{
-              numero: printRemito.numero,
-              total: printRemito.total,
-              subtotal: printRemito.subtotal,
-              descuento: Math.round(printRemito.subtotal * (printRemito.descuento_porcentaje || 0) / 100),
-              recargo: Math.round(printRemito.subtotal * (printRemito.recargo_porcentaje || 0) / 100),
-              transferSurcharge: 0,
-              tipoComprobante: printRemito.tipo_comprobante,
-              formaPago: printRemito.forma_pago,
-              moneda: printRemito.moneda || "ARS",
-              cliente: printRemito.clientes?.nombre || "Consumidor Final",
-              clienteDireccion: [printRemito.clientes?.domicilio, printRemito.clientes?.localidad].filter(Boolean).join(", ") || null,
-              clienteTelefono: printRemito.clientes?.telefono || null,
-              clienteCondicionIva: printRemito.clientes?.situacion_iva || null,
-              vendedor: getVendedorNombre(printRemito.vendedor_id),
-              fecha: formatDatePDF(printRemito.fecha),
-              saldoAnterior: printClienteSaldo,
-              saldoNuevo: printClienteSaldo,
-              items: printLineItems,
-            }}
-          />
-        </div>
+      {/* Print preview dialog */}
+      {printSaleObj && (
+        <PrintPreviewDialog
+          open={printPreviewOpen}
+          onClose={() => { setPrintPreviewOpen(false); setPrintSaleObj(null); }}
+          config={receiptConfig}
+          sale={printSaleObj}
+          title={`Vista previa — ${printSaleObj.tipoComprobante} N° ${printSaleObj.numero}`}
+        />
       )}
     </div>
   );
