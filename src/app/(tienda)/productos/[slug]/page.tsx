@@ -144,19 +144,7 @@ export default function ProductoDetallePage() {
     return () => window.removeEventListener("cart-updated", syncCart);
   }, []);
 
-  // Load active discounts
-  useEffect(() => {
-    async function loadDiscounts() {
-      const today = new Date().toISOString().split("T")[0];
-      const { data } = await supabase
-        .from("descuentos")
-        .select("*")
-        .eq("activo", true)
-        .lte("fecha_inicio", today);
-      setActiveDiscounts((data || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
-    }
-    loadDiscounts();
-  }, []);
+  // Discounts loaded inside main useEffect to avoid double rendering
 
   function getProductDiscount(prod: Producto, presLabel?: string | null, qty?: number): number {
     let best = 0;
@@ -198,42 +186,40 @@ export default function ProductoDetallePage() {
     if (!id) return;
     async function fetchData() {
       setLoading(true);
-      const { data: prod } = await supabase
-        .from("productos")
-        .select("*, categorias(nombre), marcas(nombre)")
-        .eq("id", id)
-        .single();
+
+      // Fetch product + discounts in parallel
+      const today = new Date().toISOString().split("T")[0];
+      const [{ data: prod }, { data: discountsRaw }] = await Promise.all([
+        supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("id", id).single(),
+        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
+      ]);
+      setActiveDiscounts((discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
 
       if (prod) {
-        // Check if product belongs to a restricted category
-        const { data: cat } = await supabase
-          .from("categorias")
-          .select("restringida")
-          .eq("id", prod.categoria_id)
-          .single();
+        // Parallel: category restriction check + presentaciones + combo items
+        const [{ data: cat }, { data: pres }, comboResult] = await Promise.all([
+          supabase.from("categorias").select("restringida").eq("id", prod.categoria_id).single(),
+          supabase.from("presentaciones").select("*").eq("producto_id", id).order("cantidad"),
+          prod.es_combo
+            ? supabase.from("combo_items").select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, precio, imagen_url)").eq("combo_id", id)
+            : Promise.resolve({ data: null }),
+        ]);
+
+        // Check restricted category access
         if (cat?.restringida) {
-          // Check if user has permission
           const raw = localStorage.getItem("cliente_auth");
           let hasAccess = false;
           if (raw) {
             try {
               const auth = JSON.parse(raw);
               if (auth?.id) {
-                const { data: authData } = await supabase
-                  .from("clientes_auth")
-                  .select("cliente_id")
-                  .eq("id", auth.id)
-                  .single();
+                const { data: authData } = await supabase.from("clientes_auth").select("cliente_id").eq("id", auth.id).single();
                 if (authData?.cliente_id) {
-                  const { data: cliente } = await supabase
-                    .from("clientes")
-                    .select("categorias_permitidas")
-                    .eq("id", authData.cliente_id)
-                    .single();
+                  const { data: cliente } = await supabase.from("clientes").select("categorias_permitidas").eq("id", authData.cliente_id).single();
                   hasAccess = (cliente?.categorias_permitidas || []).includes(prod.categoria_id);
                 }
               }
-            } catch {}
+            } catch { /* invalid auth */ }
           }
           if (!hasAccess) {
             setRestricted(true);
@@ -244,17 +230,11 @@ export default function ProductoDetallePage() {
 
         setProducto(prod as Producto);
         addRecentlyViewed({ id: prod.id, nombre: prod.nombre, precio: prod.precio, imagen_url: prod.imagen_url });
-
-        // Dynamic page title
         document.title = `${prod.nombre} | Dulcesur`;
 
-        // Load combo items if es_combo
-        if (prod.es_combo) {
-          const { data: ci } = await supabase
-            .from("combo_items")
-            .select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, precio, imagen_url)")
-            .eq("combo_id", id);
-          setComboComponentes((ci || []).map((d: any) => ({
+        // Set combo items
+        if (comboResult?.data) {
+          setComboComponentes((comboResult.data || []).map((d: any) => ({
             producto_id: d.productos?.id || "",
             cantidad: d.cantidad,
             nombre: d.productos?.nombre || "",
@@ -264,14 +244,9 @@ export default function ProductoDetallePage() {
           })));
         }
 
-        const { data: pres } = await supabase
-          .from("presentaciones")
-          .select("*")
-          .eq("producto_id", id)
-          .order("cantidad");
+        // Set presentaciones
         if (pres && pres.length > 0) {
           setPresentaciones(pres as Presentacion[]);
-          // Default to "Unidad" for Mt/Medio Cartón products
           const hasMedio = pres.some((p: any) => p.cantidad <= 0.5 || (p.nombre && p.nombre.toLowerCase().includes("medio")));
           const unitIdx = hasMedio ? pres.findIndex((p: any) => p.cantidad === 1) : -1;
           setSelectedPresIdx(unitIdx >= 0 ? unitIdx : 0);
@@ -280,71 +255,40 @@ export default function ProductoDetallePage() {
           setSelectedPresIdx(0);
         }
 
-        // Fetch related products: prioritize same brand+category, then same subcategory, then same category
+        // Fetch related products in parallel (all 3 queries at once, filter client-side)
+        const MAX_RELATED = 8;
+        const relatedQueries = await Promise.all([
+          prod.marca_id
+            ? supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
+            : Promise.resolve({ data: [] }),
+          prod.subcategoria_id
+            ? supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("subcategoria_id", prod.subcategoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
+            : Promise.resolve({ data: [] }),
+          supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED),
+        ]);
+
         const related: Producto[] = [];
         const usedIds = new Set<string>([id as string]);
-        const MAX_RELATED = 8;
-
-        // 1. Same brand + same category (most relevant)
-        if (prod.marca_id) {
-          const { data: sameBrandCat } = await supabase
-            .from("productos")
-            .select("*, categorias(nombre), marcas(nombre)")
-            .eq("categoria_id", prod.categoria_id)
-            .eq("marca_id", prod.marca_id)
-            .eq("activo", true)
-            .gt("stock", 0)
-            .neq("id", id)
-            .limit(MAX_RELATED);
-          for (const p of sameBrandCat || []) {
-            if (!usedIds.has(p.id)) { related.push(p as Producto); usedIds.add(p.id); }
-          }
-        }
-
-        // 2. Same subcategory (if not enough yet)
-        if (related.length < MAX_RELATED && prod.subcategoria_id) {
-          const { data: sameSub } = await supabase
-            .from("productos")
-            .select("*, categorias(nombre), marcas(nombre)")
-            .eq("subcategoria_id", prod.subcategoria_id)
-            .eq("activo", true)
-            .gt("stock", 0)
-            .neq("id", id)
-            .limit(MAX_RELATED - related.length);
-          for (const p of sameSub || []) {
-            if (!usedIds.has(p.id)) { related.push(p as Producto); usedIds.add(p.id); }
-          }
-        }
-
-        // 3. Same category (fill remaining slots)
-        if (related.length < MAX_RELATED) {
-          const { data: sameCat } = await supabase
-            .from("productos")
-            .select("*, categorias(nombre), marcas(nombre)")
-            .eq("categoria_id", prod.categoria_id)
-            .eq("activo", true)
-            .gt("stock", 0)
-            .neq("id", id)
-            .limit(MAX_RELATED - related.length);
-          for (const p of sameCat || []) {
+        // Priority: brand+category > subcategory > category
+        for (const { data: batch } of relatedQueries) {
+          for (const p of batch || []) {
+            if (related.length >= MAX_RELATED) break;
             if (!usedIds.has(p.id)) { related.push(p as Producto); usedIds.add(p.id); }
           }
         }
 
         if (related.length > 0) {
           setRelacionados(related);
+          // Lazy-load related presentations (non-blocking)
           const ids = related.map((r: Producto) => r.id);
-          const { data: relPres } = await supabase
-            .from("presentaciones")
-            .select("*")
-            .in("producto_id", ids)
-            .order("cantidad");
-          const map: Record<string, Presentacion[]> = {};
-          (relPres || []).forEach((p: Presentacion) => {
-            if (!map[p.producto_id]) map[p.producto_id] = [];
-            map[p.producto_id].push(p);
+          supabase.from("presentaciones").select("*").in("producto_id", ids).order("cantidad").then(({ data: relPres }) => {
+            const map: Record<string, Presentacion[]> = {};
+            (relPres || []).forEach((p: Presentacion) => {
+              if (!map[p.producto_id]) map[p.producto_id] = [];
+              map[p.producto_id].push(p);
+            });
+            setRelPresentaciones(map);
           });
-          setRelPresentaciones(map);
         }
       }
       setLoading(false);

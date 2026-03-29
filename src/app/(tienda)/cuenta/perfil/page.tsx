@@ -145,7 +145,10 @@ export default function PerfilPage() {
     } else if (clienteAuthId) {
       // Create new client record and link it
       // Get default zona and vendedor
-      const { data: defaultZona } = await supabase.from("zonas_entrega").select("id").ilike("nombre", "%zona 1%").limit(1).maybeSingle();
+      const [{ data: defaultZona }, { data: defaultVendor }] = await Promise.all([
+        supabase.from("zonas_entrega").select("id").ilike("nombre", "%zona 1%").limit(1).maybeSingle(),
+        supabase.from("usuarios").select("id").limit(1).single(),
+      ]);
       const { data: newCliente } = await supabase
         .from("clientes")
         .insert({
@@ -160,7 +163,7 @@ export default function PerfilPage() {
           codigo_postal: codigoPostal || null,
           situacion_iva: "Consumidor final",
           origen: "tienda",
-          vendedor_id: "94b3d01c-6be8-4a38-a8f0-c42b6502b19e", // Mariano Miguel (default)
+          vendedor_id: defaultVendor?.id || null,
           zona_entrega: defaultZona?.id || null,
         })
         .select("id")

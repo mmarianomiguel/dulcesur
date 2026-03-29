@@ -219,15 +219,16 @@ export default function ProductosPage() {
       // Try ventas first
       const { data: venta } = await supabase
         .from("ventas")
-        .select("id, numero, fecha, total, forma_pago, tipo_comprobante, estado, observacion, descuento_porcentaje, recargo_porcentaje, monto_efectivo, monto_transferencia, vendedor, clientes(nombre, cuit)")
+        .select("id, numero, fecha, total, forma_pago, tipo_comprobante, estado, observacion, descuento_porcentaje, recargo_porcentaje, monto_efectivo, monto_transferencia, vendedor_id, clientes(nombre, cuit), usuarios(nombre)")
         .eq("id", ordenId)
-        .single();
+        .maybeSingle();
       if (venta) {
         const { data: items } = await supabase
           .from("venta_items")
           .select("id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion, descuento")
           .eq("venta_id", ordenId)
           .order("created_at");
+        const vendedorNombre = Array.isArray(venta.usuarios) ? venta.usuarios[0]?.nombre : (venta.usuarios as any)?.nombre;
         setOrdenDetail({
           id: venta.id,
           numero: venta.numero,
@@ -241,7 +242,7 @@ export default function ProductosPage() {
           recargo_porcentaje: venta.recargo_porcentaje || 0,
           monto_efectivo: venta.monto_efectivo || 0,
           monto_transferencia: venta.monto_transferencia || 0,
-          vendedor: venta.vendedor || "",
+          vendedor: vendedorNombre || "",
           cliente: Array.isArray(venta.clientes) ? venta.clientes[0] ?? null : venta.clientes as { nombre: string; cuit: string | null } | null,
           items: items || [],
         });
@@ -251,7 +252,7 @@ export default function ProductosPage() {
           .from("compras")
           .select("id, numero, fecha, total, estado, observacion, proveedores(nombre)")
           .eq("id", ordenId)
-          .single();
+          .maybeSingle();
         if (compra) {
           const { data: items } = await supabase
             .from("compra_items")

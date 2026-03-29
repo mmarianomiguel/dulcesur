@@ -1283,8 +1283,8 @@ export default function PedidosProveedorPage() {
               <MessageCircle className="w-4 h-4 mr-1.5" />WhatsApp
             </Button>
             {canReceive && (
-              <Button size="sm" variant="outline" onClick={() => window.open("/admin/compras", "_self")}>
-                <Package className="w-4 h-4 mr-1.5" />Ir a Registrar compra
+              <Button size="sm" onClick={() => openReceiveDialog()}>
+                <Package className="w-4 h-4 mr-1.5" />Registrar compra
               </Button>
             )}
             {canDelete && !editingDetail && (

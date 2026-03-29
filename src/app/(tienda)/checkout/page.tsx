@@ -126,6 +126,9 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
+  // Vendor (fetched dynamically)
+  const [defaultVendedorId, setDefaultVendedorId] = useState<string | null>(null);
+
   // Contact
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
@@ -231,7 +234,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const raw = localStorage.getItem("carrito");
     if (raw) {
-      try { const _p = JSON.parse(raw); setItems(Array.isArray(_p) ? _p : []); } catch {}
+      try { const _p = JSON.parse(raw); setItems(Array.isArray(_p) ? _p : []); } catch { /* invalid cart JSON, use empty */ }
     }
 
     const auth = localStorage.getItem("cliente_auth");
@@ -358,12 +361,16 @@ export default function CheckoutPage() {
               }
             });
         }
-      } catch {}
+      } catch { /* invalid auth JSON */ }
     } else {
       setShowNewAddress(true);
     }
 
     loadConfig();
+    // Fetch default vendor dynamically
+    supabase.from("usuarios").select("id").limit(1).single().then(({ data: vendor }) => {
+      if (vendor) setDefaultVendedorId(vendor.id);
+    });
     try {
       const stored = localStorage.getItem("cuentas_bancarias");
       if (stored) {
@@ -372,7 +379,7 @@ export default function CheckoutPage() {
         setCuentasBancarias(arr);
         if (arr.length > 0) setSelectedCuentaId(arr[0].id);
       }
-    } catch {}
+    } catch { /* invalid bank accounts JSON */ }
     setLoaded(true);
   }, [loadConfig]);
 
@@ -410,9 +417,10 @@ export default function CheckoutPage() {
     const errs: string[] = [];
     if (items.length === 0) { errs.push("Tu carrito está vacío."); setErrors(errs); return; }
     if (!nombre) errs.push("El nombre es obligatorio.");
-    if (!telefono || telefono.replace(/\D/g, "").length < 6) errs.push("Ingresá un teléfono válido (mínimo 6 dígitos).");
+    const phoneDigits = telefono.replace(/\D/g, "");
+    if (!telefono || phoneDigits.length < 8 || phoneDigits.length > 15) errs.push("Ingresá un teléfono válido (entre 8 y 15 dígitos).");
     if (!email) errs.push("El email es obligatorio.");
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push("Ingresá un email válido.");
+    else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) errs.push("Ingresá un email válido.");
     if (metodoEntrega === "retiro" && config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) {
       errs.push(`El monto mínimo para retiro en local es ${formatCurrency(config.monto_minimo_pedido)}.`);
     }
@@ -645,7 +653,7 @@ export default function CheckoutPage() {
         entregado: false,
         origen: "tienda",
         metodo_entrega: metodoEntrega === "retiro" ? "retiro" : "envio",
-        vendedor_id: "94b3d01c-6be8-4a38-a8f0-c42b6502b19e",
+        vendedor_id: defaultVendedorId,
       }).select("id").single();
 
       if (ventaError) throw ventaError;
@@ -1065,8 +1073,9 @@ export default function CheckoutPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Nombre</label>
+                <label htmlFor="checkout-nombre" className={labelClass}>Nombre</label>
                 <input
+                  id="checkout-nombre"
                   type="text"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
@@ -1075,8 +1084,9 @@ export default function CheckoutPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Apellido</label>
+                <label htmlFor="checkout-apellido" className={labelClass}>Apellido</label>
                 <input
+                  id="checkout-apellido"
                   type="text"
                   value={apellido}
                   onChange={(e) => setApellido(e.target.value)}
@@ -1085,10 +1095,11 @@ export default function CheckoutPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Email</label>
+                <label htmlFor="checkout-email" className={labelClass}>Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
+                    id="checkout-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -1098,10 +1109,11 @@ export default function CheckoutPage() {
                 </div>
               </div>
               <div>
-                <label className={labelClass}>Teléfono</label>
+                <label htmlFor="checkout-telefono" className={labelClass}>Teléfono</label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
+                    id="checkout-telefono"
                     type="tel"
                     value={telefono}
                     onChange={(e) => setTelefono(e.target.value.replace(/[^\d\s\-+()]/g, ""))}
@@ -1264,8 +1276,9 @@ export default function CheckoutPage() {
                     <p className="text-sm font-medium text-gray-700">Nueva dirección</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className={labelClass}>Calle</label>
+                        <label htmlFor="addr-calle" className={labelClass}>Calle</label>
                         <input
+                          id="addr-calle"
                           type="text"
                           value={addr.calle}
                           onChange={(e) => setAddr({ ...addr, calle: e.target.value })}
@@ -1274,8 +1287,9 @@ export default function CheckoutPage() {
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <label className={labelClass}>Número</label>
+                          <label htmlFor="addr-numero" className={labelClass}>Número</label>
                           <input
+                            id="addr-numero"
                             type="text"
                             value={addr.numero}
                             onChange={(e) => setAddr({ ...addr, numero: e.target.value })}
@@ -1283,8 +1297,9 @@ export default function CheckoutPage() {
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Piso</label>
+                          <label htmlFor="addr-piso" className={labelClass}>Piso</label>
                           <input
+                            id="addr-piso"
                             type="text"
                             value={addr.piso}
                             onChange={(e) => setAddr({ ...addr, piso: e.target.value })}
@@ -1292,8 +1307,9 @@ export default function CheckoutPage() {
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Depto</label>
+                          <label htmlFor="addr-depto" className={labelClass}>Depto</label>
                           <input
+                            id="addr-depto"
                             type="text"
                             value={addr.departamento}
                             onChange={(e) => setAddr({ ...addr, departamento: e.target.value })}
@@ -1302,8 +1318,9 @@ export default function CheckoutPage() {
                         </div>
                       </div>
                       <div>
-                        <label className={labelClass}>Localidad</label>
+                        <label htmlFor="addr-localidad" className={labelClass}>Localidad</label>
                         <input
+                          id="addr-localidad"
                           type="text"
                           value={addr.localidad}
                           onChange={(e) => setAddr({ ...addr, localidad: e.target.value })}
@@ -1311,8 +1328,9 @@ export default function CheckoutPage() {
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Provincia</label>
+                        <label htmlFor="addr-provincia" className={labelClass}>Provincia</label>
                         <input
+                          id="addr-provincia"
                           type="text"
                           value={addr.provincia}
                           onChange={(e) => setAddr({ ...addr, provincia: e.target.value })}
@@ -1320,8 +1338,9 @@ export default function CheckoutPage() {
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Código postal</label>
+                        <label htmlFor="addr-cp" className={labelClass}>Código postal</label>
                         <input
+                          id="addr-cp"
                           type="text"
                           value={addr.codigo_postal}
                           onChange={(e) => setAddr({ ...addr, codigo_postal: e.target.value })}
@@ -1329,8 +1348,9 @@ export default function CheckoutPage() {
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Referencia</label>
+                        <label htmlFor="addr-referencia" className={labelClass}>Referencia</label>
                         <input
+                          id="addr-referencia"
                           type="text"
                           value={addr.referencia}
                           onChange={(e) => setAddr({ ...addr, referencia: e.target.value })}
@@ -1586,10 +1606,11 @@ export default function CheckoutPage() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-medium text-gray-600 flex items-center gap-1 mb-1">
+                      <label htmlFor="mixto-efectivo" className="text-xs font-medium text-gray-600 flex items-center gap-1 mb-1">
                         <Banknote className="w-3.5 h-3.5" /> Efectivo
                       </label>
                       <input
+                        id="mixto-efectivo"
                         type="text"
                         inputMode="numeric"
                         value={formatThousands(mixtoEfectivo)}
@@ -1603,7 +1624,7 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-600 flex items-center gap-1 mb-1">
+                      <label htmlFor="mixto-transf" className="text-xs font-medium text-gray-600 flex items-center gap-1 mb-1">
                         <Building className="w-3.5 h-3.5" /> Transferencia
                       </label>
                       {(() => {
