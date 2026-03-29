@@ -343,7 +343,7 @@ export default function ProductosPage() {
     }
 
     const [allProdsRaw, allPres, allCI] = await Promise.all([
-      fetchAllPages("productos", "id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, updated_at, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
+      fetchAllPages("productos", "id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, fecha_actualizacion, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
       fetchAllPages("presentaciones", "producto_id, sku, nombre, cantidad"),
       fetchAllPages("combo_items", "combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)"),
     ]);
@@ -1553,8 +1553,22 @@ export default function ProductosPage() {
     arr.sort((a, b) => {
       if (sortBy === "nombre_asc") return a.nombre.localeCompare(b.nombre);
       if (sortBy === "nombre_desc") return b.nombre.localeCompare(a.nombre);
-      if (sortBy === "updated_desc") return new Date((b as any).updated_at || 0).getTime() - new Date((a as any).updated_at || 0).getTime();
-      if (sortBy === "updated_asc") return new Date((a as any).updated_at || 0).getTime() - new Date((b as any).updated_at || 0).getTime();
+      if (sortBy === "updated_desc") {
+        const da = (a as any).fecha_actualizacion ? new Date((a as any).fecha_actualizacion).getTime() : 0;
+        const db = (b as any).fecha_actualizacion ? new Date((b as any).fecha_actualizacion).getTime() : 0;
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return db - da;
+      }
+      if (sortBy === "updated_asc") {
+        const da = (a as any).fecha_actualizacion ? new Date((a as any).fecha_actualizacion).getTime() : 0;
+        const db = (b as any).fecha_actualizacion ? new Date((b as any).fecha_actualizacion).getTime() : 0;
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return da - db;
+      }
       if (sortBy === "precio_asc") return a.precio - b.precio;
       if (sortBy === "precio_desc") return b.precio - a.precio;
       if (sortBy === "stock_asc") return a.stock - b.stock;
