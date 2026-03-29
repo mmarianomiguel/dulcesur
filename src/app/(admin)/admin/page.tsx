@@ -334,6 +334,20 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const fixSaldo = async (clientId: string, correctSaldo: number) => {
+    await supabase.from("clientes").update({ saldo: correctSaldo }).eq("id", clientId);
+    setSaldoMismatches((prev) => prev.filter((c) => c.id !== clientId));
+    showAdminToast("Saldo corregido", "success");
+  };
+
+  const fixAllSaldos = async () => {
+    for (const c of saldoMismatches) {
+      await supabase.from("clientes").update({ saldo: c.calculado }).eq("id", c.id);
+    }
+    setSaldoMismatches([]);
+    showAdminToast(`${saldoMismatches.length} saldos corregidos`, "success");
+  };
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -819,18 +833,23 @@ export default function DashboardPage() {
       {/* ─── Saldos Descuadrados ─── */}
       {saldoMismatches.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-red-600" />
-            <span className="text-sm font-semibold text-red-800">Saldos descuadrados ({saldoMismatches.length} cliente{saldoMismatches.length !== 1 ? "s" : ""})</span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600" />
+              <span className="text-sm font-semibold text-red-800">Saldos descuadrados ({saldoMismatches.length} cliente{saldoMismatches.length !== 1 ? "s" : ""})</span>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-100" onClick={fixAllSaldos}>
+              Corregir todos
+            </Button>
           </div>
-          <p className="text-xs text-red-600 mb-2">El saldo del cliente no coincide con la suma de su cuenta corriente</p>
+          <p className="text-xs text-red-600 mb-2">El saldo del cliente no coincide con la suma de su cuenta corriente. &quot;Corregir&quot; ajusta el saldo al valor real de la CC.</p>
           <div className="flex flex-wrap gap-2">
             {saldoMismatches.slice(0, 8).map((c) => (
-              <div key={c.id} className="flex items-center gap-1.5 bg-white rounded-md border border-red-200 px-2.5 py-1 text-xs">
+              <div key={c.id} className="flex items-center gap-1.5 bg-white rounded-md border border-red-200 px-2.5 py-1.5 text-xs">
                 <span className="font-medium text-red-900 truncate max-w-[150px]">{c.nombre}</span>
-                <span className="text-red-500">saldo: {formatCurrency(c.saldo)}</span>
-                <span className="text-muted-foreground">vs CC: {formatCurrency(c.calculado)}</span>
-                <span className="font-bold text-red-700">({c.diff > 0 ? "+" : ""}{formatCurrency(c.diff)})</span>
+                <span className="text-red-500">{formatCurrency(c.saldo)}</span>
+                <span className="text-muted-foreground">→ {formatCurrency(c.calculado)}</span>
+                <button onClick={() => fixSaldo(c.id, c.calculado)} className="ml-1 px-1.5 py-0.5 rounded bg-red-100 text-red-700 hover:bg-red-200 font-medium">Corregir</button>
               </div>
             ))}
             {saldoMismatches.length > 8 && (
