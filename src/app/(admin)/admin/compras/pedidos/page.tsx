@@ -90,6 +90,12 @@ interface PedidoItemRow {
   subtotal: number;
 }
 
+interface Subcategoria {
+  id: string;
+  nombre: string;
+  categoria_id: string;
+}
+
 interface SuggestedItem {
   producto_id: string;
   codigo: string;
@@ -98,6 +104,8 @@ interface SuggestedItem {
   stock_minimo: number;
   stock_maximo: number;
   faltante: number;
+  unidades_por_caja: number;
+  cajas: number;
   precio_unitario: number;
   subtotal: number;
 }
@@ -127,6 +135,7 @@ export default function PedidosProveedorPage() {
   const [pedidos, setPedidos] = useState<PedidoRow[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [subcategorias, setSubcategorias] = useState<Subcategoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState("all");
@@ -144,6 +153,7 @@ export default function PedidosProveedorPage() {
   const [mode, setMode] = useState<"list" | "new" | "detail" | "generate" | "edit">("list");
   const [selectedProveedorId, setSelectedProveedorId] = useState("");
   const [selectedCategoriaId, setSelectedCategoriaId] = useState("all");
+  const [selectedSubcategoriaId, setSelectedSubcategoriaId] = useState("all");
   const [pedirHasta, setPedirHasta] = useState<"minimo" | "maximo">("maximo");
 
   // Searchable dropdown states
@@ -151,8 +161,11 @@ export default function PedidosProveedorPage() {
   const [provOpen, setProvOpen] = useState(false);
   const [catSearch, setCatSearch] = useState("");
   const [catOpen, setCatOpen] = useState(false);
+  const [subcatSearch, setSubcatSearch] = useState("");
+  const [subcatOpen, setSubcatOpen] = useState(false);
   const provRef = useRef<HTMLDivElement>(null);
   const catRef = useRef<HTMLDivElement>(null);
+  const subcatRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<SuggestedItem[]>([]);
   const [observacion, setObservacion] = useState("");
   const [saving, setSaving] = useState(false);
@@ -210,14 +223,16 @@ export default function PedidosProveedorPage() {
       pedQuery = pedQuery.gte("fecha", pedFilterFrom).lte("fecha", pedFilterTo);
     }
 
-    const [{ data: ped }, { data: prov }, { data: cats }] = await Promise.all([
+    const [{ data: ped }, { data: prov }, { data: cats }, { data: subcats }] = await Promise.all([
       pedQuery,
       supabase.from("proveedores").select("id, nombre, saldo").eq("activo", true).order("nombre"),
       supabase.from("categorias").select("id, nombre").order("nombre"),
+      supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
     ]);
     setPedidos((ped as PedidoRow[]) || []);
     setProveedores((prov as Proveedor[]) || []);
     setCategorias((cats as Categoria[]) || []);
+    setSubcategorias((subcats as Subcategoria[]) || []);
     setLoading(false);
   }, [pedFilterMode, pedFilterDay, pedFilterMonth, pedFilterYear, pedFilterFrom, pedFilterTo]);
 
@@ -230,6 +245,7 @@ export default function PedidosProveedorPage() {
     const handler = (e: MouseEvent) => {
       if (provRef.current && !provRef.current.contains(e.target as Node)) setProvOpen(false);
       if (catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false);
+      if (subcatRef.current && !subcatRef.current.contains(e.target as Node)) setSubcatOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -243,12 +259,15 @@ export default function PedidosProveedorPage() {
 
     let query = supabase
       .from("productos")
-      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, categoria_id, producto_proveedores!inner(proveedor_id, precio_proveedor, cantidad_minima_pedido), presentaciones(nombre, cantidad)")
+      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, categoria_id, subcategoria_id, producto_proveedores!inner(proveedor_id, precio_proveedor, cantidad_minima_pedido), presentaciones(nombre, cantidad)")
       .eq("activo", true)
       .eq("producto_proveedores.proveedor_id", selectedProveedorId);
 
     if (selectedCategoriaId !== "all") {
       query = query.eq("categoria_id", selectedCategoriaId);
+    }
+    if (selectedSubcategoriaId !== "all") {
+      query = query.eq("subcategoria_id", selectedSubcategoriaId);
     }
 
     const { data } = await query;
@@ -281,10 +300,11 @@ export default function PedidosProveedorPage() {
           }
           // Round up to full boxes if product has a Caja presentation
           const cajaPres = (p.presentaciones || []).find((pr: any) => pr.nombre?.toLowerCase().startsWith("caja") && pr.cantidad > 1);
-          if (cajaPres) {
-            const unidadesPorCaja = cajaPres.cantidad;
+          const unidadesPorCaja = cajaPres ? cajaPres.cantidad : 0;
+          if (unidadesPorCaja > 0) {
             faltante = Math.ceil(faltante / unidadesPorCaja) * unidadesPorCaja;
           }
+          const cajas = unidadesPorCaja > 0 ? Math.round(faltante / unidadesPorCaja) : 0;
           const precio = pp?.precio_proveedor || p.costo || 0;
           return {
             producto_id: p.id,
@@ -294,6 +314,8 @@ export default function PedidosProveedorPage() {
             stock_minimo: p.stock_minimo || 0,
             stock_maximo: p.stock_maximo || 0,
             faltante,
+            unidades_por_caja: unidadesPorCaja,
+            cajas,
             precio_unitario: precio,
             subtotal: faltante * precio,
           };
@@ -313,6 +335,9 @@ export default function PedidosProveedorPage() {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
       updated[index].subtotal = updated[index].faltante * updated[index].precio_unitario;
+      if (field === "faltante" && updated[index].unidades_por_caja > 0) {
+        updated[index].cajas = Math.round(value / updated[index].unidades_por_caja * 10) / 10;
+      }
       return updated;
     });
   };
@@ -481,6 +506,7 @@ export default function PedidosProveedorPage() {
   const resetForm = () => {
     setSelectedProveedorId("");
     setSelectedCategoriaId("all");
+    setSelectedSubcategoriaId("all");
     setItems([]);
     setObservacion("");
   };
@@ -808,7 +834,7 @@ export default function PedidosProveedorPage() {
 
     const { data } = await supabase
       .from("productos")
-      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, producto_proveedores(proveedor_id, precio_proveedor, cantidad_minima_pedido, es_principal, proveedores(nombre))")
+      .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, producto_proveedores(proveedor_id, precio_proveedor, cantidad_minima_pedido, es_principal, proveedores(nombre)), presentaciones(nombre, cantidad)")
       .eq("activo", true);
 
     if (data) {
@@ -847,6 +873,12 @@ export default function PedidosProveedorPage() {
         } else {
           faltante = pp.cantidad_minima_pedido || 1;
         }
+        const cajaPres = (p.presentaciones || []).find((pr: any) => pr.nombre?.toLowerCase().startsWith("caja") && pr.cantidad > 1);
+        const unidadesPorCaja = cajaPres ? cajaPres.cantidad : 0;
+        if (unidadesPorCaja > 0) {
+          faltante = Math.ceil(faltante / unidadesPorCaja) * unidadesPorCaja;
+        }
+        const cajas = unidadesPorCaja > 0 ? Math.round(faltante / unidadesPorCaja) : 0;
         const precio = pp.precio_proveedor || p.costo || 0;
         groupMap[provId].items.push({
           producto_id: p.id,
@@ -856,6 +888,8 @@ export default function PedidosProveedorPage() {
           stock_minimo: minimo,
           stock_maximo: maximo,
           faltante,
+          unidades_por_caja: unidadesPorCaja,
+          cajas,
           precio_unitario: precio,
           subtotal: faltante * precio,
         });
@@ -975,7 +1009,7 @@ export default function PedidosProveedorPage() {
 
         <Card className="overflow-visible">
           <CardContent className="pt-6 overflow-visible">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
               <div ref={provRef}>
                 <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Proveedor</Label>
                 <div className="relative">
@@ -1014,12 +1048,12 @@ export default function PedidosProveedorPage() {
                   <Input
                     placeholder="Buscar categoria..."
                     value={selectedCategoriaId !== "all" ? (categorias.find((c) => c.id === selectedCategoriaId)?.nombre ?? catSearch) : catSearch}
-                    onChange={(e) => { setCatSearch(e.target.value); setSelectedCategoriaId("all"); setCatOpen(true); }}
+                    onChange={(e) => { setCatSearch(e.target.value); setSelectedCategoriaId("all"); setSelectedSubcategoriaId("all"); setCatOpen(true); }}
                     onFocus={() => setCatOpen(true)}
                     className="pl-9"
                   />
                   {selectedCategoriaId !== "all" && (
-                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSelectedCategoriaId("all"); setCatSearch(""); }}>
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSelectedCategoriaId("all"); setSelectedSubcategoriaId("all"); setCatSearch(""); }}>
                       <X className="w-4 h-4" />
                     </button>
                   )}
@@ -1028,7 +1062,7 @@ export default function PedidosProveedorPage() {
                       <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setSelectedCategoriaId("all"); setCatSearch(""); setCatOpen(false); }}>Todas</button>
                       {categorias.filter((c) => norm(c.nombre).includes(norm(catSearch))).map((c) => (
                         <button key={c.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
-                          onClick={() => { setSelectedCategoriaId(c.id); setCatSearch(""); setCatOpen(false); }}>
+                          onClick={() => { setSelectedCategoriaId(c.id); setSelectedSubcategoriaId("all"); setCatSearch(""); setCatOpen(false); }}>
                           {c.nombre}
                         </button>
                       ))}
@@ -1036,14 +1070,46 @@ export default function PedidosProveedorPage() {
                   )}
                 </div>
               </div>
+              <div ref={subcatRef}>
+                <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Subcategoria (opcional)</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar subcategoria..."
+                    value={selectedSubcategoriaId !== "all" ? (subcategorias.find((s) => s.id === selectedSubcategoriaId)?.nombre ?? subcatSearch) : subcatSearch}
+                    onChange={(e) => { setSubcatSearch(e.target.value); setSelectedSubcategoriaId("all"); setSubcatOpen(true); }}
+                    onFocus={() => setSubcatOpen(true)}
+                    className="pl-9"
+                  />
+                  {selectedSubcategoriaId !== "all" && (
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => { setSelectedSubcategoriaId("all"); setSubcatSearch(""); }}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  {subcatOpen && selectedSubcategoriaId === "all" && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
+                      <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setSelectedSubcategoriaId("all"); setSubcatSearch(""); setSubcatOpen(false); }}>Todas</button>
+                      {subcategorias
+                        .filter((s) => selectedCategoriaId === "all" || s.categoria_id === selectedCategoriaId)
+                        .filter((s) => norm(s.nombre).includes(norm(subcatSearch)))
+                        .map((s) => (
+                          <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
+                            onClick={() => { setSelectedSubcategoriaId(s.id); setSubcatSearch(""); setSubcatOpen(false); }}>
+                            {s.nombre}
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center rounded-lg border overflow-hidden text-sm">
-                  <button className={`px-3 py-2 ${pedirHasta === "maximo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("maximo")}>Hasta máximo</button>
-                  <button className={`px-3 py-2 ${pedirHasta === "minimo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("minimo")}>Hasta mínimo</button>
+                  <button className={`px-3 py-2 ${pedirHasta === "maximo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("maximo")}>Hasta máx</button>
+                  <button className={`px-3 py-2 ${pedirHasta === "minimo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("minimo")}>Hasta mín</button>
                 </div>
                 <Button onClick={handleSugerirFaltantes} disabled={!selectedProveedorId || suggesting}>
                   {suggesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                  Sugerir faltantes
+                  Sugerir
                 </Button>
               </div>
             </div>
@@ -1069,6 +1135,7 @@ export default function PedidosProveedorPage() {
                       <th className="text-center py-3 px-4 font-medium">Min</th>
                       <th className="text-center py-3 px-4 font-medium">Max</th>
                       <th className="text-center py-3 px-4 font-medium">Cantidad</th>
+                      <th className="text-center py-3 px-4 font-medium">Cajas</th>
                       <th className="text-right py-3 px-4 font-medium">Precio Unit.</th>
                       <th className="text-right py-3 px-4 font-medium">Subtotal</th>
                       <th className="w-10"></th>
@@ -1086,6 +1153,13 @@ export default function PedidosProveedorPage() {
                           <Input type="number" min={1} value={item.faltante}
                             onChange={(e) => updateItemField(idx, "faltante", Math.max(1, Number(e.target.value)))}
                             className="w-20 mx-auto text-center h-8" />
+                        </td>
+                        <td className="py-2 px-4 text-center text-muted-foreground">
+                          {item.unidades_por_caja > 0 ? (
+                            <span className="font-medium">{item.cajas} <span className="text-xs text-muted-foreground">({item.unidades_por_caja} un.)</span></span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="py-2 px-4 text-right">
                           <Input type="number" min={0} value={item.precio_unitario}
@@ -1193,7 +1267,7 @@ export default function PedidosProveedorPage() {
             )}
             <Button size="sm" variant="outline" onClick={() => {
               const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
-              const lines = detailItems.map((i) => `• ${i.descripcion || "Producto"} x${i.cantidad}`);
+              const lines = detailItems.map((i) => `• ${i.cantidad} - ${i.descripcion || "Producto"}`);
               const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
               navigator.clipboard.writeText(text);
               showAdminToast("Pedido copiado al portapapeles", "success");
@@ -1202,7 +1276,7 @@ export default function PedidosProveedorPage() {
             </Button>
             <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => {
               const provNombre = detailPedido.proveedores?.nombre || "Proveedor";
-              const lines = detailItems.map((i) => `• ${i.descripcion || "Producto"} x${i.cantidad}`);
+              const lines = detailItems.map((i) => `• ${i.cantidad} - ${i.descripcion || "Producto"}`);
               const text = `Hola ${provNombre}, te paso el pedido:\n\n${lines.join("\n")}\n\nGracias!`;
               window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
             }}>
@@ -1528,6 +1602,7 @@ export default function PedidosProveedorPage() {
                           <th className="text-center py-2 px-3 font-medium text-xs">Min</th>
                           <th className="text-center py-2 px-3 font-medium text-xs">Max</th>
                           <th className="text-center py-2 px-3 font-medium text-xs">A pedir</th>
+                          <th className="text-center py-2 px-3 font-medium text-xs">Cajas</th>
                           <th className="text-right py-2 px-3 font-medium text-xs">Costo Unit.</th>
                           <th className="text-right py-2 px-3 font-medium text-xs">Subtotal</th>
                         </tr>
@@ -1541,6 +1616,11 @@ export default function PedidosProveedorPage() {
                             <td className="py-2 px-3 text-center text-sm text-muted-foreground">{item.stock_minimo}</td>
                             <td className="py-2 px-3 text-center text-sm text-muted-foreground">{item.stock_maximo}</td>
                             <td className="py-2 px-3 text-center text-sm font-medium">{item.faltante}</td>
+                            <td className="py-2 px-3 text-center text-sm text-muted-foreground">
+                              {item.unidades_por_caja > 0 ? (
+                                <span className="font-medium">{item.cajas} <span className="text-xs">({item.unidades_por_caja} un.)</span></span>
+                              ) : "—"}
+                            </td>
                             <td className="py-2 px-3 text-right text-sm">{formatCurrency(item.precio_unitario)}</td>
                             <td className="py-2 px-3 text-right text-sm font-semibold">{formatCurrency(item.subtotal)}</td>
                           </tr>
