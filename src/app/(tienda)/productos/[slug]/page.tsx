@@ -429,10 +429,11 @@ export default function ProductoDetallePage() {
     ? (comboStock ?? 0)
     : (producto?.stock ?? 0);
   const availableStock = producto ? Math.max(0, effectiveStock - totalUnitsInCart) : 0;
-  const maxQty = availableStock > 0 ? Math.max(1, Math.floor(availableStock / presQty)) : 0;
-  const canBuy = availableStock > 0;
+  const maxQty = availableStock > 0 ? Math.floor(availableStock / presQty) : 0;
+  const canBuy = maxQty > 0;
 
   const stockLabel = !producto ? "" :
+    !canBuy && availableStock > 0 ? `Quedan ${availableStock}` :
     !canBuy ? "Sin stock" :
     maxQty <= 5 ? `Últimas ${presQty > 1 ? maxQty + " cajas" : maxQty + " unidades"}` :
     "Disponible";

@@ -469,8 +469,8 @@ function ProductosDestacadosBlock({
                         const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
                         const price = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
                         const presUnits = activePres ? activePres.cantidad : 1;
-                        const maxQty = Math.max(1, Math.floor(prod.stock / presUnits));
-                        return (
+                        const maxQty = Math.floor(prod.stock / Math.max(0.01, presUnits));
+                        return maxQty > 0 ? (
                           <>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
@@ -499,6 +499,8 @@ function ProductosDestacadosBlock({
                               Agregar
                             </button>
                           </>
+                        ) : (
+                          <p className="text-center text-xs text-orange-500 font-medium py-2">Quedan {prod.stock}</p>
                         );
                       })()}
                       </div>

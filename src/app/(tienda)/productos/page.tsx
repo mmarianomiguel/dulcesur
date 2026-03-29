@@ -1367,7 +1367,7 @@ function ProductosContent() {
                         </div>
                       ) : producto.stock > 0 && producto.stock <= 5 && (
                         <span className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
-                          {producto.stock === 1 ? "¡Última unidad!" : `¡Últimas ${producto.stock}!`}
+                          {producto.stock < 1 ? `¡Quedan ${producto.stock}!` : producto.stock === 1 ? "¡Última unidad!" : `¡Últimas ${producto.stock}!`}
                         </span>
                       )}
                     </Link>
@@ -1450,8 +1450,8 @@ function ProductosContent() {
                       {(() => {
                         const activePres = pres && pres.length > 1 ? pres[selectedPres[producto.id] ?? 0] : null;
                         const presUnits = activePres ? Number(activePres.cantidad) : 1;
-                        const maxForPres = availableStock > 0 ? Math.max(1, Math.floor(availableStock / presUnits)) : 0;
-                        const canBuy = availableStock > 0;
+                        const maxForPres = availableStock > 0 ? Math.floor(availableStock / presUnits) : 0;
+                        const canBuy = maxForPres > 0;
                         return canBuy ? (
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center justify-between">
@@ -1605,8 +1605,8 @@ function ProductosContent() {
                       {(() => {
                         const activePres = pres && pres.length > 1 ? pres[selectedPres[producto.id] ?? 0] : null;
                         const presUnits = activePres ? Number(activePres.cantidad) : 1;
-                        const maxForPres = availableStock > 0 ? Math.max(1, Math.floor(availableStock / presUnits)) : 0;
-                        const canBuy = availableStock > 0;
+                        const maxForPres = availableStock > 0 ? Math.floor(availableStock / presUnits) : 0;
+                        const canBuy = maxForPres > 0;
                         return canBuy ? (
                         <div className="shrink-0 flex items-center gap-2">
                           <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
