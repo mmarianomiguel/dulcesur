@@ -3595,7 +3595,7 @@ export default function ProductosPage() {
                             {first.descripcion && <span className="ml-2">{first.descripcion}</span>}
                           </p>
                         )}
-                        {first.orden_id && (
+                        {first.orden_id && (isVenta || isCompra || isAnulacion || isDevolucion) && (
                           <button type="button" onClick={() => openOrdenDetail(first.orden_id!)} className="text-xs text-blue-600 hover:underline">
                             Ver orden
                           </button>
