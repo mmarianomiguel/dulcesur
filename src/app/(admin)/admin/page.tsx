@@ -290,23 +290,38 @@ export default function DashboardPage() {
     const rows = (ventasOnline || []) as unknown as PedidoVenta[];
     setPedidosOnline(rows);
 
-    // Fetch combo data for preview
+    // Fetch combo data + pedidos_tienda in parallel
     const allProductIds = rows.flatMap((v) => v.venta_items.map((i) => i.producto_id)).filter(Boolean) as string[];
+    const numeros = rows.map((v) => v.numero);
+
+    // Fire both independent queries in parallel
+    const [prodsResult, pedidosTiendaResult] = await Promise.all([
+      allProductIds.length > 0
+        ? supabase.from("productos").select("id, es_combo").in("id", [...new Set(allProductIds)])
+        : Promise.resolve({ data: [] }),
+      numeros.length > 0
+        ? supabase.from("pedidos_tienda").select("numero, fecha_entrega, estado").in("numero", numeros)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    // Process combos
     if (allProductIds.length > 0) {
-      const uniqueIds = [...new Set(allProductIds)];
-      const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", uniqueIds);
+      const prods = prodsResult.data;
       const cIds = new Set<string>();
       for (const p of prods || []) {
         if ((p as any).es_combo) cIds.add(p.id);
       }
       setComboProductIds(cIds);
       const cMap: Record<string, { nombre: string; cantidad: number }[]> = {};
-      for (const comboId of cIds) {
-        const { data: ciData } = await supabase
+      if (cIds.size > 0) {
+        const { data: allComboItems } = await supabase
           .from("combo_items")
-          .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
-          .eq("combo_id", comboId);
-        cMap[comboId] = (ciData || []).map((ci: any) => ({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad }));
+          .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+          .in("combo_id", [...cIds]);
+        for (const ci of (allComboItems || []) as any[]) {
+          if (!cMap[ci.combo_id]) cMap[ci.combo_id] = [];
+          cMap[ci.combo_id].push({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad });
+        }
       }
       setComboItemsMap(cMap);
     } else {
@@ -314,12 +329,9 @@ export default function DashboardPage() {
       setComboItemsMap({});
     }
 
-    const numeros = rows.map((v) => v.numero);
+    // Process pedidos_tienda (already fetched above)
     if (numeros.length > 0) {
-      const { data: pedidosTienda } = await supabase
-        .from("pedidos_tienda")
-        .select("numero, fecha_entrega, estado")
-        .in("numero", numeros);
+      const pedidosTienda = pedidosTiendaResult.data;
       const entregaMap: Record<string, string> = {};
       const estadoMap: Record<string, string> = {};
       (pedidosTienda || []).forEach((p: { numero: string; fecha_entrega: string | null; estado: string }) => {
@@ -360,7 +372,10 @@ export default function DashboardPage() {
     // ─── Build month chart queries (6 months, each fires 2 parallel requests) ───
     const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(todayARG() + "T12:00:00"); d.setMonth(d.getMonth() - i);
+      // Use day=1 to avoid setMonth overflow (e.g. Mar 31 → setMonth(-1) skips Feb)
+      const d = new Date(todayARG() + "T12:00:00");
+      d.setDate(1); // set to 1st before changing month to prevent overflow
+      d.setMonth(d.getMonth() - i);
       const year = d.getFullYear(); const month = d.getMonth() + 1;
       const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
       const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
