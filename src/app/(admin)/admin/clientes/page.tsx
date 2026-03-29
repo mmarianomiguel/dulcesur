@@ -55,6 +55,7 @@ import {
   Upload,
   FileSpreadsheet,
   Printer,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -494,6 +495,27 @@ export default function ClientesPage() {
     setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0, saldoInicial });
 
     setMovLoading(false);
+  };
+
+  const recalcularSaldo = async () => {
+    if (!movClient?.id) return;
+    const { data } = await supabase
+      .from("cuenta_corriente")
+      .select("debe, haber")
+      .eq("cliente_id", movClient.id);
+    if (!data) { showAdminToast("Error al recalcular", "error"); return; }
+    const totalDebe = data.reduce((s, r) => s + (r.debe || 0), 0);
+    const totalHaber = data.reduce((s, r) => s + (r.haber || 0), 0);
+    const saldoReal = Math.round((totalDebe - totalHaber) * 100) / 100;
+    await supabase.from("clientes").update({ saldo: saldoReal }).eq("id", movClient.id);
+    // Update the last CC row saldo too
+    const { data: lastRow } = await supabase.from("cuenta_corriente").select("id").eq("cliente_id", movClient.id).order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(1);
+    if (lastRow && lastRow.length > 0) {
+      await supabase.from("cuenta_corriente").update({ saldo: saldoReal }).eq("id", lastRow[0].id);
+    }
+    showAdminToast(`Saldo recalculado: ${formatCurrency(saldoReal)}`, "success");
+    fetchClients();
+    fetchMovimientos(movClient.id, movDesde, movHasta);
   };
 
   const openPayMov = (m: any) => {
@@ -1576,6 +1598,9 @@ export default function ClientesPage() {
 
                     {/* Actions */}
                     <div className="flex justify-end gap-2 mb-2">
+                      <Button size="sm" variant="outline" onClick={recalcularSaldo} title="Recalcular saldo desde cuenta corriente">
+                        <RefreshCw className="w-3.5 h-3.5 mr-1" />Recalcular
+                      </Button>
                       {movCCRows.length > 0 && (
                         <Button size="sm" variant="outline" onClick={exportCCExcel}>
                           <Download className="w-3.5 h-3.5 mr-1" />Excel
