@@ -535,6 +535,7 @@ export default function PedidosProveedorPage() {
       console.error("Error deleting pedido:", err);
     } finally {
       setDeleting(false);
+      setDeleteConfirm({ open: false, pedido: null });
     }
   };
 
