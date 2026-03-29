@@ -378,6 +378,7 @@ function ProductosDestacadosBlock({
                           src={prod.imagen_url}
                           alt={prod.nombre}
                           fill
+                          loading="lazy"
                           className="card-product-img object-contain p-4"
                         />
                       ) : (
@@ -635,6 +636,7 @@ function ImagenBannerBlock({ config }: { config: Record<string, any> }) {
         src={url}
         alt={config.alt || ""}
         fill
+        priority
         className="object-cover"
       />
     </div>

@@ -533,6 +533,7 @@ export default function ProductoDetallePage() {
                 src={producto.imagen_url}
                 alt={producto.nombre}
                 fill
+                priority
                 sizes="(max-width: 768px) 100vw, 50vw"
                 className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
               />

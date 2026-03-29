@@ -166,6 +166,7 @@ export default function TiendaNavbar() {
               src={logoSrc}
               alt={config?.nombre || "Tienda"}
               className="h-10 w-auto"
+              fetchPriority="high"
               onError={() => {
                 if (logoSrc !== FALLBACK_LOGO) setLogoSrc(FALLBACK_LOGO);
               }}
@@ -184,6 +185,7 @@ export default function TiendaNavbar() {
                 onChange={(e) => handleQueryChange(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                 placeholder="¿Qué estás buscando?"
+                aria-label="Buscar productos"
                 className="h-10 w-full rounded-full border border-gray-300 pl-4 pr-12 text-sm text-gray-700 placeholder-gray-400 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               <button
@@ -264,7 +266,7 @@ export default function TiendaNavbar() {
         </div>
 
         {/* ── Category bar (desktop) ── */}
-        <nav className="hidden border-b border-gray-100 lg:block">
+        <nav aria-label="Categorías" className="hidden border-b border-gray-100 lg:block">
           <div
             ref={categoryBarRef}
             className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 scrollbar-none"
@@ -312,6 +314,7 @@ export default function TiendaNavbar() {
             src={mobilLogoSrc}
             alt={config?.nombre || "Tienda"}
             className="h-8 w-auto"
+            fetchPriority="high"
             onError={() => {
               if (mobilLogoSrc !== FALLBACK_LOGO) setMobilLogoSrc(FALLBACK_LOGO);
             }}
@@ -333,6 +336,7 @@ export default function TiendaNavbar() {
               value={mobileQuery}
               onChange={(e) => setMobileQuery(e.target.value)}
               placeholder="¿Qué estás buscando?"
+              aria-label="Buscar productos"
               className="h-10 w-full rounded-full border border-gray-300 pl-4 pr-10 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-primary"
             />
             <button
@@ -346,7 +350,7 @@ export default function TiendaNavbar() {
         </form>
 
         {/* Categories */}
-        <nav className="flex-1 overflow-y-auto px-2 py-2">
+        <nav aria-label="Categorías" className="flex-1 overflow-y-auto px-2 py-2">
           <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
             Categorías
           </p>

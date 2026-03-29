@@ -9,10 +9,11 @@ import ScrollToTop from "@/components/tienda/scroll-to-top";
 
 export const metadata: Metadata = {
   title: {
-    default: "Dulcesur - Tienda Online Mayorista",
-    template: "%s | Dulcesur",
+    default: "DulceSur - Tienda Online",
+    template: "%s | DulceSur",
   },
-  description: "Comprá golosinas, snacks y productos de almacén al mejor precio mayorista. Envíos a todo el país.",
+  description:
+    "Tienda online de DulceSur. Golosinas, galletitas, snacks y más al mejor precio.",
 };
 
 export default function TiendaLayout({ children }: { children: React.ReactNode }) {

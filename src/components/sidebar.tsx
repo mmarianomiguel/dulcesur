@@ -335,6 +335,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           <button
             onClick={onMobileClose}
             className="lg:hidden p-1.5 rounded-lg hover:bg-sidebar-accent/50 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+            aria-label="Cerrar menú"
           >
             <X className="w-5 h-5" />
           </button>
@@ -343,7 +344,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         <Separator className="bg-sidebar-border" />
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav role="navigation" aria-label="Menú principal" className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {filteredNavigation.map((item) => {
             const isActive = isNavActive(item);
             const hasChildren = !!item.children?.length;
@@ -353,6 +354,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               <button
                 key={item.name}
                 onClick={() => toggleSection(item.name)}
+                aria-expanded={expanded}
                 className={cn(
                   "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                   isActive
@@ -373,6 +375,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               <Link
                 key={item.name}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                   isActive
@@ -391,6 +394,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                   <TooltipTrigger>
                     <Link
                       href={item.href}
+                      aria-label={item.name}
+                      aria-current={isActive ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                         isActive
@@ -417,6 +422,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                         <Link
                           key={child.href}
                           href={child.href}
+                          aria-current={childActive ? "page" : undefined}
                           className={cn(
                             "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150",
                             childActive
@@ -467,6 +473,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                   router.refresh();
                 }}
                 title="Cerrar sesión"
+                aria-label="Cerrar sesión"
                 className="text-sidebar-foreground/50 hover:text-red-400 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -476,6 +483,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
           <button
             onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
             className="hidden lg:flex items-center justify-center w-full py-2 rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
           >
             {collapsed ? (

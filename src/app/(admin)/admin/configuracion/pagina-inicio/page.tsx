@@ -282,7 +282,7 @@ function EditableText({
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      dangerouslySetInnerHTML={{ __html: value || placeholder || "" }}
+      dangerouslySetInnerHTML={{ __html: sanitizeHtml(value || placeholder || "") }}
     />
   );
 }
