@@ -1247,6 +1247,24 @@ export default function ComprasPage() {
     );
   }, [purchases, search]);
 
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const rows = filtered.map((p) => ({
+      "Número": p.numero,
+      "Fecha": p.fecha,
+      "Proveedor": p.proveedores?.nombre || "",
+      "Total": p.total,
+      "Forma de Pago": p.forma_pago || "",
+      "Estado Pago": p.estado_pago || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 18 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Compras");
+    XLSX.writeFile(wb, `Compras_${todayARG()}.xlsx`);
+    showAdminToast(`${rows.length} compras exportadas`, "success");
+  };
+
   /* ═══════════════════ RENDER ═══════════════════ */
 
   // ── NEW COMPRA FORM ──
@@ -2506,10 +2524,15 @@ export default function ComprasPage() {
             </p>
           </div>
         </div>
-        <Button onClick={() => setMode("new")}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Compra
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportExcel}>
+            <Download className="w-4 h-4 mr-2" />Exportar
+          </Button>
+          <Button onClick={() => setMode("new")}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Compra
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

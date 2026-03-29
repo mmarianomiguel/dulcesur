@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { todayARG, formatCurrency } from "@/lib/formatters";
+import { norm } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1514,13 +1515,13 @@ export default function ProductosPage() {
   );
 
   const filtered = useMemo(() => {
-    const q = debouncedSearch.toLowerCase();
+    const q = norm(debouncedSearch);
     const arr = products.filter((p) => {
       const matchesSearch =
         !q ||
-        p.nombre.toLowerCase().includes(q) ||
-        p.codigo.toLowerCase().includes(q) ||
-        (presCodigoMap[p.id] || []).some((pr) => (pr.codigo || "").toLowerCase().includes(q));
+        norm(p.nombre).includes(q) ||
+        norm(p.codigo).includes(q) ||
+        (presCodigoMap[p.id] || []).some((pr) => norm(pr.codigo || "").includes(q));
       const matchesCategory = category === "all" || p.categoria_id === category;
       const matchesSubcategory = subcategoryFilter === "all" || p.subcategoria_id === subcategoryFilter;
       const matchesMarca = marcaFilter === "all" || p.marca_id === marcaFilter;
@@ -1884,7 +1885,7 @@ export default function ProductosPage() {
                     {catOpen && category === "all" && (
                       <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                         <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setCategory("all"); setCatSearch(""); setCatOpen(false); setPage(1); }}>Todas</button>
-                        {categories.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).map((c) => (
+                        {categories.filter((c) => norm(c.nombre).includes(norm(catSearch))).map((c) => (
                           <div key={c.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted transition-colors group">
                             <button className="flex-1 text-left text-sm"
                               onClick={() => { setCategory(c.id); setCatSearch(""); setCatOpen(false); setSubcategoryFilter("all"); setPage(1); }}>
@@ -1905,7 +1906,7 @@ export default function ProductosPage() {
                             </button>
                           </div>
                         ))}
-                        {categories.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase())).length === 0 && (
+                        {categories.filter((c) => norm(c.nombre).includes(norm(catSearch))).length === 0 && (
                           <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                         )}
                       </div>
@@ -1931,13 +1932,13 @@ export default function ProductosPage() {
                     {subcatOpen && subcategoryFilter === "all" && (
                       <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                         <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setSubcategoryFilter("all"); setSubcatSearch(""); setSubcatOpen(false); setPage(1); }}>Todas</button>
-                        {filteredSubcategoriesForFilter.filter((s) => s.nombre.toLowerCase().includes(subcatSearch.toLowerCase())).map((s) => (
+                        {filteredSubcategoriesForFilter.filter((s) => norm(s.nombre).includes(norm(subcatSearch))).map((s) => (
                           <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                             onClick={() => { setSubcategoryFilter(s.id); setSubcatSearch(""); setSubcatOpen(false); setPage(1); }}>
                             {s.nombre}
                           </button>
                         ))}
-                        {filteredSubcategoriesForFilter.filter((s) => s.nombre.toLowerCase().includes(subcatSearch.toLowerCase())).length === 0 && (
+                        {filteredSubcategoriesForFilter.filter((s) => norm(s.nombre).includes(norm(subcatSearch))).length === 0 && (
                           <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                         )}
                       </div>
@@ -1963,13 +1964,13 @@ export default function ProductosPage() {
                     {marcaOpen && marcaFilter === "all" && (
                       <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-[200px] overflow-y-auto">
                         <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setMarcaFilter("all"); setMarcaSearch(""); setMarcaOpen(false); setPage(1); }}>Todas</button>
-                        {marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())).map((m) => (
+                        {marcas.filter((m) => norm(m.nombre).includes(norm(marcaSearch))).map((m) => (
                           <button key={m.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                             onClick={() => { setMarcaFilter(m.id); setMarcaSearch(""); setMarcaOpen(false); setPage(1); }}>
                             {m.nombre}
                           </button>
                         ))}
-                        {marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())).length === 0 && (
+                        {marcas.filter((m) => norm(m.nombre).includes(norm(marcaSearch))).length === 0 && (
                           <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                         )}
                       </div>
@@ -2385,7 +2386,7 @@ export default function ProductosPage() {
                 {(() => {
                   const [catSearch, setCatSearch] = [formCatSearch, setFormCatSearch];
                   const [catOpen, setCatOpen] = [formCatOpen, setFormCatOpen];
-                  const filtered = categories.filter((c) => c.nombre.toLowerCase().includes(catSearch.toLowerCase()));
+                  const filtered = categories.filter((c) => norm(c.nombre).includes(norm(catSearch)));
                   const selected = categories.find((c) => c.id === form.categoria_id);
                   return (
                   <div className="space-y-1.5 relative" ref={null}>
@@ -2414,7 +2415,7 @@ export default function ProductosPage() {
                 {(() => {
                   const [subSearch, setSubSearch] = [formSubSearch, setFormSubSearch];
                   const [subOpen, setSubOpen] = [formSubOpen, setFormSubOpen];
-                  const filtered = filteredSubcategories.filter((s) => s.nombre.toLowerCase().includes(subSearch.toLowerCase()));
+                  const filtered = filteredSubcategories.filter((s) => norm(s.nombre).includes(norm(subSearch)));
                   const selected = subcategories.find((s) => s.id === form.subcategoria_id);
                   return (
                   <div className="space-y-1.5 relative">
@@ -2443,7 +2444,7 @@ export default function ProductosPage() {
                 {(() => {
                   const [marcaSearch, setMarcaSearch] = [formMarcaSearch, setFormMarcaSearch];
                   const [marcaOpen, setMarcaOpen] = [formMarcaOpen, setFormMarcaOpen];
-                  const filtered = marcas.filter((m) => m.nombre.toLowerCase().includes(marcaSearch.toLowerCase()));
+                  const filtered = marcas.filter((m) => norm(m.nombre).includes(norm(marcaSearch)));
                   const selected = marcas.find((m) => m.id === form.marca_id);
                   return (
                   <div className="space-y-1.5 relative">
@@ -3849,8 +3850,8 @@ export default function ProductosPage() {
           </div>
           <div className="max-h-64 overflow-y-auto divide-y border rounded-lg">
             {allNonCombos.filter((p) =>
-              p.nombre.toLowerCase().includes(comboProductSearch.toLowerCase()) ||
-              p.codigo.toLowerCase().includes(comboProductSearch.toLowerCase())
+              norm(p.nombre).includes(norm(comboProductSearch)) ||
+              norm(p.codigo).includes(norm(comboProductSearch))
             ).map((p) => (
               <button
                 key={p.id}

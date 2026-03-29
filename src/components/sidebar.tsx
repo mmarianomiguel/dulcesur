@@ -17,6 +17,8 @@ import {
   ChevronRight,
   ChevronDown,
   LogOut,
+  Moon,
+  Sun,
   Building2,
   List,
   Banknote,
@@ -30,6 +32,7 @@ import {
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useWhiteLabel } from "@/hooks/use-white-label";
+import { useDarkMode } from "@/hooks/use-dark-mode";
 import {
   Tooltip,
   TooltipContent,
@@ -162,6 +165,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [permisosMap, setPermisosMap] = useState<Record<string, boolean> | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [cajaAbierta, setCajaAbierta] = useState(false);
+  const { dark, toggle: toggleDark } = useDarkMode();
   const permsFetched = useRef(false);
 
   // Close mobile sidebar on route change
@@ -473,6 +477,18 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             );
           })}
         </nav>
+
+        {/* Dark mode toggle */}
+        <div className="px-3 pb-1">
+          <button
+            onClick={toggleDark}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors w-full"
+            aria-label={dark ? "Modo claro" : "Modo oscuro"}
+          >
+            {dark ? <Sun className="w-5 h-5 shrink-0" /> : <Moon className="w-5 h-5 shrink-0" />}
+            {!collapsed && <span>{dark ? "Modo claro" : "Modo oscuro"}</span>}
+          </button>
+        </div>
 
         <Separator className="bg-sidebar-border" />
 

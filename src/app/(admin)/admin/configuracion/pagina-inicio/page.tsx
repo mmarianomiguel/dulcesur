@@ -938,7 +938,24 @@ export default function PaginaInicioEditor() {
                 return (
                   <div key={bloque.id}>
                     <div
-                      className={`relative cursor-pointer transition-all duration-200 ${
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(idx)); e.currentTarget.style.opacity = "0.5"; }}
+                      onDragEnd={(e) => { e.currentTarget.style.opacity = ""; }}
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.outline = "3px dashed #ec4899"; }}
+                      onDragLeave={(e) => { e.currentTarget.style.outline = ""; }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.style.outline = "";
+                        const from = Number(e.dataTransfer.getData("text/plain"));
+                        if (from === idx || isNaN(from)) return;
+                        setBloques((prev) => {
+                          const list = [...prev];
+                          const [moved] = list.splice(from, 1);
+                          list.splice(idx, 0, moved);
+                          return list;
+                        });
+                      }}
+                      className={`relative cursor-grab active:cursor-grabbing transition-all duration-200 ${
                         !bloque.activo ? "opacity-40" : ""
                       }`}
                       style={{
@@ -1108,8 +1125,25 @@ export default function PaginaInicioEditor() {
                   return (
                     <div
                       key={bloque.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors group ${
-                        isSelected ? "bg-pink-50 border border-pink-200" : "hover:bg-gray-50"
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(idx)); e.currentTarget.classList.add("opacity-50"); }}
+                      onDragEnd={(e) => { e.currentTarget.classList.remove("opacity-50"); }}
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-pink-400"); }}
+                      onDragLeave={(e) => { e.currentTarget.classList.remove("border-pink-400"); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("border-pink-400");
+                        const from = Number(e.dataTransfer.getData("text/plain"));
+                        if (from === idx || isNaN(from)) return;
+                        setBloques((prev) => {
+                          const list = [...prev];
+                          const [moved] = list.splice(from, 1);
+                          list.splice(idx, 0, moved);
+                          return list;
+                        });
+                      }}
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-grab active:cursor-grabbing transition-all group border ${
+                        isSelected ? "bg-pink-50 border-pink-200" : "border-transparent hover:bg-gray-50"
                       }`}
                       onClick={() => setSelectedId(bloque.id)}
                     >

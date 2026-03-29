@@ -1125,13 +1125,13 @@ export default function ClientesPage() {
                           <button className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors" onClick={() => { setVendedorFilter(""); setVendedorSearch(""); setVendedorOpen(false); }}>
                             Todos los vendedores
                           </button>
-                          {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).map((v) => (
+                          {vendedores.filter((v) => norm(v.nombre).includes(norm(vendedorSearch))).map((v) => (
                             <button key={v.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm transition-colors"
                               onClick={() => { setVendedorFilter(v.id); setVendedorSearch(""); setVendedorOpen(false); }}>
                               {v.nombre}
                             </button>
                           ))}
-                          {vendedores.filter((v) => v.nombre.toLowerCase().includes(vendedorSearch.toLowerCase())).length === 0 && (
+                          {vendedores.filter((v) => norm(v.nombre).includes(norm(vendedorSearch))).length === 0 && (
                             <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
                           )}
                         </div>

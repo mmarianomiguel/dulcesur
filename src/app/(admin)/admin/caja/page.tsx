@@ -38,6 +38,7 @@ import {
   Eye,
   Loader2,
   AlertTriangle,
+  Download,
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
@@ -934,6 +935,24 @@ export default function CajaPage() {
     );
   }
 
+  const exportMovimientosExcel = async () => {
+    const XLSX = await import("xlsx");
+    const rows = movements.map((m) => ({
+      "Fecha": m.fecha,
+      "Hora": m.hora,
+      "Tipo": m.tipo === "ingreso" ? "Ingreso" : m.tipo === "egreso" ? "Egreso" : "Cancelación",
+      "Descripción": m.descripcion,
+      "Método de Pago": m.metodo_pago,
+      "Monto": m.monto,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 35 }, { wch: 18 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+    XLSX.writeFile(wb, `Caja_Movimientos_${todayARG()}.xlsx`);
+    showAdminToast(`${rows.length} movimientos exportados`, "success");
+  };
+
   // ─── Turno open: main view ───
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -946,6 +965,10 @@ export default function CajaPage() {
         })}
         actions={
           <>
+            <Button variant="outline" size="sm" onClick={exportMovimientosExcel}>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar
+            </Button>
             <Button variant="outline" size="sm" onClick={openHistorial}>
               <History className="w-4 h-4 mr-2" />
               Historial

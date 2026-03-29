@@ -1,7 +1,7 @@
 "use client";
 
 import { showAdminToast } from "@/components/admin-toast";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   Card,
@@ -117,7 +117,14 @@ export default function TiendaConfigPage() {
       supabase.from("categorias").select("id, nombre").order("nombre"),
     ]);
     if (cfg) setConfig(cfg as TiendaConfig);
-    setDestacadas((dest as CategoriaDestacada[]) || []);
+    // Deduplicate by categoria_id (keep first occurrence, preserve order)
+    const seen = new Set<string>();
+    const deduped = ((dest as CategoriaDestacada[]) || []).filter((d) => {
+      if (seen.has(d.categoria_id)) return false;
+      seen.add(d.categoria_id);
+      return true;
+    });
+    setDestacadas(deduped);
     setCategorias((cats as Categoria[]) || []);
     setLoading(false);
   }, []);
@@ -211,6 +218,25 @@ export default function TiendaConfigPage() {
 
     setSaving(false);
   };
+
+  // Auto-save destacadas to DB whenever they change (debounced)
+  const destacadasInitialized = useRef(false);
+  useEffect(() => {
+    if (!destacadasInitialized.current) {
+      // Skip the first render (initial load from DB)
+      destacadasInitialized.current = true;
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      await supabase.from("categorias_destacadas").delete().neq("id", "");
+      if (destacadas.length > 0) {
+        await supabase.from("categorias_destacadas").insert(
+          destacadas.map((d, i) => ({ categoria_id: d.categoria_id, orden: i + 1 }))
+        );
+      }
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [destacadas]);
 
   const availableCats = categorias.filter(
     (c) => !destacadas.some((d) => d.categoria_id === c.id)
@@ -743,7 +769,22 @@ export default function TiendaConfigPage() {
                   {destacadas.map((d, i) => (
                     <div
                       key={d.categoria_id}
-                      className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:shadow-sm transition-shadow group"
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(i)); e.currentTarget.classList.add("opacity-50"); }}
+                      onDragEnd={(e) => { e.currentTarget.classList.remove("opacity-50"); }}
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-primary"); }}
+                      onDragLeave={(e) => { e.currentTarget.classList.remove("border-primary"); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("border-primary");
+                        const from = Number(e.dataTransfer.getData("text/plain"));
+                        if (from === i || isNaN(from)) return;
+                        const list = [...destacadas];
+                        const [moved] = list.splice(from, 1);
+                        list.splice(i, 0, moved);
+                        setDestacadas(list.map((d, idx) => ({ ...d, orden: idx + 1 })));
+                      }}
+                      className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:shadow-sm transition-all group cursor-grab active:cursor-grabbing"
                     >
                       <div className="text-muted-foreground/40">
                         <GripVertical className="w-4 h-4" />
