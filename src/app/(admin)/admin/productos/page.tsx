@@ -1629,17 +1629,24 @@ export default function ProductosPage() {
     [filtered, safeCurrentPage, pageSize]
   );
 
-  const { outOfStock, lowStock, comboCount } = useMemo(() => {
+  const { outOfStock, lowStock, comboCount, lowStockProducts } = useMemo(() => {
     let oos = 0, low = 0, combos = 0;
+    const lowList: { id: string; nombre: string; codigo: string; stock: number; stock_minimo: number }[] = [];
     for (const p of products) {
       const isComboP = !!(p as any).es_combo;
       if (isComboP) combos++;
       const effectiveStock = isComboP ? (comboStockMap[p.id] ?? 0) : p.stock;
       if (effectiveStock === 0) oos++;
-      else if (effectiveStock <= (p.stock_minimo || 5)) low++;
+      else if (effectiveStock <= (p.stock_minimo || 5)) {
+        low++;
+        lowList.push({ id: p.id, nombre: p.nombre, codigo: (p as any).codigo || "", stock: effectiveStock, stock_minimo: p.stock_minimo || 5 });
+      }
     }
-    return { outOfStock: oos, lowStock: low, comboCount: combos };
+    lowList.sort((a, b) => a.stock - b.stock);
+    return { outOfStock: oos, lowStock: low, comboCount: combos, lowStockProducts: lowList };
   }, [products, comboStockMap]);
+
+  const [lowStockOpen, setLowStockOpen] = useState(false);
 
 
   return (
@@ -1716,10 +1723,13 @@ export default function ProductosPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer hover:bg-muted/40 transition-colors"
+          onClick={() => lowStock > 0 && setLowStockOpen(true)}
+        >
           <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-orange-500" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${lowStock > 0 ? "bg-orange-500/20" : "bg-orange-500/10"}`}>
+              <AlertTriangle className={`w-5 h-5 ${lowStock > 0 ? "text-orange-600" : "text-orange-500"}`} />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Stock bajo</p>
@@ -3917,6 +3927,39 @@ export default function ProductosPage() {
                 Confirmar
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* ─── Stock Bajo Dialog ─── */}
+      <Dialog open={lowStockOpen} onOpenChange={setLowStockOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-orange-500" />
+              Stock bajo ({lowStockProducts.length} producto{lowStockProducts.length !== 1 ? "s" : ""})
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {lowStockProducts.map((p) => (
+              <div key={p.id} className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 cursor-pointer" onClick={() => { setLowStockOpen(false); const prod = products.find((pr) => pr.id === p.id); if (prod) openEdit(prod); }}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{p.nombre}</p>
+                  {p.codigo && <p className="text-xs text-muted-foreground font-mono">{p.codigo}</p>}
+                </div>
+                <div className="flex items-center gap-3 shrink-0 ml-3">
+                  <div className="text-right">
+                    <p className={`text-sm font-bold ${p.stock <= 0 ? "text-red-600" : "text-orange-600"}`}>{p.stock} un.</p>
+                    <p className="text-[10px] text-muted-foreground">mín. {p.stock_minimo}</p>
+                  </div>
+                  <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
+                    <div className={`h-full rounded-full ${p.stock <= 0 ? "bg-red-500" : p.stock <= p.stock_minimo * 0.5 ? "bg-orange-500" : "bg-amber-400"}`} style={{ width: `${Math.min(100, (p.stock / p.stock_minimo) * 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+            {lowStockProducts.length === 0 && (
+              <p className="text-center text-muted-foreground py-8">No hay productos con stock bajo</p>
+            )}
           </div>
         </DialogContent>
       </Dialog>

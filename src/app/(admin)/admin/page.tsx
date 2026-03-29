@@ -790,45 +790,55 @@ export default function DashboardPage() {
 
       {/* ─── Accesos Rápidos ─── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Link href="/admin/ventas" className="flex items-center gap-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
-          <ShoppingCart className="w-6 h-6 shrink-0" />
-          <div><p className="font-bold text-sm">Nueva Venta</p><p className="text-[10px] opacity-80">Abrir POS</p></div>
+        <Link href="/admin/ventas" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-emerald-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative flex flex-col gap-2">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+              <ShoppingCart className="w-5 h-5 text-emerald-600 group-hover:text-white transition-colors" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Nueva Venta</p>
+              <p className="text-[11px] text-muted-foreground">Abrir POS</p>
+            </div>
+          </div>
         </Link>
-        <Link href="/admin/clientes" className="flex items-center gap-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
-          <CreditCard className="w-6 h-6 shrink-0" />
-          <div><p className="font-bold text-sm">Cobrar Deuda</p><p className="text-[10px] opacity-80">Cuenta corriente</p></div>
+        <Link href="/admin/clientes" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-blue-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative flex flex-col gap-2">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
+              <CreditCard className="w-5 h-5 text-blue-600 group-hover:text-white transition-colors" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Cobrar Deuda</p>
+              <p className="text-[11px] text-muted-foreground">Cuenta corriente</p>
+            </div>
+          </div>
         </Link>
-        <Link href="/admin/compras" className="flex items-center gap-3 bg-gradient-to-r from-violet-500 to-violet-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
-          <Truck className="w-6 h-6 shrink-0" />
-          <div><p className="font-bold text-sm">Cargar Compra</p><p className="text-[10px] opacity-80">Proveedor</p></div>
+        <Link href="/admin/compras" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-violet-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-violet-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative flex flex-col gap-2">
+            <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center group-hover:bg-violet-500 group-hover:text-white transition-colors">
+              <Truck className="w-5 h-5 text-violet-600 group-hover:text-white transition-colors" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Cargar Compra</p>
+              <p className="text-[11px] text-muted-foreground">Proveedor</p>
+            </div>
+          </div>
         </Link>
-        <Link href="/admin/productos" className="flex items-center gap-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl p-4 hover:shadow-lg hover:scale-[1.02] transition-all">
-          <PackageIcon className="w-6 h-6 shrink-0" />
-          <div><p className="font-bold text-sm">Productos</p><p className="text-[10px] opacity-80">Gestionar catálogo</p></div>
+        <Link href="/admin/productos" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-orange-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-orange-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative flex flex-col gap-2">
+            <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
+              <PackageIcon className="w-5 h-5 text-orange-600 group-hover:text-white transition-colors" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Productos</p>
+              <p className="text-[11px] text-muted-foreground">Gestionar catálogo</p>
+            </div>
+          </div>
         </Link>
       </div>
-
-      {/* ─── Stock Bajo ─── */}
-      {lowStockProducts.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <span className="text-sm font-semibold text-amber-800">Stock bajo ({lowStockProducts.length} producto{lowStockProducts.length !== 1 ? "s" : ""})</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {lowStockProducts.slice(0, 10).map((p) => (
-              <div key={p.id} className="flex items-center gap-1.5 bg-white rounded-md border border-amber-200 px-2.5 py-1 text-xs">
-                <span className="font-medium text-amber-900 truncate max-w-[180px]">{p.nombre}</span>
-                <span className={`font-bold ${p.stock <= 0 ? "text-red-600" : "text-amber-600"}`}>{p.stock} un.</span>
-                <span className="text-amber-500">/ mín. {p.stock_minimo}</span>
-              </div>
-            ))}
-            {lowStockProducts.length > 10 && (
-              <span className="text-xs text-amber-600 self-center">+{lowStockProducts.length - 10} más</span>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ─── Saldos Descuadrados ─── */}
       {saldoMismatches.length > 0 && (

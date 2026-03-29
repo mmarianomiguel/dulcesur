@@ -177,7 +177,13 @@ export default function ClientesPage() {
   const [cobranzaFilterFrom, setCobranzaFilterFrom] = useState("");
   const [cobranzaFilterTo, setCobranzaFilterTo] = useState("");
   const [cobroOpen, setCobroOpen] = useState(false);
-  const [cobroReceipt, setCobroReceipt] = useState<{ open: boolean; cliente: string; monto: number; formaPago: string; fecha: string; saldoAnterior: number; saldoNuevo: number } | null>(null);
+  const [cobroReceipt, setCobroReceipt] = useState<{
+    open: boolean; cliente: string; clienteCuit: string; clienteDomicilio: string;
+    monto: number; formaPago: string; fecha: string; saldoAnterior: number; saldoNuevo: number;
+    empresaNombre: string; empresaCuit: string; empresaDomicilio: string; empresaTelefono: string;
+    cuentaBancaria: string; cuentaAlias: string; observacion: string;
+    comprobantes: { comprobante: string; debe: number; haber: number }[];
+  } | null>(null);
   const [cobroClient, setCobroClient] = useState<Cliente | null>(null);
   const [cobroMonto, setCobroMonto] = useState(0);
   const [cobroFormaPago, setCobroFormaPago] = useState("Efectivo");
@@ -499,6 +505,12 @@ export default function ClientesPage() {
 
   const recalcularSaldo = async () => {
     if (!movClient?.id) return;
+
+    // 1. Get current saldo from DB
+    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", movClient.id).single();
+    const saldoActual = freshCli?.saldo ?? 0;
+
+    // 2. Sum all CC entries
     const { data } = await supabase
       .from("cuenta_corriente")
       .select("debe, haber")
@@ -507,13 +519,46 @@ export default function ClientesPage() {
     const totalDebe = data.reduce((s, r) => s + (r.debe || 0), 0);
     const totalHaber = data.reduce((s, r) => s + (r.haber || 0), 0);
     const saldoReal = Math.round((totalDebe - totalHaber) * 100) / 100;
-    await supabase.from("clientes").update({ saldo: saldoReal }).eq("id", movClient.id);
+
+    // 3. Check for cobros without matching CC haber entries
+    const { data: cobros } = await supabase.from("cobros").select("monto").eq("cliente_id", movClient.id);
+    const totalCobros = (cobros || []).reduce((s, r) => s + (r.monto || 0), 0);
+    const totalCCHaber = totalHaber;
+    const cobrosHuerfanos = Math.round((totalCobros - totalCCHaber) * 100) / 100;
+
+    // If there are cobros without CC entries, account for them
+    const saldoFinal = cobrosHuerfanos > 0
+      ? Math.round((saldoReal - cobrosHuerfanos) * 100) / 100
+      : saldoReal;
+
+    await supabase.from("clientes").update({ saldo: saldoFinal }).eq("id", movClient.id);
+
     // Update the last CC row saldo too
     const { data: lastRow } = await supabase.from("cuenta_corriente").select("id").eq("cliente_id", movClient.id).order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(1);
     if (lastRow && lastRow.length > 0) {
-      await supabase.from("cuenta_corriente").update({ saldo: saldoReal }).eq("id", lastRow[0].id);
+      await supabase.from("cuenta_corriente").update({ saldo: saldoFinal }).eq("id", lastRow[0].id);
     }
-    showAdminToast(`Saldo recalculado: ${formatCurrency(saldoReal)}`, "success");
+
+    // If there were orphaned cobros, create missing CC entries
+    if (cobrosHuerfanos > 0) {
+      const hoy = todayARG();
+      await supabase.from("cuenta_corriente").insert({
+        cliente_id: movClient.id,
+        fecha: hoy,
+        comprobante: `Ajuste recálculo`,
+        descripcion: `Cobros sin registrar en CC (ajuste automático)`,
+        debe: 0,
+        haber: cobrosHuerfanos,
+        saldo: saldoFinal,
+        forma_pago: "Ajuste",
+      });
+      showAdminToast(`Saldo recalculado: ${formatCurrency(saldoActual)} → ${formatCurrency(saldoFinal)} (se encontraron cobros sin registrar: ${formatCurrency(cobrosHuerfanos)})`, "success");
+    } else if (saldoActual !== saldoFinal) {
+      showAdminToast(`Saldo recalculado: ${formatCurrency(saldoActual)} → ${formatCurrency(saldoFinal)}`, "success");
+    } else {
+      showAdminToast("El saldo ya es correcto", "success");
+    }
+
     fetchClients();
     fetchMovimientos(movClient.id, movDesde, movHasta);
   };
@@ -556,7 +601,7 @@ export default function ClientesPage() {
       const { data: updResult } = await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", movClient?.id).eq("saldo", saldoActual).select("id");
       if (updResult && updResult.length > 0) break;
     }
-    await supabase.from("cuenta_corriente").insert({
+    const { error: ccError } = await supabase.from("cuenta_corriente").insert({
       cliente_id: movClient?.id,
       fecha: hoy,
       comprobante: `Cobro deuda - ${payMovVenta.descripcion}`,
@@ -567,6 +612,14 @@ export default function ClientesPage() {
       forma_pago: payMovMetodo,
       venta_id: payMovVenta.id,
     });
+
+    // If CC insert failed, revert saldo to prevent orphaned updates
+    if (ccError) {
+      await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", movClient?.id);
+      showAdminToast("Error al registrar en cuenta corriente", "error");
+      setPayMovSaving(false);
+      return;
+    }
 
     setPayMovSaving(false);
     setPayMovOpen(false);
@@ -650,16 +703,25 @@ export default function ClientesPage() {
       if (updResult && updResult.length > 0) break;
     }
 
-    await supabase.from("cuenta_corriente").insert({
+    // Insert CC entry AFTER saldo update so we have the correct running balance
+    const { error: ccError } = await supabase.from("cuenta_corriente").insert({
       cliente_id: cobroClient.id,
       fecha: hoy,
       comprobante: `RE ${hoy}`,
-      descripcion: `Cobro - ${cobroFormaPago}`,
+      descripcion: `Cobro - ${cobroFormaPago}${cobroObs ? ` — ${cobroObs}` : ""}`,
       debe: 0,
       haber: cobroMonto,
       saldo: currentSaldo,
       forma_pago: cobroFormaPago,
     });
+
+    // If CC insert failed, revert saldo to prevent orphaned updates
+    if (ccError) {
+      await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", cobroClient.id);
+      showAdminToast("Error al registrar en cuenta corriente", "error");
+      setSaving(false);
+      return;
+    }
 
     const cuentaSeleccionada = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
     await supabase.from("caja_movimientos").insert({
@@ -672,14 +734,29 @@ export default function ClientesPage() {
       ...(cobroFormaPago === "Transferencia" && cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
     });
 
+    // Fetch empresa data and pending comprobantes for the receipt
+    const { data: emp } = await supabase.from("empresa").select("nombre, cuit, domicilio, telefono").limit(1).single();
+    const { data: ccDeudas } = await supabase.from("cuenta_corriente").select("comprobante, debe, haber").eq("cliente_id", cobroClient.id).gt("debe", 0).order("fecha", { ascending: true });
+    const cuentaSel = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
+
     setCobroReceipt({
       open: true,
       cliente: cobroClient.nombre,
+      clienteCuit: cobroClient.cuit || "",
+      clienteDomicilio: [cobroClient.domicilio, cobroClient.localidad, cobroClient.provincia].filter(Boolean).join(", "),
       monto: cobroMonto,
       formaPago: cobroFormaPago,
       fecha: hoy,
       saldoAnterior: saldoActual,
       saldoNuevo: currentSaldo,
+      empresaNombre: emp?.nombre || "DulceSur",
+      empresaCuit: emp?.cuit || "",
+      empresaDomicilio: emp?.domicilio || "",
+      empresaTelefono: emp?.telefono || "",
+      cuentaBancaria: cuentaSel?.nombre || "",
+      cuentaAlias: cuentaSel?.alias || "",
+      observacion: cobroObs || "",
+      comprobantes: (ccDeudas || []).map((d: any) => ({ comprobante: d.comprobante, debe: d.debe || 0, haber: d.haber || 0 })),
     });
 
     logAudit({ action: "CREATE", module: "clientes", entityId: cobroClient.id, userName: currentUser?.nombre || "Admin", after: { cobro: cobroMonto, formaPago: cobroFormaPago, cliente: cobroClient.nombre } });
@@ -1804,41 +1881,139 @@ export default function ClientesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cobro Receipt Dialog */}
+      {/* Cobro Receipt Dialog — A4 */}
       <Dialog open={!!cobroReceipt?.open} onOpenChange={(open) => { if (!open) setCobroReceipt(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Recibo de Cobro</DialogTitle>
           </DialogHeader>
           {cobroReceipt && (
             <div className="space-y-3">
-              <div id="cobro-receipt-print" className="border rounded-lg p-4 space-y-3 bg-white text-sm">
-                <div className="text-center border-b pb-2">
-                  <p className="font-bold text-base">RECIBO DE COBRO</p>
-                  <p className="text-xs text-muted-foreground">{new Date(cobroReceipt.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
+              <div id="cobro-receipt-print" className="border rounded-lg bg-white text-sm" style={{ fontFamily: "Arial, sans-serif" }}>
+                {/* Header — Empresa */}
+                <div className="border-b p-6 pb-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-xl font-bold tracking-tight">{cobroReceipt.empresaNombre}</p>
+                      {cobroReceipt.empresaCuit && <p className="text-xs text-gray-500 mt-0.5">CUIT: {cobroReceipt.empresaCuit}</p>}
+                      {cobroReceipt.empresaDomicilio && <p className="text-xs text-gray-500">{cobroReceipt.empresaDomicilio}</p>}
+                      {cobroReceipt.empresaTelefono && <p className="text-xs text-gray-500">Tel: {cobroReceipt.empresaTelefono}</p>}
+                    </div>
+                    <div className="text-right">
+                      <div className="inline-block border-2 border-gray-800 rounded-lg px-4 py-2">
+                        <p className="text-xs font-bold text-gray-800 tracking-widest">RECIBO</p>
+                        <p className="text-lg font-bold text-gray-800">X</p>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Fecha: {new Date(cobroReceipt.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{cobroReceipt.cliente}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Forma de pago</span><span>{cobroReceipt.formaPago}</span></div>
+
+                {/* Client info */}
+                <div className="border-b p-6 py-4 bg-gray-50">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Datos del cliente</p>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                    <div className="flex gap-2"><span className="text-gray-500 shrink-0">Nombre:</span><span className="font-medium">{cobroReceipt.cliente}</span></div>
+                    {cobroReceipt.clienteCuit && <div className="flex gap-2"><span className="text-gray-500 shrink-0">CUIT:</span><span className="font-medium">{cobroReceipt.clienteCuit}</span></div>}
+                    {cobroReceipt.clienteDomicilio && <div className="flex gap-2 col-span-2"><span className="text-gray-500 shrink-0">Domicilio:</span><span className="font-medium">{cobroReceipt.clienteDomicilio}</span></div>}
+                  </div>
                 </div>
-                <div className="border-t border-b py-2 text-center">
-                  <p className="text-xs text-muted-foreground">Monto recibido</p>
-                  <p className="text-2xl font-bold">{formatCurrency(cobroReceipt.monto)}</p>
+
+                {/* Payment details */}
+                <div className="p-6 py-4 border-b">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Detalle del cobro</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-lg border p-3">
+                      <p className="text-[10px] text-gray-400 uppercase">Forma de pago</p>
+                      <p className="font-semibold text-sm mt-0.5">{cobroReceipt.formaPago}</p>
+                      {cobroReceipt.formaPago === "Transferencia" && cobroReceipt.cuentaBancaria && (
+                        <div className="mt-1.5 text-xs">
+                          <p className="text-gray-500">Cuenta: {cobroReceipt.cuentaBancaria}</p>
+                          {cobroReceipt.cuentaAlias && <p className="text-gray-500">Alias: <span className="font-mono font-medium text-gray-700">{cobroReceipt.cuentaAlias}</span></p>}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border p-3 bg-emerald-50 border-emerald-200">
+                      <p className="text-[10px] text-emerald-600 uppercase">Monto recibido</p>
+                      <p className="font-bold text-xl text-emerald-700 mt-0.5">{formatCurrency(cobroReceipt.monto)}</p>
+                    </div>
+                  </div>
+                  {cobroReceipt.observacion && (
+                    <div className="mt-3 text-xs"><span className="text-gray-500">Obs:</span> <span className="text-gray-700">{cobroReceipt.observacion}</span></div>
+                  )}
                 </div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Saldo anterior</span><span>{formatCurrency(cobroReceipt.saldoAnterior)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Cobro</span><span>-{formatCurrency(cobroReceipt.monto)}</span></div>
-                  <div className="flex justify-between font-bold border-t pt-1"><span>Saldo actual</span><span>{formatCurrency(Math.max(0, cobroReceipt.saldoNuevo))}</span></div>
+
+                {/* Comprobantes (deuda origen) */}
+                {cobroReceipt.comprobantes.length > 0 && (
+                  <div className="p-6 py-4 border-b">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Comprobantes asociados (deuda)</p>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-1.5 font-medium text-gray-500">Comprobante</th>
+                          <th className="text-right py-1.5 font-medium text-gray-500">Debe</th>
+                          <th className="text-right py-1.5 font-medium text-gray-500">Haber</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cobroReceipt.comprobantes.map((c, i) => (
+                          <tr key={i} className="border-b border-gray-100">
+                            <td className="py-1.5 font-mono">{c.comprobante}</td>
+                            <td className="py-1.5 text-right text-red-600">{formatCurrency(c.debe)}</td>
+                            <td className="py-1.5 text-right text-emerald-600">{c.haber > 0 ? formatCurrency(c.haber) : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Balance summary */}
+                <div className="p-6 py-4">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Resumen de cuenta</p>
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-500">Saldo anterior</span><span className="font-medium">{formatCurrency(cobroReceipt.saldoAnterior)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">Cobro aplicado</span><span className="font-medium text-emerald-600">-{formatCurrency(cobroReceipt.monto)}</span></div>
+                    <div className="flex justify-between border-t-2 border-gray-800 pt-2 mt-2">
+                      <span className="font-bold">Saldo actual</span>
+                      <span className={`font-bold text-lg ${cobroReceipt.saldoNuevo <= 0 ? "text-emerald-600" : "text-gray-900"}`}>{formatCurrency(Math.max(0, cobroReceipt.saldoNuevo))}</span>
+                    </div>
+                    {cobroReceipt.saldoNuevo <= 0 && (
+                      <p className="text-center text-xs text-emerald-600 font-medium mt-1">Cuenta al día</p>
+                    )}
+                  </div>
                 </div>
               </div>
+
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setCobroReceipt(null)}>Cerrar</Button>
                 <Button className="flex-1" onClick={() => {
                   const el = document.getElementById("cobro-receipt-print");
                   if (!el) return;
-                  const win = window.open("", "_blank", "width=400,height=500");
+                  const win = window.open("", "_blank", "width=800,height=1100");
                   if (!win) return;
-                  win.document.write(`<!DOCTYPE html><html><head><title>Recibo de Cobro</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:350px;margin:0 auto}@media print{body{padding:10px}}</style></head><body>${el.innerHTML}</body></html>`);
+                  win.document.write(`<!DOCTYPE html><html><head><title>Recibo de Cobro — ${cobroReceipt.cliente}</title><style>
+                    @page { size: A4; margin: 20mm; }
+                    body { font-family: Arial, sans-serif; padding: 0; margin: 0; color: #1a1a1a; }
+                    .border { border: 1px solid #e5e5e5; }
+                    .border-b { border-bottom: 1px solid #e5e5e5; }
+                    .border-t-2 { border-top: 2px solid #1a1a1a; }
+                    .rounded-lg { border-radius: 8px; }
+                    .bg-gray-50 { background: #f9fafb; }
+                    .bg-emerald-50 { background: #ecfdf5; }
+                    .border-emerald-200 { border-color: #a7f3d0; }
+                    .text-emerald-600 { color: #059669; }
+                    .text-emerald-700 { color: #047857; }
+                    .text-red-600 { color: #dc2626; }
+                    .text-gray-400 { color: #9ca3af; }
+                    .text-gray-500 { color: #6b7280; }
+                    .text-gray-700 { color: #374151; }
+                    .font-mono { font-family: monospace; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { padding: 6px 8px; }
+                    th { font-size: 11px; color: #6b7280; }
+                    @media print { body { padding: 0; } }
+                  </style></head><body>${el.innerHTML}</body></html>`);
                   win.document.close();
                   win.onload = () => { win.print(); win.close(); };
                 }}>
