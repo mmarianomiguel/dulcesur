@@ -525,9 +525,15 @@ export default function ClientesPage() {
       ...(payMovMetodo === "Transferencia" && payMovCuentaSel ? { cuenta_bancaria: payMovCuentaSel.nombre } : {}),
     });
 
-    const cli = clients.find((c) => c.id === movClient?.id);
-    const currentSaldo = cli?.saldo || 0;
-    const newSaldo = currentSaldo - montoReal;
+    let saldoActual = 0;
+    let newSaldo = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", movClient?.id).single();
+      saldoActual = freshCli?.saldo ?? 0;
+      newSaldo = saldoActual - montoReal;
+      const { data: updResult } = await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", movClient?.id).eq("saldo", saldoActual).select("id");
+      if (updResult && updResult.length > 0) break;
+    }
     await supabase.from("cuenta_corriente").insert({
       cliente_id: movClient?.id,
       fecha: hoy,
@@ -539,7 +545,6 @@ export default function ClientesPage() {
       forma_pago: payMovMetodo,
       venta_id: payMovVenta.id,
     });
-    await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", movClient?.id);
 
     setPayMovSaving(false);
     setPayMovOpen(false);
@@ -612,10 +617,16 @@ export default function ClientesPage() {
       observacion: cobroObs || null,
     });
 
-    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
-    const saldoActual = freshCli?.saldo ?? cobroClient.saldo;
-    const currentSaldo = saldoActual - cobroMonto;
     const hoy = todayARG();
+    let saldoActual = 0;
+    let currentSaldo = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
+      saldoActual = freshCli?.saldo ?? 0;
+      currentSaldo = saldoActual - cobroMonto;
+      const { data: updResult } = await supabase.from("clientes").update({ saldo: currentSaldo }).eq("id", cobroClient.id).eq("saldo", saldoActual).select("id");
+      if (updResult && updResult.length > 0) break;
+    }
 
     await supabase.from("cuenta_corriente").insert({
       cliente_id: cobroClient.id,
@@ -627,11 +638,6 @@ export default function ClientesPage() {
       saldo: currentSaldo,
       forma_pago: cobroFormaPago,
     });
-
-    await supabase
-      .from("clientes")
-      .update({ saldo: currentSaldo })
-      .eq("id", cobroClient.id);
 
     const cuentaSeleccionada = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
     await supabase.from("caja_movimientos").insert({

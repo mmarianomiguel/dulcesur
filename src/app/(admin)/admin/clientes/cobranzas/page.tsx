@@ -162,11 +162,16 @@ export default function CobranzasPage() {
       observacion: cobroObs || null,
     });
 
-    // Re-read saldo from DB to avoid stale state
-    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
-    const saldoActual = freshCli?.saldo ?? cobroClient.saldo;
-    const currentSaldo = saldoActual - cobroMonto;
     const hoy = todayARG();
+    let saldoActual = 0;
+    let currentSaldo = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
+      saldoActual = freshCli?.saldo ?? 0;
+      currentSaldo = saldoActual - cobroMonto;
+      const { data: updResult } = await supabase.from("clientes").update({ saldo: currentSaldo }).eq("id", cobroClient.id).eq("saldo", saldoActual).select("id");
+      if (updResult && updResult.length > 0) break;
+    }
 
     await supabase.from("cuenta_corriente").insert({
       cliente_id: cobroClient.id,
@@ -178,11 +183,6 @@ export default function CobranzasPage() {
       saldo: currentSaldo,
       forma_pago: cobroFormaPago,
     });
-
-    await supabase
-      .from("clientes")
-      .update({ saldo: currentSaldo })
-      .eq("id", cobroClient.id);
 
     // Register caja movement
     const cuentaSeleccionada = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
