@@ -189,6 +189,7 @@ export default function DashboardPage() {
   const [monthlyData, setMonthlyData] = useState<{ name: string; ventas: number; egresos: number }[]>([]);
   const [ventasPorCategoria, setVentasPorCategoria] = useState<{ name: string; value: number }[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<{ id: string; nombre: string; codigo: string; stock: number; stock_minimo: number }[]>([]);
+  const [saldoMismatches, setSaldoMismatches] = useState<{ id: string; nombre: string; saldo: number; calculado: number; diff: number }[]>([]);
 
   // ─── Pedidos Online state ───
   const [pedidosOnline, setPedidosOnline] = useState<PedidoVenta[]>([]);
@@ -416,6 +417,21 @@ export default function DashboardPage() {
     setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
     setCuentasCobrar((cls || []).reduce((a, c) => a + (c.saldo > 0 ? c.saldo : 0), 0));
     setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
+
+    // Saldo mismatch detection: compare clientes.saldo vs cuenta_corriente sum
+    const { data: allClients } = await supabase.from("clientes").select("id, nombre, saldo").eq("activo", true);
+    if (allClients && allClients.length > 0) {
+      const { data: ccSums } = await supabase.from("cuenta_corriente").select("cliente_id, debe, haber");
+      const ccMap: Record<string, number> = {};
+      for (const row of ccSums || []) {
+        ccMap[row.cliente_id] = (ccMap[row.cliente_id] || 0) + (row.debe || 0) - (row.haber || 0);
+      }
+      const mismatches = allClients
+        .map((c) => ({ id: c.id, nombre: c.nombre, saldo: c.saldo || 0, calculado: ccMap[c.id] || 0, diff: Math.round(((c.saldo || 0) - (ccMap[c.id] || 0)) * 100) / 100 }))
+        .filter((c) => Math.abs(c.diff) > 0.5)
+        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+      setSaldoMismatches(mismatches);
+    }
 
     // Fetch 6 months in parallel instead of sequentially
     const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
@@ -795,6 +811,30 @@ export default function DashboardPage() {
             ))}
             {lowStockProducts.length > 10 && (
               <span className="text-xs text-amber-600 self-center">+{lowStockProducts.length - 10} más</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Saldos Descuadrados ─── */}
+      {saldoMismatches.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-red-600" />
+            <span className="text-sm font-semibold text-red-800">Saldos descuadrados ({saldoMismatches.length} cliente{saldoMismatches.length !== 1 ? "s" : ""})</span>
+          </div>
+          <p className="text-xs text-red-600 mb-2">El saldo del cliente no coincide con la suma de su cuenta corriente</p>
+          <div className="flex flex-wrap gap-2">
+            {saldoMismatches.slice(0, 8).map((c) => (
+              <div key={c.id} className="flex items-center gap-1.5 bg-white rounded-md border border-red-200 px-2.5 py-1 text-xs">
+                <span className="font-medium text-red-900 truncate max-w-[150px]">{c.nombre}</span>
+                <span className="text-red-500">saldo: {formatCurrency(c.saldo)}</span>
+                <span className="text-muted-foreground">vs CC: {formatCurrency(c.calculado)}</span>
+                <span className="font-bold text-red-700">({c.diff > 0 ? "+" : ""}{formatCurrency(c.diff)})</span>
+              </div>
+            ))}
+            {saldoMismatches.length > 8 && (
+              <span className="text-xs text-red-600 self-center">+{saldoMismatches.length - 8} más</span>
             )}
           </div>
         </div>
