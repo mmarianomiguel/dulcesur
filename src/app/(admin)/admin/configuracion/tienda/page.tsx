@@ -754,7 +754,7 @@ export default function TiendaConfigPage() {
                       <span className="text-sm font-medium flex-1">
                         {d.categoria?.nombre || d.categoria_id}
                       </span>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-0.5">
                         <Button
                           variant="ghost"
                           size="sm"
