@@ -52,6 +52,7 @@ import {
   ScanBarcode,
   AlertCircle,
   Package,
+  CalendarDays,
 } from "lucide-react";
 
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -1973,12 +1974,10 @@ export default function VentasPage() {
                 setClientHighlight(0);
                 setClientDialogOpen(true);
               }}
-              className="flex items-center gap-2 lg:gap-3 flex-1 rounded-xl border bg-card px-3 lg:px-4 py-2 lg:py-3 text-left hover:bg-accent transition-colors"
+              className="flex items-center gap-2 flex-1 rounded-lg border bg-card px-3 py-1.5 text-left hover:bg-accent transition-colors"
             >
-              <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
-                <User className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <span className={selectedClient ? "text-sm font-medium" : "text-sm text-muted-foreground"}>
+              <User className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className={selectedClient ? "text-sm font-medium truncate" : "text-sm text-muted-foreground"}>
                 {selectedClient ? `${selectedClient.nombre}` : "Consumidor Final"}
               </span>
               {selectedClient && (
@@ -2009,35 +2008,42 @@ export default function VentasPage() {
             </button>
           </div>
 
-          {/* Dispatch method toggle */}
-          <button
-            onClick={() => {
-              if (clientId) fetchClientAddresses(clientId);
-              setDeliveryDialogOpen(true);
-            }}
-            className="flex items-center gap-2 w-full rounded-xl border bg-card px-3 py-2 text-left hover:bg-accent transition-colors"
-          >
-            {deliveryMethod === "pickup" ? (
-              <div className="w-8 h-8 rounded-full bg-sky-50 flex items-center justify-center border border-sky-200">
-                <Store className="w-4 h-4 text-sky-700" />
-              </div>
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                <Truck className="w-4 h-4 text-emerald-600" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium">
-                {deliveryMethod === "pickup" ? "Retiro en Tienda" : "Envío a domicilio"}
-              </p>
+          {/* Delivery + Date row */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (clientId) fetchClientAddresses(clientId);
+                setDeliveryDialogOpen(true);
+              }}
+              className="flex items-center gap-1.5 flex-1 rounded-lg border bg-card px-2.5 py-1.5 text-left hover:bg-accent transition-colors"
+            >
+              {deliveryMethod === "pickup" ? (
+                <Store className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+              ) : (
+                <Truck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              )}
+              <span className="text-xs font-medium truncate">
+                {deliveryMethod === "pickup" ? "Retiro en Tienda" : "Envío"}
+              </span>
               {deliveryMethod === "delivery" && selectedAddressId && (
-                <p className="text-[11px] text-muted-foreground truncate">
+                <span className="text-[10px] text-muted-foreground truncate hidden lg:inline">
                   {clientAddresses.find((a) => a.id === selectedAddressId)?.direccion || ""}
-                </p>
+                </span>
+              )}
+            </button>
+            <div className="flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 shrink-0">
+              <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                type="date"
+                value={fechaVenta}
+                onChange={(e) => setFechaVenta(e.target.value)}
+                className="h-5 text-xs border-0 p-0 w-[110px] bg-transparent shadow-none focus-visible:ring-0"
+              />
+              {fechaVenta !== todayARG() && (
+                <button onClick={() => setFechaVenta(todayARG())} className="text-[10px] text-primary hover:underline font-medium">Hoy</button>
               )}
             </div>
-            <span className="text-[11px] text-primary font-medium">Cambiar</span>
-          </button>
+          </div>
 
           {/* Cart area */}
           <Card ref={cartSectionRef} tabIndex={-1} className="flex-1 flex flex-col overflow-hidden min-h-[200px]">
@@ -2630,20 +2636,6 @@ export default function VentasPage() {
               </div>
             </CardContent>
           </Card>
-
-          {/* Fecha */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Fecha</span>
-            <Input
-              type="date"
-              value={fechaVenta}
-              onChange={(e) => setFechaVenta(e.target.value)}
-              className="h-7 text-xs flex-1"
-            />
-            {fechaVenta !== todayARG() && (
-              <button onClick={() => setFechaVenta(todayARG())} className="text-xs text-primary hover:underline whitespace-nowrap">Hoy</button>
-            )}
-          </div>
 
           {/* Totals */}
           <Card>

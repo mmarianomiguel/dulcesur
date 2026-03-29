@@ -675,101 +675,207 @@ export default function ListaPreciosPage() {
       }
 
       if (style === "lista") {
-        // ── Lista General de Precios ──
+        // ── Lista General de Precios — Diseño profesional ──
         const empresaNombre = "DULCESUR";
-        const lm = 12;
-        const rm = pageW - 12;
+        const lm = 10;
+        const rm = pageW - 10;
         const colW = rm - lm;
         const fmtP = (n: number) => `$${n.toLocaleString("es-AR")}`;
+        // Brand purple
+        const brandR = 88, brandG = 50, brandB = 168;
+        const rowH = 6.5;
+        const totalPages = { count: 1 }; // will be updated after layout
+        let globalRowIdx = 0;
 
-        const drawHeader = () => {
-          // Logo larger
-          if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 8, 18, 18); } catch {} }
-          // Title next to logo
-          const titleX = logoBase64 ? lm + 30 : lm;
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(18);
-          pdf.text("LISTA DE PRECIOS", titleX, 16);
-          pdf.setFontSize(11);
+        const drawPageFooter = (pageNum: number) => {
+          const footY = pageH - 10;
+          // Thin line
+          pdf.setDrawColor(200);
+          pdf.setLineWidth(0.3);
+          pdf.line(lm, footY, rm, footY);
+          // Left: brand
           pdf.setFont("helvetica", "normal");
-          pdf.setTextColor(80);
-          pdf.text(empresaNombre, titleX, 22);
-          pdf.setFontSize(8);
-          pdf.setTextColor(120);
-          pdf.text(`Última actualización: ${today}`, titleX, 27);
+          pdf.setFontSize(7);
+          pdf.setTextColor(130);
+          pdf.text(config.webUrl || "www.dulcesur.com", lm, footY + 4);
+          // Right: page number
+          pdf.text(`Pág. ${pageNum}`, rm, footY + 4, { align: "right" });
           pdf.setTextColor(0);
-          // Thick separator
-          pdf.setDrawColor(180);
-          pdf.setLineWidth(0.8);
-          pdf.line(lm, 32, rm, 32);
-          pdf.setLineWidth(0.2);
-          pdf.setDrawColor(220);
-          pdf.line(lm, 33, rm, 33);
+        };
+
+        const drawHeader = (isFirstPage: boolean) => {
+          if (isFirstPage) {
+            // Purple top bar
+            pdf.setFillColor(brandR, brandG, brandB);
+            pdf.rect(0, 0, pageW, 3, "F");
+
+            // Logo
+            const logoW = logoBase64 ? 22 : 0;
+            if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 8, logoW, logoW); } catch {} }
+
+            // Title block
+            const titleX = logoBase64 ? lm + logoW + 6 : lm;
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(22);
+            pdf.setTextColor(30);
+            pdf.text("LISTA DE PRECIOS", titleX, 18);
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(11);
+            pdf.setTextColor(brandR, brandG, brandB);
+            pdf.text(empresaNombre, titleX, 24);
+
+            pdf.setFontSize(8);
+            pdf.setTextColor(120);
+            pdf.text(`${today}  •  ${selectedProducts.length} productos`, titleX, 29);
+            pdf.setTextColor(0);
+
+            // Purple accent line
+            pdf.setDrawColor(brandR, brandG, brandB);
+            pdf.setLineWidth(1);
+            pdf.line(lm, 34, rm, 34);
+
+            return 40;
+          } else {
+            // Continuation pages: thin purple line at top
+            pdf.setFillColor(brandR, brandG, brandB);
+            pdf.rect(0, 0, pageW, 1.5, "F");
+            return 10;
+          }
         };
 
         const drawTableHeader = (y: number) => {
+          pdf.setFillColor(brandR, brandG, brandB);
+          pdf.rect(lm, y, colW, 7, "F");
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(7);
-          pdf.setFillColor(240, 240, 240);
-          pdf.rect(lm, y - 3, colW, 6, "F");
-          pdf.text("PRODUCTO", lm + 2, y);
-          pdf.text("MARCA", lm + 72, y);
-          pdf.text("UNIDAD", lm + 100, y);
-          pdf.text("CAJA (Cant.)", lm + 125, y);
-          pdf.text("DTO.", lm + 155, y);
-          pdf.text("ACTUALIZ.", rm - 2, y, { align: "right" });
-          return y + 5;
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(255);
+          const ty = y + 5;
+          pdf.text("PRODUCTO", lm + 3, ty);
+          pdf.text("UNIDAD", rm - 55, ty, { align: "right" });
+          pdf.text("CAJA", rm - 18, ty, { align: "right" });
+          pdf.text("ACTUALIZ.", rm - 2, ty, { align: "right" });
+          pdf.setTextColor(0);
+          return y + 9;
         };
 
-        const drawProduct = (p: Product, y: number, rowIdx: number) => {
-          if (rowIdx % 2 === 0) {
-            pdf.setFillColor(250, 250, 250);
-            pdf.rect(lm, y - 3, colW, 5, "F");
+        const drawCategoryHeader = (cat: string, y: number) => {
+          pdf.setFillColor(brandR, brandG, brandB);
+          pdf.rect(lm, y, colW, 7, "F");
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(8.5);
+          pdf.setTextColor(255);
+          pdf.text(cat.toUpperCase(), lm + 3, y + 5);
+          pdf.setTextColor(0);
+          return y + 9;
+        };
+
+        const drawSubcategoryHeader = (sub: string, y: number) => {
+          // Light purple background
+          pdf.setFillColor(235, 228, 245);
+          pdf.rect(lm, y, colW, 6, "F");
+          // Small purple left accent
+          pdf.setFillColor(brandR, brandG, brandB);
+          pdf.rect(lm, y, 1.5, 6, "F");
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(7);
+          pdf.setTextColor(brandR, brandG, brandB);
+          pdf.text(sub, lm + 5, y + 4);
+          pdf.setTextColor(0);
+          return y + 7.5;
+        };
+
+        const drawProduct = (p: Product, y: number) => {
+          // Alternating row colors
+          if (globalRowIdx % 2 === 0) {
+            pdf.setFillColor(248, 247, 252);
+            pdf.rect(lm, y, colW, rowH, "F");
           }
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(6.5);
-          const nombre = p.nombre.length > 40 ? p.nombre.substring(0, 37) + "..." : p.nombre;
+
           const unitPrice = p.enOferta && p.precioOferta > 0 ? p.precioOferta : p.precioUnitario;
           const boxPrice = p.precioCaja > 0 ? p.precioCaja : 0;
           const boxQty = p.unidadesCaja > 0 ? p.unidadesCaja : 0;
-          const hasDiscount = p.enOferta && p.precioOferta > 0 && p.precioOferta < p.precioUnitario;
-          const discPct = hasDiscount ? Math.round((1 - p.precioOferta / p.precioUnitario) * 100) : 0;
-          const fechaAct = p.fechaActualizacion ? new Date(p.fechaActualizacion).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "—";
+          const fechaAct = p.fechaActualizacion ? new Date(p.fechaActualizacion).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "";
 
-          pdf.text(nombre, lm + 2, y);
-          pdf.text(p.marca || "—", lm + 72, y);
-          pdf.text(fmtP(unitPrice), lm + 100, y);
-          pdf.text(boxPrice > 0 ? `${fmtP(boxPrice)} (${boxQty})` : "—", lm + 125, y);
-          if (discPct > 0) {
-            pdf.setTextColor(220, 50, 50);
-            pdf.text(`-${discPct}%`, lm + 155, y);
+          // Product name (bold)
+          const nombre = p.nombre.length > 48 ? p.nombre.substring(0, 45) + "..." : p.nombre;
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(30);
+          const textY = y + 3;
+          pdf.text(nombre, lm + 3, textY);
+
+          // Brand in gray below name
+          if (p.marca) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(5.5);
+            pdf.setTextColor(140);
+            pdf.text(p.marca, lm + 3, textY + 2.8);
             pdf.setTextColor(0);
-          } else {
-            pdf.text("—", lm + 155, y);
           }
-          pdf.text(fechaAct, rm - 2, y, { align: "right" });
-          return y + 5;
+
+          // Unit price
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(8);
+          pdf.setTextColor(30);
+          pdf.text(fmtP(unitPrice), rm - 55, textY + 0.8, { align: "right" });
+
+          // Box price
+          if (boxPrice > 0) {
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(30);
+            pdf.text(fmtP(boxPrice), rm - 23, textY + 0.3, { align: "right" });
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(5.5);
+            pdf.setTextColor(120);
+            pdf.text(`x${boxQty}`, rm - 18, textY + 0.3);
+          } else {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(7);
+            pdf.setTextColor(180);
+            pdf.text("—", rm - 20, textY + 0.5, { align: "center" });
+          }
+
+          // Date
+          if (fechaAct) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(6);
+            pdf.setTextColor(140);
+            pdf.text(fechaAct, rm - 2, textY + 0.5, { align: "right" });
+          }
+
+          pdf.setTextColor(0);
+          // Bottom border
+          pdf.setDrawColor(230);
+          pdf.setLineWidth(0.15);
+          pdf.line(lm, y + rowH, rm, y + rowH);
+
+          globalRowIdx++;
+          return y + rowH;
         };
 
-        const checkPage = (y: number): number => {
-          if (y > pageH - 25) {
+        const checkPage = (y: number, needed: number = rowH): number => {
+          if (y + needed > pageH - 15) {
+            drawPageFooter(totalPages.count);
             pdf.addPage();
-            return drawTableHeader(15);
+            totalPages.count++;
+            const startY = drawHeader(false);
+            return startY;
           }
           return y;
         };
 
-        drawHeader();
-        let yPos = drawTableHeader(39);
+        // ── Render ──
+        let yPos = drawHeader(true);
 
         if (listaGroupMode === "none") {
-          // Simple flat list
-          selectedProducts.forEach((p, idx) => {
+          yPos = drawTableHeader(yPos);
+          selectedProducts.forEach((p) => {
             yPos = checkPage(yPos);
-            yPos = drawProduct(p, yPos, idx);
+            yPos = drawProduct(p, yPos);
           });
         } else if (listaGroupMode === "categoria") {
-          // Group by category
           const groups: Record<string, Product[]> = {};
           selectedProducts.forEach((p) => {
             const cat = p.categoria || "Sin categoría";
@@ -777,24 +883,16 @@ export default function ListaPreciosPage() {
             groups[cat].push(p);
           });
           Object.keys(groups).sort().forEach((cat) => {
-            yPos = checkPage(yPos);
-            // Category header
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(8);
-            pdf.setFillColor(220, 230, 245);
-            pdf.rect(lm, yPos - 3, colW, 5.5, "F");
-            pdf.text(cat.toUpperCase(), lm + 3, yPos);
-            yPos += 6;
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(6.5);
-            groups[cat].forEach((p, idx) => {
+            yPos = checkPage(yPos, 16);
+            globalRowIdx = 0;
+            yPos = drawCategoryHeader(cat, yPos);
+            groups[cat].forEach((p) => {
               yPos = checkPage(yPos);
-              yPos = drawProduct(p, yPos, idx);
+              yPos = drawProduct(p, yPos);
             });
-            yPos += 2;
+            yPos += 3;
           });
         } else {
-          // Group by category + subcategory
           const groups: Record<string, Record<string, Product[]>> = {};
           selectedProducts.forEach((p) => {
             const cat = p.categoria || "Sin categoría";
@@ -804,44 +902,24 @@ export default function ListaPreciosPage() {
             groups[cat][sub].push(p);
           });
           Object.keys(groups).sort().forEach((cat) => {
-            yPos = checkPage(yPos);
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(8);
-            pdf.setFillColor(220, 230, 245);
-            pdf.rect(lm, yPos - 3, colW, 5.5, "F");
-            pdf.text(cat.toUpperCase(), lm + 3, yPos);
-            yPos += 6;
+            yPos = checkPage(yPos, 22);
+            globalRowIdx = 0;
+            yPos = drawCategoryHeader(cat, yPos);
             Object.keys(groups[cat]).sort().forEach((sub) => {
-              yPos = checkPage(yPos);
-              pdf.setFont("helvetica", "bold");
-              pdf.setFontSize(7);
-              pdf.setTextColor(100);
-              pdf.setDrawColor(230);
-              pdf.line(lm + 6, yPos + 1, lm + 6 + pdf.getTextWidth(sub) + 4, yPos + 1);
-              pdf.text(sub, lm + 8, yPos);
-              pdf.setTextColor(0);
-              yPos += 5;
-              pdf.setFont("helvetica", "normal");
-              pdf.setFontSize(6.5);
-              groups[cat][sub].forEach((p, idx) => {
+              yPos = checkPage(yPos, 14);
+              yPos = drawSubcategoryHeader(sub, yPos);
+              groups[cat][sub].forEach((p) => {
                 yPos = checkPage(yPos);
-                yPos = drawProduct(p, yPos, idx);
+                yPos = drawProduct(p, yPos);
               });
-              yPos += 1;
+              yPos += 2;
             });
-            yPos += 2;
+            yPos += 3;
           });
         }
 
         // Footer on last page
-        const footY = pageH - 18;
-        pdf.setDrawColor(200);
-        pdf.line(lm, footY, rm, footY);
-        pdf.setFontSize(7);
-        pdf.setTextColor(100);
-        pdf.text(`${empresaNombre} | ${config.webUrl || "www.dulcesur.com"}`, lm + 2, footY + 5);
-        pdf.text(`${selectedProducts.length} productos | Pág ${pdf.getNumberOfPages()}`, rm - 2, footY + 5, { align: "right" });
-        pdf.setTextColor(0);
+        drawPageFooter(totalPages.count);
       }
 
       if (style === "variaciones") {
