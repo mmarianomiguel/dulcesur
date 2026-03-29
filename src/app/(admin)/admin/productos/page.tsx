@@ -573,83 +573,52 @@ export default function ProductosPage() {
       imagen_url: p.imagen_url || "",
     });
     setShowDescription(!!(p.descripcion_detallada));
+    setIsCombo(!!(p as any).es_combo);
+    setComboItems([]);
+    setPriceHistory([]);
+    setProductDiscounts([]);
 
-    // Load proveedores for this product
-    const { data: provData } = await supabase
-      .from("producto_proveedores")
-      .select("proveedor_id")
-      .eq("producto_id", p.id);
-    setSelectedProveedores((provData || []).map((pp) => pp.proveedor_id));
+    // Parallelize essential API calls (proveedores + presentaciones + combo items)
+    const [provResult, presResult, comboResult] = await Promise.all([
+      supabase.from("producto_proveedores").select("proveedor_id").eq("producto_id", p.id),
+      supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, sku, costo, precio, precio_oferta").eq("producto_id", p.id).order("cantidad"),
+      (p as any).es_combo
+        ? supabase.from("combo_items").select("*, productos!combo_items_producto_id_fkey(id, codigo, nombre, precio, costo, stock)").eq("combo_id", p.id)
+        : Promise.resolve({ data: null }),
+    ]);
 
-    // Load presentaciones for this product
-    const { data: presData } = await supabase
-      .from("presentaciones")
-      .select("id, producto_id, nombre, cantidad, sku, costo, precio, precio_oferta")
-      .eq("producto_id", p.id)
-      .order("cantidad");
-    const loadedPres = (presData || []) as Presentacion[];
-    // If no unit presentation exists, auto-add one with the product's costo and precio
+    setSelectedProveedores((provResult.data || []).map((pp) => pp.proveedor_id));
+
+    const loadedPres = (presResult.data || []) as Presentacion[];
     if (!loadedPres.some((pr) => pr.cantidad === 1)) {
-      loadedPres.unshift({
-        nombre: "Unidad",
-        cantidad: 1,
-        sku: "",
-        costo: p.costo,
-        precio: p.precio,
-        precio_oferta: null,
-      });
+      loadedPres.unshift({ nombre: "Unidad", cantidad: 1, sku: "", costo: p.costo, precio: p.precio, precio_oferta: null });
     }
     setPresentaciones(loadedPres);
 
-    // Load combo items if applicable
-    if ((p as any).es_combo) {
-      setIsCombo(true);
-      setComboItems([]);
-      const { data: ciData } = await supabase
-        .from("combo_items")
-        .select("*, productos!combo_items_producto_id_fkey(id, codigo, nombre, precio, costo, stock)")
-        .eq("combo_id", p.id);
-      setComboItems((ciData || []).map((d: any) => ({
-        producto_id: d.producto_id,
-        cantidad: d.cantidad,
-        descuento: d.descuento ?? 0,
-        producto: d.productos,
+    if ((p as any).es_combo && comboResult.data) {
+      setComboItems(comboResult.data.map((d: any) => ({
+        producto_id: d.producto_id, cantidad: d.cantidad, descuento: d.descuento ?? 0, producto: d.productos,
       })));
-    } else {
-      setIsCombo(false);
-      setComboItems([]);
     }
-
-    // Load price history
-    const { data: phData } = await supabase
-      .from("precio_historial")
-      .select("*")
-      .eq("producto_id", p.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setPriceHistory((phData || []) as any);
-
-    // Load active discounts that apply to this product
-    try {
-      const { data: allDesc } = await supabase
-        .from("descuentos")
-        .select("*")
-        .eq("activo", true);
-      const today = new Date().toISOString().split("T")[0];
-      const applicableDiscounts = (allDesc || []).filter((d: any) => {
-        // Skip expired discounts (allow null fecha_fin = no expiry)
-        if (d.fecha_fin && d.fecha_fin < today) return false;
-        if (d.aplica_a === "todos") return true;
-        if (d.aplica_a === "productos" && (d.productos_ids || []).includes(p.id)) return true;
-        if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(p.categoria_id)) return true;
-        if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(p.subcategoria_id)) return true;
-        return false;
-      });
-      setProductDiscounts(applicableDiscounts);
-    } catch { setProductDiscounts([]); }
 
     setEditTab("info");
     setDialogOpen(true);
+
+    // Lazy-load price history and discounts in background (non-blocking)
+    supabase.from("precio_historial").select("*").eq("producto_id", p.id).order("created_at", { ascending: false }).limit(20)
+      .then(({ data }) => setPriceHistory((data || []) as any));
+    supabase.from("descuentos").select("*").eq("activo", true)
+      .then(({ data: allDesc }) => {
+        const today = new Date().toISOString().split("T")[0];
+        setProductDiscounts((allDesc || []).filter((d: any) => {
+          if (d.fecha_fin && d.fecha_fin < today) return false;
+          if (d.aplica_a === "todos") return true;
+          if (d.aplica_a === "productos" && (d.productos_ids || []).includes(p.id)) return true;
+          if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(p.categoria_id)) return true;
+          if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(p.subcategoria_id)) return true;
+          return false;
+        }));
+      });
   };
 
   const openPriceHistory = async (p: ProductoWithRelations) => {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import { showToast } from "@/components/tienda/toast";
 import { supabase } from "@/lib/supabase";
@@ -287,18 +288,27 @@ function ProductosContent() {
     loadSubs();
   }, [categoriaId]);
 
-  // Load active discounts
+  // Load active discounts + brands in parallel (no dependencies)
   useEffect(() => {
-    async function loadDiscounts() {
+    async function loadDiscountsAndBrands() {
       const today = new Date().toISOString().split("T")[0];
-      const { data } = await supabase
-        .from("descuentos")
-        .select("*")
-        .eq("activo", true)
-        .lte("fecha_inicio", today);
-      setActiveDiscounts((data || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
+      const [discResult, marcasResult, marcaProdsResult] = await Promise.all([
+        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("marcas").select("id, nombre"),
+        supabase.from("productos").select("marca_id").eq("activo", true).eq("visibilidad", "visible"),
+      ]);
+
+      setActiveDiscounts((discResult.data || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
+
+      if (marcasResult.data) {
+        const countMap: Record<string, number> = {};
+        marcaProdsResult.data?.forEach((p: { marca_id: string | null }) => {
+          if (p.marca_id) countMap[p.marca_id] = (countMap[p.marca_id] || 0) + 1;
+        });
+        setMarcas(marcasResult.data.map((m: { id: string; nombre: string }) => ({ ...m, count: countMap[m.id] || 0 })));
+      }
     }
-    loadDiscounts();
+    loadDiscountsAndBrands();
   }, []);
 
   function getProductDiscount(producto: Producto, presLabel?: string | null, qty?: number): number {
@@ -349,37 +359,6 @@ function ProductosContent() {
       });
     }
   }, [categoriaId]);
-
-  // Fetch marcas with counts
-  useEffect(() => {
-    async function loadMarcas() {
-      const { data: marcasList } = await supabase
-        .from("marcas")
-        .select("id, nombre");
-      if (!marcasList) return;
-
-      const { data: prods } = await supabase
-        .from("productos")
-        .select("marca_id")
-        .eq("activo", true)
-        .eq("visibilidad", "visible");
-
-      const countMap: Record<string, number> = {};
-      prods?.forEach((p: { marca_id: string | null }) => {
-        if (p.marca_id) {
-          countMap[p.marca_id] = (countMap[p.marca_id] || 0) + 1;
-        }
-      });
-
-      setMarcas(
-        marcasList.map((m: { id: string; nombre: string }) => ({
-          ...m,
-          count: countMap[m.id] || 0,
-        }))
-      );
-    }
-    loadMarcas();
-  }, []);
 
   // Fetch products
   useEffect(() => {
@@ -517,6 +496,16 @@ function ProductosContent() {
   const activeCategoryName = categorias.find(
     (c) => c.id === categoriaId
   )?.nombre;
+
+  // Pre-compute base discounts for all displayed products (avoid recalculating in render loop)
+  const productDiscountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of productos) {
+      map[p.id] = getProductDiscount(p);
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productos, activeDiscounts]);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
@@ -1292,12 +1281,15 @@ function ProductosContent() {
                   >
                     {/* Image */}
                     <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`} className="relative block">
-                      <div className="aspect-[4/3] bg-gradient-to-b from-gray-50 to-white overflow-hidden">
+                      <div className="aspect-[4/3] bg-gradient-to-b from-gray-50 to-white overflow-hidden relative">
                         {producto.imagen_url ? (
-                          <img
+                          <Image
                             src={producto.imagen_url}
                             alt={producto.nombre}
-                            className="w-full h-full object-contain p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
+                            fill
+                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                            className="object-contain p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
+                            loading="lazy"
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 to-gray-100">
@@ -1510,10 +1502,13 @@ function ProductosContent() {
                       className="relative shrink-0 w-36 h-36 bg-gradient-to-b from-gray-50 to-white overflow-hidden"
                     >
                       {producto.imagen_url ? (
-                        <img
+                        <Image
                           src={producto.imagen_url}
                           alt={producto.nombre}
-                          className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500 ease-out"
+                          fill
+                          sizes="144px"
+                          className="object-contain p-4 group-hover:scale-105 transition-transform duration-500 ease-out"
+                          loading="lazy"
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-gray-50 to-gray-100">
