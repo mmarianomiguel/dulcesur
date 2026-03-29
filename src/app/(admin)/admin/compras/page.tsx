@@ -459,6 +459,12 @@ export default function ComprasPage() {
 
   // Registrar en caja state
   const [registrarEnCaja, setRegistrarEnCaja] = useState(true);
+  const [redondeo, setRedondeo] = useState<0 | 10 | 50 | 100>(0);
+
+  const roundPrice = (price: number) => {
+    if (redondeo === 0) return Math.round(price);
+    return Math.round(price / redondeo) * redondeo;
+  };
 
   // Detail view
   const [detailCompra, setDetailCompra] = useState<CompraRow | null>(null);
@@ -606,7 +612,7 @@ export default function ComprasPage() {
         sueltas,
         unidades_por_caja: unidadesPorCaja,
         costo_unitario: costoUnit,
-        costo_original: product.costo,
+        costo_original: costoUnit,
         precio_original: product.precio,
         subtotal: costoUnit * cantidad,
         actualizarPrecio: true,
@@ -835,7 +841,7 @@ export default function ComprasPage() {
         if (item.costo_unitario !== item.costo_original) {
           if (item.actualizarPrecio && item.costo_original > 0) {
             const marginRatio = item.precio_original / item.costo_original;
-            const newPrecio = Math.round(item.costo_unitario * marginRatio);
+            const newPrecio = roundPrice(item.costo_unitario * marginRatio);
             await supabase
               .from("productos")
               .update({
@@ -844,6 +850,16 @@ export default function ComprasPage() {
                 fecha_actualizacion: todayString(),
               })
               .eq("id", item.producto_id);
+            // Also update presentation prices proportionally
+            if (item.precio_original > 0) {
+              const priceRatio = newPrecio / item.precio_original;
+              const { data: prods } = await supabase.from("presentaciones").select("id, precio, costo, cantidad").eq("producto_id", item.producto_id);
+              for (const pres of prods || []) {
+                const newPresPrecio = roundPrice(pres.precio * priceRatio);
+                const newPresCosto = pres.costo > 0 ? Math.round(item.costo_unitario * pres.cantidad) : 0;
+                await supabase.from("presentaciones").update({ precio: newPresPrecio, costo: newPresCosto }).eq("id", pres.id);
+              }
+            }
             preciosActualizados.push({
               producto_id: item.producto_id,
               nombre: item.nombre,
@@ -1467,7 +1483,15 @@ export default function ComprasPage() {
                         {items.filter((i) => i.costo_unitario !== i.costo_original).length} productos actualizarán precio
                       </span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 border-r pr-2">
+                        <span className="text-[10px] text-blue-700">Redondear:</span>
+                        {([0, 10, 50, 100] as const).map((v) => (
+                          <button key={v} onClick={() => setRedondeo(v)} className={`h-5 px-1.5 rounded text-[10px] font-medium ${redondeo === v ? "bg-blue-600 text-white" : "bg-white text-blue-700 border border-blue-200 hover:bg-blue-50"}`}>
+                            {v === 0 ? "No" : `$${v}`}
+                          </button>
+                        ))}
+                      </div>
                       <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-blue-700" onClick={() => setItems((prev) => prev.map((i) => i.costo_unitario !== i.costo_original ? { ...i, actualizarPrecio: true } : i))}>
                         Marcar todos
                       </Button>
@@ -1599,7 +1623,7 @@ export default function ComprasPage() {
                                   />
                                   <span className="text-[10px] text-muted-foreground">
                                     {item.actualizarPrecio ? (
-                                      <>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(item.costo_original > 0 ? Math.round(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original)}</span></>
+                                      <>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original)}</span></>
                                     ) : (
                                       <span>Mantener {formatCurrency(item.precio_original)}</span>
                                     )}

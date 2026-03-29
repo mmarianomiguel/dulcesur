@@ -290,7 +290,7 @@ export default function EditarPreciosPage() {
   // (search state is now internal to SearchableSelect)
 
   // Mass edit state
-  const [massTarget, setMassTarget] = useState<"venta" | "costo" | "margen">("costo");
+  const [massTarget, setMassTarget] = useState<"venta" | "costo" | "margen" | "fijar_venta" | "fijar_costo">("costo");
   const [massType, setMassType] = useState<"percentage" | "fixed">("percentage");
   const [massOperation, setMassOperation] = useState<"increase" | "decrease">("increase");
   const [massAmount, setMassAmount] = useState("");
@@ -562,11 +562,31 @@ export default function EditarPreciosPage() {
   const massEditPreview = useMemo(() => {
     const amount = parseFloat(massAmount);
     if (isNaN(amount) || amount < 0) return [];
-    if (amount === 0 && massTarget !== "margen") return [];
+    if (amount === 0 && !["margen", "fijar_venta", "fijar_costo"].includes(massTarget)) return [];
 
     return selectedProducts.map((p) => {
       const currentCosto = costoChanges[p.id] ?? (p.costo || 0);
       const currentPrecio = priceChanges[p.id] ?? p.precio;
+
+      if (massTarget === "fijar_venta") {
+        const newPrecio = Math.max(0, Math.round(amount));
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto: currentCosto, currentPrecio, newPrecio, diff, diffPercent };
+      }
+
+      if (massTarget === "fijar_costo") {
+        const newCosto = Math.max(0, Math.round(amount));
+        // Maintain margin
+        let newPrecio = currentPrecio;
+        if (currentCosto > 0) {
+          const marginRatio = currentPrecio / currentCosto;
+          newPrecio = Math.round(newCosto * marginRatio);
+        }
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio, diff, diffPercent };
+      }
 
       if (massTarget === "margen") {
         // Set fixed margin: precio = costo * (1 + amount/100)
@@ -661,7 +681,7 @@ export default function EditarPreciosPage() {
         const prod = productos.find((p) => p.id === item.id);
         const updateData: Record<string, unknown> = { precio: item.newPrecio, fecha_actualizacion: new Date().toISOString() };
         if (prod) updateData.precio_anterior = prod.precio;
-        if (massTarget === "costo") updateData.costo = item.newCosto;
+        if (massTarget === "costo" || massTarget === "fijar_costo") updateData.costo = item.newCosto;
         updates.push(supabase.from("productos").update(updateData).eq("id", item.id).then());
 
         // Update presentation prices proportionally
@@ -702,7 +722,7 @@ export default function EditarPreciosPage() {
         prev.map((p) => {
           const preview = massEditPreview.find((i) => i.id === p.id);
           if (preview) {
-            return massTarget === "costo"
+            return (massTarget === "costo" || massTarget === "fijar_costo")
               ? { ...p, costo: preview.newCosto, precio: preview.newPrecio }
               : { ...p, precio: preview.newPrecio };
           }
@@ -1097,11 +1117,32 @@ export default function EditarPreciosPage() {
                   />
                   <span className="text-sm">Setear Margen %</span>
                 </label>
+                <span className="text-xs text-muted-foreground">|</span>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="massTarget"
+                    checked={massTarget === "fijar_venta"}
+                    onChange={() => setMassTarget("fijar_venta")}
+                    className="accent-primary"
+                  />
+                  <span className="text-sm">Fijar Precio Venta</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="massTarget"
+                    checked={massTarget === "fijar_costo"}
+                    onChange={() => setMassTarget("fijar_costo")}
+                    className="accent-primary"
+                  />
+                  <span className="text-sm">Fijar Precio Costo</span>
+                </label>
               </div>
             </div>
 
             {/* Tipo de cambio */}
-            {massTarget !== "margen" && <div>
+            {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && <div>
               <Label className="text-sm font-medium mb-2 block">Tipo de cambio</Label>
               <div className="flex gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1129,7 +1170,7 @@ export default function EditarPreciosPage() {
 
             }
             {/* Operacion */}
-            {massTarget !== "margen" && <div>
+            {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && <div>
               <Label className="text-sm font-medium mb-2 block">Operaci&oacute;n</Label>
               <div className="flex gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1160,11 +1201,11 @@ export default function EditarPreciosPage() {
             {/* Amount input */}
             <div>
               <Label className="text-sm font-medium mb-2 block">
-                {massTarget === "margen" ? "Margen %" : massType === "percentage" ? "Porcentaje" : "Monto"}
+                {massTarget === "margen" ? "Margen %" : massTarget === "fijar_venta" ? "Precio de venta" : massTarget === "fijar_costo" ? "Precio de costo" : massType === "percentage" ? "Porcentaje" : "Monto"}
               </Label>
               <div className="relative w-48">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                  {massTarget === "margen" ? "%" : massType === "percentage" ? "%" : "$"}
+                  {massTarget === "margen" ? "%" : ["fijar_venta", "fijar_costo"].includes(massTarget) ? "$" : massType === "percentage" ? "%" : "$"}
                 </span>
                 <Input
                   type="number"

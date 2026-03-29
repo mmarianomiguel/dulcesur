@@ -203,7 +203,12 @@ export default function ProductosPage() {
     estado: string;
     observacion: string | null;
     cliente: { nombre: string; cuit: string | null } | null;
-    items: { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidad_medida: string | null; unidades_por_presentacion?: number }[];
+    items: { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidad_medida: string | null; unidades_por_presentacion?: number; descuento?: number }[];
+    descuento_porcentaje?: number;
+    recargo_porcentaje?: number;
+    monto_efectivo?: number;
+    monto_transferencia?: number;
+    vendedor?: string;
   } | null>(null);
 
   const openOrdenDetail = useCallback(async (ordenId: string) => {
@@ -214,13 +219,13 @@ export default function ProductosPage() {
       // Try ventas first
       const { data: venta } = await supabase
         .from("ventas")
-        .select("id, numero, fecha, total, forma_pago, tipo_comprobante, estado, observacion, clientes(nombre, cuit)")
+        .select("id, numero, fecha, total, forma_pago, tipo_comprobante, estado, observacion, descuento_porcentaje, recargo_porcentaje, monto_efectivo, monto_transferencia, vendedor, clientes(nombre, cuit)")
         .eq("id", ordenId)
         .single();
       if (venta) {
         const { data: items } = await supabase
           .from("venta_items")
-          .select("id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion")
+          .select("id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion, descuento")
           .eq("venta_id", ordenId)
           .order("created_at");
         setOrdenDetail({
@@ -232,6 +237,11 @@ export default function ProductosPage() {
           tipo_comprobante: venta.tipo_comprobante,
           estado: venta.estado,
           observacion: venta.observacion,
+          descuento_porcentaje: venta.descuento_porcentaje || 0,
+          recargo_porcentaje: venta.recargo_porcentaje || 0,
+          monto_efectivo: venta.monto_efectivo || 0,
+          monto_transferencia: venta.monto_transferencia || 0,
+          vendedor: venta.vendedor || "",
           cliente: Array.isArray(venta.clientes) ? venta.clientes[0] ?? null : venta.clientes as { nombre: string; cuit: string | null } | null,
           items: items || [],
         });
@@ -3629,36 +3639,64 @@ export default function ProductosPage() {
               <p className="text-center text-sm text-muted-foreground py-8">No se encontro la orden</p>
             ) : (
               <>
+                {/* Header info */}
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-muted-foreground">Numero</p>
+                    <p className="text-[11px] text-muted-foreground">Numero</p>
                     <p className="font-medium">{ordenDetail.numero}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Fecha</p>
+                    <p className="text-[11px] text-muted-foreground">Fecha</p>
                     <p className="font-medium">{new Date(ordenDetail.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Cliente</p>
+                    <p className="text-[11px] text-muted-foreground">Cliente</p>
                     <p className="font-medium">{ordenDetail.cliente?.nombre || "Consumidor Final"}</p>
+                    {ordenDetail.cliente?.cuit && <p className="text-[10px] text-muted-foreground">CUIT: {ordenDetail.cliente.cuit}</p>}
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Comprobante</p>
+                    <p className="text-[11px] text-muted-foreground">Comprobante</p>
                     <p className="font-medium">{ordenDetail.tipo_comprobante}</p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Forma de pago</p>
-                    <p className="font-medium">{ordenDetail.forma_pago}</p>
+                </div>
+
+                {/* Payment detail */}
+                <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Forma de pago</span>
+                    <span className="font-medium">{ordenDetail.forma_pago}</span>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Estado</p>
+                  {ordenDetail.forma_pago === "Mixto" && (ordenDetail.monto_efectivo || 0) > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground pl-2">Efectivo</span>
+                      <span>{formatCurrency(ordenDetail.monto_efectivo || 0)}</span>
+                    </div>
+                  )}
+                  {ordenDetail.forma_pago === "Mixto" && (ordenDetail.monto_transferencia || 0) > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground pl-2">Transferencia</span>
+                      <span>{formatCurrency(ordenDetail.monto_transferencia || 0)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Estado</span>
                     <Badge variant="outline" className="text-xs">{ordenDetail.estado}</Badge>
                   </div>
+                  {ordenDetail.vendedor && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Vendedor</span>
+                      <span className="font-medium">{ordenDetail.vendedor}</span>
+                    </div>
+                  )}
                 </div>
+
                 {ordenDetail.observacion && (
                   <p className="text-sm text-muted-foreground italic">{ordenDetail.observacion}</p>
                 )}
+
                 <Separator />
+
+                {/* Items */}
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Items ({ordenDetail.items.length})</p>
                   <div className="space-y-1.5">
@@ -3668,6 +3706,7 @@ export default function ProductosPage() {
                           <p className="truncate">{it.descripcion}</p>
                           <p className="text-xs text-muted-foreground">
                             {(it.unidades_por_presentacion ?? 1) > 0 && (it.unidades_por_presentacion ?? 1) < 1 ? it.cantidad * (it.unidades_por_presentacion ?? 1) : it.cantidad} {it.unidad_medida || "u."} x {formatCurrency(it.precio_unitario)}
+                            {(it.descuento || 0) > 0 && <span className="text-red-500 ml-1">(-{it.descuento}%)</span>}
                           </p>
                         </div>
                         <p className="font-medium shrink-0 ml-3">{formatCurrency(it.subtotal)}</p>
@@ -3675,10 +3714,42 @@ export default function ProductosPage() {
                     ))}
                   </div>
                 </div>
+
                 <Separator />
-                <div className="flex justify-between items-center text-base font-semibold">
-                  <span>Total</span>
-                  <span>{formatCurrency(ordenDetail.total)}</span>
+
+                {/* Totals */}
+                <div className="space-y-1 text-sm">
+                  {(() => {
+                    const itemsSum = ordenDetail.items.reduce((s, it) => s + it.subtotal, 0);
+                    const descPct = ordenDetail.descuento_porcentaje || 0;
+                    const recPct = ordenDetail.recargo_porcentaje || 0;
+                    return (
+                      <>
+                        {(descPct > 0 || recPct > 0) && (
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Subtotal</span>
+                            <span>{formatCurrency(itemsSum)}</span>
+                          </div>
+                        )}
+                        {descPct > 0 && (
+                          <div className="flex justify-between text-red-500">
+                            <span>Descuento ({descPct}%)</span>
+                            <span>-{formatCurrency(itemsSum * descPct / 100)}</span>
+                          </div>
+                        )}
+                        {recPct > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Recargo ({recPct}%)</span>
+                            <span>+{formatCurrency(itemsSum * recPct / 100)}</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                  <div className="flex justify-between items-center text-base font-semibold pt-1">
+                    <span>Total</span>
+                    <span>{formatCurrency(ordenDetail.total)}</span>
+                  </div>
                 </div>
               </>
             )}
