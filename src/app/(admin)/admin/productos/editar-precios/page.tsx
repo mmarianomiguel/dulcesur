@@ -1,7 +1,24 @@
 "use client";
 
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, todayARG } from "@/lib/formatters";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+
+const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+interface Descuento {
+  id: string;
+  nombre: string;
+  porcentaje: number;
+  aplica_a: string;
+  productos_ids: string[];
+  categorias_ids: string[];
+  subcategorias_ids: string[];
+  marcas_ids: string[];
+  productos_excluidos_ids: string[];
+  activo: boolean;
+  fecha_inicio: string;
+  fecha_fin: string | null;
+}
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -103,7 +120,7 @@ function SearchableSelect({
   const selectedLabel = value === "all" ? allLabel : options.find((o) => o.value === value)?.label ?? allLabel;
 
   const filtered = search
-    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    ? options.filter((o) => norm(o.label).includes(norm(search)))
     : options;
 
   useEffect(() => {
@@ -190,6 +207,7 @@ export default function EditarPreciosPage() {
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [subcategorias, setSubcategorias] = useState<Subcategoria[]>([]);
+  const [descuentos, setDescuentos] = useState<Descuento[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -201,6 +219,7 @@ export default function EditarPreciosPage() {
   const [sortOrder, setSortOrder] = useState<"nombre" | "modificacion">("nombre");
   const [searchFilter, setSearchFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -329,18 +348,21 @@ export default function EditarPreciosPage() {
     }
     async function load() {
       setLoading(true);
-      const [prods, marcaRes, catRes, subcatRes, presData] = await Promise.all([
+      const today = todayARG();
+      const [prods, marcaRes, catRes, subcatRes, presData, descRes] = await Promise.all([
         fetchAll("productos", "id, nombre, codigo, stock, precio, costo, activo, categoria_id, subcategoria_id, marca_id, fecha_actualizacion", (q: any) => q.eq("activo", true).order("nombre")),
         supabase.from("marcas").select("*").order("nombre"),
         supabase.from("categorias").select("*").order("nombre"),
         supabase.from("subcategorias").select("*").order("nombre"),
         fetchAll("presentaciones", "id, producto_id, nombre, cantidad, precio"),
+        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
       ]);
       setProductos(prods);
       setMarcas(marcaRes.data ?? []);
       setCategorias(catRes.data ?? []);
       setSubcategorias(subcatRes.data ?? []);
       setPresentaciones(presData);
+      setDescuentos((descRes.data ?? []).filter((d: Descuento) => !d.fecha_fin || d.fecha_fin >= today));
       setLoading(false);
     }
     load();
@@ -352,6 +374,12 @@ export default function EditarPreciosPage() {
     return subcategorias.filter((s) => s.categoria_id === categoriaFilter);
   }, [subcategorias, categoriaFilter]);
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchFilter(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   // Reset subcategory filter when category changes
   useEffect(() => {
     setSubcategoriaFilter("all");
@@ -360,7 +388,7 @@ export default function EditarPreciosPage() {
   // Filtered products
   const filteredProductos = useMemo(() => {
     const result = productos.filter((p) => {
-      if (searchFilter && !p.nombre.toLowerCase().includes(searchFilter.toLowerCase()) && !p.codigo.toLowerCase().includes(searchFilter.toLowerCase())) return false;
+      if (searchFilter && !norm(p.nombre).includes(norm(searchFilter)) && !norm(p.codigo).includes(norm(searchFilter))) return false;
       if (marcaFilter !== "all" && p.marca_id !== marcaFilter) return false;
       if (categoriaFilter !== "all" && p.categoria_id !== categoriaFilter) return false;
       if (subcategoriaFilter !== "all" && p.subcategoria_id !== subcategoriaFilter) return false;
@@ -397,6 +425,21 @@ export default function EditarPreciosPage() {
     },
     [presentaciones]
   );
+
+  // Get active discount for a product
+  const getProductDiscount = useCallback((p: ProductoRow) => {
+    for (const d of descuentos) {
+      // Check exclusions first
+      if (d.productos_excluidos_ids?.includes(p.id)) continue;
+      // Check if applies
+      if (d.aplica_a === "todos") return d;
+      if (d.aplica_a === "productos" && d.productos_ids?.includes(p.id)) return d;
+      if (d.aplica_a === "categorias" && p.categoria_id && d.categorias_ids?.includes(p.categoria_id)) return d;
+      if (d.aplica_a === "subcategorias" && p.subcategoria_id && d.subcategorias_ids?.includes(p.subcategoria_id)) return d;
+      if (d.aplica_a === "marcas" && p.marca_id && d.marcas_ids?.includes(p.marca_id)) return d;
+    }
+    return null;
+  }, [descuentos]);
 
   // Selection helpers
   const allFilteredSelected =
@@ -467,6 +510,14 @@ export default function EditarPreciosPage() {
   // Save changes
   const hasChanges = Object.keys(priceChanges).length > 0 || Object.keys(costoChanges).length > 0;
 
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    if (!hasChanges) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasChanges]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -489,11 +540,12 @@ export default function EditarPreciosPage() {
           const prod = productos.find((p) => p.id === id);
           const oldPrecio = prod?.precio || 0;
           const newPrecio = priceChanges[id];
-          if (oldPrecio > 0 && newPrecio !== oldPrecio) {
-            const ratio = newPrecio / oldPrecio;
+          if (newPrecio !== oldPrecio) {
             const prodPres = presentaciones.filter((p) => p.producto_id === id);
             for (const pres of prodPres) {
-              const newPresPrecio = Math.round(pres.precio * ratio);
+              const newPresPrecio = oldPrecio > 0
+                ? Math.round(pres.precio * (newPrecio / oldPrecio))
+                : (pres.cantidad > 0 ? Math.round(newPrecio * pres.cantidad) : newPrecio);
               updates.push(supabase.from("presentaciones").update({ precio: newPresPrecio }).eq("id", pres.id).then());
             }
           }
@@ -707,11 +759,12 @@ export default function EditarPreciosPage() {
 
         // Update presentation prices proportionally
         const oldPrecio = prod?.precio ?? 0;
-        if (oldPrecio > 0 && item.newPrecio !== oldPrecio) {
-          const ratio = item.newPrecio / oldPrecio;
+        if (item.newPrecio !== oldPrecio) {
           const prodPres = presentaciones.filter((pr) => pr.producto_id === item.id);
           for (const pres of prodPres) {
-            const newPresPrecio = Math.round(pres.precio * ratio);
+            const newPresPrecio = oldPrecio > 0
+              ? Math.round(pres.precio * (item.newPrecio / oldPrecio))
+              : (pres.cantidad > 0 ? Math.round(item.newPrecio * pres.cantidad) : item.newPrecio);
             await supabase.from("presentaciones").update({ precio: newPresPrecio }).eq("id", pres.id);
           }
         }
@@ -848,7 +901,7 @@ export default function EditarPreciosPage() {
               <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Buscar por nombre o código..." value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} className="pl-9" />
+                <Input placeholder="Buscar por nombre o código..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="pl-9" />
               </div>
             </div>
             <Button variant={showFilters ? "default" : "outline"} className={showFilters ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-blue-600 border-blue-600 hover:bg-blue-50"} onClick={() => setShowFilters(!showFilters)}>
@@ -924,6 +977,18 @@ export default function EditarPreciosPage() {
               )}
             </p>
             <div className="flex items-center gap-2">
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const inverted = new Set(filteredProductos.filter((p) => !selectedIds.has(p.id)).map((p) => p.id));
+                    setSelectedIds(inverted);
+                  }}
+                >
+                  Invertir selección
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -998,6 +1063,7 @@ export default function EditarPreciosPage() {
                   <TableHead className="text-right">Margen %</TableHead>
                   <TableHead className="text-right">Precio Unidad</TableHead>
                   <TableHead className="text-right">Precio Caja</TableHead>
+                  <TableHead className="text-center">Descuento</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1077,12 +1143,23 @@ export default function EditarPreciosPage() {
                       <TableCell className="text-right tabular-nums">
                         {cajaPrice !== null ? formatCurrency(cajaPrice) : "-"}
                       </TableCell>
+                      <TableCell className="text-center">
+                        {(() => {
+                          const disc = getProductDiscount(p);
+                          if (!disc) return <span className="text-muted-foreground">—</span>;
+                          return (
+                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
+                              -{disc.porcentaje}%
+                            </Badge>
+                          );
+                        })()}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
                 {filteredProductos.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                       <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       No se encontraron productos
                     </TableCell>
