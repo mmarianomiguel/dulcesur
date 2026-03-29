@@ -2225,7 +2225,14 @@ export default function ClientesPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Nueva contraseña</Label>
-                    <Input type="password" value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder="Ingrese la nueva contraseña" />
+                    <div className="flex gap-2">
+                      <Input type="password" value={resetPw} onChange={(e) => setResetPw(e.target.value)} placeholder="Ingrese la nueva contraseña" className="flex-1" />
+                      {form.numero_documento && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setResetPw(form.numero_documento); setResetMsg(""); }}>
+                          Usar DNI
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {resetMsg && (
                     <p className={`text-sm ${resetMsg.startsWith("Error") ? "text-destructive" : "text-emerald-600"}`}>{resetMsg}</p>
