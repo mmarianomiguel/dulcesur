@@ -32,10 +32,7 @@ interface ClienteOption { id: string; nombre: string; }
 export default function ReportesPage() {
   const [tab, setTab] = useState("ventas");
   const [quickPeriod, setQuickPeriod] = useState<"today" | "week" | "month" | "custom">("today");
-  const [desde, setDesde] = useState(() => {
-    const d = new Date(); d.setDate(1);
-    return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-  });
+  const [desde, setDesde] = useState(() => todayARG());
   const [hasta, setHasta] = useState(() => todayARG());
   const [loading, setLoading] = useState(false);
 
@@ -98,13 +95,7 @@ export default function ReportesPage() {
       const d = new Date(); d.setDate(1);
       return { desde: d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), hasta: today };
     }
-    // custom
-    if (ventaDateMode === "dia") {
-      return { desde: today, hasta: today };
-    } else if (ventaDateMode === "mensual") {
-      const d = new Date(); d.setDate(1);
-      return { desde: d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), hasta: today };
-    }
+    // custom — always use the date pickers
     return { desde, hasta };
   }, [quickPeriod, ventaDateMode, desde, hasta]);
 
