@@ -38,6 +38,7 @@ import {
   Phone,
   Banknote,
   User,
+  Wallet,
 } from "lucide-react";
 import {
   Dialog,
@@ -1122,6 +1123,22 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ─── Quick Actions ─── */}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => router.push("/admin/ventas")} className="gap-1.5">
+          <ShoppingCart className="w-4 h-4" /> Nueva Venta
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => router.push("/admin/compras")} className="gap-1.5">
+          <Receipt className="w-4 h-4" /> Nueva Compra
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => router.push("/admin/caja")} className="gap-1.5">
+          <Wallet className="w-4 h-4" /> Caja
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => router.push("/admin/clientes")} className="gap-1.5">
+          <Users className="w-4 h-4" /> Clientes
+        </Button>
+      </div>
 
       {/* ─── Date filter ─── */}
       <Card>

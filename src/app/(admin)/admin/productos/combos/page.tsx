@@ -20,6 +20,7 @@ import {
 import {
   Plus, Search, Trash2, Loader2, Layers, X,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface Categoria {
   id: string;
@@ -84,6 +85,9 @@ export default function CombosPage() {
   const [productSearch, setProductSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Delete confirm
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // Detail
   const [detailCombo, setDetailCombo] = useState<Producto | null>(null);
@@ -274,9 +278,15 @@ export default function CombosPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    await supabase.from("combo_items").delete().eq("combo_id", id);
-    await supabase.from("productos").update({ activo: false }).eq("id", id);
+  const handleDelete = (id: string) => {
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    await supabase.from("combo_items").delete().eq("combo_id", deleteTarget);
+    await supabase.from("productos").update({ activo: false }).eq("id", deleteTarget);
+    setDeleteTarget(null);
     fetchData();
   };
 
@@ -625,6 +635,17 @@ export default function CombosPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirm */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Eliminar combo"
+        description="¿Estás seguro de que querés eliminar este combo? Se desactivará del sistema."
+        confirmLabel="Eliminar"
+        variant="danger"
+      />
 
       {/* Product search dialog */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>

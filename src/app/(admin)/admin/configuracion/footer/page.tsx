@@ -18,6 +18,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface FooterConfig {
   descripcion: string;
@@ -64,6 +65,7 @@ export default function FooterConfigPage() {
   const [editPage, setEditPage] = useState<PaginaInfo | null>(null);
   const [editForm, setEditForm] = useState({ titulo: "", slug: "", contenido: "", activa: true });
   const [savingPage, setSavingPage] = useState(false);
+  const [deletePageId, setDeletePageId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -226,7 +228,7 @@ export default function FooterConfigPage() {
                 <Badge variant={p.activa ? "secondary" : "outline"} className="text-[10px]">{p.activa ? "Activa" : "Oculta"}</Badge>
                 <Switch checked={p.activa} onCheckedChange={(v) => { supabase.from("paginas_info").update({ activa: v }).eq("id", p.id).then(() => fetchData()); }} />
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditPage(p)}><Pencil className="w-3.5 h-3.5" /></Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { supabase.from("paginas_info").delete().eq("id", p.id).then(() => fetchData()); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeletePageId(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
               </div>
             ))}
             {paginas.length === 0 && <div className="p-8 text-center text-muted-foreground text-sm">Sin páginas</div>}
@@ -266,6 +268,22 @@ export default function FooterConfigPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete page confirm */}
+      <ConfirmDialog
+        open={!!deletePageId}
+        onOpenChange={(o) => !o && setDeletePageId(null)}
+        onConfirm={async () => {
+          if (!deletePageId) return;
+          await supabase.from("paginas_info").delete().eq("id", deletePageId);
+          setDeletePageId(null);
+          fetchData();
+        }}
+        title="Eliminar página"
+        description="¿Estás seguro de que querés eliminar esta página de información? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="danger"
+      />
     </div>
   );
 }

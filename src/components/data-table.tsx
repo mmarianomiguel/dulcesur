@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -9,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { EmptyState } from "./empty-state";
 import { LoadingSpinner } from "./loading-spinner";
 
@@ -20,6 +21,8 @@ export interface Column<T> {
   render?: (row: T, index: number) => React.ReactNode;
   className?: string;
   headerClassName?: string;
+  sortable?: boolean;
+  sortValue?: (row: T) => string | number;
 }
 
 interface DataTableProps<T> {
@@ -67,6 +70,30 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   rowClassName,
 }: DataTableProps<T>) {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortKey) return data;
+    const col = columns.find(c => c.key === sortKey);
+    if (!col) return data;
+    return [...data].sort((a, b) => {
+      const av = col.sortValue ? col.sortValue(a) : (a[sortKey] as any) ?? "";
+      const bv = col.sortValue ? col.sortValue(b) : (b[sortKey] as any) ?? "";
+      if (typeof av === "number" && typeof bv === "number") return sortDir === "asc" ? av - bv : bv - av;
+      return sortDir === "asc" ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+    });
+  }, [data, sortKey, sortDir, columns]);
+
   if (loading) return <LoadingSpinner />;
   if (data.length === 0) return <EmptyState title={emptyTitle} description={emptyDescription} />;
 
@@ -78,13 +105,27 @@ export function DataTable<T extends Record<string, unknown>>({
             <TableRow>
               {columns.map((col) => (
                 <TableHead key={col.key} className={col.headerClassName}>
-                  {col.header}
+                  {col.sortable ? (
+                    <button
+                      className="flex items-center gap-1 hover:text-foreground transition-colors -ml-1 px-1 py-0.5 rounded"
+                      onClick={() => handleSort(col.key)}
+                    >
+                      {col.header}
+                      {sortKey === col.key ? (
+                        sortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronsUpDown className="w-3.5 h-3.5 opacity-30" />
+                      )}
+                    </button>
+                  ) : (
+                    col.header
+                  )}
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row, idx) => (
+            {sortedData.map((row, idx) => (
               <TableRow
                 key={idx}
                 className={`${onRowClick ? "cursor-pointer" : ""} ${rowClassName?.(row, idx) ?? ""}`}

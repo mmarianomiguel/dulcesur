@@ -161,6 +161,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [modulosConfig, setModulosConfig] = useState<Record<string, boolean> | null>(null);
   const [permisosMap, setPermisosMap] = useState<Record<string, boolean> | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [cajaAbierta, setCajaAbierta] = useState(false);
   const permsFetched = useRef(false);
 
   // Close mobile sidebar on route change
@@ -215,7 +216,25 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       } catch {
         // Auth not available, fall through to localStorage
       }
+
+      // Check if caja (turno) is open
+      supabase.from("turnos_caja").select("id").eq("estado", "abierto").limit(1).maybeSingle().then(({ data }) => {
+        setCajaAbierta(!!data);
+      });
     })();
+  }, []);
+
+  // Realtime subscription for caja status
+  useEffect(() => {
+    const channel = supabase
+      .channel("caja-status")
+      .on("postgres_changes", { event: "*", schema: "public", table: "turnos_caja" }, () => {
+        supabase.from("turnos_caja").select("id").eq("estado", "abierto").limit(1).maybeSingle().then(({ data }) => {
+          setCajaAbierta(!!data);
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const loadModulos = useCallback(() => {
@@ -364,6 +383,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               >
                 <item.icon className="w-5 h-5 shrink-0" />
                 <span className="flex-1 text-left">{item.name}</span>
+                {item.name === "Caja" && cajaAbierta && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                )}
                 <ChevronDown
                   className={cn(
                     "w-4 h-4 shrink-0 transition-transform duration-200",
@@ -385,6 +407,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               >
                 <item.icon className="w-5 h-5 shrink-0" />
                 {!collapsed && <span>{item.name}</span>}
+                {!collapsed && item.name === "Caja" && cajaAbierta && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                )}
               </Link>
             );
 
