@@ -1941,45 +1941,48 @@ export default function VentasPage() {
       <div className="flex-1 flex flex-col lg:flex-row gap-2 lg:gap-3 p-2 lg:p-3 overflow-hidden">
         {/* LEFT COLUMN */}
         <div className="flex-1 flex flex-col gap-2 lg:gap-3 min-w-0 overflow-hidden">
-          {/* Client selector */}
-          <div className="flex items-center gap-2">
-            <input
-              ref={codigoClienteRef}
-              type="text"
-              inputMode="numeric"
-              placeholder="#"
-              maxLength={4}
-              className="w-[72px] h-[46px] rounded-xl border bg-card px-2 text-center font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              onChange={(e) => {
-                const code = e.target.value.replace(/\D/g, "").slice(0, 4);
-                e.target.value = code;
-                if (code.length >= 1) {
-                  const numericCode = parseInt(code, 10);
-                  const match = clients.find((c) => {
-                    const cc = (c as any).codigo_cliente;
-                    return cc && parseInt(cc, 10) === numericCode;
-                  });
-                  if (match) {
-                    setClientId(match.id);
-                    e.target.value = (match as any).codigo_cliente || code;
-                    e.target.blur();
+          {/* Top bar: Client + Delivery + Date */}
+          <div className="rounded-xl border bg-card overflow-hidden">
+            {/* Row 1: Code + Client */}
+            <div className="flex items-center border-b">
+              <input
+                ref={codigoClienteRef}
+                type="text"
+                inputMode="numeric"
+                placeholder="#"
+                maxLength={4}
+                className="w-14 h-9 border-r bg-muted/30 px-2 text-center font-mono text-sm focus:outline-none focus:bg-primary/5"
+                onChange={(e) => {
+                  const code = e.target.value.replace(/\D/g, "").slice(0, 4);
+                  e.target.value = code;
+                  if (code.length >= 1) {
+                    const numericCode = parseInt(code, 10);
+                    const match = clients.find((c) => {
+                      const cc = (c as any).codigo_cliente;
+                      return cc && parseInt(cc, 10) === numericCode;
+                    });
+                    if (match) {
+                      setClientId(match.id);
+                      e.target.value = (match as any).codigo_cliente || code;
+                      e.target.blur();
+                    }
                   }
-                }
-              }}
-            />
-            <button
-              ref={clientSectionRef}
-              onClick={() => {
-                setClientSearch("");
-                setClientHighlight(0);
-                setClientDialogOpen(true);
-              }}
-              className="flex items-center gap-2 flex-1 rounded-lg border bg-card px-3 py-1.5 text-left hover:bg-accent transition-colors"
-            >
-              <User className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className={selectedClient ? "text-sm font-medium truncate" : "text-sm text-muted-foreground"}>
-                {selectedClient ? `${selectedClient.nombre}` : "Consumidor Final"}
-              </span>
+                }}
+              />
+              <button
+                ref={clientSectionRef}
+                onClick={() => {
+                  setClientSearch("");
+                  setClientHighlight(0);
+                  setClientDialogOpen(true);
+                }}
+                className="flex items-center gap-2 flex-1 px-3 h-9 text-left hover:bg-accent transition-colors"
+              >
+                <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className={selectedClient ? "text-sm font-medium truncate" : "text-sm text-muted-foreground"}>
+                  {selectedClient ? selectedClient.nombre : "Consumidor Final"}
+                </span>
+              </button>
               {selectedClient && (
                 <span
                   role="button"
@@ -2000,48 +2003,47 @@ export default function VentasPage() {
                     setClientId("");
                     if (codigoClienteRef.current) codigoClienteRef.current.value = "";
                   }}
-                  className="ml-auto p-1 rounded hover:bg-muted cursor-pointer"
+                  className="px-2.5 h-9 flex items-center hover:bg-muted cursor-pointer border-l"
                 >
                   <X className="w-3.5 h-3.5 text-muted-foreground" />
                 </span>
               )}
-            </button>
-          </div>
-
-          {/* Delivery + Date row */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (clientId) fetchClientAddresses(clientId);
-                setDeliveryDialogOpen(true);
-              }}
-              className="flex items-center gap-1.5 flex-1 rounded-lg border bg-card px-2.5 py-1.5 text-left hover:bg-accent transition-colors"
-            >
-              {deliveryMethod === "pickup" ? (
-                <Store className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-              ) : (
-                <Truck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              )}
-              <span className="text-xs font-medium truncate">
-                {deliveryMethod === "pickup" ? "Retiro en Tienda" : "Envío"}
-              </span>
-              {deliveryMethod === "delivery" && selectedAddressId && (
-                <span className="text-[10px] text-muted-foreground truncate hidden lg:inline">
-                  {clientAddresses.find((a) => a.id === selectedAddressId)?.direccion || ""}
+            </div>
+            {/* Row 2: Delivery + Date */}
+            <div className="flex items-center h-8">
+              <button
+                onClick={() => {
+                  if (clientId) fetchClientAddresses(clientId);
+                  setDeliveryDialogOpen(true);
+                }}
+                className="flex items-center gap-1.5 flex-1 px-3 h-full text-left hover:bg-accent transition-colors"
+              >
+                {deliveryMethod === "pickup" ? (
+                  <Store className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                ) : (
+                  <Truck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                )}
+                <span className="text-xs font-medium">
+                  {deliveryMethod === "pickup" ? "Retiro en Tienda" : "Envío a domicilio"}
                 </span>
-              )}
-            </button>
-            <div className="flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 shrink-0">
-              <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                type="date"
-                value={fechaVenta}
-                onChange={(e) => setFechaVenta(e.target.value)}
-                className="h-5 text-xs border-0 p-0 w-[110px] bg-transparent shadow-none focus-visible:ring-0"
-              />
-              {fechaVenta !== todayARG() && (
-                <button onClick={() => setFechaVenta(todayARG())} className="text-[10px] text-primary hover:underline font-medium">Hoy</button>
-              )}
+                {deliveryMethod === "delivery" && selectedAddressId && (
+                  <span className="text-[10px] text-muted-foreground truncate hidden lg:inline">
+                    — {clientAddresses.find((a) => a.id === selectedAddressId)?.direccion || ""}
+                  </span>
+                )}
+              </button>
+              <div className="flex items-center gap-1.5 px-2.5 h-full border-l shrink-0">
+                <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  type="date"
+                  value={fechaVenta}
+                  onChange={(e) => setFechaVenta(e.target.value)}
+                  className="h-5 text-xs border-0 p-0 w-[110px] bg-transparent shadow-none focus-visible:ring-0"
+                />
+                {fechaVenta !== todayARG() && (
+                  <button onClick={() => setFechaVenta(todayARG())} className="text-[10px] text-primary hover:underline font-medium">Hoy</button>
+                )}
+              </div>
             </div>
           </div>
 
