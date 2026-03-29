@@ -1216,7 +1216,7 @@ export default function PedidosProveedorPage() {
   // ── DETAIL VIEW ──
   if (mode === "detail" && detailPedido) {
     const isParcial = detailPedido.estado === "Recibido Parcial";
-    const canReceive = detailPedido.estado === "Enviado" || isParcial;
+    const canReceive = detailPedido.estado === "Borrador" || detailPedido.estado === "Enviado" || isParcial;
     const canEdit = detailPedido.estado === "Borrador";
     const canDelete = detailPedido.estado === "Borrador" || detailPedido.estado === "Enviado";
     const detailTotal = detailItems.reduce((a, i) => a + i.subtotal, 0);
@@ -1283,7 +1283,24 @@ export default function PedidosProveedorPage() {
               <MessageCircle className="w-4 h-4 mr-1.5" />WhatsApp
             </Button>
             {canReceive && (
-              <Button size="sm" onClick={() => openReceiveDialog()}>
+              <Button size="sm" onClick={() => {
+                // Save pedido data to localStorage for compras page to pick up
+                const pedidoData = {
+                  pedido_id: detailPedido.id,
+                  pedido_numero: detailPedido.id.slice(0, 8).toUpperCase(),
+                  proveedor_id: detailPedido.proveedor_id,
+                  observacion: detailPedido.observacion || "",
+                  items: detailItems.map((item) => ({
+                    producto_id: item.producto_id,
+                    codigo: item.codigo,
+                    descripcion: item.descripcion,
+                    cantidad: item.cantidad - (item.cantidad_recibida || 0),
+                    precio_unitario: item.precio_unitario,
+                  })).filter((i) => i.cantidad > 0),
+                };
+                localStorage.setItem("pedido_to_compra", JSON.stringify(pedidoData));
+                window.location.href = "/admin/compras";
+              }}>
                 <Package className="w-4 h-4 mr-1.5" />Registrar compra
               </Button>
             )}

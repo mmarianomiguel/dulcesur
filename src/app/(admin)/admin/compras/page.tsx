@@ -536,6 +536,57 @@ export default function ComprasPage() {
     fetchData();
   }, [fetchData]);
 
+  // Import pedido from pedidos page (if navigated with data)
+  useEffect(() => {
+    const raw = localStorage.getItem("pedido_to_compra");
+    if (!raw || providers.length === 0) return;
+    localStorage.removeItem("pedido_to_compra");
+    try {
+      const pedido = JSON.parse(raw);
+      if (!pedido.items || pedido.items.length === 0) return;
+      // Set proveedor
+      if (pedido.proveedor_id) setSelectedProveedorId(pedido.proveedor_id);
+      if (pedido.observacion) setObservacion(pedido.observacion);
+      // Fetch product details for each pedido item
+      const productIds = pedido.items.map((i: any) => i.producto_id);
+      supabase
+        .from("productos")
+        .select("id, codigo, nombre, stock, costo, precio, imagen_url")
+        .in("id", productIds)
+        .then(({ data: products }) => {
+          if (!products) return;
+          const prodMap = new Map(products.map((p: any) => [p.id, p]));
+          const compraItems: CompraItem[] = pedido.items
+            .map((item: any) => {
+              const prod = prodMap.get(item.producto_id);
+              if (!prod) return null;
+              const cantidad = item.cantidad;
+              const costoUnit = item.precio_unitario || prod.costo;
+              return {
+                producto_id: prod.id,
+                codigo: prod.codigo,
+                nombre: prod.nombre,
+                imagen_url: prod.imagen_url,
+                stock_actual: prod.stock,
+                cantidad,
+                cajas: 0,
+                sueltas: cantidad,
+                unidades_por_caja: 0,
+                costo_unitario: costoUnit,
+                costo_original: prod.costo,
+                precio_original: prod.precio,
+                subtotal: costoUnit * cantidad,
+                actualizarPrecio: true,
+              } as CompraItem;
+            })
+            .filter(Boolean) as CompraItem[];
+          setItems(compraItems);
+          setMode("new");
+          showAdminToast(`Pedido importado con ${compraItems.length} productos`, "success");
+        });
+    } catch { /* invalid pedido data */ }
+  }, [providers]);
+
   // Click outside handler for searchable dropdowns
   useEffect(() => {
     const handler = (e: MouseEvent) => {
