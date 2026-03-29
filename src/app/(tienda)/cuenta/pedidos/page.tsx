@@ -602,8 +602,7 @@ export default function PedidosPage() {
                         {p.cuenta_bancaria && <span className="text-gray-400 text-xs ml-1">→ {p.cuenta_bancaria}</span>}
                         {p.fecha && (
                           <span className="block text-[10px] text-gray-400 mt-0.5">
-                            {new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}{" "}
-                            {new Date(p.fecha).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                            {(() => { const d = new Date(p.fecha); return isNaN(d.getTime()) ? "" : `${d.toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}, ${d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`; })()}
                             {isHojaRuta ? " — Pago al momento de entrega" : isCobro ? " — Cobro posterior" : ""}
                           </span>
                         )}
@@ -902,8 +901,7 @@ export default function PedidosPage() {
                         {p.cuenta_bancaria && <span className="text-gray-400 text-xs ml-1">→ {p.cuenta_bancaria}</span>}
                         {p.fecha && (
                           <span className="block text-[10px] text-gray-400 mt-0.5">
-                            {new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}{" "}
-                            {new Date(p.fecha).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                            {(() => { const d = new Date(p.fecha); return isNaN(d.getTime()) ? "" : `${d.toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}, ${d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`; })()}
                             {isHojaRuta ? " — Pago al momento de entrega" : isCobro ? " — Cobro posterior" : ""}
                           </span>
                         )}
