@@ -242,14 +242,18 @@ export default function EditarPreciosPage() {
 
   const applyRounding = async () => {
     if (roundPreview.length === 0) return;
+    // If rounding right after mass edit, don't update precio_anterior (it was already set correctly)
+    const isPostMassRound = postMassEditIds.length > 0;
     setSaving(true);
     for (const item of roundPreview) {
       const prod = productos.find((p) => p.id === item.id);
       if (!prod) continue;
-      await supabase.from("productos").update({ precio: item.precioNuevo, precio_anterior: item.precioActual, fecha_actualizacion: new Date().toISOString() }).eq("id", item.id);
+      const updateData: Record<string, unknown> = { precio: item.precioNuevo, fecha_actualizacion: new Date().toISOString() };
+      if (!isPostMassRound) updateData.precio_anterior = item.precioActual;
+      await supabase.from("productos").update(updateData).eq("id", item.id);
       await supabase.from("precio_historial").insert({
         producto_id: item.id, precio_anterior: item.precioActual, precio_nuevo: item.precioNuevo,
-        costo_anterior: prod.costo, costo_nuevo: prod.costo, usuario: "Admin (Redondeo)",
+        costo_anterior: prod.costo, costo_nuevo: prod.costo, usuario: isPostMassRound ? "Admin (Redondeo post-edición)" : "Admin (Redondeo)",
       });
       // Update presentaciones
       const presRows = presentaciones.filter((pr) => pr.producto_id === item.id);
@@ -266,11 +270,19 @@ export default function EditarPreciosPage() {
     setSaving(false);
     setRoundOpen(false);
 
-    // Show post-save dialog with carteles option
-    const savedInfo = roundPreview.map((item) => {
-      const prod = productos.find((p) => p.id === item.id);
-      return { id: item.id, nombre: prod?.nombre || "", codigo: prod?.codigo || "", precio: item.precioNuevo };
-    });
+    // Update saved product names with rounded prices (for post-save dialog)
+    if (isPostMassRound) {
+      setSavedProductNames((prev) => prev.map((p) => {
+        const rp = roundPreview.find((r) => r.id === p.id);
+        return rp ? { ...p, precio: rp.precioNuevo } : p;
+      }));
+    } else {
+      const savedInfo = roundPreview.map((item) => {
+        const prod = productos.find((p) => p.id === item.id);
+        return { id: item.id, nombre: prod?.nombre || "", codigo: prod?.codigo || "", precio: item.precioNuevo };
+      });
+      if (savedInfo.length > 0) setSavedProductNames(savedInfo);
+    }
 
     // Update local state instead of reloading
     setProductos((prev) => prev.map((p) => {
@@ -279,15 +291,16 @@ export default function EditarPreciosPage() {
     }));
 
     setRoundPreview([]);
-
-    if (savedInfo.length > 0) {
-      setSavedProductNames(savedInfo);
-      setPostSaveDialog(true);
-    }
+    setPostMassEditIds([]);
+    setPostSaveDialog(true);
   };
 
   // Confirmation dialog for mass edit
   const [confirmMassEditOpen, setConfirmMassEditOpen] = useState(false);
+
+  // Post-mass-edit rounding prompt
+  const [postMassRoundPrompt, setPostMassRoundPrompt] = useState(false);
+  const [postMassEditIds, setPostMassEditIds] = useState<string[]>([]);
 
   // (search state is now internal to SearchableSelect)
 
@@ -679,8 +692,6 @@ export default function EditarPreciosPage() {
   const applyMassEdit = async () => {
     setSaving(true);
     try {
-      const updates: PromiseLike<unknown>[] = [];
-
       for (const item of massEditPreview) {
         const prod = productos.find((p) => p.id === item.id);
         const updateData: Record<string, unknown> = {};
@@ -690,19 +701,21 @@ export default function EditarPreciosPage() {
           if (prod) updateData.precio_anterior = prod.precio;
         }
         if (massTarget === "costo" || massTarget === "fijar_costo") updateData.costo = item.newCosto;
-        updates.push(supabase.from("productos").update(updateData).eq("id", item.id).then());
+        if (Object.keys(updateData).length > 0) {
+          await supabase.from("productos").update(updateData).eq("id", item.id);
+        }
 
         // Update presentation prices proportionally
-        if (prod && prod.precio > 0 && item.newPrecio !== prod.precio) {
-          const ratio = item.newPrecio / prod.precio;
+        const oldPrecio = prod?.precio ?? 0;
+        if (oldPrecio > 0 && item.newPrecio !== oldPrecio) {
+          const ratio = item.newPrecio / oldPrecio;
           const prodPres = presentaciones.filter((pr) => pr.producto_id === item.id);
           for (const pres of prodPres) {
-            updates.push(supabase.from("presentaciones").update({ precio: Math.round(pres.precio * ratio) }).eq("id", pres.id).then());
+            const newPresPrecio = Math.round(pres.precio * ratio);
+            await supabase.from("presentaciones").update({ precio: newPresPrecio }).eq("id", pres.id);
           }
         }
       }
-
-      await Promise.all(updates);
 
       // Log to precio_historial
       const historyInserts = massEditPreview
@@ -761,14 +774,16 @@ export default function EditarPreciosPage() {
       setMassEditOpen(false);
       setMassAmount("");
 
-      // Show post-save dialog with carteles option
+      // Save IDs and show rounding prompt before post-save dialog
+      const editedIds = massEditPreview.map((item) => item.id);
       const savedInfo = massEditPreview.map((item) => {
         const prod = productos.find((p) => p.id === item.id);
         return { id: item.id, nombre: prod?.nombre || item.nombre, codigo: prod?.codigo || "", precio: item.newPrecio };
       });
+      setPostMassEditIds(editedIds);
       if (savedInfo.length > 0) {
         setSavedProductNames(savedInfo);
-        setPostSaveDialog(true);
+        setPostMassRoundPrompt(true);
       }
     } catch (err) {
       console.error("Error applying mass edit:", err);
@@ -1344,6 +1359,35 @@ export default function EditarPreciosPage() {
             >
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post-Mass-Edit Rounding Prompt */}
+      <Dialog open={postMassRoundPrompt} onOpenChange={setPostMassRoundPrompt}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Redondear precios?</DialogTitle>
+            <DialogDescription>
+              Se actualizaron {postMassEditIds.length} productos. ¿Querés redondear los precios antes de finalizar?
+              Esto evita que la tienda muestre una rebaja por diferencia de redondeo.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setPostMassRoundPrompt(false);
+              setPostSaveDialog(true);
+            }}>
+              No, finalizar
+            </Button>
+            <Button onClick={() => {
+              setPostMassRoundPrompt(false);
+              // Pre-select the mass-edited products and open rounding dialog
+              setSelectedIds(new Set(postMassEditIds));
+              setRoundOpen(true);
+            }}>
+              Sí, redondear
             </Button>
           </DialogFooter>
         </DialogContent>
