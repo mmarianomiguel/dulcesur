@@ -203,113 +203,56 @@ function ProductosContent() {
     [searchParams, router]
   );
 
-  // Fetch categorias with counts (only visible products, respecting stock cutoff)
+  // Fetch all filter data + config in a single parallel request on mount
   useEffect(() => {
-    async function load() {
-      const { data: cats } = await supabase
-        .from("categorias")
-        .select("id, nombre, restringida");
-      if (!cats) return;
-
-      let query = supabase
-        .from("productos")
-        .select("categoria_id")
-        .eq("activo", true)
-        .eq("visibilidad", "visible");
-
-      // Apply same stock visibility filter as the product grid
-      if (diasOcultarSinStock > 0) {
-        const cutoff = new Date(Date.now() - diasOcultarSinStock * 24 * 60 * 60 * 1000).toISOString();
-        query = query.or(`stock.gt.0,updated_at.gt.${cutoff}`);
-      }
-
-      const { data: prods } = await query;
-
-      const countMap: Record<string, number> = {};
-      prods?.forEach((p: { categoria_id: string }) => {
-        countMap[p.categoria_id] = (countMap[p.categoria_id] || 0) + 1;
-      });
-
-      setCategorias(
-        cats.map((c: { id: string; nombre: string }) => ({
-          ...c,
-          count: countMap[c.id] || 0,
-        }))
-      );
-    }
-    load();
-  }, [diasOcultarSinStock]);
-
-  // Fetch config for dias_ocultar_sin_stock
-  useEffect(() => {
-    supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single().then(({ data }) => {
-      if (data?.dias_ocultar_sin_stock != null) setDiasOcultarSinStock(data.dias_ocultar_sin_stock);
-    });
-  }, []);
-
-  // Fetch ALL subcategorias with counts
-  useEffect(() => {
-    async function loadSubs() {
-      const { data: subs } = await supabase
-        .from("subcategorias")
-        .select("id, nombre, categoria_id");
-      if (!subs) return;
-
-      let subQuery = supabase
-        .from("productos")
-        .select("subcategoria_id")
-        .eq("activo", true)
-        .eq("visibilidad", "visible");
-
-      if (diasOcultarSinStock > 0) {
-        const cutoff = new Date(Date.now() - diasOcultarSinStock * 24 * 60 * 60 * 1000).toISOString();
-        subQuery = subQuery.or(`stock.gt.0,updated_at.gt.${cutoff}`);
-      }
-
-      const { data: prods } = await subQuery;
-
-      const countMap: Record<string, number> = {};
-      prods?.forEach((p: { subcategoria_id: string | null }) => {
-        if (p.subcategoria_id) {
-          countMap[p.subcategoria_id] = (countMap[p.subcategoria_id] || 0) + 1;
-        }
-      });
-
-      const subsWithCounts = subs.map((s: { id: string; nombre: string; categoria_id: string }) => ({
-        ...s,
-        count: countMap[s.id] || 0,
-      }));
-      setAllSubcategorias(subsWithCounts);
-      // Keep old subcategorias for backward compat with filtered subcats
-      if (categoriaId) {
-        setSubcategorias(subsWithCounts.filter((s: Subcategoria) => s.categoria_id === categoriaId));
-      }
-    }
-    loadSubs();
-  }, [categoriaId]);
-
-  // Load active discounts + brands in parallel (no dependencies)
-  useEffect(() => {
-    async function loadDiscountsAndBrands() {
+    async function loadFilters() {
       const today = new Date().toISOString().split("T")[0];
-      const [discResult, marcasResult, marcaProdsResult] = await Promise.all([
-        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
+      const [catsRes, subsRes, marcasRes, discRes, configRes, prodsRes] = await Promise.all([
+        supabase.from("categorias").select("id, nombre, restringida"),
+        supabase.from("subcategorias").select("id, nombre, categoria_id"),
         supabase.from("marcas").select("id, nombre"),
-        supabase.from("productos").select("marca_id").eq("activo", true).eq("visibilidad", "visible"),
+        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
+        supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible"),
       ]);
 
-      setActiveDiscounts((discResult.data || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
+      const dias = configRes.data?.dias_ocultar_sin_stock ?? 7;
+      setDiasOcultarSinStock(dias);
 
-      if (marcasResult.data) {
-        const countMap: Record<string, number> = {};
-        marcaProdsResult.data?.forEach((p: { marca_id: string | null }) => {
-          if (p.marca_id) countMap[p.marca_id] = (countMap[p.marca_id] || 0) + 1;
-        });
-        setMarcas(marcasResult.data.map((m: { id: string; nombre: string }) => ({ ...m, count: countMap[m.id] || 0 })));
+      // Filter products by stock cutoff (same logic as product grid)
+      const allProds = prodsRes.data || [];
+      const cutoff = dias > 0
+        ? new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+      const visibleProds = cutoff
+        ? allProds.filter((p: any) => p.stock > 0 || (p.updated_at && p.updated_at > cutoff))
+        : allProds;
+
+      // Build count maps from the single products query
+      const catCount: Record<string, number> = {};
+      const subCount: Record<string, number> = {};
+      const marcaCount: Record<string, number> = {};
+      for (const p of visibleProds) {
+        if (p.categoria_id) catCount[p.categoria_id] = (catCount[p.categoria_id] || 0) + 1;
+        if (p.subcategoria_id) subCount[p.subcategoria_id] = (subCount[p.subcategoria_id] || 0) + 1;
+        if (p.marca_id) marcaCount[p.marca_id] = (marcaCount[p.marca_id] || 0) + 1;
       }
+
+      setCategorias((catsRes.data || []).map((c: any) => ({ ...c, count: catCount[c.id] || 0 })));
+      const subsWithCounts = (subsRes.data || []).map((s: any) => ({ ...s, count: subCount[s.id] || 0 }));
+      setAllSubcategorias(subsWithCounts);
+      setMarcas((marcasRes.data || []).map((m: any) => ({ ...m, count: marcaCount[m.id] || 0 })));
+      setActiveDiscounts((discRes.data || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
     }
-    loadDiscountsAndBrands();
+    loadFilters();
   }, []);
+
+  // Filter subcategorias when selected category changes
+  useEffect(() => {
+    if (categoriaId) {
+      setSubcategorias(allSubcategorias.filter((s) => s.categoria_id === categoriaId));
+    }
+  }, [categoriaId, allSubcategorias]);
 
   function getProductDiscount(producto: Producto, presLabel?: string | null, qty?: number): number {
     let best = 0;

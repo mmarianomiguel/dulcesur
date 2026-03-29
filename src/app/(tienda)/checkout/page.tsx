@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
@@ -162,6 +162,7 @@ export default function CheckoutPage() {
 
   // Config
   const [config, setConfig] = useState<TiendaConfig | null>(null);
+  const configRef = useRef<TiendaConfig | null>(null);
   const [whatsappUrl, setWhatsappUrl] = useState("");
 
   // Saldo pendiente
@@ -192,7 +193,7 @@ export default function CheckoutPage() {
     showToast("Carrito ajustado al stock disponible", { subtitle: "Los productos sin stock fueron eliminados" });
   };
 
-  const loadConfig = useCallback(async () => {
+  const loadConfig = useCallback(async (): Promise<TiendaConfig | null> => {
     const { data } = await supabase.from("tienda_config").select("*").single();
     if (data) {
       const cfg: TiendaConfig = {
@@ -206,6 +207,7 @@ export default function CheckoutPage() {
         costo_envio: data.costo_envio ?? 0,
       };
       setConfig(cfg);
+      configRef.current = cfg;
       // Load WhatsApp URL from footer_config or empresa phone
       const fc = (data as any)?.footer_config;
       if (fc?.whatsapp_url) {
@@ -228,15 +230,34 @@ export default function CheckoutPage() {
         tomorrow.setDate(tomorrow.getDate() + 1);
         setFechaEntrega(tomorrow.toISOString().split("T")[0]);
       }
+      return cfg;
     }
+    return null;
   }, []);
 
   useEffect(() => {
+    // ── Synchronous localStorage reads ──
     const raw = localStorage.getItem("carrito");
     if (raw) {
       try { const _p = JSON.parse(raw); setItems(Array.isArray(_p) ? _p : []); } catch { /* invalid cart JSON, use empty */ }
     }
+    try {
+      const stored = localStorage.getItem("cuentas_bancarias");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const arr = Array.isArray(parsed) ? parsed : [];
+        setCuentasBancarias(arr);
+        if (arr.length > 0) setSelectedCuentaId(arr[0].id);
+      }
+    } catch { /* invalid bank accounts JSON */ }
 
+    // ── Parallel: config + vendor (don't depend on auth) ──
+    const configPromise = loadConfig();
+    supabase.from("usuarios").select("id").limit(1).single().then(({ data: vendor }) => {
+      if (vendor) setDefaultVendedorId(vendor.id);
+    });
+
+    // ── Auth-dependent fetches ──
     const auth = localStorage.getItem("cliente_auth");
     if (auth) {
       try {
@@ -251,135 +272,116 @@ export default function CheckoutPage() {
           if (parsed.email) setEmail(parsed.email);
           if (parsed.telefono) setTelefono(parsed.telefono);
 
-          supabase
+          // Parallel: fetch addresses and client profile link at the same time
+          const addressesPromise = supabase
             .from("cliente_direcciones")
             .select("*")
-            .eq("cliente_auth_id", parsed.id)
-            .then(({ data }) => {
-              if (data && data.length > 0) {
-                setSavedAddresses(data as Address[]);
-                const defaultAddr = data.find((a: Address) => a.predeterminada);
-                setSelectedAddressId(defaultAddr?.id || data[0].id);
-              } else {
-                setShowNewAddress(true);
-              }
-            });
+            .eq("cliente_auth_id", parsed.id);
 
-          // Fetch client profile data from clientes table and pre-fill fields
-          supabase
+          const clienteAuthPromise = supabase
             .from("clientes_auth")
             .select("cliente_id")
             .eq("id", parsed.id)
-            .single()
-            .then(async ({ data: authRec }) => {
-              if (!authRec?.cliente_id) return;
-              const { data: cli } = await supabase.from("clientes").select("nombre, email, telefono, domicilio, localidad, provincia, codigo_postal, saldo, dias_entrega").eq("id", authRec.cliente_id).single();
-              if (cli) {
-                // Pre-fill contact fields from clientes table (more reliable than localStorage)
-                if (cli.nombre) {
-                  const parts = cli.nombre.split(" ");
-                  setNombre(parts[0] || "");
-                  setApellido(parts.slice(1).join(" ") || "");
-                }
-                if (cli.email) setEmail(cli.email);
-                if (cli.telefono) setTelefono(cli.telefono);
+            .single();
 
-                // Pre-fill address form from clientes table when no saved addresses
-                supabase
-                  .from("cliente_direcciones")
-                  .select("id")
-                  .eq("cliente_auth_id", parsed.id)
-                  .then(({ data: dirData }) => {
-                    if (!dirData || dirData.length === 0) {
-                      // No saved addresses: pre-fill the "Nueva dirección" form
-                      if (cli.domicilio || cli.localidad || cli.provincia || cli.codigo_postal) {
-                        // Parse domicilio into calle + numero if possible (e.g. "Av. San Martin 1234")
-                        let calle = cli.domicilio || "";
-                        let numero = "";
-                        if (calle) {
-                          const match = calle.match(/^(.+?)\s+(\d+)\s*$/);
-                          if (match) {
-                            calle = match[1];
-                            numero = match[2];
-                          }
-                        }
-                        setAddr({
-                          calle,
-                          numero,
-                          piso: "",
-                          departamento: "",
-                          localidad: cli.localidad || "",
-                          provincia: cli.provincia || "",
-                          codigo_postal: cli.codigo_postal || "",
-                          referencia: "",
-                        });
-                      }
+          Promise.all([addressesPromise, clienteAuthPromise]).then(async ([{ data: addrData }, { data: authRec }]) => {
+            // Handle addresses (single query, no duplicate)
+            if (addrData && addrData.length > 0) {
+              setSavedAddresses(addrData as Address[]);
+              const defaultAddr = addrData.find((a: Address) => a.predeterminada);
+              setSelectedAddressId(defaultAddr?.id || addrData[0].id);
+            } else {
+              setShowNewAddress(true);
+            }
+            const hasAddresses = addrData && addrData.length > 0;
+
+            // Fetch client profile
+            if (!authRec?.cliente_id) return;
+            const { data: cli } = await supabase.from("clientes").select("nombre, email, telefono, domicilio, localidad, provincia, codigo_postal, saldo, dias_entrega").eq("id", authRec.cliente_id).single();
+            if (cli) {
+              // Pre-fill contact fields from clientes table (more reliable than localStorage)
+              if (cli.nombre) {
+                const parts = cli.nombre.split(" ");
+                setNombre(parts[0] || "");
+                setApellido(parts.slice(1).join(" ") || "");
+              }
+              if (cli.email) setEmail(cli.email);
+              if (cli.telefono) setTelefono(cli.telefono);
+
+              // Pre-fill address form from clientes table when no saved addresses
+              if (!hasAddresses) {
+                if (cli.domicilio || cli.localidad || cli.provincia || cli.codigo_postal) {
+                  let calle = cli.domicilio || "";
+                  let numero = "";
+                  if (calle) {
+                    const match = calle.match(/^(.+?)\s+(\d+)\s*$/);
+                    if (match) {
+                      calle = match[1];
+                      numero = match[2];
                     }
-                  });
-              }
-              // Override delivery dates with client-specific days if available
-              const clientDias = cli?.dias_entrega;
-              if (clientDias && clientDias.length > 0) {
-                // Fetch config directly to avoid stale state
-                const { data: cfgData } = await supabase.from("tienda_config").select("dias_max_programacion, hora_corte").single();
-                const maxDias = cfgData?.dias_max_programacion ?? 14;
-                const horaCorte = cfgData?.hora_corte ?? "12:30";
-                const clientDates = getAvailableDates(clientDias, maxDias, horaCorte);
-                setAvailableDates(clientDates);
-                if (clientDates.length > 0) setFechaEntrega(clientDates[0].value);
-              }
-
-              const saldo = cli?.saldo || 0;
-              if (saldo > 0) {
-                setSaldoPendiente(saldo);
-                // Fetch deudas detail
-                const { data: ccDeudas } = await supabase
-                  .from("cuenta_corriente")
-                  .select("comprobante, debe, haber, venta_id")
-                  .eq("cliente_id", authRec.cliente_id);
-                const ventaDeudas: Record<string, number> = {};
-                for (const cc of ccDeudas || []) {
-                  if (cc.venta_id) {
-                    ventaDeudas[cc.venta_id] = (ventaDeudas[cc.venta_id] || 0) + (cc.debe || 0) - (cc.haber || 0);
                   }
-                }
-                const deudas = Object.entries(ventaDeudas)
-                  .filter(([, m]) => m > 0)
-                  .map(([, m]) => ({ numero: "", monto: m }));
-                // Get venta numbers
-                const ventaIdsWithDebt = Object.entries(ventaDeudas).filter(([, m]) => m > 0).map(([id]) => id);
-                if (ventaIdsWithDebt.length > 0) {
-                  const { data: ventas } = await supabase.from("ventas").select("id, numero, tipo_comprobante").in("id", ventaIdsWithDebt);
-                  const detalles = (ventas || []).map((v: any) => ({
-                    numero: `${v.tipo_comprobante} ${v.numero}`,
-                    monto: ventaDeudas[v.id] || 0,
-                  }));
-                  setDeudasDetalle(detalles);
-                } else {
-                  setDeudasDetalle(deudas);
+                  setAddr({
+                    calle,
+                    numero,
+                    piso: "",
+                    departamento: "",
+                    localidad: cli.localidad || "",
+                    provincia: cli.provincia || "",
+                    codigo_postal: cli.codigo_postal || "",
+                    referencia: "",
+                  });
                 }
               }
-            });
+            }
+            // Override delivery dates with client-specific days if available
+            const clientDias = cli?.dias_entrega;
+            if (clientDias && clientDias.length > 0) {
+              // Use config from ref (already loaded in parallel) instead of re-fetching
+              const cfg = configRef.current || await configPromise;
+              const maxDias = cfg?.dias_max_programacion ?? 14;
+              const horaCorte = cfg?.hora_corte ?? "12:30";
+              const clientDates = getAvailableDates(clientDias, maxDias, horaCorte);
+              setAvailableDates(clientDates);
+              if (clientDates.length > 0) setFechaEntrega(clientDates[0].value);
+            }
+
+            const saldo = cli?.saldo || 0;
+            if (saldo > 0) {
+              setSaldoPendiente(saldo);
+              // Fetch deudas detail
+              const { data: ccDeudas } = await supabase
+                .from("cuenta_corriente")
+                .select("comprobante, debe, haber, venta_id")
+                .eq("cliente_id", authRec.cliente_id);
+              const ventaDeudas: Record<string, number> = {};
+              for (const cc of ccDeudas || []) {
+                if (cc.venta_id) {
+                  ventaDeudas[cc.venta_id] = (ventaDeudas[cc.venta_id] || 0) + (cc.debe || 0) - (cc.haber || 0);
+                }
+              }
+              const deudas = Object.entries(ventaDeudas)
+                .filter(([, m]) => m > 0)
+                .map(([, m]) => ({ numero: "", monto: m }));
+              // Get venta numbers
+              const ventaIdsWithDebt = Object.entries(ventaDeudas).filter(([, m]) => m > 0).map(([id]) => id);
+              if (ventaIdsWithDebt.length > 0) {
+                const { data: ventas } = await supabase.from("ventas").select("id, numero, tipo_comprobante").in("id", ventaIdsWithDebt);
+                const detalles = (ventas || []).map((v: any) => ({
+                  numero: `${v.tipo_comprobante} ${v.numero}`,
+                  monto: ventaDeudas[v.id] || 0,
+                }));
+                setDeudasDetalle(detalles);
+              } else {
+                setDeudasDetalle(deudas);
+              }
+            }
+          });
         }
       } catch { /* invalid auth JSON */ }
     } else {
       setShowNewAddress(true);
     }
 
-    loadConfig();
-    // Fetch default vendor dynamically
-    supabase.from("usuarios").select("id").limit(1).single().then(({ data: vendor }) => {
-      if (vendor) setDefaultVendedorId(vendor.id);
-    });
-    try {
-      const stored = localStorage.getItem("cuentas_bancarias");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const arr = Array.isArray(parsed) ? parsed : [];
-        setCuentasBancarias(arr);
-        if (arr.length > 0) setSelectedCuentaId(arr[0].id);
-      }
-    } catch { /* invalid bank accounts JSON */ }
     setLoaded(true);
   }, [loadConfig]);
 
@@ -446,14 +448,27 @@ export default function CheckoutPage() {
     setErrors([]);
     setSubmitting(true);
 
-    // ── Server-side price validation: re-fetch real prices from DB ──
+    // ── Fetch all product data in ONE parallel batch ──
     const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
-    const { data: stockData } = await supabase.from("productos").select("id, stock, nombre, es_combo, costo").in("id", productIds);
+    const hoyCheck = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+
+    const [{ data: stockData }, { data: presData }, { data: dbDescuentos }] = await Promise.all([
+      supabase.from("productos").select("id, stock, nombre, es_combo, costo, precio").in("id", productIds),
+      supabase.from("presentaciones").select("producto_id, nombre, cantidad, costo, precio").in("producto_id", productIds),
+      supabase.from("descuentos").select("producto_id, porcentaje, presentacion").eq("activo", true).lte("fecha_inicio", hoyCheck),
+    ]);
+
+    // Build stock + cost + price maps from the single productos query
     const stockMap: Record<string, { stock: number; nombre: string }> = {};
     const costoMap: Record<string, number> = {};
-    for (const p of stockData || []) { stockMap[p.id] = { stock: p.stock, nombre: p.nombre }; costoMap[p.id] = p.costo || 0; }
-    // Fetch presentation costs for accurate costo_unitario
-    const { data: presData } = await supabase.from("presentaciones").select("producto_id, cantidad, costo").in("producto_id", productIds);
+    const prodPriceMap: Record<string, number> = {};
+    for (const p of stockData || []) {
+      stockMap[p.id] = { stock: p.stock, nombre: p.nombre };
+      costoMap[p.id] = p.costo || 0;
+      prodPriceMap[p.id] = p.precio;
+    }
+
+    // Build presentation cost + price maps from the single presentaciones query
     const presCostMap: Record<string, Record<number, number>> = {};
     for (const pr of presData || []) { if (!presCostMap[pr.producto_id]) presCostMap[pr.producto_id] = {}; if (pr.costo > 0) presCostMap[pr.producto_id][pr.cantidad] = pr.costo; }
 
@@ -506,28 +521,10 @@ export default function CheckoutPage() {
       return;
     }
 
-    // ── Server-side price validation: override cart prices with DB prices ──
-    const { data: dbProducts } = await supabase
-      .from("productos")
-      .select("id, precio, es_combo")
-      .in("id", productIds);
-    const { data: dbPresentaciones } = await supabase
-      .from("presentaciones")
-      .select("producto_id, nombre, cantidad, precio")
-      .in("producto_id", productIds);
-    // Fetch active discounts
-    const hoyCheck = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-    const { data: dbDescuentos } = await supabase
-      .from("descuentos")
-      .select("producto_id, porcentaje, presentacion")
-      .eq("activo", true)
-      .lte("fecha_inicio", hoyCheck);
-
+    // ── Server-side price validation: use already-fetched data ──
     const activeDescs = (dbDescuentos || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= hoyCheck);
-    const prodPriceMap: Record<string, number> = {};
-    for (const p of dbProducts || []) prodPriceMap[p.id] = p.precio;
     const presPriceMap: Record<string, number> = {};
-    for (const pr of dbPresentaciones || []) {
+    for (const pr of presData || []) {
       const basePrice = prodPriceMap[pr.producto_id] || 0;
       // If pres price equals base product price and qty > 1, it's stored as unit price → multiply
       const realPrice = (pr.precio > 0 && pr.cantidad > 1 && pr.precio === basePrice)

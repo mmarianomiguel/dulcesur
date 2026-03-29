@@ -315,12 +315,14 @@ function ProductosDestacadosBlock({
   presMap,
   loading,
   agregarAlCarrito,
+  diasNuevo,
 }: {
   config: Record<string, any>;
   productos: Producto[];
   presMap: Record<string, any[]>;
   loading: boolean;
   agregarAlCarrito: (p: Producto, qty: number) => void;
+  diasNuevo: number;
 }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
   const titulo = config.titulo_seccion || "Productos Destacados";
@@ -334,13 +336,6 @@ function ProductosDestacadosBlock({
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
-  const [diasNuevo, setDiasNuevo] = useState(7);
-
-  useEffect(() => {
-    supabase.from("tienda_config").select("dias_badge_nuevo").limit(1).single().then(({ data }) => {
-      if (data?.dias_badge_nuevo != null) setDiasNuevo(data.dias_badge_nuevo);
-    });
-  }, []);
 
   const getQty = (id: string) => quantities[id] ?? 1;
   const setQty = (id: string, val: number) =>
@@ -664,48 +659,67 @@ export default function TiendaPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [presMap, setPresMap] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
+  const [diasNuevo, setDiasNuevo] = useState(7);
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Fetch blocks
-      const { data: bloquesData } = await supabase
-        .from("pagina_inicio_bloques")
-        .select("*")
-        .eq("activo", true)
-        .order("orden", { ascending: true });
+      // 1. Fetch blocks and tienda_config in parallel
+      const [bloquesRes, configRes] = await Promise.all([
+        supabase
+          .from("pagina_inicio_bloques")
+          .select("*")
+          .eq("activo", true)
+          .order("orden", { ascending: true }),
+        supabase
+          .from("tienda_config")
+          .select("dias_badge_nuevo")
+          .limit(1)
+          .single(),
+      ]);
 
-      const blocks: Bloque[] = bloquesData || [];
+      const blocks: Bloque[] = bloquesRes.data || [];
       setBloques(blocks);
+
+      if (configRes.data?.dias_badge_nuevo != null) {
+        setDiasNuevo(configRes.data.dias_badge_nuevo);
+      }
 
       // 2. Determine what data we need based on block types
       const tipos = blocks.map((b) => b.tipo);
+
+      // Build parallel fetches for categories and products
+      const promises: Promise<void>[] = [];
 
       // Fetch categories if needed
       if (tipos.includes("categorias_destacadas")) {
         const catBlock = blocks.find((b) => b.tipo === "categorias_destacadas");
         const maxCats = catBlock?.config?.max_items || 6;
 
-        const { data: destacadas } = await supabase
-          .from("categorias_destacadas")
-          .select("*, categorias(*)");
+        promises.push(
+          (async () => {
+            const { data: destacadas } = await supabase
+              .from("categorias_destacadas")
+              .select("*, categorias(*)");
 
-        if (destacadas && destacadas.length > 0) {
-          setCategorias(
-            destacadas
-              .map((d: any) => d.categorias)
-              .filter(Boolean)
-              .slice(0, maxCats)
-          );
-        } else {
-          const { data: cats } = await supabase
-            .from("categorias")
-            .select("*")
-            .limit(maxCats);
-          if (cats) setCategorias(cats);
-        }
+            if (destacadas && destacadas.length > 0) {
+              setCategorias(
+                destacadas
+                  .map((d: any) => d.categorias)
+                  .filter(Boolean)
+                  .slice(0, maxCats)
+              );
+            } else {
+              const { data: cats } = await supabase
+                .from("categorias")
+                .select("*")
+                .limit(maxCats);
+              if (cats) setCategorias(cats);
+            }
+          })()
+        );
       }
 
-      // Fetch products if needed
+      // Fetch products + presentaciones if needed
       if (tipos.includes("productos_destacados")) {
         const prodBlock = blocks.find(
           (b) => b.tipo === "productos_destacados"
@@ -713,33 +727,40 @@ export default function TiendaPage() {
         const maxItems = prodBlock?.config?.max_items || 8;
         const orden = prodBlock?.config?.orden || "recientes";
 
-        let query = supabase
-          .from("productos")
-          .select("*, categorias(*)")
-          .eq("activo", true)
-          .eq("visibilidad", "visible");
+        promises.push(
+          (async () => {
+            let query = supabase
+              .from("productos")
+              .select("*, categorias(*)")
+              .eq("activo", true)
+              .eq("visibilidad", "visible");
 
-        if (orden === "precio_asc") {
-          query = query.order("precio", { ascending: true });
-        } else if (orden === "precio_desc") {
-          query = query.order("precio", { ascending: false });
-        } else {
-          query = query.order("nombre", { ascending: true });
-        }
+            if (orden === "precio_asc") {
+              query = query.order("precio", { ascending: true });
+            } else if (orden === "precio_desc") {
+              query = query.order("precio", { ascending: false });
+            } else {
+              query = query.order("nombre", { ascending: true });
+            }
 
-        const { data: prods } = await query.limit(maxItems);
-        if (prods) {
-          setProductos(prods);
-          // Load presentations for these products
-          const ids = prods.map((p: any) => p.id);
-          if (ids.length > 0) {
-            const { data: presData } = await supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku").in("producto_id", ids).order("cantidad");
-            const map: Record<string, any[]> = {};
-            (presData || []).forEach((p: any) => { if (!map[p.producto_id]) map[p.producto_id] = []; map[p.producto_id].push(p); });
-            setPresMap(map);
-          }
-        }
+            const { data: prods } = await query.limit(maxItems);
+            if (prods) {
+              setProductos(prods);
+              // Load presentations in parallel (no dependency on categories)
+              const ids = prods.map((p: any) => p.id);
+              if (ids.length > 0) {
+                const { data: presData } = await supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku").in("producto_id", ids).order("cantidad");
+                const map: Record<string, any[]> = {};
+                (presData || []).forEach((p: any) => { if (!map[p.producto_id]) map[p.producto_id] = []; map[p.producto_id].push(p); });
+                setPresMap(map);
+              }
+            }
+          })()
+        );
       }
+
+      // Run categories and products fetches in parallel
+      await Promise.all(promises);
 
       setLoading(false);
     }
@@ -813,6 +834,7 @@ export default function TiendaPage() {
             presMap={presMap}
             loading={loading}
             agregarAlCarrito={agregarAlCarrito}
+            diasNuevo={diasNuevo}
           />
         );
       case "banner_promo":

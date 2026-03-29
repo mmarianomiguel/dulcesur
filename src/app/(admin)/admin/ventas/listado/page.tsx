@@ -331,13 +331,9 @@ export default function ListadoVentasPage() {
   }, [quickPeriod, filterOrigen, filterType, filterPayment, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
 
   useEffect(() => { fetchVentas(); }, [fetchVentas]);
+  // Fetch all reference data in parallel on mount
   useEffect(() => {
-    supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre").then(({ data }) => setCuentasBancarias(data || []));
-  }, []);
-
-  useEffect(() => {
-    supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data }) => setVendedores(data || []));
-    // Load saved receipt config + printed tracking
+    // Synchronous localStorage reads
     try {
       const stored = localStorage.getItem("receipt_config");
       if (stored) setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
@@ -346,8 +342,18 @@ export default function ListadoVentasPage() {
       const printed = localStorage.getItem("printed_pedidos");
       if (printed) setPrintedPedidos(new Set(JSON.parse(printed)));
     } catch {}
-    // Load empresa data for receipt fallback
-    supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single().then(({ data: emp }) => {
+
+    // Parallel Supabase queries for independent reference data
+    Promise.all([
+      supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre"),
+      supabase.from("usuarios").select("id, nombre").eq("activo", true),
+      supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single(),
+      supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
+    ]).then(([cuentasRes, usuariosRes, empresaRes, tiendaRes]) => {
+      setCuentasBancarias(cuentasRes.data || []);
+      setVendedores(usuariosRes.data || []);
+
+      const emp = empresaRes.data;
       if (emp) {
         setReceiptConfig((prev) => ({
           ...prev,
@@ -358,9 +364,8 @@ export default function ListadoVentasPage() {
           empresaIva: prev.empresaIva || emp.situacion_iva || "",
         }));
       }
-    });
-    // Load logo and web URL from tienda_config if not in receipt_config
-    supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single().then(({ data: tc }) => {
+
+      const tc = tiendaRes.data;
       if (tc) {
         setReceiptConfig((prev) => ({
           ...prev,

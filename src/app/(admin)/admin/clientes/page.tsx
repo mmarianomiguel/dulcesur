@@ -194,14 +194,11 @@ export default function ClientesPage() {
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("clientes")
-      .select("*")
-      .eq("activo", true)
-      .order("nombre")
-      .limit(5000);
+    const [{ data }, { data: vends }] = await Promise.all([
+      supabase.from("clientes").select("*").eq("activo", true).order("nombre").limit(5000),
+      supabase.from("usuarios").select("id, nombre").eq("activo", true).order("nombre"),
+    ]);
     setClients((data || []) as unknown as Cliente[]);
-    const { data: vends } = await supabase.from("usuarios").select("id, nombre").eq("activo", true).order("nombre");
     setVendedores(vends || []);
     setLoading(false);
   }, []);
@@ -250,13 +247,14 @@ export default function ClientesPage() {
   };
 
   useEffect(() => {
-    fetchClients();
-    fetchZonas();
-    supabase.from("categorias").select("id, nombre").eq("restringida", true).then(({ data }) => {
-      if (data) setCategoriasRestringidas(data);
-    });
-    supabase.from("cuentas_bancarias").select("id, nombre, alias, tipo_cuenta").eq("activo", true).order("nombre").then(({ data }) => {
-      setCuentasBancarias(data || []);
+    Promise.all([
+      fetchClients(),
+      fetchZonas(),
+      supabase.from("categorias").select("id, nombre").eq("restringida", true),
+      supabase.from("cuentas_bancarias").select("id, nombre, alias, tipo_cuenta").eq("activo", true).order("nombre"),
+    ]).then(([, , { data: cats }, { data: ctas }]) => {
+      if (cats) setCategoriasRestringidas(cats);
+      setCuentasBancarias(ctas || []);
     });
   }, [fetchClients, fetchZonas]);
 
@@ -429,15 +427,38 @@ export default function ClientesPage() {
   const fetchMovimientos = async (clienteId: string, desde: string, hasta: string) => {
     setMovLoading(true);
 
-    // Tab Compras: all sales
-    const { data: ventas } = await supabase
-      .from("ventas")
-      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
-      .eq("cliente_id", clienteId)
-      .gte("fecha", desde)
-      .lte("fecha", hasta)
-      .neq("estado", "anulada")
-      .order("created_at", { ascending: false });
+    // Run all queries in parallel
+    const [{ data: ventas }, { data: prevData }, { data: ccData }, { data: freshCli }] = await Promise.all([
+      // Tab Compras: all sales
+      supabase
+        .from("ventas")
+        .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
+        .eq("cliente_id", clienteId)
+        .gte("fecha", desde)
+        .lte("fecha", hasta)
+        .neq("estado", "anulada")
+        .order("created_at", { ascending: false }),
+      // Saldo inicial: last movement BEFORE the period
+      supabase
+        .from("cuenta_corriente")
+        .select("saldo")
+        .eq("cliente_id", clienteId)
+        .lt("fecha", desde)
+        .order("fecha", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1),
+      // Movements in period
+      supabase
+        .from("cuenta_corriente")
+        .select("*")
+        .eq("cliente_id", clienteId)
+        .gte("fecha", desde)
+        .lte("fecha", hasta)
+        .order("fecha", { ascending: true })
+        .order("created_at", { ascending: true }),
+      // Fresh client saldo
+      supabase.from("clientes").select("saldo").eq("id", clienteId).single(),
+    ]);
 
     const compras: any[] = [];
     for (const v of ventas || []) {
@@ -460,27 +481,7 @@ export default function ClientesPage() {
     const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
     setMovTotals({ ventas: totalVentas, nc: totalNC, totalComprado: totalVentas - totalNC });
 
-    // Tab Cuenta Corriente: extracto from cuenta_corriente table
-    // 1. Get saldo inicial: last movement BEFORE the period
-    const { data: prevData } = await supabase
-      .from("cuenta_corriente")
-      .select("saldo")
-      .eq("cliente_id", clienteId)
-      .lt("fecha", desde)
-      .order("fecha", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1);
     const saldoInicial = prevData && prevData.length > 0 ? (prevData[0].saldo || 0) : 0;
-
-    // 2. Get movements in period
-    const { data: ccData } = await supabase
-      .from("cuenta_corriente")
-      .select("*")
-      .eq("cliente_id", clienteId)
-      .gte("fecha", desde)
-      .lte("fecha", hasta)
-      .order("fecha", { ascending: true })
-      .order("created_at", { ascending: true });
 
     const ccRows = (ccData || []).map((row: any) => ({
       id: row.id,
@@ -497,7 +498,6 @@ export default function ClientesPage() {
 
     const totalDebe = ccRows.reduce((s: number, r: any) => s + r.debe, 0);
     const totalHaber = ccRows.reduce((s: number, r: any) => s + r.haber, 0);
-    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
     setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0, saldoInicial });
 
     setMovLoading(false);

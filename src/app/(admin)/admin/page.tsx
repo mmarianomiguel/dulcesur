@@ -357,97 +357,7 @@ export default function DashboardPage() {
     setReceiptConfig(loadReceiptConfig());
     setPrintedPedidos(getPrintedPedidos());
 
-    // Fetch tienda config for delivery days
-    const { data: tiendaConfig } = await supabase.from("tienda_config").select("dias_entrega").single();
-    if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
-
-    // Period sales — fetch tipo_comprobante to distinguish NCs from regular sales
-    const { data: periodSalesRaw } = await supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
-    // Separate NCs from regular sales
-    const periodSales = (periodSalesRaw || []).filter((v) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-    const periodNCs = (periodSalesRaw || []).filter((v) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-    const ncTotalAmount = periodNCs.reduce((a, v) => a + v.total, 0);
-    // Sales total = regular sales minus NC refund amounts
-    const salesTotal = periodSales.reduce((a, v) => a + v.total, 0) - ncTotalAmount;
-    setVentasPeriodo(salesTotal);
-    setTicketsPeriodo(periodSales.length);
-
-    // Split Mixto into Efectivo+Transferencia+CC using caja_movimientos + cuenta_corriente
-    const mixtoIds = (periodSales || []).filter((v) => v.forma_pago === "Mixto").map((v) => v.id);
-    let mixtoMovs: { referencia_id: string; metodo_pago: string; monto: number }[] = [];
-    let mixtoCCData: { venta_id: string; debe: number }[] = [];
-    if (mixtoIds.length > 0) {
-      const [{ data: movs }, { data: ccRows }] = await Promise.all([
-        supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds),
-        supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds),
-      ]);
-      mixtoMovs = (movs || []) as any[];
-      mixtoCCData = (ccRows || []) as any[];
-    }
-    const paymentMap: Record<string, number> = {};
-    (periodSales || []).forEach((v) => {
-      if (v.forma_pago === "Mixto") {
-        const movs = mixtoMovs.filter((m) => m.referencia_id === v.id);
-        const ccParts = mixtoCCData.filter((c) => c.venta_id === v.id);
-        let desglosado = false;
-        movs.forEach((m) => { paymentMap[m.metodo_pago] = (paymentMap[m.metodo_pago] || 0) + m.monto; desglosado = true; });
-        ccParts.forEach((c) => { if (c.debe > 0) { paymentMap["Cuenta Corriente"] = (paymentMap["Cuenta Corriente"] || 0) + c.debe; desglosado = true; } });
-        if (!desglosado) paymentMap["Efectivo"] = (paymentMap["Efectivo"] || 0) + v.total;
-      } else {
-        paymentMap[v.forma_pago] = (paymentMap[v.forma_pago] || 0) + v.total;
-      }
-    });
-    setPaymentBreakdown(Object.entries(paymentMap).map(([name, value]) => ({ name, value })));
-
-    // Only real expenses (tipo=egreso), exclude cancelaciones (reversed income)
-    const { data: periodExpenses } = await supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso");
-    setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
-
-    const { data: ventaIds } = await supabase.from("ventas").select("id, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada");
-    // Exclude NCs from margin calculation (returned items are not real profit)
-    const regularVentaIds = (ventaIds || []).filter((v) => !(v as any).tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-    let gananciaTotal = 0;
-    if (regularVentaIds.length > 0) {
-      const ids = regularVentaIds.map((v) => v.id);
-      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", ids);
-      gananciaTotal = (items || []).reduce((acc, item: any) => {
-        const cantidad = Number(item.cantidad) || 0;
-        const precioUnitario = Number(item.precio_unitario) || 0;
-        const descPct = Number(item.descuento) || 0;
-        const precioConDesc = precioUnitario * (1 - descPct / 100);
-        // Use frozen costo_unitario only — never fall back to live product cost
-        const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
-        return acc + (precioConDesc - costoReal) * cantidad;
-      }, 0);
-    }
-    setGananciaPeriodo(gananciaTotal);
-
-    const [{ data: prods }, { data: cls }, { data: provs }] = await Promise.all([
-      supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).limit(10000),
-      supabase.from("clientes").select("saldo").eq("activo", true),
-      supabase.from("proveedores").select("saldo").eq("activo", true),
-    ]);
-    setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo > 0 ? p.costo : p.precio), 0));
-    setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
-    setCuentasCobrar((cls || []).reduce((a, c) => a + (c.saldo > 0 ? c.saldo : 0), 0));
-    setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
-
-    // Saldo mismatch detection: compare clientes.saldo vs cuenta_corriente sum
-    const { data: allClients } = await supabase.from("clientes").select("id, nombre, saldo").eq("activo", true);
-    if (allClients && allClients.length > 0) {
-      const { data: ccSums } = await supabase.from("cuenta_corriente").select("cliente_id, debe, haber");
-      const ccMap: Record<string, number> = {};
-      for (const row of ccSums || []) {
-        ccMap[row.cliente_id] = (ccMap[row.cliente_id] || 0) + (row.debe || 0) - (row.haber || 0);
-      }
-      const mismatches = allClients
-        .map((c) => ({ id: c.id, nombre: c.nombre, saldo: c.saldo || 0, calculado: ccMap[c.id] || 0, diff: Math.round(((c.saldo || 0) - (ccMap[c.id] || 0)) * 100) / 100 }))
-        .filter((c) => Math.abs(c.diff) > 0.5)
-        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-      setSaldoMismatches(mismatches);
-    }
-
-    // Fetch 6 months in parallel instead of sequentially
+    // ─── Build month chart queries (6 months, each fires 2 parallel requests) ───
     const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(todayARG() + "T12:00:00"); d.setMonth(d.getMonth() - i);
@@ -470,14 +380,125 @@ export default function DashboardPage() {
         })
       );
     }
-    setMonthlyData(await Promise.all(monthQueries));
 
-    const { data: ventasCat } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada");
+    // ─── Group 1: All independent queries in parallel ───
+    const [
+      { data: tiendaConfig },
+      { data: periodSalesRaw },
+      { data: periodExpenses },
+      { data: prods },
+      { data: allClients },
+      { data: provs },
+      { data: ccSums },
+      { data: ventasCat },
+      monthlyDataResult,
+      // fetchPedidosOnline runs in parallel too (fire-and-forget resolved below)
+    ] = await Promise.all([
+      supabase.from("tienda_config").select("dias_entrega").single(),
+      supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
+      supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso"),
+      supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).limit(10000),
+      supabase.from("clientes").select("id, nombre, saldo").eq("activo", true),
+      supabase.from("proveedores").select("saldo").eq("activo", true),
+      supabase.from("cuenta_corriente").select("cliente_id, debe, haber"),
+      supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada"),
+      Promise.all(monthQueries),
+    ]);
+
+    // Start pedidos online fetch in parallel with processing below
+    const pedidosOnlinePromise = fetchPedidosOnline();
+
+    // ─── Tienda config ───
+    if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
+
+    // ─── Period sales (reuse single ventas query for both totals and margin) ───
+    const periodSales = (periodSalesRaw || []).filter((v) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+    const periodNCs = (periodSalesRaw || []).filter((v) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+    const ncTotalAmount = periodNCs.reduce((a, v) => a + v.total, 0);
+    const salesTotal = periodSales.reduce((a, v) => a + v.total, 0) - ncTotalAmount;
+    setVentasPeriodo(salesTotal);
+    setTicketsPeriodo(periodSales.length);
+
+    // ─── Expenses ───
+    setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
+
+    // ─── Products: capital & low stock ───
+    setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo > 0 ? p.costo : p.precio), 0));
+    setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
+
+    // ─── Clients: cuentas a cobrar + saldo mismatch (single query, used for both) ───
+    setCuentasCobrar((allClients || []).reduce((a, c) => a + ((c.saldo || 0) > 0 ? c.saldo : 0), 0));
+    setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
+
+    // Saldo mismatch detection (reuses allClients and ccSums from group 1)
+    if (allClients && allClients.length > 0) {
+      const ccMap: Record<string, number> = {};
+      for (const row of ccSums || []) {
+        ccMap[row.cliente_id] = (ccMap[row.cliente_id] || 0) + (row.debe || 0) - (row.haber || 0);
+      }
+      const mismatches = allClients
+        .map((c) => ({ id: c.id, nombre: c.nombre, saldo: c.saldo || 0, calculado: ccMap[c.id] || 0, diff: Math.round(((c.saldo || 0) - (ccMap[c.id] || 0)) * 100) / 100 }))
+        .filter((c) => Math.abs(c.diff) > 0.5)
+        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+      setSaldoMismatches(mismatches);
+    }
+
+    // ─── Monthly chart ───
+    setMonthlyData(monthlyDataResult);
+
+    // ─── Ventas por categoria ───
     const catMap: Record<string, number> = {};
     (ventasCat || []).forEach((vi: any) => { catMap[vi.productos?.categorias?.nombre || "Sin categoria"] = (catMap[vi.productos?.categorias?.nombre || "Sin categoria"] || 0) + (vi.subtotal || 0); });
     setVentasPorCategoria(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
 
-    await fetchPedidosOnline();
+    // ─── Group 2: Queries that depend on periodSalesRaw ───
+
+    // Mixto payment breakdown — fetch caja_movimientos + cuenta_corriente only for mixto sales
+    const mixtoIds = periodSales.filter((v) => v.forma_pago === "Mixto").map((v) => v.id);
+    let mixtoMovs: { referencia_id: string; metodo_pago: string; monto: number }[] = [];
+    let mixtoCCData: { venta_id: string; debe: number }[] = [];
+    if (mixtoIds.length > 0) {
+      const [{ data: movs }, { data: ccRows }] = await Promise.all([
+        supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds),
+        supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds),
+      ]);
+      mixtoMovs = (movs || []) as any[];
+      mixtoCCData = (ccRows || []) as any[];
+    }
+    const paymentMap: Record<string, number> = {};
+    periodSales.forEach((v) => {
+      if (v.forma_pago === "Mixto") {
+        const movs = mixtoMovs.filter((m) => m.referencia_id === v.id);
+        const ccParts = mixtoCCData.filter((c) => c.venta_id === v.id);
+        let desglosado = false;
+        movs.forEach((m) => { paymentMap[m.metodo_pago] = (paymentMap[m.metodo_pago] || 0) + m.monto; desglosado = true; });
+        ccParts.forEach((c) => { if (c.debe > 0) { paymentMap["Cuenta Corriente"] = (paymentMap["Cuenta Corriente"] || 0) + c.debe; desglosado = true; } });
+        if (!desglosado) paymentMap["Efectivo"] = (paymentMap["Efectivo"] || 0) + v.total;
+      } else {
+        paymentMap[v.forma_pago] = (paymentMap[v.forma_pago] || 0) + v.total;
+      }
+    });
+    setPaymentBreakdown(Object.entries(paymentMap).map(([name, value]) => ({ name, value })));
+
+    // Margin calculation — reuse periodSales IDs (no duplicate ventas query)
+    const regularVentaIds = periodSales.map((v) => v.id);
+    let gananciaTotal = 0;
+    if (regularVentaIds.length > 0) {
+      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", regularVentaIds);
+      gananciaTotal = (items || []).reduce((acc, item: any) => {
+        const cantidad = Number(item.cantidad) || 0;
+        const precioUnitario = Number(item.precio_unitario) || 0;
+        const descPct = Number(item.descuento) || 0;
+        const precioConDesc = precioUnitario * (1 - descPct / 100);
+        // Use frozen costo_unitario only — never fall back to live product cost
+        const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
+        return acc + (precioConDesc - costoReal) * cantidad;
+      }, 0);
+    }
+    setGananciaPeriodo(gananciaTotal);
+
+    // Wait for pedidos online to finish
+    await pedidosOnlinePromise;
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     } finally {
