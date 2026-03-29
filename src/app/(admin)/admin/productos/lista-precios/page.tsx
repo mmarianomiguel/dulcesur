@@ -451,7 +451,7 @@ export default function ListaPreciosPage() {
       const pdf = new jsPDF({ orientation: isLandscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const margin = style === "combinado" ? 0 : 5;
+      const margin = style === "combinado" ? 4 : 5;
       // Use the most recent product update date, not today
       const latestUpdate = selectedProducts.reduce((latest, p) => {
         const d = p.fechaActualizacion ? new Date(p.fechaActualizacion).getTime() : 0;
@@ -499,7 +499,12 @@ export default function ListaPreciosPage() {
           pdf.setFontSize(config.combinado_footerFontSize);
           pdf.setTextColor(150);
           if (config.combinado_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerTextY);
-          if (config.combinado_mostrarFecha) pdf.text(today, x + cellW - pad - 1, footerTextY, { align: "right" });
+          if (config.combinado_mostrarFecha) {
+            const prodDate = product.fechaActualizacion
+              ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
+              : today;
+            pdf.text(prodDate, x + cellW - pad - 1, footerTextY, { align: "right" });
+          }
           pdf.setTextColor(0);
 
           // Footer line
