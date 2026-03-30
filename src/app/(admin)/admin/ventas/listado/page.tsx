@@ -1483,11 +1483,34 @@ export default function ListadoVentasPage() {
 
     const fromPedidos: Pedido[] = poPedidos.map((p) => ({ ...p, _source: "pedidos" as const }));
 
-    // Deduplicate: if a pedido online has same numero as historial venta, keep only the online one
-    const onlineNumeros = new Set(fromPedidos.map((p) => p.numero));
-    const deduped = fromHistorial.filter((h) => !onlineNumeros.has(h.numero));
+    // Build map of pedidos_tienda by numero for enrichment
+    const pedidoByNumero = new Map(fromPedidos.map((p) => [p.numero, p]));
 
-    return [...deduped, ...fromPedidos].sort((a, b) =>
+    // Enrich historial entries that are online orders with pedidos_tienda data
+    // but always keep the historial entry (it has venta data like _ventaId, totals, etc.)
+    const enrichedHistorial = fromHistorial.map((h) => {
+      const pt = pedidoByNumero.get(h.numero);
+      if (pt) {
+        // Merge pedidos_tienda client info into the historial entry
+        pedidoByNumero.delete(h.numero); // consumed, won't be added again
+        return {
+          ...h,
+          nombre_cliente: pt.nombre_cliente || h.nombre_cliente,
+          email: pt.email || h.email,
+          telefono: pt.telefono || h.telefono,
+          metodo_entrega: pt.metodo_entrega || h.metodo_entrega,
+          direccion_texto: pt.direccion_texto || h.direccion_texto,
+          isOnline: true,
+          _source: "historial" as const,
+        };
+      }
+      return h;
+    });
+
+    // Add remaining pedidos_tienda that don't have a matching venta yet
+    const remainingPedidos = [...pedidoByNumero.values()];
+
+    return [...enrichedHistorial, ...remainingPedidos].sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [ventas, poPedidos, vendedores, loading, poLoading]);
@@ -1495,8 +1518,9 @@ export default function ListadoVentasPage() {
   const filteredOrders = useMemo(() => {
     return allOrders.filter((o) => {
       // Source filter
-      if (filterSource === "pos" && o._source !== "historial") return false;
-      if (filterSource === "online" && o._source !== "pedidos") return false;
+      const isOnlineOrder = o._source === "pedidos" || o.isOnline || (o as any)._tipo_comprobante === "Pedido Web";
+      if (filterSource === "pos" && isOnlineOrder) return false;
+      if (filterSource === "online" && !isOnlineOrder) return false;
       // Estado filter
       if (poFilterEstado !== "todos" && o.estado !== poFilterEstado) return false;
       // Payment filter
