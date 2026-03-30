@@ -612,6 +612,7 @@ export default function CajaPage() {
     retiros,
     efectivoEsperado,
     efectivoInicial,
+    egresosDetalle,
   } = useMemo(() => {
     const ventasPorMetodo = (metodo: string) =>
       ventas.filter((v) => v.forma_pago === metodo).reduce((a, v) => a + v.total, 0);
@@ -721,6 +722,11 @@ export default function CajaPage() {
     const efectivoInicial = turno?.efectivo_inicial ?? 0;
     const efectivoEsperado = efectivoInicial + ventasEfectivo + depositosEfectivo - gastos - retiros - notasCreditoEgresos - anulaciones;
 
+    // Individual egreso items for breakdown display
+    const egresosDetalle = movements
+      .filter((m) => m.tipo === "egreso" || (m.tipo === "cancelacion" && (m.referencia_tipo === "nota_credito" || m.referencia_tipo === "anulacion") && m.metodo_pago === "Efectivo"))
+      .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: Math.abs(m.monto) }));
+
     return {
       ventasEfectivo,
       ventasTransferencia,
@@ -734,6 +740,7 @@ export default function CajaPage() {
       retiros,
       efectivoEsperado,
       efectivoInicial,
+      egresosDetalle,
     };
   }, [ventas, movements, turno]);
 
@@ -1050,13 +1057,29 @@ export default function CajaPage() {
               iconColor="text-emerald-500"
               iconBg="bg-emerald-500/10"
             />
-            <StatCard
-              title="Egresos Caja"
-              value={formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}
-              icon={ArrowDownRight}
-              iconColor="text-red-500"
-              iconBg="bg-red-500/10"
-            />
+            <Card>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1 min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Egresos Caja</p>
+                    <p className="text-xl lg:text-2xl font-bold truncate">{formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-red-500/10 shrink-0">
+                    <ArrowDownRight className="w-5 h-5 text-red-500" />
+                  </div>
+                </div>
+                {egresosDetalle.length > 0 && (
+                  <div className="mt-2 pt-2 border-t space-y-1">
+                    {egresosDetalle.map((e, i) => (
+                      <div key={i} className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground truncate mr-2">{e.descripcion}</span>
+                        <span className="font-medium shrink-0 text-red-500">-{formatCurrency(e.monto)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* Payment method breakdown */}
