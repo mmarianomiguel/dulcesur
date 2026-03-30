@@ -2384,7 +2384,12 @@ export default function ListadoVentasPage() {
                                 />
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
+                            <td className="px-3 py-2 text-right">
+                              {formatCurrency(item.precio_unitario)}
+                              {(item.unidades_por_presentacion || 1) > 1 && (
+                                <p className="text-[10px] text-muted-foreground">{formatCurrency(item.precio_unitario / item.unidades_por_presentacion)} c/u</p>
+                              )}
+                            </td>
                             {poEditItems.some((i) => (i.descuento || 0) > 0) && (
                               <td className="px-3 py-2 text-right text-xs">{(item.descuento || 0) > 0 ? `-${item.descuento}%` : ""}</td>
                             )}
