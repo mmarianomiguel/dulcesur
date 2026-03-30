@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuración — Rediseño Propuesto</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #f8fafc;
+    color: #1e293b;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .app-shell {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Admin Sidebar (simplified) ── */
+  .admin-sidebar {
+    width: 220px;
+    background: hsl(220 25% 12%);
+    color: #94a3b8;
+    padding: 20px 0;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .admin-sidebar .brand {
+    padding: 0 20px 20px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #f1f5f9;
+    border-bottom: 1px solid hsl(220 20% 18%);
+    margin-bottom: 12px;
+  }
+  .admin-sidebar .nav-item {
+    padding: 9px 20px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .admin-sidebar .nav-item:hover { background: hsl(220 20% 16%); color: #e2e8f0; }
+  .admin-sidebar .nav-item.active { background: hsl(220 50% 25%); color: #fff; font-weight: 500; }
+  .admin-sidebar .nav-item .icon { width: 16px; text-align: center; opacity: .7; }
+
+  /* ── Main Content ── */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* Top header */
+  .page-header {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 20px 32px;
+  }
+  .page-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .page-header p {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+
+  /* ── Config Layout ── */
+  .config-layout {
+    display: flex;
+    flex: 1;
+  }
+
+  /* Config sidebar nav */
+  .config-sidebar {
+    width: 240px;
+    background: #fff;
+    border-right: 1px solid #e2e8f0;
+    padding: 20px 0;
+    flex-shrink: 0;
+  }
+  .config-group {
+    margin-bottom: 8px;
+  }
+  .config-group-label {
+    padding: 8px 20px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #94a3b8;
+  }
+  .config-nav-item {
+    padding: 8px 20px 8px 32px;
+    font-size: 13px;
+    color: #475569;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all .15s;
+    border-left: 3px solid transparent;
+  }
+  .config-nav-item:hover {
+    background: #f8fafc;
+    color: #1e293b;
+  }
+  .config-nav-item.active {
+    background: #eff6ff;
+    color: #2563eb;
+    border-left-color: #2563eb;
+    font-weight: 500;
+  }
+  .config-nav-item .nav-icon {
+    font-size: 15px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  /* Config content area */
+  .config-content {
+    flex: 1;
+    padding: 28px 32px;
+    max-width: 860px;
+  }
+
+  /* Section header */
+  .section-header {
+    margin-bottom: 24px;
+  }
+  .section-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .section-header p {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  /* Cards */
+  .setting-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    transition: box-shadow .15s;
+  }
+  .setting-card:hover {
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .setting-card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 4px;
+  }
+  .setting-card .desc {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 16px;
+  }
+
+  /* Form rows */
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .form-row.single {
+    grid-template-columns: 1fr;
+  }
+  .form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 5px;
+  }
+  .form-group input, .form-group select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    font-size: 13px;
+    color: #1e293b;
+    background: #fff;
+    transition: border-color .15s;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+  }
+  .form-group input::placeholder { color: #cbd5e1; }
+
+  /* Toggle row */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-row .toggle-label {
+    font-size: 13px;
+    color: #334155;
+  }
+  .toggle-row .toggle-desc {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+  .toggle-switch {
+    width: 40px;
+    height: 22px;
+    background: #cbd5e1;
+    border-radius: 11px;
+    position: relative;
+    cursor: pointer;
+    transition: background .2s;
+    flex-shrink: 0;
+  }
+  .toggle-switch.on { background: #2563eb; }
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,.15);
+  }
+  .toggle-switch.on::after { transform: translateX(18px); }
+
+  /* Buttons */
+  .btn {
+    padding: 8px 18px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-primary {
+    background: #2563eb;
+    color: #fff;
+  }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+  }
+  .btn-secondary:hover { background: #e2e8f0; }
+  .btn-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  /* ── Comparison Layout ── */
+  .comparison {
+    padding: 32px;
+  }
+  .comparison h2 {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 6px;
+    color: #0f172a;
+  }
+  .comparison .subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 28px;
+  }
+
+  /* Tab switcher */
+  .view-switcher {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 28px;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 10px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .view-tab {
+    padding: 8px 24px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #64748b;
+    border: none;
+    background: transparent;
+    transition: all .15s;
+  }
+  .view-tab:hover { color: #1e293b; }
+  .view-tab.active {
+    background: #fff;
+    color: #2563eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+
+  .view-panel { display: none; }
+  .view-panel.active { display: block; }
+
+  /* ── Before: Current structure ── */
+  .before-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .before-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .before-card h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .before-card h4 .emoji { font-size: 14px; }
+  .before-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .before-card ul li {
+    font-size: 11px;
+    color: #64748b;
+    padding: 3px 0;
+    padding-left: 12px;
+    position: relative;
+  }
+  .before-card ul li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: #cbd5e1;
+  }
+  .before-card ul li.dup {
+    color: #ef4444;
+    font-weight: 500;
+  }
+  .before-card ul li.dup::before { color: #ef4444; }
+
+  .problem-callout {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 20px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .problem-callout h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #dc2626;
+    margin-bottom: 6px;
+  }
+  .problem-callout ul {
+    list-style: none;
+    padding: 0;
+  }
+  .problem-callout ul li {
+    font-size: 12px;
+    color: #991b1b;
+    padding: 2px 0;
+    padding-left: 16px;
+    position: relative;
+  }
+  .problem-callout ul li::before {
+    content: '✗';
+    position: absolute;
+    left: 0;
+    font-weight: 700;
+  }
+
+  /* ── After: Full mockup ── */
+  .after-wrapper {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,.08);
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* ── Annotations ── */
+  .annotation {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 24px;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .annotation h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #92400e;
+    margin-bottom: 8px;
+  }
+  .annotation ul {
+    list-style: none;
+    padding: 0;
+  }
+  .annotation ul li {
+    font-size: 12px;
+    color: #78350f;
+    padding: 3px 0 3px 18px;
+    position: relative;
+  }
+  .annotation ul li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    font-weight: 700;
+    color: #d97706;
+  }
+
+  /* Nav interactivity */
+  .config-nav-item[data-section] { cursor: pointer; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .before-grid { grid-template-columns: repeat(2, 1fr); }
+    .admin-sidebar { display: none; }
+    .config-sidebar { width: 200px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="comparison">
+  <h2>Rediseño de Configuración</h2>
+  <p class="subtitle">Comparación: estructura actual vs propuesta</p>
+
+  <div class="view-switcher">
+    <button class="view-tab active" onclick="switchView('before')">Antes (actual)</button>
+    <button class="view-tab" onclick="switchView('after')">Después (propuesto)</button>
+  </div>
+
+  <!-- ════════ BEFORE ════════ -->
+  <div class="view-panel active" id="panel-before">
+    <div class="before-grid">
+      <div class="before-card">
+        <h4><span class="emoji">⚙️</span> General</h4>
+        <ul>
+          <li>Empresa</li>
+          <li>Facturación</li>
+          <li>Impresión</li>
+          <li>Comprobantes</li>
+        </ul>
+      </div>
+      <div class="before-card">
+        <h4><span class="emoji">🖥️</span> Sistema</h4>
+        <ul>
+          <li>Módulos</li>
+          <li>Backup</li>
+        </ul>
+      </div>
+      <div class="before-card">
+        <h4><span class="emoji">🎨</span> Apariencia</h4>
+        <ul>
+          <li>Identidad</li>
+          <li>Colores</li>
+        </ul>
+      </div>
+      <div class="before-card">
+        <h4><span class="emoji">🛒</span> Tienda Online</h4>
+        <ul>
+          <li>General</li>
+          <li>Pedidos y Envíos</li>
+          <li>Categorías</li>
+          <li class="dup">Footer y Páginas ⚠️</li>
+        </ul>
+      </div>
+      <div class="before-card">
+        <h4><span class="emoji">🏠</span> Página Inicio</h4>
+        <ul>
+          <li>Builder de bloques</li>
+        </ul>
+      </div>
+      <div class="before-card">
+        <h4><span class="emoji">📄</span> Footer</h4>
+        <ul>
+          <li class="dup">Footer config ⚠️</li>
+          <li class="dup">Páginas info ⚠️</li>
+        </ul>
+      </div>
+      <div class="before-card">
+        <h4><span class="emoji">💳</span> Pagos</h4>
+        <ul>
+          <li>Métodos de pago</li>
+          <li>Cuentas bancarias</li>
+        </ul>
+      </div>
+      <div class="before-card">
+        <h4><span class="emoji">👥</span> Usuarios y Roles</h4>
+        <ul>
+          <li>Usuarios</li>
+          <li>Roles y permisos</li>
+        </ul>
+      </div>
+    </div>
+    <div class="problem-callout">
+      <h4>Problemas detectados</h4>
+      <ul>
+        <li>Footer duplicado en "Tienda Online" y en su propia página</li>
+        <li>Tienda repartida en 3 páginas (Tienda, Página Inicio, Footer)</li>
+        <li>Pagos desconectado del contexto de facturación</li>
+        <li>8 páginas sin jerarquía clara — todo al mismo nivel</li>
+        <li>Apariencia separada del sistema sin motivo claro</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ════════ AFTER ════════ -->
+  <div class="view-panel" id="panel-after">
+    <div class="after-wrapper">
+      <div class="app-shell">
+        <!-- Simplified admin sidebar -->
+        <div class="admin-sidebar">
+          <div class="brand">Dulcesur</div>
+          <div class="nav-item"><span class="icon">📊</span> Dashboard</div>
+          <div class="nav-item"><span class="icon">🛍️</span> Ventas</div>
+          <div class="nav-item"><span class="icon">👤</span> Clientes</div>
+          <div class="nav-item"><span class="icon">📦</span> Productos</div>
+          <div class="nav-item"><span class="icon">💰</span> Caja</div>
+          <div class="nav-item active"><span class="icon">⚙️</span> Configuración</div>
+        </div>
+
+        <div class="main-content">
+          <div class="page-header">
+            <h1>Configuración</h1>
+            <p>Administrá los ajustes de tu negocio, tienda online y sistema</p>
+          </div>
+
+          <div class="config-layout">
+            <!-- New config sidebar -->
+            <div class="config-sidebar">
+              <!-- Group 1: Negocio -->
+              <div class="config-group">
+                <div class="config-group-label">Negocio</div>
+                <div class="config-nav-item active" data-section="empresa">
+                  <span class="nav-icon">🏢</span> Empresa
+                </div>
+                <div class="config-nav-item" data-section="facturacion">
+                  <span class="nav-icon">📋</span> Facturación
+                </div>
+                <div class="config-nav-item" data-section="impresion">
+                  <span class="nav-icon">🖨️</span> Impresión
+                </div>
+                <div class="config-nav-item" data-section="pagos">
+                  <span class="nav-icon">💳</span> Pagos
+                </div>
+              </div>
+
+              <!-- Group 2: Tienda Online -->
+              <div class="config-group">
+                <div class="config-group-label">Tienda Online</div>
+                <div class="config-nav-item" data-section="tienda-general">
+                  <span class="nav-icon">🛒</span> General
+                </div>
+                <div class="config-nav-item" data-section="pedidos">
+                  <span class="nav-icon">📦</span> Pedidos y Envíos
+                </div>
+                <div class="config-nav-item" data-section="catalogo">
+                  <span class="nav-icon">📂</span> Catálogo
+                </div>
+                <div class="config-nav-item" data-section="pagina-inicio">
+                  <span class="nav-icon">🏠</span> Página de Inicio
+                </div>
+                <div class="config-nav-item" data-section="footer">
+                  <span class="nav-icon">📄</span> Footer y Páginas
+                </div>
+              </div>
+
+              <!-- Group 3: Sistema -->
+              <div class="config-group">
+                <div class="config-group-label">Sistema</div>
+                <div class="config-nav-item" data-section="apariencia">
+                  <span class="nav-icon">🎨</span> Apariencia
+                </div>
+                <div class="config-nav-item" data-section="usuarios">
+                  <span class="nav-icon">👥</span> Usuarios y Roles
+                </div>
+                <div class="config-nav-item" data-section="modulos">
+                  <span class="nav-icon">🧩</span> Módulos
+                </div>
+                <div class="config-nav-item" data-section="backup">
+                  <span class="nav-icon">💾</span> Backup
+                </div>
+              </div>
+            </div>
+
+            <!-- Content panels -->
+            <div class="config-content">
+              <!-- Empresa -->
+              <div class="content-section active" id="sec-empresa">
+                <div class="section-header">
+                  <h2>Datos de la Empresa</h2>
+                  <p>Información legal y de contacto de tu negocio</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Información básica</h3>
+                  <p class="desc">Estos datos aparecen en comprobantes y documentos</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Razón social</label>
+                      <input type="text" value="Dulcesur S.R.L." />
+                    </div>
+                    <div class="form-group">
+                      <label>CUIT</label>
+                      <input type="text" value="30-71234567-9" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Condición IVA</label>
+                      <select>
+                        <option>Responsable Inscripto</option>
+                        <option>Monotributista</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>Inicio de actividades</label>
+                      <input type="text" value="01/03/2020" />
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-card">
+                  <h3>Contacto</h3>
+                  <p class="desc">Dirección y datos de contacto</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Dirección</label>
+                      <input type="text" value="Av. San Martín 1234" />
+                    </div>
+                    <div class="form-group">
+                      <label>Localidad</label>
+                      <input type="text" value="Buenos Aires" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Teléfono</label>
+                      <input type="text" value="011 4567-8901" />
+                    </div>
+                    <div class="form-group">
+                      <label>Email</label>
+                      <input type="text" value="info@dulcesur.com" />
+                    </div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Cancelar</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+
+              <!-- Facturación -->
+              <div class="content-section" id="sec-facturacion">
+                <div class="section-header">
+                  <h2>Facturación</h2>
+                  <p>Configuración de comprobantes y numeración</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Punto de venta</h3>
+                  <p class="desc">Numeración para facturación</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Punto de venta</label>
+                      <input type="text" value="0001" />
+                    </div>
+                    <div class="form-group">
+                      <label>Próximo número</label>
+                      <input type="text" value="00004521" />
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-card">
+                  <h3>Comprobantes habilitados</h3>
+                  <p class="desc">Tipos de comprobante que se pueden emitir</p>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Factura A</div>
+                      <div class="toggle-desc">Para Responsables Inscriptos</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Factura B</div>
+                      <div class="toggle-desc">Para Consumidores Finales</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Recibo X</div>
+                      <div class="toggle-desc">Comprobante no fiscal</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Nota de Crédito</div>
+                      <div class="toggle-desc">Para devoluciones y ajustes</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Cancelar</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+
+              <!-- Pagos -->
+              <div class="content-section" id="sec-pagos">
+                <div class="section-header">
+                  <h2>Pagos</h2>
+                  <p>Métodos de pago y cuentas bancarias</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Métodos de pago</h3>
+                  <p class="desc">Configurá cómo recibís pagos</p>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Permitir pago mixto</div>
+                      <div class="toggle-desc">Combinar múltiples métodos en una misma venta</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Recargo transferencia</div>
+                      <div class="toggle-desc">Porcentaje: 0%</div>
+                    </div>
+                    <div style="font-size:13px;color:#2563eb;font-weight:500;">0%</div>
+                  </div>
+                </div>
+                <div class="setting-card">
+                  <h3>Cuentas bancarias</h3>
+                  <p class="desc">Se muestran en recibos y en la tienda online</p>
+                  <div style="display:flex;flex-direction:column;gap:8px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div>
+                        <div style="font-size:13px;font-weight:500;color:#1e293b;">Banco Nación — CA $</div>
+                        <div style="font-size:11px;color:#94a3b8;">CBU: 0110012345678901234567</div>
+                      </div>
+                      <div style="font-size:11px;color:#22c55e;font-weight:500;">Activa</div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div>
+                        <div style="font-size:13px;font-weight:500;color:#1e293b;">Mercado Pago</div>
+                        <div style="font-size:11px;color:#94a3b8;">CVU: 0000012345678901234567</div>
+                      </div>
+                      <div style="font-size:11px;color:#22c55e;font-weight:500;">Activa</div>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px;">
+                    <button class="btn btn-secondary" style="font-size:12px;">+ Agregar cuenta</button>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Cancelar</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+
+              <!-- Tienda General -->
+              <div class="content-section" id="sec-tienda-general">
+                <div class="section-header">
+                  <h2>Tienda Online — General</h2>
+                  <p>Configuración principal de tu tienda</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Identidad de la tienda</h3>
+                  <p class="desc">Nombre y descripción visibles para tus clientes</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Nombre de la tienda</label>
+                      <input type="text" value="DulceSur" />
+                    </div>
+                    <div class="form-group">
+                      <label>Logo URL</label>
+                      <input type="text" placeholder="https://..." />
+                    </div>
+                  </div>
+                  <div class="form-row single">
+                    <div class="form-group">
+                      <label>Descripción</label>
+                      <input type="text" value="Tu tienda online con envío a todo el país" />
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-card">
+                  <h3>Estado y límites</h3>
+                  <p class="desc">Controles de disponibilidad</p>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Tienda activa</div>
+                      <div class="toggle-desc">Los clientes pueden navegar y comprar</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="form-row" style="margin-top:12px;">
+                    <div class="form-group">
+                      <label>Pedido mínimo ($)</label>
+                      <input type="text" value="5.000" />
+                    </div>
+                    <div class="form-group">
+                      <label>Envío gratis desde ($)</label>
+                      <input type="text" value="50.000" />
+                    </div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Cancelar</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+
+              <!-- Apariencia -->
+              <div class="content-section" id="sec-apariencia">
+                <div class="section-header">
+                  <h2>Apariencia</h2>
+                  <p>Personalizá los colores y la identidad del sistema</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Identidad del sistema</h3>
+                  <p class="desc">Nombre y logo que se muestran en el panel admin</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Nombre del sistema</label>
+                      <input type="text" value="Dulcesur" />
+                    </div>
+                    <div class="form-group">
+                      <label>Subtítulo</label>
+                      <input type="text" value="Panel de administración" />
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-card">
+                  <h3>Esquema de colores</h3>
+                  <p class="desc">Elegí un preset o personalizá los colores</p>
+                  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+                    <div style="width:44px;height:44px;border-radius:10px;background:#2563eb;cursor:pointer;border:3px solid #1d4ed8;box-shadow:0 0 0 2px #bfdbfe;"></div>
+                    <div style="width:44px;height:44px;border-radius:10px;background:#16a34a;cursor:pointer;border:3px solid transparent;"></div>
+                    <div style="width:44px;height:44px;border-radius:10px;background:#dc2626;cursor:pointer;border:3px solid transparent;"></div>
+                    <div style="width:44px;height:44px;border-radius:10px;background:#ea580c;cursor:pointer;border:3px solid transparent;"></div>
+                    <div style="width:44px;height:44px;border-radius:10px;background:#db2777;cursor:pointer;border:3px solid transparent;"></div>
+                    <div style="width:44px;height:44px;border-radius:10px;background:#0891b2;cursor:pointer;border:3px solid transparent;"></div>
+                    <div style="width:44px;height:44px;border-radius:10px;background:#7c3aed;cursor:pointer;border:3px solid transparent;"></div>
+                    <div style="width:44px;height:44px;border-radius:10px;background:#6b7280;cursor:pointer;border:3px solid transparent;"></div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Tono personalizado</label>
+                      <input type="range" style="width:100%;accent-color:#2563eb;" />
+                    </div>
+                    <div class="form-group">
+                      <label>Luminosidad sidebar</label>
+                      <input type="range" style="width:100%;accent-color:#2563eb;" />
+                    </div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Restablecer</button>
+                  <button class="btn btn-primary">Aplicar colores</button>
+                </div>
+              </div>
+
+              <!-- Usuarios -->
+              <div class="content-section" id="sec-usuarios">
+                <div class="section-header">
+                  <h2>Usuarios y Roles</h2>
+                  <p>Gestión de accesos y permisos del sistema</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Usuarios del sistema</h3>
+                  <p class="desc">Usuarios con acceso al panel de administración</p>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">NC</div>
+                        <div>
+                          <div style="font-size:13px;font-weight:500;color:#1e293b;">Neyck Castro</div>
+                          <div style="font-size:11px;color:#94a3b8;">neyck@dulcesur.com · Admin</div>
+                        </div>
+                      </div>
+                      <div style="font-size:11px;color:#22c55e;font-weight:500;">Activo</div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:32px;height:32px;border-radius:50%;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">MM</div>
+                        <div>
+                          <div style="font-size:13px;font-weight:500;color:#1e293b;">Mariano Miguel</div>
+                          <div style="font-size:11px;color:#94a3b8;">mariano@dulcesur.com · Vendedor</div>
+                        </div>
+                      </div>
+                      <div style="font-size:11px;color:#22c55e;font-weight:500;">Activo</div>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px;">
+                    <button class="btn btn-secondary" style="font-size:12px;">+ Nuevo usuario</button>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Gestionar roles</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+
+              <!-- Módulos -->
+              <div class="content-section" id="sec-modulos">
+                <div class="section-header">
+                  <h2>Módulos</h2>
+                  <p>Activá o desactivá secciones del sistema</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Módulos del sistema</h3>
+                  <p class="desc">Los módulos desactivados no aparecen en el menú lateral</p>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Dashboard</div></div>
+                    <div class="toggle-switch on" style="opacity:.5;cursor:not-allowed;"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Ventas</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Clientes</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Productos</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Caja</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Stock</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Reportes</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Vendedores</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div><div class="toggle-label">Tienda Online</div></div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Backup -->
+              <div class="content-section" id="sec-backup">
+                <div class="section-header">
+                  <h2>Backup</h2>
+                  <p>Exportá e importá los datos del sistema</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Exportar backup</h3>
+                  <p class="desc">Descargá un archivo JSON con todos los datos del sistema</p>
+                  <button class="btn btn-primary" style="margin-top:4px;">Descargar backup</button>
+                </div>
+                <div class="setting-card">
+                  <h3>Restaurar backup</h3>
+                  <p class="desc">Cargá un archivo JSON previamente exportado</p>
+                  <button class="btn btn-secondary" style="margin-top:4px;">Seleccionar archivo</button>
+                </div>
+              </div>
+
+              <!-- Impresión -->
+              <div class="content-section" id="sec-impresion">
+                <div class="section-header">
+                  <h2>Impresión</h2>
+                  <p>Formato y diseño de los recibos impresos</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Formato del recibo</h3>
+                  <p class="desc">Personalizá cómo se ven los comprobantes impresos</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Tamaño fuente empresa</label>
+                      <input type="text" value="14px" />
+                    </div>
+                    <div class="form-group">
+                      <label>Tamaño fuente productos</label>
+                      <input type="text" value="9px" />
+                    </div>
+                  </div>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Mostrar logo en recibo</div>
+                      <div class="toggle-desc">Logo de la empresa en el encabezado</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div>
+                      <div class="toggle-label">Mostrar datos bancarios</div>
+                      <div class="toggle-desc">Cuentas bancarias en el pie del recibo</div>
+                    </div>
+                    <div class="toggle-switch on"></div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Vista previa</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+
+              <!-- Pedidos -->
+              <div class="content-section" id="sec-pedidos">
+                <div class="section-header">
+                  <h2>Pedidos y Envíos</h2>
+                  <p>Horarios, días de entrega y reglas de pedidos</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Horarios de operación</h3>
+                  <p class="desc">Cuándo se aceptan pedidos online</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Hora de apertura</label>
+                      <input type="text" value="08:00" />
+                    </div>
+                    <div class="form-group">
+                      <label>Hora de cierre</label>
+                      <input type="text" value="18:00" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Hora de corte de pedidos</label>
+                      <input type="text" value="14:00" />
+                    </div>
+                    <div class="form-group">
+                      <label>Días de anticipación máx.</label>
+                      <input type="text" value="7" />
+                    </div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Cancelar</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+
+              <!-- Catálogo -->
+              <div class="content-section" id="sec-catalogo">
+                <div class="section-header">
+                  <h2>Catálogo</h2>
+                  <p>Categorías destacadas y reglas de visibilidad</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Categorías destacadas</h3>
+                  <p class="desc">Se muestran en la tienda como accesos rápidos</p>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                      <span style="font-size:13px;color:#1e293b;">Kiosco</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                      <span style="font-size:13px;color:#1e293b;">Almacén</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                      <span style="font-size:13px;color:#1e293b;">Librería</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">+ Agregar categoría</button>
+                  <button class="btn btn-primary">Guardar orden</button>
+                </div>
+              </div>
+
+              <!-- Pagina Inicio -->
+              <div class="content-section" id="sec-pagina-inicio">
+                <div class="section-header">
+                  <h2>Página de Inicio</h2>
+                  <p>Armá el homepage de tu tienda con bloques</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Bloques activos</h3>
+                  <p class="desc">Arrastrá para reordenar, tocá para editar</p>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                        <span style="font-size:13px;font-weight:500;color:#1e293b;">Hero Banner</span>
+                      </div>
+                      <div class="toggle-switch on" style="transform:scale(.8);"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                        <span style="font-size:13px;font-weight:500;color:#1e293b;">Trust Badges</span>
+                      </div>
+                      <div class="toggle-switch on" style="transform:scale(.8);"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                        <span style="font-size:13px;font-weight:500;color:#1e293b;">Categorías Destacadas</span>
+                      </div>
+                      <div class="toggle-switch on" style="transform:scale(.8);"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                        <span style="font-size:13px;font-weight:500;color:#1e293b;">Productos Destacados</span>
+                      </div>
+                      <div class="toggle-switch on" style="transform:scale(.8);"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="cursor:grab;color:#94a3b8;">⠿</span>
+                        <span style="font-size:13px;font-weight:500;color:#334155;">Banner Promo</span>
+                      </div>
+                      <div class="toggle-switch" style="transform:scale(.8);"></div>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px;">
+                    <button class="btn btn-secondary" style="font-size:12px;">+ Agregar bloque</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Footer -->
+              <div class="content-section" id="sec-footer">
+                <div class="section-header">
+                  <h2>Footer y Páginas</h2>
+                  <p>Pie de página de la tienda y páginas informativas</p>
+                </div>
+                <div class="setting-card">
+                  <h3>Redes sociales</h3>
+                  <p class="desc">Links que aparecen en el footer</p>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Instagram</label>
+                      <input type="text" placeholder="https://instagram.com/..." />
+                    </div>
+                    <div class="form-group">
+                      <label>Facebook</label>
+                      <input type="text" placeholder="https://facebook.com/..." />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>WhatsApp</label>
+                      <input type="text" placeholder="https://wa.me/..." />
+                    </div>
+                    <div class="form-group">
+                      <label>Email de contacto</label>
+                      <input type="text" placeholder="info@..." />
+                    </div>
+                  </div>
+                </div>
+                <div class="setting-card">
+                  <h3>Páginas informativas</h3>
+                  <p class="desc">Contenido accesible desde /info/[slug]</p>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div>
+                        <div style="font-size:13px;font-weight:500;color:#1e293b;">Medios de pago</div>
+                        <div style="font-size:11px;color:#94a3b8;">/info/medios-de-pago</div>
+                      </div>
+                      <div class="toggle-switch on" style="transform:scale(.8);"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div>
+                        <div style="font-size:13px;font-weight:500;color:#1e293b;">Envíos</div>
+                        <div style="font-size:11px;color:#94a3b8;">/info/envios</div>
+                      </div>
+                      <div class="toggle-switch on" style="transform:scale(.8);"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+                      <div>
+                        <div style="font-size:13px;font-weight:500;color:#1e293b;">Términos y condiciones</div>
+                        <div style="font-size:11px;color:#94a3b8;">/info/terminos</div>
+                      </div>
+                      <div class="toggle-switch on" style="transform:scale(.8);"></div>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px;">
+                    <button class="btn btn-secondary" style="font-size:12px;">+ Nueva página</button>
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary">Cancelar</button>
+                  <button class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annotation">
+      <h4>Cambios clave en esta propuesta</h4>
+      <ul>
+        <li><strong>3 grupos lógicos</strong> (Negocio / Tienda Online / Sistema) reemplazan 8 páginas sueltas</li>
+        <li><strong>Footer unificado</strong> — eliminada la duplicación entre Tienda y la página Footer separada</li>
+        <li><strong>Pagos movido a Negocio</strong> — junto con Facturación e Impresión donde tiene sentido</li>
+        <li><strong>Página de Inicio dentro de Tienda</strong> — ya no es una sección separada en el sidebar</li>
+        <li><strong>Apariencia dentro de Sistema</strong> — agrupa customización técnica del panel</li>
+        <li><strong>Navegación secundaria</strong> — sidebar de config con secciones agrupadas y labels de grupo</li>
+        <li><strong>Sin tabs dentro de cada sección</strong> — cada subsección es una página propia con scroll, más limpio</li>
+        <li><strong>1 URL por sección</strong> — /configuracion/negocio/empresa, /configuracion/tienda/footer, etc.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchView(view) {
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('panel-' + view).classList.add('active');
+  }
+
+  // Nav interactivity for the "after" mockup
+  document.querySelectorAll('.config-nav-item[data-section]').forEach(item => {
+    item.addEventListener('click', () => {
+      // Update nav
+      document.querySelectorAll('.config-nav-item').forEach(n => n.classList.remove('active'));
+      item.classList.add('active');
+      // Update content
+      document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+      const sec = document.getElementById('sec-' + item.dataset.section);
+      if (sec) sec.classList.add('active');
+    });
+  });
+
+  // Init: show only first section
+  document.querySelectorAll('.content-section').forEach((s, i) => {
+    if (i > 0) s.style.display = 'none';
+    s.classList.remove('active');
+  });
+  document.querySelector('.content-section').classList.add('active');
+  document.querySelector('.content-section').style.display = 'block';
+
+  // Update display on nav click
+  document.querySelectorAll('.config-nav-item[data-section]').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.content-section').forEach(s => {
+        s.style.display = 'none';
+        s.classList.remove('active');
+      });
+      const sec = document.getElementById('sec-' + item.dataset.section);
+      if (sec) {
+        sec.style.display = 'block';
+        sec.classList.add('active');
+      }
+    });
+  });
+
+  // Toggle switches
+  document.querySelectorAll('.toggle-switch').forEach(sw => {
+    if (sw.style.cursor === 'not-allowed') return;
+    sw.addEventListener('click', () => sw.classList.toggle('on'));
+  });
+</script>
+
+</body>
+</html>

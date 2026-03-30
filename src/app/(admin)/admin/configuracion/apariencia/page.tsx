@@ -43,7 +43,7 @@ function ColorCircle({ hue, selected, onClick }: { hue: number; selected: boolea
   );
 }
 
-export default function WhiteLabelPage() {
+export default function AparienciaPage() {
   const { config, update, reset, DEFAULT_CONFIG } = useWhiteLabel();
   const [saved, setSaved] = useState(false);
 

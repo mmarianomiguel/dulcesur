@@ -136,15 +136,6 @@ const navigation: NavItem[] = [
     name: "Configuración",
     href: "/admin/configuracion",
     icon: Settings,
-    children: [
-      { name: "General", href: "/admin/configuracion" },
-      { name: "Apariencia", href: "/admin/configuracion/white-label" },
-      { name: "Tienda Online", href: "/admin/configuracion/tienda" },
-      { name: "Página de Inicio", href: "/admin/configuracion/pagina-inicio" },
-      { name: "Pagos", href: "/admin/configuracion/pagos" },
-      { name: "Usuarios y Roles", href: "/admin/configuracion/usuarios-roles" },
-      { name: "Sistema", href: "/admin/configuracion/sistema" },
-    ],
   },
 ];
 

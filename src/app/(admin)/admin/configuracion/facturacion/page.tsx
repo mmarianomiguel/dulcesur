@@ -11,10 +11,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Loader2, Check } from "lucide-react";
+import { Receipt, Loader2, Check } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
-export default function EmpresaPage() {
+export default function FacturacionPage() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,15 +36,13 @@ export default function EmpresaPage() {
     if (!empresa) return;
     setSaving(true);
     await supabase.from("empresa").update({
-      nombre: empresa.nombre,
-      razon_social: empresa.razon_social,
-      cuit: empresa.cuit,
-      situacion_iva: empresa.situacion_iva,
-      domicilio: empresa.domicilio,
-      telefono: empresa.telefono,
+      punto_venta: empresa.punto_venta,
+      tipo_comprobante_default: empresa.tipo_comprobante_default,
+      lista_precios_default: empresa.lista_precios_default,
+      moneda_default: empresa.moneda_default,
     }).eq("id", empresa.id);
     setSaving(false);
-    showAdminToast("Datos de empresa guardados correctamente");
+    showAdminToast("Configuración de facturación guardada");
   };
 
   if (loading) {
@@ -54,12 +52,12 @@ export default function EmpresaPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-          <Building2 className="w-5 h-5 text-primary" />
+        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+          <Receipt className="w-5 h-5 text-emerald-500" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Datos de la empresa</h2>
-          <p className="text-sm text-muted-foreground">Información general y fiscal de tu negocio</p>
+          <h2 className="text-lg font-semibold tracking-tight">Facturación</h2>
+          <p className="text-sm text-muted-foreground">Configuración de comprobantes, moneda y punto de venta</p>
         </div>
       </div>
 
@@ -67,35 +65,39 @@ export default function EmpresaPage() {
         <CardContent className="pt-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-2">
-              <Label>Nombre comercial</Label>
-              <Input value={empresa?.nombre || ""} onChange={(ev) => e("nombre", ev.target.value)} />
+              <Label>Punto de venta</Label>
+              <Input value={empresa?.punto_venta || ""} onChange={(ev) => e("punto_venta", ev.target.value)} placeholder="0001" />
             </div>
             <div className="space-y-2">
-              <Label>CUIT</Label>
-              <Input value={empresa?.cuit || ""} onChange={(ev) => e("cuit", ev.target.value)} placeholder="XX-XXXXXXXX-X" />
-            </div>
-            <div className="space-y-2">
-              <Label>Razón social</Label>
-              <Input value={empresa?.razon_social || ""} onChange={(ev) => e("razon_social", ev.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Situación IVA</Label>
-              <Select value={empresa?.situacion_iva || ""} onValueChange={(v) => e("situacion_iva", v || "")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar situación IVA" /></SelectTrigger>
+              <Label>Tipo comprobante default</Label>
+              <Select value={empresa?.tipo_comprobante_default || ""} onValueChange={(v) => e("tipo_comprobante_default", v || "")}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Responsable Inscripto">Responsable Inscripto</SelectItem>
-                  <SelectItem value="Monotributista">Monotributista</SelectItem>
-                  <SelectItem value="Exento">Exento</SelectItem>
+                  <SelectItem value="Remito X">Remito X</SelectItem>
+                  <SelectItem value="Factura B">Factura B</SelectItem>
+                  <SelectItem value="Factura C">Factura C</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Domicilio fiscal</Label>
-              <Input value={empresa?.domicilio || ""} onChange={(ev) => e("domicilio", ev.target.value)} />
+              <Label>Lista de precios default</Label>
+              <Select value={empresa?.lista_precios_default || ""} onValueChange={(v) => e("lista_precios_default", v || "")}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Contado">Contado</SelectItem>
+                  <SelectItem value="Mayorista">Mayorista</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label>Teléfono</Label>
-              <Input value={empresa?.telefono || ""} onChange={(ev) => e("telefono", ev.target.value)} />
+              <Label>Moneda</Label>
+              <Select value={empresa?.moneda_default || ""} onValueChange={(v) => e("moneda_default", v || "")}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ARS">Pesos (ARS)</SelectItem>
+                  <SelectItem value="USD">Dólares (USD)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <Separator />

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
   Save, Loader2, Instagram, Facebook, Phone, MapPin, Mail, Check,
-  Pencil, Trash2, Plus,
+  Pencil, Trash2, Plus, FileText,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -123,9 +123,17 @@ export default function FooterConfigPage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Footer y Páginas de Info</h1>
-        <p className="text-muted-foreground text-sm">Configura el pie de página y las páginas de información de la tienda</p>
+      {/* Section Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+          <FileText className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Footer y Páginas</h1>
+          <p className="text-sm text-muted-foreground">
+            Pie de página y contenido informativo de la tienda
+          </p>
+        </div>
       </div>
 
       {/* Footer content */}

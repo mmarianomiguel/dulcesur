@@ -101,16 +101,7 @@ const MODULE_STRUCTURE: { modulo: string; submodulos: string[] }[] = [
 const emptyUserForm = { nombre: "", email: "", password: "", rol_id: "", es_admin: false };
 const emptyRolForm = { nombre: "", descripcion: "" };
 
-type Section = "usuarios" | "roles";
-
-const NAV_ITEMS: { key: Section; label: string; icon: React.ReactNode }[] = [
-  { key: "usuarios", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
-  { key: "roles", label: "Roles y Permisos", icon: <Shield className="w-4 h-4" /> },
-];
-
 export default function UsuariosRolesPage() {
-  const [activeSection, setActiveSection] = useState<Section>("usuarios");
-
   // ─── Usuarios state ───
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [roles, setRoles] = useState<Rol[]>([]);
@@ -288,7 +279,7 @@ export default function UsuariosRolesPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-6">
+    <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
@@ -300,167 +291,128 @@ export default function UsuariosRolesPage() {
         </div>
       </div>
 
-      {/* Body: Sidebar + Content */}
-      <div className="flex gap-6">
-        {/* Left Sidebar Nav */}
-        <nav className="w-56 shrink-0 hidden md:block">
-          <div className="sticky top-6 space-y-1">
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setActiveSection(item.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
-                  activeSection === item.key
-                    ? "bg-accent text-foreground border-l-[3px] border-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border-l-[3px] border-transparent"
-                }`}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
+      {/* ======================== USUARIOS ======================== */}
+      <div className="space-y-4">
+        {/* Search + New */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Buscar por nombre o email..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
-        </nav>
-
-        {/* Mobile tabs */}
-        <div className="flex gap-1 md:hidden w-full mb-4">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setActiveSection(item.key)}
-              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                activeSection === item.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
+          <Button onClick={openNewUser}>
+            <Plus className="w-4 h-4 mr-2" />Nuevo
+          </Button>
         </div>
 
-        {/* Right content area */}
-        <div className="flex-1 min-w-0">
-          {/* ======================== USUARIOS ======================== */}
-          {activeSection === "usuarios" && (
-            <div className="space-y-4">
-              {/* Search + New */}
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Buscar por nombre o email..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-                </div>
-                <Button onClick={openNewUser}>
-                  <Plus className="w-4 h-4 mr-2" />Nuevo
-                </Button>
+        {/* Table */}
+        <Card>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">No se encontraron usuarios</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Email</th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Rol</th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground">Estado</th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground">Admin</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((u) => (
+                      <tr key={u.id} className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors${!u.activo ? " opacity-50" : ""}`}>
+                        <td className="py-3 px-4 font-medium">{u.nombre}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{u.email || "-"}</td>
+                        <td className="py-3 px-4">
+                          {u.roles?.nombre ? <Badge variant="secondary">{u.roles.nombre}</Badge> : <span className="text-muted-foreground">-</span>}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button onClick={() => handleToggleActive(u)}>
+                            <Badge variant={u.activo ? "default" : "outline"} className={u.activo ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer" : "text-muted-foreground cursor-pointer"}>
+                              {u.activo ? "Activo" : "Inactivo"}
+                            </Badge>
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {u.es_admin && <Shield className="w-4 h-4 text-amber-500 inline-block" />}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditUser(u)}><Pencil className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeactivateUser(u)}><Trash2 className="w-4 h-4" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-              {/* Table */}
-              <Card>
-                <CardContent className="p-0">
-                  {loading ? (
-                    <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-                  ) : filtered.length === 0 ? (
-                    <div className="text-center py-16 text-muted-foreground">No se encontraron usuarios</div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/50">
-                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
-                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">Email</th>
-                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">Rol</th>
-                            <th className="text-center py-3 px-4 font-medium text-muted-foreground">Estado</th>
-                            <th className="text-center py-3 px-4 font-medium text-muted-foreground">Admin</th>
-                            <th className="text-right py-3 px-4 font-medium text-muted-foreground">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filtered.map((u) => (
-                            <tr key={u.id} className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors${!u.activo ? " opacity-50" : ""}`}>
-                              <td className="py-3 px-4 font-medium">{u.nombre}</td>
-                              <td className="py-3 px-4 text-muted-foreground">{u.email || "-"}</td>
-                              <td className="py-3 px-4">
-                                {u.roles?.nombre ? <Badge variant="secondary">{u.roles.nombre}</Badge> : <span className="text-muted-foreground">-</span>}
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                <button onClick={() => handleToggleActive(u)}>
-                                  <Badge variant={u.activo ? "default" : "outline"} className={u.activo ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer" : "text-muted-foreground cursor-pointer"}>
-                                    {u.activo ? "Activo" : "Inactivo"}
-                                  </Badge>
-                                </button>
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                {u.es_admin && <Shield className="w-4 h-4 text-amber-500 inline-block" />}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditUser(u)}><Pencil className="w-4 h-4" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeactivateUser(u)}><Trash2 className="w-4 h-4" /></Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+      {/* ======================== ROLES ======================== */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+              <Shield className="w-5 h-5 text-primary" />
             </div>
-          )}
-
-          {/* ======================== ROLES ======================== */}
-          {activeSection === "roles" && (
-            <div className="space-y-4">
-              <div className="flex justify-end">
-                <Button onClick={openNewRol}><Plus className="w-4 h-4 mr-2" />Nuevo Rol</Button>
-              </div>
-
-              <Card>
-                <CardContent className="p-0">
-                  {loading ? (
-                    <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-                  ) : roles.length === 0 ? (
-                    <div className="text-center py-16 text-muted-foreground">No hay roles creados</div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/50">
-                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
-                            <th className="text-left py-3 px-4 font-medium text-muted-foreground">Descripción</th>
-                            <th className="text-center py-3 px-4 font-medium text-muted-foreground">Usuarios</th>
-                            <th className="text-right py-3 px-4 font-medium text-muted-foreground">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {roles.map((r) => (
-                            <tr key={r.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-                              <td className="py-3 px-4 font-medium">{r.nombre}</td>
-                              <td className="py-3 px-4 text-muted-foreground">{r.descripcion || "-"}</td>
-                              <td className="py-3 px-4 text-center">
-                                <Badge variant="secondary" className="gap-1"><Users className="w-3 h-3" />{userCounts[r.id] || 0}</Badge>
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => openPermissions(r)}><Key className="w-4 h-4" />Permisos</Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditRol(r)}><Pencil className="w-4 h-4" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteRol(r)}><Trash2 className="w-4 h-4" /></Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight">Roles y Permisos</h2>
+              <p className="text-sm text-muted-foreground">Definir roles y configurar permisos de acceso</p>
             </div>
-          )}
+          </div>
+          <Button onClick={openNewRol}><Plus className="w-4 h-4 mr-2" />Nuevo Rol</Button>
         </div>
+
+        <Card>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+            ) : roles.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">No hay roles creados</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Descripción</th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground">Usuarios</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roles.map((r) => (
+                      <tr key={r.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4 font-medium">{r.nombre}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{r.descripcion || "-"}</td>
+                        <td className="py-3 px-4 text-center">
+                          <Badge variant="secondary" className="gap-1"><Users className="w-3 h-3" />{userCounts[r.id] || 0}</Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => openPermissions(r)}><Key className="w-4 h-4" />Permisos</Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditRol(r)}><Pencil className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteRol(r)}><Trash2 className="w-4 h-4" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* ─── User Dialog ─── */}
