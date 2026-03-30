@@ -223,7 +223,7 @@ export function ReceiptPrintView({
   const ClientInfo = () => (
     <div style={{ border: "1px solid #000", padding: "3px 6px", marginBottom: "4px", fontSize: `${fsCliente}px`, lineHeight: "1.4" }}>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}{config.mostrarTelefono && sale.clienteTelefono && <span> · Tel: {sale.clienteTelefono}</span>}{sale.clienteCondicionIva && <span> · {sale.clienteCondicionIva}</span>}</span>
+        <span><span style={{ fontWeight: "bold" }}>Cliente:</span> {sale.cliente}{config.mostrarTelefono && sale.clienteTelefono && <span> · Tel: {sale.clienteTelefono}</span>}</span>
         {config.mostrarVendedor && (
           <span><span style={{ fontWeight: "bold" }}>Vendedor:</span> {sale.vendedor || (sale.tipoComprobante?.toLowerCase().includes("pedido web") || sale.tipoComprobante?.toLowerCase().includes("web") ? "Tienda Online" : "—")}</span>
         )}
