@@ -406,11 +406,15 @@ export default function HojaDeRutaPage() {
   const [payCuentaBancariaId, setPayCuentaBancariaId] = useState("");
   const [paySaving, setPaySaving] = useState(false);
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([]);
+  const [porcentajeTransferencia, setPorcentajeTransferencia] = useState(0);
 
-  // Load bank accounts from DB (fallback to localStorage)
+  // Load bank accounts and transfer surcharge from DB
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("activo", true).order("nombre");
+      const [{ data }, { data: tc }] = await Promise.all([
+        supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("activo", true).order("nombre"),
+        supabase.from("tienda_config").select("recargo_transferencia").limit(1).single(),
+      ]);
       if (data && data.length > 0) {
         setCuentasBancarias(data as CuentaBancaria[]);
       } else {
@@ -418,6 +422,9 @@ export default function HojaDeRutaPage() {
           const stored = localStorage.getItem("cuentas_bancarias");
           if (stored) setCuentasBancarias(JSON.parse(stored));
         } catch {}
+      }
+      if (tc && (tc as any).recargo_transferencia > 0) {
+        setPorcentajeTransferencia((tc as any).recargo_transferencia);
       }
     })();
   }, []);
@@ -450,6 +457,15 @@ export default function HojaDeRutaPage() {
     }
     if (totalPagando <= 0) return;
 
+    // Calculate transfer surcharge
+    let montoTransfConRecargo = 0;
+    let surchargeAmount = 0;
+    if (porcentajeTransferencia > 0) {
+      const montoTransf = payMetodo === "Transferencia" ? payMonto : payMetodo === "Mixto" ? payTransferencia : 0;
+      surchargeAmount = Math.round(montoTransf * (porcentajeTransferencia / 100));
+      montoTransfConRecargo = montoTransf + surchargeAmount;
+    }
+
     setPaySaving(true);
     const hoy = getArgentinaToday();
     const hora = nowTimeARG();
@@ -457,7 +473,7 @@ export default function HojaDeRutaPage() {
     const saldoPendiente = debe - montoReal;
     const cuentaSeleccionada = payCuentaBancariaId ? cuentasBancarias.find((c) => c.id === payCuentaBancariaId) : null;
 
-    // Register payment(s) in caja
+    // Register payment(s) in caja — transfer entries include surcharge
     if (payMetodo === "Mixto") {
       if (payEfectivo > 0) {
         await supabase.from("caja_movimientos").insert({
@@ -469,23 +485,33 @@ export default function HojaDeRutaPage() {
         });
       }
       if (payTransferencia > 0) {
+        const montoTransfReal = montoTransfConRecargo > 0 ? montoTransfConRecargo : payTransferencia;
         await supabase.from("caja_movimientos").insert({
           fecha: hoy, hora, tipo: "ingreso",
-          descripcion: `Cobro entrega #${payVenta.numero} (Transferencia) — ${payVenta.clientes?.nombre || ""}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
+          descripcion: `Cobro entrega #${payVenta.numero} (Transferencia${surchargeAmount > 0 ? ` +${porcentajeTransferencia}% recargo` : ""}) — ${payVenta.clientes?.nombre || ""}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
           metodo_pago: "Transferencia",
-          monto: Math.max(0, Math.min(payTransferencia, debe - Math.min(payEfectivo, debe))),
+          monto: montoTransfReal,
           referencia_id: payVenta.id, referencia_tipo: "venta",
           ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
         });
       }
+    } else if (payMetodo === "Transferencia") {
+      const montoTransfReal = montoTransfConRecargo > 0 ? montoTransfConRecargo : montoReal;
+      await supabase.from("caja_movimientos").insert({
+        fecha: hoy, hora, tipo: "ingreso",
+        descripcion: `Cobro entrega #${payVenta.numero} (Transferencia${surchargeAmount > 0 ? ` +${porcentajeTransferencia}% recargo` : ""}) — ${payVenta.clientes?.nombre || ""}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
+        metodo_pago: "Transferencia",
+        monto: montoTransfReal,
+        referencia_id: payVenta.id, referencia_tipo: "venta",
+        ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
+      });
     } else {
       await supabase.from("caja_movimientos").insert({
         fecha: hoy, hora, tipo: "ingreso",
-        descripcion: `Cobro entrega #${payVenta.numero} (${payMetodo}) — ${payVenta.clientes?.nombre || ""}${payMetodo === "Transferencia" && cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
+        descripcion: `Cobro entrega #${payVenta.numero} (${payMetodo}) — ${payVenta.clientes?.nombre || ""}`,
         metodo_pago: payMetodo,
         monto: montoReal,
         referencia_id: payVenta.id, referencia_tipo: "venta",
-        ...(payMetodo === "Transferencia" && cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
       });
     }
 
@@ -1440,6 +1466,8 @@ export default function HojaDeRutaPage() {
             const debe = Math.max(0, payVenta.total - pagado);
             const totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMonto;
             const saldoPendiente = debe - Math.min(totalPagando, debe);
+            const montoTransfDialog = payMetodo === "Transferencia" ? payMonto : payMetodo === "Mixto" ? payTransferencia : 0;
+            const surchargeDialog = porcentajeTransferencia > 0 && montoTransfDialog > 0 ? Math.round(montoTransfDialog * (porcentajeTransferencia / 100)) : 0;
             return (
               <div className="space-y-4">
                 {/* Summary */}
@@ -1500,8 +1528,14 @@ export default function HojaDeRutaPage() {
                         </Select>
                       </div>
                     )}
+                    {surchargeDialog > 0 && (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800">
+                        El cliente debe transferir <strong>{formatCurrency(payTransferencia + surchargeDialog)}</strong> (incluye recargo {porcentajeTransferencia}%: {formatCurrency(surchargeDialog)})
+                      </div>
+                    )}
                     <div className="text-xs text-right text-muted-foreground">
                       Total a cobrar: <strong className="text-foreground">{formatCurrency(payEfectivo + payTransferencia)}</strong>
+                      {surchargeDialog > 0 && <span className="text-blue-600 ml-1">(+{formatCurrency(surchargeDialog)} recargo)</span>}
                     </div>
                   </div>
                 ) : (
@@ -1519,6 +1553,11 @@ export default function HojaDeRutaPage() {
                             {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{(c as any).alias || c.nombre}</SelectItem>)}
                           </SelectContent>
                         </Select>
+                      </div>
+                    )}
+                    {surchargeDialog > 0 && (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800 mt-2">
+                        El cliente debe transferir <strong>{formatCurrency(payMonto + surchargeDialog)}</strong> (incluye recargo {porcentajeTransferencia}%: {formatCurrency(surchargeDialog)})
                       </div>
                     )}
                   </div>
