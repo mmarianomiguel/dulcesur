@@ -131,7 +131,7 @@ export default function HojaDeRutaPage() {
     let query = supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -215,7 +215,7 @@ export default function HojaDeRutaPage() {
     const { data, error } = await supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", true)
       .gte("fecha", historialDateFrom)
@@ -1355,6 +1355,7 @@ export default function HojaDeRutaPage() {
           telefono: detailVenta.clientes?.telefono || undefined,
           domicilio: [detailVenta.clientes?.domicilio, detailVenta.clientes?.localidad].filter(Boolean).join(", ") || undefined,
           origen: detailVenta.origen === "tienda" ? "pedidos" : "historial",
+          cuenta_transferencia_alias: (detailVenta as any).cuenta_transferencia_alias || undefined,
         } : null}
         items={detailVenta?.venta_items?.map((item) => ({
           id: item.id,
@@ -1363,6 +1364,7 @@ export default function HojaDeRutaPage() {
           precio_unitario: item.precio_unitario,
           subtotal: item.subtotal,
           unidad_medida: item.unidad_medida,
+          unidades_por_presentacion: (item as any).unidades_por_presentacion,
         })) || []}
         pagos={detailPagos}
       />

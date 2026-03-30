@@ -739,13 +739,57 @@ export default function CajaPage() {
       .filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta")
       .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: m.monto, metodo: m.metodo_pago || "Efectivo" }));
 
-    // Ventas breakdown by forma_pago
+    // Ventas breakdown by forma_pago — decompose Mixto into real methods
     const ventasDesglose: Record<string, { count: number; total: number }> = {};
     for (const v of ventas) {
-      const fp = v.forma_pago || "Otro";
-      if (!ventasDesglose[fp]) ventasDesglose[fp] = { count: 0, total: 0 };
-      ventasDesglose[fp].count++;
-      ventasDesglose[fp].total += v.total;
+      if (v.forma_pago === "Mixto") {
+        // Try to decompose from caja_movimientos
+        const ventaMovs = movements.filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso");
+        if (ventaMovs.length > 0) {
+          for (const m of ventaMovs) {
+            const mp = m.metodo_pago || "Otro";
+            if (!ventasDesglose[mp]) ventasDesglose[mp] = { count: 0, total: 0 };
+            ventasDesglose[mp].total += m.monto;
+          }
+          // Count the sale once under each method that has a portion
+          const methods = new Set(ventaMovs.map((m) => m.metodo_pago || "Otro"));
+          for (const mp of methods) {
+            if (!ventasDesglose[mp]) ventasDesglose[mp] = { count: 0, total: 0 };
+            ventasDesglose[mp].count++;
+          }
+        } else {
+          // Online orders without caja_movimientos: use stored amounts
+          const ef = (v as any).monto_efectivo || 0;
+          const tr = (v as any).monto_transferencia || 0;
+          const cc = (v as any).monto_cuenta_corriente || 0;
+          if (ef > 0) {
+            if (!ventasDesglose["Efectivo"]) ventasDesglose["Efectivo"] = { count: 0, total: 0 };
+            ventasDesglose["Efectivo"].count++;
+            ventasDesglose["Efectivo"].total += ef;
+          }
+          if (tr > 0) {
+            if (!ventasDesglose["Transferencia"]) ventasDesglose["Transferencia"] = { count: 0, total: 0 };
+            ventasDesglose["Transferencia"].count++;
+            ventasDesglose["Transferencia"].total += tr;
+          }
+          if (cc > 0) {
+            if (!ventasDesglose["Cuenta Corriente"]) ventasDesglose["Cuenta Corriente"] = { count: 0, total: 0 };
+            ventasDesglose["Cuenta Corriente"].count++;
+            ventasDesglose["Cuenta Corriente"].total += cc;
+          }
+          // If nothing found, fallback
+          if (ef === 0 && tr === 0 && cc === 0) {
+            if (!ventasDesglose["Otro"]) ventasDesglose["Otro"] = { count: 0, total: 0 };
+            ventasDesglose["Otro"].count++;
+            ventasDesglose["Otro"].total += v.total;
+          }
+        }
+      } else {
+        const fp = v.forma_pago || "Otro";
+        if (!ventasDesglose[fp]) ventasDesglose[fp] = { count: 0, total: 0 };
+        ventasDesglose[fp].count++;
+        ventasDesglose[fp].total += v.total;
+      }
     }
 
     return {
