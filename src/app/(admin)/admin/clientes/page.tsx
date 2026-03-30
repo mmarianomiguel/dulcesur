@@ -978,9 +978,20 @@ export default function ClientesPage() {
     }
   }, [clients, search, vendedorFilter, filterDomicilio, filterZona, sortOrder]);
 
-  const inscriptos = useMemo(() => clients.filter((c) => c.situacion_iva === "Responsable Inscripto").length, [clients]);
   const withBalance = useMemo(() => clients.filter((c) => c.saldo > 0).length, [clients]);
   const withFavor = useMemo(() => clients.filter((c) => c.saldo < 0).length, [clients]);
+  const recentClients = useMemo(() => {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    return clients.filter((c) => c.created_at && c.created_at > cutoff);
+  }, [clients]);
+  const topDeudores = useMemo(() =>
+    clients.filter((c) => c.saldo > 0).sort((a, b) => b.saldo - a.saldo).slice(0, 8),
+  [clients]);
+  const topFavor = useMemo(() =>
+    clients.filter((c) => c.saldo < 0).sort((a, b) => a.saldo - b.saldo).slice(0, 8),
+  [clients]);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const toggleCard = (key: string) => setExpandedCard((prev) => prev === key ? null : key);
 
   const f = (key: keyof typeof form, value: string | string[]) => setForm({ ...form, [key]: value });
 
@@ -1046,28 +1057,94 @@ export default function ClientesPage() {
       {activeTab === "listado" && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* Total Clientes */}
             <Card>
               <CardContent className="pt-6 flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="w-5 h-5 text-primary" /></div>
                 <div><p className="text-xs text-muted-foreground">Total clientes</p><p className="text-xl font-bold">{clients.length}</p></div>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Building2 className="w-5 h-5 text-emerald-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Resp. Inscriptos</p><p className="text-xl font-bold">{inscriptos}</p></div>
+
+            {/* Nuevos últimas 24hs */}
+            <Card
+              className={`transition-all ${recentClients.length > 0 ? "cursor-pointer hover:shadow-md" : ""}`}
+              onClick={() => recentClients.length > 0 && toggleCard("recientes")}
+            >
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center"><Plus className="w-5 h-5 text-blue-500" /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Nuevos (24hs)</p>
+                    <p className="text-xl font-bold">{recentClients.length}</p>
+                  </div>
+                  {recentClients.length > 0 && <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expandedCard === "recientes" ? "rotate-180" : ""}`} />}
+                </div>
+                {expandedCard === "recientes" && recentClients.length > 0 && (
+                  <div className="mt-3 pt-2 border-t space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {recentClients.map((c) => (
+                      <div key={c.id} className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground truncate mr-2">{c.nombre}</span>
+                        <span className="font-medium shrink-0 text-blue-600">{new Date(c.created_at!).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-orange-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Con saldo pendiente</p><p className="text-xl font-bold">{withBalance}</p></div>
+
+            {/* Saldo pendiente */}
+            <Card
+              className={`transition-all ${withBalance > 0 ? "cursor-pointer hover:shadow-md" : ""}`}
+              onClick={() => withBalance > 0 && toggleCard("deudores")}
+            >
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-orange-500" /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Saldo pendiente</p>
+                    <p className="text-xl font-bold">{withBalance}</p>
+                  </div>
+                  {withBalance > 0 && <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expandedCard === "deudores" ? "rotate-180" : ""}`} />}
+                </div>
+                {expandedCard === "deudores" && topDeudores.length > 0 && (
+                  <div className="mt-3 pt-2 border-t space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {topDeudores.map((c) => (
+                      <div key={c.id} className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground truncate mr-2">{c.nombre}</span>
+                        <span className="font-medium shrink-0 text-orange-600">{formatCurrency(c.saldo)}</span>
+                      </div>
+                    ))}
+                    {withBalance > 8 && <p className="text-[10px] text-muted-foreground text-center pt-1">y {withBalance - 8} más...</p>}
+                  </div>
+                )}
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-emerald-500" /></div>
-                <div><p className="text-xs text-muted-foreground">Con saldo a favor</p><p className="text-xl font-bold">{withFavor}</p></div>
+
+            {/* Saldo a favor */}
+            <Card
+              className={`transition-all ${withFavor > 0 ? "cursor-pointer hover:shadow-md" : ""}`}
+              onClick={() => withFavor > 0 && toggleCard("favor")}
+            >
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-emerald-500" /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Saldo a favor</p>
+                    <p className="text-xl font-bold">{withFavor}</p>
+                  </div>
+                  {withFavor > 0 && <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expandedCard === "favor" ? "rotate-180" : ""}`} />}
+                </div>
+                {expandedCard === "favor" && topFavor.length > 0 && (
+                  <div className="mt-3 pt-2 border-t space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {topFavor.map((c) => (
+                      <div key={c.id} className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground truncate mr-2">{c.nombre}</span>
+                        <span className="font-medium shrink-0 text-emerald-600">{formatCurrency(Math.abs(c.saldo))}</span>
+                      </div>
+                    ))}
+                    {withFavor > 8 && <p className="text-[10px] text-muted-foreground text-center pt-1">y {withFavor - 8} más...</p>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -39,6 +39,7 @@ import {
   Loader2,
   AlertTriangle,
   Download,
+  ChevronDown,
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
@@ -223,6 +224,10 @@ export default function CajaPage() {
     initialData: [] as Venta[],
     deps: [turno],
   });
+
+  // ─── Expandable stat cards ───
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const toggleCard = (key: string) => setExpandedCard((prev) => prev === key ? null : key);
 
   // ─── Dialogs ───
   const movDialog = useDialog<"ingreso" | "egreso">();
@@ -613,6 +618,8 @@ export default function CajaPage() {
     efectivoEsperado,
     efectivoInicial,
     egresosDetalle,
+    ingresosDetalle,
+    ventasDesglose,
   } = useMemo(() => {
     const ventasPorMetodo = (metodo: string) =>
       ventas.filter((v) => v.forma_pago === metodo).reduce((a, v) => a + v.total, 0);
@@ -727,6 +734,20 @@ export default function CajaPage() {
       .filter((m) => m.tipo === "egreso" || (m.tipo === "cancelacion" && (m.referencia_tipo === "nota_credito" || m.referencia_tipo === "anulacion") && m.metodo_pago === "Efectivo"))
       .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: Math.abs(m.monto) }));
 
+    // Individual ingreso items (non-venta) for breakdown display
+    const ingresosDetalle = movements
+      .filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta")
+      .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: m.monto, metodo: m.metodo_pago || "Efectivo" }));
+
+    // Ventas breakdown by forma_pago
+    const ventasDesglose: Record<string, { count: number; total: number }> = {};
+    for (const v of ventas) {
+      const fp = v.forma_pago || "Otro";
+      if (!ventasDesglose[fp]) ventasDesglose[fp] = { count: 0, total: 0 };
+      ventasDesglose[fp].count++;
+      ventasDesglose[fp].total += v.total;
+    }
+
     return {
       ventasEfectivo,
       ventasTransferencia,
@@ -741,6 +762,8 @@ export default function CajaPage() {
       efectivoEsperado,
       efectivoInicial,
       egresosDetalle,
+      ingresosDetalle,
+      ventasDesglose,
     };
   }, [ventas, movements, turno]);
 
@@ -1033,53 +1056,102 @@ export default function CajaPage() {
             </Card>
           )}
 
-          {/* Stats */}
+          {/* Stats - Interactive cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            <StatCard
-              title="Total Ventas"
-              value={formatCurrency(totalVentas)}
-              subtitle={`${ventas.length} ordenes`}
-              icon={Wallet}
-              iconColor="text-primary"
-              iconBg="bg-primary/10"
-            />
-            <StatCard
-              title="Efectivo Esperado"
-              value={formatCurrency(efectivoEsperado)}
-              icon={Banknote}
-              iconColor="text-emerald-500"
-              iconBg="bg-emerald-500/10"
-            />
-            <StatCard
-              title="Ingresos Caja"
-              value={formatCurrency(depositos)}
-              icon={ArrowUpRight}
-              iconColor="text-emerald-500"
-              iconBg="bg-emerald-500/10"
-            />
-            <Card>
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Egresos Caja</p>
-                    <p className="text-xl lg:text-2xl font-bold truncate">{formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-red-500/10 shrink-0">
-                    <ArrowDownRight className="w-5 h-5 text-red-500" />
-                  </div>
-                </div>
-                {egresosDetalle.length > 0 && (
-                  <div className="mt-2 pt-2 border-t space-y-1">
-                    {egresosDetalle.map((e, i) => (
-                      <div key={i} className="flex justify-between text-[11px]">
-                        <span className="text-muted-foreground truncate mr-2">{e.descripcion}</span>
-                        <span className="font-medium shrink-0 text-red-500">-{formatCurrency(e.monto)}</span>
+            {[
+              {
+                key: "ventas",
+                title: "Total Ventas",
+                value: formatCurrency(totalVentas),
+                subtitle: `${ventas.length} ordenes`,
+                icon: Wallet,
+                iconColor: "text-primary",
+                iconBg: "bg-primary/10",
+                hasDetail: Object.keys(ventasDesglose).length > 0,
+                detail: Object.entries(ventasDesglose).sort((a, b) => b[1].total - a[1].total).map(([fp, d]) => ({
+                  label: `${fp} (${d.count})`,
+                  value: formatCurrency(d.total),
+                  color: "",
+                })),
+              },
+              {
+                key: "efectivo",
+                title: "Efectivo Esperado",
+                value: formatCurrency(efectivoEsperado),
+                icon: Banknote,
+                iconColor: "text-emerald-500",
+                iconBg: "bg-emerald-500/10",
+                hasDetail: true,
+                detail: [
+                  { label: `Inicial`, value: formatCurrency(efectivoInicial), color: "" },
+                  { label: `+ Ventas efectivo`, value: formatCurrency(ventasEfectivo), color: "text-emerald-600" },
+                  { label: `+ Ingresos`, value: formatCurrency(depositos), color: "text-emerald-600" },
+                  { label: `- Egresos`, value: `-${formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}`, color: "text-red-500" },
+                ],
+              },
+              {
+                key: "ingresos",
+                title: "Ingresos Caja",
+                value: formatCurrency(depositos),
+                icon: ArrowUpRight,
+                iconColor: "text-emerald-500",
+                iconBg: "bg-emerald-500/10",
+                hasDetail: ingresosDetalle.length > 0,
+                detail: ingresosDetalle.map((d) => ({
+                  label: `${d.descripcion} (${d.metodo})`,
+                  value: formatCurrency(d.monto),
+                  color: "text-emerald-600",
+                })),
+              },
+              {
+                key: "egresos",
+                title: "Egresos Caja",
+                value: formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones),
+                icon: ArrowDownRight,
+                iconColor: "text-red-500",
+                iconBg: "bg-red-500/10",
+                hasDetail: egresosDetalle.length > 0,
+                detail: egresosDetalle.map((d) => ({
+                  label: d.descripcion,
+                  value: `-${formatCurrency(d.monto)}`,
+                  color: "text-red-500",
+                })),
+              },
+            ].map((card) => (
+              <Card
+                key={card.key}
+                className={`transition-all ${card.hasDetail ? "cursor-pointer hover:shadow-md" : ""}`}
+                onClick={() => card.hasDetail && toggleCard(card.key)}
+              >
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1 min-w-0">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{card.title}</p>
+                      <p className="text-xl lg:text-2xl font-bold truncate">{card.value}</p>
+                      {card.subtitle && <p className="text-xs text-muted-foreground">{card.subtitle}</p>}
+                    </div>
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <div className={`p-2.5 rounded-xl ${card.iconBg}`}>
+                        <card.icon className={`w-5 h-5 ${card.iconColor}`} />
                       </div>
-                    ))}
+                      {card.hasDetail && (
+                        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expandedCard === card.key ? "rotate-180" : ""}`} />
+                      )}
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  {expandedCard === card.key && card.detail.length > 0 && (
+                    <div className="mt-2 pt-2 border-t space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                      {card.detail.map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px]">
+                          <span className="text-muted-foreground truncate mr-2">{d.label}</span>
+                          <span className={`font-medium shrink-0 ${d.color}`}>{d.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
           {/* Payment method breakdown */}
