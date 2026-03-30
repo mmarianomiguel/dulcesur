@@ -261,7 +261,13 @@ export function ReceiptPrintView({
                 )}
               </td>
               <td style={{ padding: rowPad, textAlign: "center" }}>
-                {item.es_combo && totalComboUnits > 0 ? `x${totalComboUnits} un` : isBox ? `x${item.unidades_por_presentacion} un` : (item.unit === "Unidad" ? "Un" : item.unit) || "Un"}
+                {item.es_combo && totalComboUnits > 0
+                  ? `x${totalComboUnits} un`
+                  : isBox
+                  ? `x${item.unidades_por_presentacion} un`
+                  : isMedio
+                  ? `x${item.unidades_por_presentacion} un`
+                  : /^(unidad|un)$/i.test(item.unit || "") ? "Un" : (item.unit || "Un")}
               </td>
               <td style={{ padding: rowPad, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtCur(precioUnitario)}</td>
               {config.mostrarDescuento && (
