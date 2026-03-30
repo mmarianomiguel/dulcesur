@@ -72,9 +72,9 @@ async function loadReceiptConfigFromDB(): Promise<ReceiptConfig | null> {
 function saveReceiptConfig(config: ReceiptConfig) {
   localStorage.setItem("receipt_config", JSON.stringify(config));
   // Also persist to DB for cross-device/browser robustness
-  supabase.from("empresa").select("id").limit(1).single().then(({ data: emp }) => {
+  Promise.resolve(supabase.from("empresa").select("id").limit(1).single()).then(({ data: emp }) => {
     if (emp) supabase.from("empresa").update({ receipt_config: config } as any).eq("id", emp.id);
-  });
+  }).catch((err) => console.error("Error guardando config de recibos:", err));
 }
 
 type Section = "empresa" | "facturacion" | "impresion" | "comprobantes";

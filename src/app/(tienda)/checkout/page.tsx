@@ -436,8 +436,8 @@ export default function CheckoutPage() {
       errs.push("Completá la dirección de envío.");
     }
     if (metodoEntrega === "envio" && !fechaEntrega) errs.push("Seleccioná una fecha de entrega.");
-    if (metodoPago === "mixto" && Math.abs(Math.round(mixtoEfectivo + mixtoTransferencia) - Math.round(subtotal + costoEnvio)) > 1) {
-      errs.push(`La suma de efectivo ($${mixtoEfectivo.toLocaleString("es-AR")}) y transferencia ($${mixtoTransferencia.toLocaleString("es-AR")}) debe igualar $${(subtotal + costoEnvio).toLocaleString("es-AR")}.`);
+    if (metodoPago === "mixto" && Math.abs(Math.round(mixtoEfectivo + mixtoTransferencia) - Math.round(subtotal + costoEnvio + recargoTransf)) > 1) {
+      errs.push(`La suma de efectivo ($${mixtoEfectivo.toLocaleString("es-AR")}) y transferencia ($${mixtoTransferencia.toLocaleString("es-AR")}) debe igualar $${(subtotal + costoEnvio + recargoTransf).toLocaleString("es-AR")}.`);
     }
 
     if (errs.length > 0) {
@@ -452,11 +452,20 @@ export default function CheckoutPage() {
     const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
     const hoyCheck = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
-    const [{ data: stockData }, { data: presData }, { data: dbDescuentos }] = await Promise.all([
+    const [stockRes, presRes, descRes] = await Promise.all([
       supabase.from("productos").select("id, stock, nombre, es_combo, costo, precio").in("id", productIds),
       supabase.from("presentaciones").select("producto_id, nombre, cantidad, costo, precio").in("producto_id", productIds),
       supabase.from("descuentos").select("producto_id, porcentaje, presentacion").eq("activo", true).lte("fecha_inicio", hoyCheck),
     ]);
+
+    if (stockRes.error || presRes.error) {
+      setErrors(["Error al validar stock y precios. Intentá de nuevo."]);
+      setSubmitting(false);
+      return;
+    }
+    const stockData = stockRes.data;
+    const presData = presRes.data;
+    const dbDescuentos = descRes.data;
 
     // Build stock + cost + price maps from the single productos query
     const stockMap: Record<string, { stock: number; nombre: string }> = {};

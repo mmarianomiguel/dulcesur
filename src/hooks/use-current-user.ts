@@ -45,16 +45,34 @@ export function useCurrentUser() {
   useEffect(() => {
     if (cachedUser) {
       setUser(cachedUser);
-      return;
+    } else {
+      if (!fetchPromise) {
+        fetchPromise = fetchUser().then((u) => {
+          cachedUser = u;
+          fetchPromise = null;
+          return u;
+        });
+      }
+      fetchPromise.then((u) => setUser(u));
     }
-    if (!fetchPromise) {
-      fetchPromise = fetchUser().then((u) => {
-        cachedUser = u;
+
+    // Listen for auth state changes (logout, session expiry)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED") {
+        cachedUser = null;
         fetchPromise = null;
-        return u;
-      });
-    }
-    fetchPromise.then((u) => setUser(u));
+        if (event === "SIGNED_OUT") {
+          setUser(null);
+        } else {
+          fetchUser().then((u) => {
+            cachedUser = u;
+            setUser(u);
+          });
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   return user;

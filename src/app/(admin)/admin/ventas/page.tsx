@@ -228,6 +228,7 @@ export default function VentasPage() {
 
   // out of stock confirmation
   const [stockWarning, setStockWarning] = useState<{ open: boolean; product: Producto | null; presentacion?: Presentacion }>({ open: false, product: null });
+  const skipFinalStockCheckRef = useRef(false);
 
   // create client from POS
   const [createClientOpen, setCreateClientOpen] = useState(false);
@@ -1294,6 +1295,7 @@ export default function VentasPage() {
   };
 
   const handleStockContinue = () => {
+    skipFinalStockCheckRef.current = true;
     setStockExceedDialog({ open: false, issues: [], adjustSet: new Set() });
     if (formaPago === "Efectivo") {
       setCashReceived("");
@@ -1560,25 +1562,29 @@ export default function VentasPage() {
         }
 
         // Fresh stock check right before deduction (prevents overselling between UI check and here)
-        const prodIds = [...new Set(stockItems.map((si) => si.producto_id))];
-        if (prodIds.length > 0) {
-          const { data: freshProds } = await supabase.from("productos").select("id, stock").in("id", prodIds);
-          const freshMap: Record<string, number> = {};
-          for (const fp of freshProds || []) freshMap[fp.id] = fp.stock;
-          const stockIssues: string[] = [];
-          for (const si of stockItems) {
-            const available = freshMap[si.producto_id] ?? 0;
-            if (si.cantidad > available) stockIssues.push(`${si.descripcion}: necesita ${si.cantidad}, hay ${available}`);
-          }
-          if (stockIssues.length > 0) {
-            setErrorModal({ open: true, message: `Stock insuficiente:\n${stockIssues.join("\n")}` });
-            // Delete the venta and items that were already inserted
-            await supabase.from("venta_items").delete().eq("venta_id", venta.id);
-            await supabase.from("ventas").delete().eq("id", venta.id);
-            setSaving(false);
-            return;
+        // Skip if user already confirmed "Facturar igual" in the stock exceed dialog
+        if (!skipFinalStockCheckRef.current) {
+          const prodIds = [...new Set(stockItems.map((si) => si.producto_id))];
+          if (prodIds.length > 0) {
+            const { data: freshProds } = await supabase.from("productos").select("id, stock").in("id", prodIds);
+            const freshMap: Record<string, number> = {};
+            for (const fp of freshProds || []) freshMap[fp.id] = fp.stock;
+            const stockIssues: string[] = [];
+            for (const si of stockItems) {
+              const available = freshMap[si.producto_id] ?? 0;
+              if (si.cantidad > available) stockIssues.push(`${si.descripcion}: necesita ${si.cantidad}, hay ${available}`);
+            }
+            if (stockIssues.length > 0) {
+              setErrorModal({ open: true, message: `Stock insuficiente:\n${stockIssues.join("\n")}` });
+              // Delete the venta and items that were already inserted
+              await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+              await supabase.from("ventas").delete().eq("id", venta.id);
+              setSaving(false);
+              return;
+            }
           }
         }
+        skipFinalStockCheckRef.current = false;
 
         // Atomic stock decrement via RPC (handles race conditions + logging)
         const { data: stockResult, error: stockRpcError } = await supabase.rpc("decrementar_stock_venta", {

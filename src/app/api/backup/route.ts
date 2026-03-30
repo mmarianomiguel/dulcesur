@@ -185,7 +185,7 @@ export async function PUT(req: NextRequest) {
                 error: `Insert failed at batch ${Math.floor(i / batchSize) + 1}: ${insertError.message}`,
               };
               failCount++;
-              continue;
+              break; // Stop inserting this table to avoid further corruption
             }
 
             insertedCount += batch.length;

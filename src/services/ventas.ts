@@ -9,7 +9,11 @@ class VentaService extends BaseService<Venta> {
   }
 
   async getNextNumero(): Promise<string> {
-    const { data } = await supabase.rpc("next_numero", { p_tipo: "venta" });
+    const { data, error } = await supabase.rpc("next_numero", { p_tipo: "venta" });
+    if (error) {
+      console.error("Error obteniendo próximo número de venta:", error);
+      throw new Error("No se pudo obtener el número de venta. Intentá de nuevo.");
+    }
     return data || "00001-00000000";
   }
 

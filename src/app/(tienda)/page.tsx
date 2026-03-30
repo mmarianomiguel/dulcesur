@@ -704,12 +704,15 @@ export default function TiendaPage() {
               .select("*, categorias(*)");
 
             if (destacadas && destacadas.length > 0) {
-              setCategorias(
-                destacadas
-                  .map((d: any) => d.categorias)
-                  .filter(Boolean)
-                  .slice(0, maxCats)
-              );
+              const seen = new Set<number>();
+              const unique = destacadas
+                .map((d: any) => d.categorias)
+                .filter((cat: any) => {
+                  if (!cat || seen.has(cat.id)) return false;
+                  seen.add(cat.id);
+                  return true;
+                });
+              setCategorias(unique.slice(0, maxCats));
             } else {
               const { data: cats } = await supabase
                 .from("categorias")

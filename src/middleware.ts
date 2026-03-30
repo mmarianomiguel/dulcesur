@@ -63,9 +63,10 @@ export async function middleware(request: NextRequest) {
 
   // Role-based protection for /admin routes
   if (pathname.startsWith("/admin") && user) {
-    // Check cookie cache to skip DB query for role verification (TTL: 5 min)
+    // Check cookie cache to skip DB query for role verification (TTL: 2 min)
+    // Cookie stores user ID to prevent reuse across different sessions
     const roleCache = request.cookies.get("admin_role_verified");
-    if (roleCache) {
+    if (roleCache?.value === user.id) {
       return supabaseResponse;
     }
 
@@ -98,9 +99,9 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Cache the role verification result for 5 minutes
-    supabaseResponse.cookies.set("admin_role_verified", "1", {
-      maxAge: 300,
+    // Cache the role verification result for 2 minutes (reduced from 5)
+    supabaseResponse.cookies.set("admin_role_verified", user.id, {
+      maxAge: 120,
       path: "/admin",
       httpOnly: true,
     });

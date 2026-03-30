@@ -351,6 +351,8 @@ export default function ListadoVentasPage() {
       supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
     ]).then(([cuentasRes, usuariosRes, empresaRes, tiendaRes]) => {
+      if (cuentasRes.error) console.error("Error cargando cuentas bancarias:", cuentasRes.error);
+      if (usuariosRes.error) console.error("Error cargando vendedores:", usuariosRes.error);
       setCuentasBancarias(cuentasRes.data || []);
       setVendedores(usuariosRes.data || []);
 
@@ -374,7 +376,7 @@ export default function ListadoVentasPage() {
           empresaWeb: prev.empresaWeb || tc.url_tienda || "",
         }));
       }
-    });
+    }).catch((err) => console.error("Error cargando datos de referencia:", err));
   }, []);
 
   const openDetail = async (v: VentaRow) => {
@@ -1973,6 +1975,7 @@ export default function ListadoVentasPage() {
           {poSelectedPedido && (() => {
             const isHistorial = poSelectedPedido._source === "historial";
             const isCancelled = poSelectedPedido.estado === "cancelado";
+            const isNCType = poSelectedPedido._tipo_comprobante?.includes("Nota de Crédito");
             const estBadge = estadoBadge[poSelectedPedido.estado] || estadoBadge.pendiente;
             const itemsSubtotal = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
             const descPct = poSelectedPedido._descuento_porcentaje || 0;
@@ -2329,9 +2332,9 @@ export default function ListadoVentasPage() {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <Package className="w-4 h-4" /> Productos ({poEditItems.length})
+                      <Package className="w-4 h-4" /> {isNCType ? "Productos devueltos" : "Productos"} ({isNCType ? poEditItems.filter((i) => i.cantidad > 0).length : poEditItems.length})
                     </h3>
-                    {!isCancelled && (
+                    {!isCancelled && !isNCType && (
                       <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setPoAddProductOpen(true)}>
                         <Plus className="w-3 h-3" /> Agregar producto
                       </Button>
@@ -2350,11 +2353,11 @@ export default function ListadoVentasPage() {
                             <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>
                           )}
                           <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
-                          {!isCancelled && <th className="w-10"></th>}
+                          {!isCancelled && !isNCType && <th className="w-10"></th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {poEditItems.map((item, idx) => {
+                        {(isNCType ? poEditItems.filter((i) => i.cantidad > 0) : poEditItems).map((item, idx) => {
                           const isCombo = poSelectedPedido._comboIds?.has(item.producto_id);
                           return (
                           <tr key={idx} className="border-b last:border-0">
@@ -2363,13 +2366,13 @@ export default function ListadoVentasPage() {
                                 {isCombo && (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white tracking-wider shrink-0">COMBO</span>
                                 )}
-                                <span className="font-medium">{item.nombre}</span>
+                                <span className="font-medium">{item.presentacion && item.presentacion !== "Unidad" ? item.nombre.replace(` - ${item.presentacion}`, "") : item.nombre}</span>
                               </div>
                               {item.codigo && <p className="text-[10px] text-muted-foreground font-mono">{item.codigo}</p>}
                             </td>
                             <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
                             <td className="px-3 py-2 text-center">
-                              {isCancelled ? (
+                              {isCancelled || isNCType ? (
                                 <span>{item.cantidad}</span>
                               ) : (
                                 <Input
@@ -2386,7 +2389,7 @@ export default function ListadoVentasPage() {
                               <td className="px-3 py-2 text-right text-xs">{(item.descuento || 0) > 0 ? `-${item.descuento}%` : ""}</td>
                             )}
                             <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad * (1 - (item.descuento || 0) / 100))}</td>
-                            {!isCancelled && (
+                            {!isCancelled && !isNCType && (
                               <td className="px-2 py-2">
                                 <button
                                   onClick={() => poRemoveItem(idx)}

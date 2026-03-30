@@ -235,10 +235,12 @@ export default function CajaPage() {
   // Sellers map for display
   const [sellersMap, setSellersMap] = useState<Record<string, string>>({});
   useEffect(() => {
-    supabase.from("proveedores").select("id, nombre").order("nombre").then(({ data }) => {
+    supabase.from("proveedores").select("id, nombre").order("nombre").then(({ data, error }) => {
+      if (error) console.error("Error cargando proveedores:", error);
       setProveedores(data || []);
     });
-    supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data }) => {
+    supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data, error }) => {
+      if (error) console.error("Error cargando usuarios:", error);
       const map: Record<string, string> = {};
       (data || []).forEach((u: any) => { map[u.id] = u.nombre; });
       setSellersMap(map);
@@ -249,7 +251,10 @@ export default function CajaPage() {
   const [ventaDetailOpen, setVentaDetailOpen] = useState(false);
   const [cajaCuentasBancarias, setCajaCuentasBancarias] = useState<{ id: string; nombre: string; alias: string }[]>([]);
   useEffect(() => {
-    supabase.from("cuentas_bancarias").select("id, nombre, alias").eq("activo", true).order("nombre").then(({ data }) => setCajaCuentasBancarias(data || []));
+    supabase.from("cuentas_bancarias").select("id, nombre, alias").eq("activo", true).order("nombre").then(({ data, error }) => {
+      if (error) console.error("Error cargando cuentas bancarias:", error);
+      setCajaCuentasBancarias(data || []);
+    });
   }, []);
   const [ventaDetail, setVentaDetail] = useState<Venta | null>(null);
   const [ventaDetailItems, setVentaDetailItems] = useState<any[]>([]);

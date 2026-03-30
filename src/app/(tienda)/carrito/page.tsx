@@ -113,7 +113,7 @@ export default function CarritoPage() {
       .filter((i) => i.id !== item.id && i.id.split("_")[0] === prodId)
       .reduce((sum, i) => sum + i.cantidad * getPresUnits(i), 0);
     const remaining = stock - usedByOthers;
-    return Math.max(0, Math.floor(remaining / presUnits));
+    return Math.max(0, Math.floor(remaining / (presUnits || 1)));
   };
 
   const hayStockInsuficiente = items.some((item) => {

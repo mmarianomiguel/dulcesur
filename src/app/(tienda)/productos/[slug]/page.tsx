@@ -297,9 +297,19 @@ export default function ProductoDetallePage() {
   }, [id]);
 
   const currentPres = presentaciones[selectedPresIdx];
-  const currentPrice = currentPres
-    ? (currentPres.precio > 0 && currentPres.cantidad > 1 && producto && currentPres.precio === producto.precio ? currentPres.precio * currentPres.cantidad : (currentPres.precio > 0 ? currentPres.precio : (producto?.precio ?? 0) * Math.max(1, currentPres.cantidad)))
-    : (producto?.precio ?? 0);
+  const currentPrice = (() => {
+    if (!currentPres) return producto?.precio ?? 0;
+    // Presentation has its own price set
+    if (currentPres.precio > 0) {
+      // If presentation price equals base product price and qty > 1, it's price-per-unit → multiply
+      if (currentPres.cantidad > 1 && producto && currentPres.precio === producto.precio) {
+        return currentPres.precio * currentPres.cantidad;
+      }
+      return currentPres.precio;
+    }
+    // No presentation price → derive from base product price
+    return (producto?.precio ?? 0) * Math.max(1, currentPres.cantidad);
+  })();
   const presQty = currentPres ? Number(currentPres.cantidad) : 1;
 
   function presLabelFn(p: { cantidad: number; nombre?: string }): string {

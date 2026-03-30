@@ -25,18 +25,24 @@ class ProductoService extends BaseService<Producto> {
   }
 
   async updateStock(id: string, newStock: number): Promise<void> {
-    await supabase.from(this.table).update({ stock: Math.max(0, newStock) }).eq("id", id);
+    const { error } = await supabase.from(this.table).update({ stock: Math.max(0, newStock) }).eq("id", id);
+    if (error) { console.error("Error actualizando stock:", error); throw error; }
   }
 
   async updatePrecio(id: string, precio: number): Promise<void> {
-    await supabase.from(this.table).update({ precio }).eq("id", id);
+    const { error } = await supabase.from(this.table).update({ precio }).eq("id", id);
+    if (error) { console.error("Error actualizando precio:", error); throw error; }
   }
 
   async bulkUpdatePrecios(updates: { id: string; precio: number }[]): Promise<void> {
-    const promises: PromiseLike<unknown>[] = updates.map((u) =>
-      supabase.from(this.table).update({ precio: u.precio }).eq("id", u.id)
+    const results = await Promise.all(
+      updates.map((u) => supabase.from(this.table).update({ precio: u.precio }).eq("id", u.id))
     );
-    await Promise.all(promises);
+    const failed = results.filter((r) => r.error);
+    if (failed.length > 0) {
+      console.error("Errores actualizando precios:", failed.map((f) => f.error));
+      throw new Error(`${failed.length} precio(s) no se pudieron actualizar`);
+    }
   }
 
   async getLowStock(): Promise<Producto[]> {
@@ -112,7 +118,7 @@ export async function logStockMovimiento(opts: {
   usuario?: string;
   orden_id?: string;
 }) {
-  await supabase.from("stock_movimientos").insert({
+  const { error } = await supabase.from("stock_movimientos").insert({
     producto_id: opts.producto_id,
     tipo: opts.tipo,
     cantidad_antes: opts.cantidad_antes,
@@ -123,6 +129,7 @@ export async function logStockMovimiento(opts: {
     usuario: opts.usuario || null,
     orden_id: opts.orden_id || null,
   });
+  if (error) console.error("Error registrando movimiento de stock:", error);
 }
 
 // Singleton exports

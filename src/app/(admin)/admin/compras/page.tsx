@@ -198,7 +198,7 @@ export default function ComprasPage() {
         // Confirmed: revert stock, caja, CC proveedor — mark as Anulada (keep audit trail)
         for (const item of detailItems) {
           if (!item.producto_id) continue;
-          const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+          const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).maybeSingle();
           if (!prod) continue;
           const unitsToRevert = item.cantidad;
           const newStock = prod.stock - unitsToRevert;
@@ -224,7 +224,7 @@ export default function ComprasPage() {
         }
         // Revert CC proveedor
         if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
-          const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
+          const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).maybeSingle();
           if (prov) {
             const newSaldo = prov.saldo - detailCompra.total;
             await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", detailCompra.proveedor_id);
@@ -285,7 +285,7 @@ export default function ComprasPage() {
       // 1. Subtract returned quantities from product stock (fresh read first)
       for (const item of itemsToReturn) {
         if (!item.producto_id) continue;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).maybeSingle();
         if (!prod) continue;
         const stockAntes = prod.stock;
         const newStock = stockAntes - item.cantidad_devolver;
@@ -322,7 +322,7 @@ export default function ComprasPage() {
       }
 
       if (wasCC && detailCompra.proveedor_id) {
-        const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).single();
+        const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).maybeSingle();
         if (prov) {
           const newSaldo = prov.saldo - returnTotal;
           await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", detailCompra.proveedor_id);
@@ -852,7 +852,7 @@ export default function ComprasPage() {
           .from("productos")
           .select("stock")
           .eq("id", item.producto_id)
-          .single();
+          .maybeSingle();
         const stockAntes = prodData?.stock ?? 0;
         const newStock = stockAntes + item.cantidad;
 
@@ -866,13 +866,13 @@ export default function ComprasPage() {
 
         if (updErr || !updData || updData.length === 0) {
           // Retry once with fresh read if concurrent update detected
-          const { data: freshProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+          const { data: freshProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).maybeSingle();
           const freshStock = freshProd?.stock ?? 0;
           await supabase.from("productos").update({ stock: freshStock + item.cantidad }).eq("id", item.producto_id);
         }
 
         // Re-read for accurate log
-        const { data: afterProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        const { data: afterProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).maybeSingle();
         const stockDespues = afterProd?.stock ?? newStock;
 
         // Log stock movement
@@ -1058,7 +1058,7 @@ export default function ComprasPage() {
       // Load product data for each item
       const loadedItems: CompraItem[] = [];
       for (const ci of compraItems) {
-        const { data: prod } = await supabase.from("productos").select("id, nombre, codigo, precio, costo, stock, imagen_url").eq("id", ci.producto_id).single();
+        const { data: prod } = await supabase.from("productos").select("id, nombre, codigo, precio, costo, stock, imagen_url").eq("id", ci.producto_id).maybeSingle();
         loadedItems.push({
           producto_id: ci.producto_id,
           nombre: ci.descripcion,
@@ -1192,7 +1192,7 @@ export default function ComprasPage() {
           .from("proveedores")
           .select("saldo")
           .eq("id", detailCompra.proveedor_id)
-          .single();
+          .maybeSingle();
         if (prov) {
           const newSaldo = (prov.saldo || 0) + paymentAmount;
           await supabase
@@ -2037,7 +2037,7 @@ export default function ComprasPage() {
                 try {
                   // Execute stock, caja, price updates for pending purchase
                   for (const item of detailItems) {
-                    const { data: prodData } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+                    const { data: prodData } = await supabase.from("productos").select("stock").eq("id", item.producto_id).maybeSingle();
                     const stockAntes = prodData?.stock ?? 0;
                     const newStock = stockAntes + item.cantidad;
                     await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
