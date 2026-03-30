@@ -287,7 +287,7 @@ export function ReceiptPrintView({
                   : isBox
                   ? `x${item.unidades_por_presentacion} un`
                   : isMedio
-                  ? `x${item.unidades_por_presentacion} un`
+                  ? "Un"
                   : /^(unidad|un)$/i.test(item.unit || "") ? "Un" : (item.unit || "Un")}
               </td>
               <td style={{ padding: rowPad, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtCur(precioUnitario)}</td>
