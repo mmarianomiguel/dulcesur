@@ -69,12 +69,17 @@ async function loadReceiptConfigFromDB(): Promise<ReceiptConfig | null> {
   return null;
 }
 
-function saveReceiptConfig(config: ReceiptConfig) {
+async function saveReceiptConfig(config: ReceiptConfig) {
   localStorage.setItem("receipt_config", JSON.stringify(config));
   // Also persist to DB for cross-device/browser robustness
-  Promise.resolve(supabase.from("empresa").select("id").limit(1).single()).then(({ data: emp }) => {
-    if (emp) supabase.from("empresa").update({ receipt_config: config } as any).eq("id", emp.id);
-  }).catch((err) => console.error("Error guardando config de recibos:", err));
+  try {
+    const { data: emp } = await supabase.from("empresa").select("id").limit(1).single();
+    if (emp) {
+      await supabase.from("empresa").update({ receipt_config: config } as any).eq("id", emp.id);
+    }
+  } catch (err) {
+    console.error("Error guardando config de recibos en DB:", err);
+  }
 }
 
 type Section = "empresa" | "facturacion" | "impresion" | "comprobantes";
@@ -94,18 +99,17 @@ export default function ConfiguracionPage() {
   const [activeSection, setActiveSection] = useState<Section>("empresa");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Load receipt config from localStorage on mount
+  // Load receipt config: try DB first (authoritative), fall back to localStorage
   useEffect(() => {
     const localConfig = loadReceiptConfig();
     setRcfg(localConfig);
-    if (!localStorage.getItem("receipt_config")) {
-      loadReceiptConfigFromDB().then((dbConfig) => {
-        if (dbConfig) {
-          setRcfg(dbConfig);
-          localStorage.setItem("receipt_config", JSON.stringify(dbConfig));
-        }
-      });
-    }
+    // Always try DB to keep in sync across devices
+    loadReceiptConfigFromDB().then((dbConfig) => {
+      if (dbConfig) {
+        setRcfg(dbConfig);
+        localStorage.setItem("receipt_config", JSON.stringify(dbConfig));
+      }
+    });
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -655,7 +659,7 @@ export default function ConfiguracionPage() {
                 </Card>
 
                 <div className="flex justify-end">
-                  <Button onClick={() => { saveReceiptConfig(rcfg); setSaving("receipt"); setTimeout(() => setSaving(null), 600); showSuccess("Configuración de comprobantes guardada"); }} disabled={saving === "receipt"}>
+                  <Button onClick={async () => { setSaving("receipt"); await saveReceiptConfig(rcfg); setTimeout(() => setSaving(null), 600); showSuccess("Configuración de comprobantes guardada"); }} disabled={saving === "receipt"}>
                     {saving === "receipt" ? <Check className="w-4 h-4 mr-2" /> : <Check className="w-4 h-4 mr-2" />}
                     {saving === "receipt" ? "Guardado" : "Guardar configuración"}
                   </Button>

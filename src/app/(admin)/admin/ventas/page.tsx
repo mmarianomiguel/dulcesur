@@ -336,11 +336,19 @@ export default function VentasPage() {
     }
     setPresentacionesMap(map);
 
-    // Load receipt config from localStorage + empresa data
+    // Load receipt config from localStorage, then try DB for cross-device sync
     try {
       const stored = localStorage.getItem("receipt_config");
       if (stored) {
         setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
+      } else {
+        // No localStorage — try loading from DB
+        const { data: empCfg } = await supabase.from("empresa").select("receipt_config").limit(1).single();
+        if (empCfg && (empCfg as any).receipt_config) {
+          const dbCfg = { ...defaultReceiptConfig, ...(empCfg as any).receipt_config };
+          setReceiptConfig(dbCfg);
+          localStorage.setItem("receipt_config", JSON.stringify(dbCfg));
+        }
       }
     } catch (err) { console.error("Error in POS:", err); }
     const { data: emp } = await supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single();
