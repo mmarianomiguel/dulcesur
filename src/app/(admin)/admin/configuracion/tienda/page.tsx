@@ -1,7 +1,7 @@
 "use client";
 
 import { showAdminToast } from "@/components/admin-toast";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   Card,
@@ -13,10 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -24,11 +24,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Store,
   Truck,
   Star,
-  CreditCard,
   Loader2,
   Check,
   X,
@@ -43,7 +43,23 @@ import {
   Image,
   CalendarDays,
   Upload,
+  Instagram,
+  Facebook,
+  Phone,
+  MapPin,
+  Mail,
+  Pencil,
+  Trash2,
+  Save,
+  FileText,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface TiendaConfig {
   id: string;
@@ -88,13 +104,48 @@ const formatARS = (value: number) =>
     minimumFractionDigits: 0,
   }).format(value);
 
-type Section = "general" | "pedidos" | "categorias" | "pagos";
+interface FooterConfig {
+  descripcion: string;
+  logo_url: string;
+  instagram_url: string;
+  facebook_url: string;
+  whatsapp_url: string;
+  direccion: string;
+  telefono: string;
+  email: string;
+  mostrar_newsletter: boolean;
+  badges: string[];
+}
+
+interface PaginaInfo {
+  id: string;
+  slug: string;
+  titulo: string;
+  contenido: string;
+  activa: boolean;
+  orden: number;
+}
+
+const DEFAULT_FOOTER: FooterConfig = {
+  descripcion: "",
+  logo_url: "",
+  instagram_url: "",
+  facebook_url: "",
+  whatsapp_url: "",
+  direccion: "",
+  telefono: "",
+  email: "",
+  mostrar_newsletter: true,
+  badges: ["Envío a domicilio", "Compra segura", "Múltiples medios de pago", "Atención personalizada"],
+};
+
+type Section = "general" | "pedidos" | "categorias" | "footer";
 
 const NAV_ITEMS: { key: Section; label: string; icon: React.ReactNode }[] = [
   { key: "general", label: "General", icon: <Store className="w-4 h-4" /> },
   { key: "pedidos", label: "Pedidos y Envíos", icon: <Truck className="w-4 h-4" /> },
   { key: "categorias", label: "Categorías Destacadas", icon: <Star className="w-4 h-4" /> },
-  { key: "pagos", label: "Pagos", icon: <CreditCard className="w-4 h-4" /> },
+  { key: "footer", label: "Footer y Páginas", icon: <FileText className="w-4 h-4" /> },
 ];
 
 export default function TiendaConfigPage() {
@@ -106,17 +157,32 @@ export default function TiendaConfigPage() {
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("general");
 
+  // Footer state
+  const [footerConfig, setFooterConfig] = useState<FooterConfig>(DEFAULT_FOOTER);
+  const [paginas, setPaginas] = useState<PaginaInfo[]>([]);
+  const [editPage, setEditPage] = useState<PaginaInfo | null>(null);
+  const [editForm, setEditForm] = useState({ titulo: "", slug: "", contenido: "", activa: true });
+  const [savingPage, setSavingPage] = useState(false);
+  const [deletePageId, setDeletePageId] = useState<string | null>(null);
+  const [savingFooter, setSavingFooter] = useState(false);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: cfg }, { data: dest }, { data: cats }] = await Promise.all([
+    const [{ data: cfg }, { data: dest }, { data: cats }, { data: pgs }] = await Promise.all([
       supabase.from("tienda_config").select("*").limit(1).single(),
       supabase
         .from("categorias_destacadas")
         .select("*, categoria:categorias(id, nombre)")
         .order("orden"),
       supabase.from("categorias").select("id, nombre").order("nombre"),
+      supabase.from("paginas_info").select("*").order("orden"),
     ]);
-    if (cfg) setConfig(cfg as TiendaConfig);
+    if (cfg) {
+      setConfig(cfg as TiendaConfig);
+      // Load footer config
+      const fc = (cfg as any).footer_config || {};
+      setFooterConfig({ ...DEFAULT_FOOTER, ...fc, descripcion: fc.descripcion || (cfg as any).descripcion || "", logo_url: fc.logo_url || (cfg as any).logo_url || "" });
+    }
     // Deduplicate by categoria_id (keep first occurrence, preserve order)
     const seen = new Set<string>();
     const deduped = ((dest as CategoriaDestacada[]) || []).filter((d) => {
@@ -126,6 +192,7 @@ export default function TiendaConfigPage() {
     });
     setDestacadas(deduped);
     setCategorias((cats as Categoria[]) || []);
+    setPaginas((pgs as PaginaInfo[]) || []);
     setLoading(false);
   }, []);
 
@@ -219,24 +286,6 @@ export default function TiendaConfigPage() {
     setSaving(false);
   };
 
-  // Auto-save destacadas to DB whenever they change (debounced)
-  const destacadasInitialized = useRef(false);
-  useEffect(() => {
-    if (!destacadasInitialized.current) {
-      // Skip the first render (initial load from DB)
-      destacadasInitialized.current = true;
-      return;
-    }
-    const timeout = setTimeout(async () => {
-      await supabase.from("categorias_destacadas").delete().neq("id", "");
-      if (destacadas.length > 0) {
-        await supabase.from("categorias_destacadas").insert(
-          destacadas.map((d, i) => ({ categoria_id: d.categoria_id, orden: i + 1 }))
-        );
-      }
-    }, 500);
-    return () => clearTimeout(timeout);
-  }, [destacadas]);
 
   const availableCats = categorias.filter(
     (c) => !destacadas.some((d) => d.categoria_id === c.id)
@@ -865,78 +914,174 @@ export default function TiendaConfigPage() {
             </div>
           )}
 
-          {/* ======================== PAGOS ======================== */}
-          {activeSection === "pagos" && (
+          {/* ======================== FOOTER Y PAGINAS ======================== */}
+          {activeSection === "footer" && (
             <div className="space-y-6">
+              {/* Footer content */}
               <Card>
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
-                        <CreditCard className="w-5 h-5 text-violet-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">Pago mixto</p>
-                        <p className="text-xs text-muted-foreground max-w-sm">
-                          Permite a los clientes combinar múltiples métodos de pago
-                          en una misma compra
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() =>
-                        update("pago_mixto_habilitado", !config?.pago_mixto_habilitado)
-                      }
-                      className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                        config?.pago_mixto_habilitado
-                          ? "bg-emerald-500"
-                          : "bg-muted-foreground/30"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
-                          config?.pago_mixto_habilitado
-                            ? "translate-x-8"
-                            : "translate-x-1"
-                        }`}
-                      />
-                    </button>
+                <CardHeader><CardTitle className="text-base">Contenido del Footer</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Descripción de la tienda</Label>
+                    <Textarea value={footerConfig.descripcion} onChange={(e) => setFooterConfig({ ...footerConfig, descripcion: e.target.value })} placeholder="Tu tienda online..." rows={2} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>URL del logo (footer)</Label>
+                    <Input value={footerConfig.logo_url} onChange={(e) => setFooterConfig({ ...footerConfig, logo_url: e.target.value })} placeholder="https://..." />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch checked={footerConfig.mostrar_newsletter} onCheckedChange={(v) => setFooterConfig({ ...footerConfig, mostrar_newsletter: v })} />
+                    <Label>Mostrar newsletter</Label>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Transfer surcharge */}
+              {/* Social & Contact */}
               <Card>
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-blue-500" />
+                <CardHeader><CardTitle className="text-base">Redes Sociales y Contacto</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5"><Instagram className="w-3.5 h-3.5" />Instagram</Label>
+                      <Input value={footerConfig.instagram_url} onChange={(e) => setFooterConfig({ ...footerConfig, instagram_url: e.target.value })} placeholder="https://instagram.com/..." />
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold">Recargo por transferencia</p>
-                      <p className="text-xs text-muted-foreground max-w-sm">
-                        Porcentaje adicional que se aplica cuando el cliente paga con transferencia bancaria
-                      </p>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5"><Facebook className="w-3.5 h-3.5" />Facebook</Label>
+                      <Input value={footerConfig.facebook_url} onChange={(e) => setFooterConfig({ ...footerConfig, facebook_url: e.target.value })} placeholder="https://facebook.com/..." />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" />WhatsApp</Label>
+                      <Input value={footerConfig.whatsapp_url} onChange={(e) => setFooterConfig({ ...footerConfig, whatsapp_url: e.target.value })} placeholder="https://wa.me/5411..." />
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 max-w-xs">
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={config?.recargo_transferencia ?? 0}
-                      onChange={(e) => update("recargo_transferencia", Number(e.target.value))}
-                      className="h-10"
-                    />
-                    <span className="text-sm font-medium text-muted-foreground shrink-0">%</span>
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />Dirección</Label>
+                      <Input value={footerConfig.direccion} onChange={(e) => setFooterConfig({ ...footerConfig, direccion: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" />Teléfono</Label>
+                      <Input value={footerConfig.telefono} onChange={(e) => setFooterConfig({ ...footerConfig, telefono: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />Email</Label>
+                      <Input value={footerConfig.email} onChange={(e) => setFooterConfig({ ...footerConfig, email: e.target.value })} />
+                    </div>
                   </div>
-                  {(config?.recargo_transferencia ?? 0) > 0 && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Ej: un pedido de $10.000 tendrá un recargo de {formatARS(10000 * (config!.recargo_transferencia / 100))} (total: {formatARS(10000 + 10000 * (config!.recargo_transferencia / 100))})
-                    </p>
-                  )}
                 </CardContent>
               </Card>
+
+              {/* Badges */}
+              <Card>
+                <CardHeader><CardTitle className="text-base">Badges de confianza</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {footerConfig.badges.map((badge, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input value={badge} onChange={(e) => { const b = [...footerConfig.badges]; b[idx] = e.target.value; setFooterConfig({ ...footerConfig, badges: b }); }} />
+                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-destructive" onClick={() => setFooterConfig({ ...footerConfig, badges: footerConfig.badges.filter((_, i) => i !== idx) })}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={() => setFooterConfig({ ...footerConfig, badges: [...footerConfig.badges, ""] })}>
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />Agregar
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <div className="flex items-center gap-3">
+                <Button onClick={async () => {
+                  setSavingFooter(true);
+                  const { data: tc } = await supabase.from("tienda_config").select("id").limit(1).single();
+                  if (tc) await supabase.from("tienda_config").update({ footer_config: footerConfig } as any).eq("id", tc.id);
+                  setSavingFooter(false);
+                  showAdminToast("Footer guardado");
+                }} disabled={savingFooter}>
+                  {savingFooter ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                  Guardar Footer
+                </Button>
+              </div>
+
+              <Separator />
+
+              {/* Info Pages */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div><CardTitle className="text-base">Páginas de Información</CardTitle><CardDescription>Cómo comprar, envíos, FAQ, etc.</CardDescription></div>
+                    <Button size="sm" onClick={() => {
+                      setEditPage({ id: "", slug: "", titulo: "", contenido: "", activa: true, orden: paginas.length });
+                      setEditForm({ titulo: "", slug: "", contenido: "", activa: true });
+                    }}><Plus className="w-4 h-4 mr-1.5" />Nueva</Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg divide-y">
+                    {paginas.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 p-3 hover:bg-muted/30">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{p.titulo}</p>
+                          <p className="text-xs text-muted-foreground">/info/{p.slug}</p>
+                        </div>
+                        <Badge variant={p.activa ? "secondary" : "outline"} className="text-[10px]">{p.activa ? "Activa" : "Oculta"}</Badge>
+                        <Switch checked={p.activa} onCheckedChange={(v) => { supabase.from("paginas_info").update({ activa: v }).eq("id", p.id).then(() => fetchData()); }} />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                          setEditPage(p);
+                          setEditForm({ titulo: p.titulo, slug: p.slug, contenido: p.contenido, activa: p.activa });
+                        }}><Pencil className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeletePageId(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    ))}
+                    {paginas.length === 0 && <div className="p-8 text-center text-muted-foreground text-sm">Sin páginas</div>}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Edit page dialog */}
+              <Dialog open={!!editPage} onOpenChange={(o) => !o && setEditPage(null)}>
+                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                  <DialogHeader><DialogTitle>{editPage?.id ? "Editar página" : "Nueva página"}</DialogTitle></DialogHeader>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Título</Label><Input value={editForm.titulo} onChange={(e) => setEditForm({ ...editForm, titulo: e.target.value })} /></div>
+                      <div className="space-y-2"><Label>Slug</Label><Input value={editForm.slug} onChange={(e) => setEditForm({ ...editForm, slug: e.target.value })} placeholder={editForm.titulo.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")} /></div>
+                    </div>
+                    <div className="space-y-2"><Label>Contenido (HTML)</Label><Textarea value={editForm.contenido} onChange={(e) => setEditForm({ ...editForm, contenido: e.target.value })} rows={12} className="font-mono text-sm" /></div>
+                    <div className="flex items-center gap-3"><Switch checked={editForm.activa} onCheckedChange={(v) => setEditForm({ ...editForm, activa: v })} /><Label>Activa</Label></div>
+                    <Button onClick={async () => {
+                      setSavingPage(true);
+                      const slug = editForm.slug || editForm.titulo.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+                      if (editPage?.id) {
+                        await supabase.from("paginas_info").update({ titulo: editForm.titulo, slug, contenido: editForm.contenido, activa: editForm.activa, updated_at: new Date().toISOString() }).eq("id", editPage.id);
+                      } else {
+                        await supabase.from("paginas_info").insert({ titulo: editForm.titulo, slug, contenido: editForm.contenido, activa: editForm.activa, orden: paginas.length });
+                      }
+                      setEditPage(null);
+                      fetchData();
+                      setSavingPage(false);
+                    }} disabled={!editForm.titulo.trim() || savingPage} className="w-full">
+                      {savingPage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}Guardar
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Delete page confirm */}
+              <ConfirmDialog
+                open={!!deletePageId}
+                onOpenChange={(o) => !o && setDeletePageId(null)}
+                onConfirm={async () => {
+                  if (!deletePageId) return;
+                  await supabase.from("paginas_info").delete().eq("id", deletePageId);
+                  setDeletePageId(null);
+                  fetchData();
+                }}
+                title="Eliminar página"
+                description="¿Estás seguro de que querés eliminar esta página de información?"
+                confirmLabel="Eliminar"
+                variant="danger"
+              />
             </div>
           )}
         </div>

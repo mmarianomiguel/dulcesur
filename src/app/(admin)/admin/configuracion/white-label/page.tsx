@@ -60,9 +60,9 @@ export default function WhiteLabelPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Personalización</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Apariencia</h1>
         <p className="text-muted-foreground text-sm">
-          Configura el nombre, logo y colores del panel de administración
+          Configura el nombre, logo, colores y tema del panel de administración
         </p>
       </div>
 

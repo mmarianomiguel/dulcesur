@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Empresa, Usuario } from "@/types/database";
+import type { Empresa } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,46 +15,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   Building2,
-  User,
   Printer,
   Receipt,
-  Shield,
-  Puzzle,
   Loader2,
   Check,
   FileText,
   Eye,
-  Landmark,
-  Plus,
-  Pencil,
-  Trash2,
   Settings,
-  CreditCard,
   Image,
-  Info,
-  SlidersHorizontal,
-  ShoppingCart,
-  Users,
-  Package,
-  Truck,
-  ShoppingBag,
-  BarChart3,
-  Globe,
-  LayoutDashboard,
-  Lock,
-  Download,
-  Upload,
-  Search,
-  X,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
@@ -106,72 +77,27 @@ function saveReceiptConfig(config: ReceiptConfig) {
   });
 }
 
-type Section = "empresa" | "facturacion" | "impresion" | "comprobantes" | "cuentas" | "modulos" | "backup";
+type Section = "empresa" | "facturacion" | "impresion" | "comprobantes";
 
 const NAV_ITEMS: { id: Section; label: string; icon: typeof Building2; description: string }[] = [
   { id: "empresa", label: "Empresa", icon: Building2, description: "Datos generales" },
   { id: "facturacion", label: "Facturación", icon: Receipt, description: "Comprobantes y ventas" },
   { id: "impresion", label: "Impresión", icon: Printer, description: "Formato de tickets" },
   { id: "comprobantes", label: "Comprobantes", icon: FileText, description: "Diseño y formato" },
-  { id: "cuentas", label: "Cuentas Bancarias", icon: Landmark, description: "Transferencias" },
-  { id: "modulos", label: "Módulos", icon: Puzzle, description: "Secciones del sistema" },
-  { id: "backup", label: "Backup", icon: Shield, description: "Exportar e importar datos" },
 ];
-
-const MODULE_META: Record<string, { icon: typeof Building2; description: string }> = {
-  Dashboard: { icon: LayoutDashboard, description: "Panel principal con resumen de actividad" },
-  Ventas: { icon: ShoppingCart, description: "Gestión de ventas y facturación" },
-  Clientes: { icon: Users, description: "Base de datos de clientes" },
-  Productos: { icon: Package, description: "Catálogo de productos y precios" },
-  Proveedores: { icon: Truck, description: "Gestión de proveedores" },
-  Compras: { icon: ShoppingBag, description: "Órdenes de compra" },
-  Caja: { icon: CreditCard, description: "Movimientos de caja y arqueos" },
-  "Vendedores": { icon: Users, description: "Comisiones y configuración de vendedores" },
-  "Auditoría": { icon: FileText, description: "Historial de acciones del sistema" },
-  "Tienda Online": { icon: Globe, description: "E-commerce y pedidos online" },
-  Configuración: { icon: Settings, description: "Ajustes del sistema" },
-};
 
 export default function ConfiguracionPage() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [rcfg, setRcfg] = useState<ReceiptConfig>(defaultReceiptConfig);
-  const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
-  const [editingCuenta, setEditingCuenta] = useState<CuentaBancaria | null>(null);
-  const [cuentaForm, setCuentaForm] = useState({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "", logo_url: "" });
-  const [proveedoresList, setProveedoresList] = useState<{ id: string; nombre: string }[]>([]);
-  const [showCuentaForm, setShowCuentaForm] = useState(false);
-  const [provSearchText, setProvSearchText] = useState("");
-  const [provDropdownOpen, setProvDropdownOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("empresa");
   const [successMsg, setSuccessMsg] = useState("");
-  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
 
-  // ─── Module enable/disable ───
-  const allModulos = ["Dashboard", "Ventas", "Clientes", "Productos", "Proveedores", "Compras", "Caja", "Stock", "Reportes", "Vendedores", "Auditoría", "Tienda Online", "Configuración"] as const;
-  const alwaysEnabled = ["Dashboard", "Configuración"];
-  const [modulos, setModulos] = useState<Record<string, boolean>>(() => {
-    const def: Record<string, boolean> = {};
-    allModulos.forEach((m) => (def[m] = true));
-    return def;
-  });
-
-  const toggleModulo = (name: string) => {
-    if (alwaysEnabled.includes(name)) return;
-    const updated = { ...modulos, [name]: !modulos[name] };
-    setModulos(updated);
-    localStorage.setItem("modulos_habilitados", JSON.stringify(updated));
-    // Dispatch storage event so sidebar picks it up in the same tab
-    window.dispatchEvent(new Event("modulos_updated"));
-  };
-
-  // Load receipt config, bank accounts and module config from localStorage on mount
+  // Load receipt config from localStorage on mount
   useEffect(() => {
     const localConfig = loadReceiptConfig();
     setRcfg(localConfig);
-    // If localStorage had no config, try loading from DB
     if (!localStorage.getItem("receipt_config")) {
       loadReceiptConfigFromDB().then((dbConfig) => {
         if (dbConfig) {
@@ -180,40 +106,13 @@ export default function ConfiguracionPage() {
         }
       });
     }
-    supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre").then(({ data }) => {
-      if (data && data.length > 0) {
-        setCuentas(data.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo_cuenta || "Caja de Ahorro", cbu_cvu: c.cbu_cvu || "", alias: c.alias || "", titular: c.titular || "", origen: c.origen || "propia", proveedor_id: c.proveedor_id || "", logo_url: c.logo_url || "" })));
-      } else {
-        try { const stored = localStorage.getItem("cuentas_bancarias"); if (stored) setCuentas(JSON.parse(stored)); } catch {}
-      }
-    });
-    supabase.from("proveedores").select("id, nombre").order("nombre").then(({ data }) => {
-      if (data) setProveedoresList(data);
-    });
-    try {
-      const stored = localStorage.getItem("modulos_habilitados");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const merged: Record<string, boolean> = {};
-        allModulos.forEach((m) => (merged[m] = parsed[m] !== undefined ? parsed[m] : true));
-        // Force always-enabled
-        alwaysEnabled.forEach((m) => (merged[m] = true));
-        setModulos(merged);
-      }
-    } catch (err) { showAdminToast("Error al cargar configuración", "error"); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: emp }, { data: users }] = await Promise.all([
-      supabase.from("empresa").select("*").limit(1).single(),
-      supabase.from("usuarios").select("*").eq("activo", true).order("nombre"),
-    ]);
+    const { data: emp } = await supabase.from("empresa").select("*").limit(1).single();
     setEmpresa(emp);
-    setUsuarios(users || []);
 
-    // Auto-populate receipt config from empresa if not yet customized
     if (emp && !localStorage.getItem("receipt_config")) {
       const autoConfig: Partial<ReceiptConfig> = {
         empresaNombre: emp.nombre || defaultReceiptConfig.empresaNombre,
@@ -400,37 +299,6 @@ export default function ConfiguracionPage() {
                 </CardContent>
               </Card>
 
-              {/* Usuarios sub-section */}
-              <div className="mt-8">
-                <div className="flex items-center gap-3 mb-4">
-                  <Shield className="w-5 h-5 text-orange-500" />
-                  <div>
-                    <h3 className="text-sm font-semibold">Usuarios y permisos</h3>
-                    <p className="text-xs text-muted-foreground">Administrar usuarios del sistema</p>
-                  </div>
-                </div>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="space-y-3">
-                      {usuarios.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                              {u.nombre.split(" ").map((n) => n[0]).join("").substring(0, 2)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">{u.nombre}</p>
-                              <p className="text-xs text-muted-foreground capitalize">{u.rol}</p>
-                            </div>
-                          </div>
-                          <Button variant="outline" size="sm" onClick={() => window.location.href = "/admin/usuarios"}>Editar</Button>
-                        </div>
-                      ))}
-                    </div>
-                    <Button variant="outline" className="mt-4" size="sm" onClick={() => window.location.href = "/admin/usuarios"}><User className="w-4 h-4 mr-2" />Administrar usuarios</Button>
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           )}
 
@@ -796,395 +664,8 @@ export default function ConfiguracionPage() {
             </div>
           )}
 
-          {/* ─── Cuentas Bancarias ─── */}
-          {activeSection === "cuentas" && (
-            <div>
-              <SectionHeader icon={Landmark} title="Cuentas Bancarias" description="Administrar cuentas para recibir transferencias y pagos" color="bg-cyan-500/10 text-cyan-500" />
-
-              <div className="space-y-4">
-                {cuentas.length > 0 ? (
-                  <div className="grid gap-3">
-                    {cuentas.map((c) => (
-                      <Card key={c.id} className="hover:shadow-sm transition-shadow">
-                        <CardContent className="py-4 px-5">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
-                                <Landmark className="w-5 h-5 text-cyan-500" />
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-sm font-semibold">{c.nombre}</p>
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${c.origen === "proveedor" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
-                                    {c.origen === "proveedor" ? "Proveedor" : "Propia"}
-                                  </span>
-                                </div>
-                                {c.alias && <p className="text-xs text-muted-foreground">Alias: <span className="font-mono font-medium">{c.alias}</span></p>}
-                                {c.titular && <p className="text-xs text-muted-foreground">Titular: {c.titular}</p>}
-                                {c.cbu_cvu && <p className="text-xs text-muted-foreground font-mono mt-0.5">{c.cbu_cvu}</p>}
-                              </div>
-                            </div>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => {
-                                setEditingCuenta(c);
-                                setCuentaForm({ nombre: c.nombre, tipo: c.tipo, cbu_cvu: c.cbu_cvu, alias: c.alias, origen: c.origen || "propia", titular: c.titular || "", proveedor_id: (c as any).proveedor_id || "", logo_url: c.logo_url || "" });
-                                setShowCuentaForm(true);
-                              }}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="text-destructive" onClick={async () => {
-                                await supabase.from("cuentas_bancarias").update({ activo: false }).eq("id", c.id);
-                                setCuentas(cuentas.filter((x) => x.id !== c.id));
-                              }}>
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <Landmark className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                      <p className="text-sm text-muted-foreground">No hay cuentas bancarias configuradas.</p>
-                      <p className="text-xs text-muted-foreground">Agrega una cuenta para recibir transferencias.</p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {showCuentaForm && (
-                  <Card>
-                    <CardContent className="pt-6 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <Label>Nombre de la cuenta</Label>
-                          <Input placeholder="Ej: Brubank, Mercado Pago, Arcor" value={cuentaForm.nombre} onChange={(ev) => setCuentaForm({ ...cuentaForm, nombre: ev.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>¿De quién es?</Label>
-                          <div className="flex gap-2">
-                            {([["propia", "🏦 Propia"], ["proveedor", "🏭 Proveedor"]] as const).map(([val, label]) => (
-                              <button
-                                key={val}
-                                type="button"
-                                onClick={() => setCuentaForm({ ...cuentaForm, origen: val })}
-                                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition ${cuentaForm.origen === val ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:border-primary/50"}`}
-                              >{label}</button>
-                            ))}
-                          </div>
-                        </div>
-                        {cuentaForm.origen === "proveedor" && (
-                          <div className="space-y-1 relative">
-                            <Label>Proveedor vinculado</Label>
-                            <button
-                              type="button"
-                              onClick={() => { setProvDropdownOpen(!provDropdownOpen); setProvSearchText(""); }}
-                              className="w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm text-left hover:border-primary/50 transition"
-                            >
-                              <span className={cuentaForm.proveedor_id ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                {proveedoresList.find((p) => p.id === cuentaForm.proveedor_id)?.nombre || "Buscar proveedor..."}
-                              </span>
-                              {cuentaForm.proveedor_id && (
-                                <span onClick={(e: any) => { e.stopPropagation(); setCuentaForm({ ...cuentaForm, proveedor_id: "" }); }} className="p-0.5 rounded-full hover:bg-muted cursor-pointer"><X className="w-3 h-3" /></span>
-                              )}
-                            </button>
-                            {provDropdownOpen && (
-                              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-lg border shadow-lg">
-                                <div className="p-2 border-b">
-                                  <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                                    <Input
-                                      placeholder="Buscar proveedor..."
-                                      value={provSearchText}
-                                      onChange={(e) => setProvSearchText(e.target.value)}
-                                      className="pl-8 h-8 text-sm"
-                                      autoFocus
-                                    />
-                                  </div>
-                                </div>
-                                <div className="max-h-48 overflow-y-auto p-1">
-                                  {proveedoresList.filter((p) => p.nombre.toLowerCase().includes(provSearchText.toLowerCase())).length === 0 ? (
-                                    <p className="text-center text-sm text-muted-foreground py-4">Sin resultados</p>
-                                  ) : proveedoresList.filter((p) => p.nombre.toLowerCase().includes(provSearchText.toLowerCase())).map((p) => (
-                                    <button
-                                      key={p.id}
-                                      type="button"
-                                      onClick={() => { setCuentaForm({ ...cuentaForm, proveedor_id: p.id }); setProvDropdownOpen(false); setProvSearchText(""); }}
-                                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition ${cuentaForm.proveedor_id === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}
-                                    >
-                                      {p.nombre}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          <Label>Alias</Label>
-                          <Input placeholder="Ej: dulcesur.mp, arcor.pagos" value={cuentaForm.alias} onChange={(ev) => setCuentaForm({ ...cuentaForm, alias: ev.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Titular (opcional)</Label>
-                          <Input placeholder="Nombre del titular" value={cuentaForm.titular} onChange={(ev) => setCuentaForm({ ...cuentaForm, titular: ev.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>CBU / CVU (opcional)</Label>
-                          <Input placeholder="22 dígitos" value={cuentaForm.cbu_cvu} onChange={(ev) => setCuentaForm({ ...cuentaForm, cbu_cvu: ev.target.value })} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>Logo (opcional)</Label>
-                          <div className="flex items-center gap-3">
-                            {cuentaForm.logo_url ? (
-                              <div className="relative w-10 h-10 rounded-lg border overflow-hidden bg-white flex-shrink-0">
-                                <img src={cuentaForm.logo_url} alt="" className="w-full h-full object-contain p-0.5" />
-                                <button type="button" onClick={() => setCuentaForm({ ...cuentaForm, logo_url: "" })} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[8px] flex items-center justify-center hover:bg-red-600">×</button>
-                              </div>
-                            ) : (
-                              <div className="w-10 h-10 rounded-lg border border-dashed border-gray-300 flex items-center justify-center flex-shrink-0 text-gray-300">
-                                <Image className="w-4 h-4" />
-                              </div>
-                            )}
-                            <label className="flex-1 cursor-pointer">
-                              <span className="text-xs text-primary hover:underline">{cuentaForm.logo_url ? "Cambiar" : "Subir logo"}</span>
-                              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                const formData = new FormData();
-                                formData.append("file", file);
-                                try {
-                                  const res = await fetch("/api/upload", { method: "POST", body: formData });
-                                  if (!res.ok) {
-                                    const err = await res.text();
-                                    showAdminToast("Error al subir logo: " + err, "error");
-                                    return;
-                                  }
-                                  const data = await res.json();
-                                  if (data.secure_url || data.url) {
-                                    setCuentaForm({ ...cuentaForm, logo_url: data.secure_url || data.url });
-                                    showAdminToast("Logo subido", "success");
-                                  } else {
-                                    showAdminToast("No se obtuvo URL del logo", "error");
-                                  }
-                                } catch (err: any) {
-                                  showAdminToast("Error: " + (err?.message || "No se pudo subir"), "error");
-                                }
-                              }} />
-                            </label>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Tipo de cuenta</Label>
-                          <Select value={cuentaForm.tipo} onValueChange={(v) => setCuentaForm({ ...cuentaForm, tipo: v ?? "" })}>
-                            <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Caja de Ahorro">Caja de Ahorro</SelectItem>
-                              <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
-                              <SelectItem value="Billetera Virtual">Billetera Virtual</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" onClick={() => { setShowCuentaForm(false); setEditingCuenta(null); setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "", logo_url: "" }); }}>
-                          Cancelar
-                        </Button>
-                        <Button size="sm" disabled={!cuentaForm.nombre} onClick={async () => {
-                          if (editingCuenta) {
-                            await supabase.from("cuentas_bancarias").update({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null, logo_url: cuentaForm.logo_url || null, updated_at: new Date().toISOString(),
-                            }).eq("id", editingCuenta.id);
-                            setCuentas(cuentas.map((c) => c.id === editingCuenta.id ? { ...c, ...cuentaForm } : c));
-                          } else {
-                            const { data: newCuenta } = await supabase.from("cuentas_bancarias").insert({
-                              nombre: cuentaForm.nombre, tipo_cuenta: cuentaForm.tipo, cbu_cvu: cuentaForm.cbu_cvu, alias: cuentaForm.alias, titular: cuentaForm.titular, origen: cuentaForm.origen, proveedor_id: cuentaForm.proveedor_id || null, logo_url: cuentaForm.logo_url || null,
-                            }).select("id").single();
-                            if (newCuenta) setCuentas([...cuentas, { id: newCuenta.id, ...cuentaForm }]);
-                          }
-                          setShowCuentaForm(false);
-                          setEditingCuenta(null);
-                          setCuentaForm({ nombre: "", tipo: "Caja de Ahorro", cbu_cvu: "", alias: "", origen: "propia", titular: "", proveedor_id: "", logo_url: "" });
-                        }}>
-                          <Check className="w-4 h-4 mr-1" />
-                          {editingCuenta ? "Actualizar" : "Agregar"}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {!showCuentaForm && (
-                  <Button variant="outline" size="sm" onClick={() => setShowCuentaForm(true)}>
-                    <Plus className="w-4 h-4 mr-2" />Agregar cuenta bancaria
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ─── Módulos ─── */}
-          {activeSection === "modulos" && (
-            <div>
-              <SectionHeader icon={Puzzle} title="Módulos del Sistema" description="Activar o desactivar secciones del menú lateral" color="bg-amber-500/10 text-amber-500" />
-
-              <div className="grid gap-3">
-                {allModulos.map((mod) => {
-                  const enabled = modulos[mod];
-                  const locked = alwaysEnabled.includes(mod);
-                  const meta = MODULE_META[mod] || { icon: Puzzle, description: "" };
-                  const ModIcon = meta.icon;
-                  return (
-                    <Card key={mod} className={cn("transition-all", !enabled && !locked && "opacity-60")}>
-                      <CardContent className="py-4 px-5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={cn(
-                              "w-10 h-10 rounded-xl flex items-center justify-center",
-                              enabled ? "bg-primary/10" : "bg-muted"
-                            )}>
-                              <ModIcon className={cn("w-5 h-5", enabled ? "text-primary" : "text-muted-foreground")} />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-semibold">{mod}</p>
-                                {locked && <Lock className="w-3 h-3 text-muted-foreground" />}
-                              </div>
-                              <p className="text-xs text-muted-foreground">{meta.description}</p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={locked}
-                            onClick={() => toggleModulo(mod)}
-                            className={cn(
-                              "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                              enabled ? "bg-emerald-500" : "bg-gray-300",
-                              locked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ease-in-out",
-                                enabled ? "translate-x-5" : "translate-x-0"
-                              )}
-                            />
-                          </button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground mt-4">Dashboard y Configuración siempre están habilitados.</p>
-            </div>
-          )}
-
-          {activeSection === "backup" && (
-            <div>
-              <SectionHeader icon={Shield} title="Backup de Datos" description="Exportar e importar toda la información del sistema" color="bg-emerald-500/10 text-emerald-500" />
-              <div className="grid gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Exportar Backup</CardTitle>
-                    <CardDescription>Descarga un archivo JSON con todos los datos del sistema</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button
-                      onClick={async () => {
-                        try {
-                          showAdminToast("Generando backup...");
-                          const res = await fetch("/api/backup");
-                          if (!res.ok) throw new Error("Error al generar backup");
-                          const blob = await res.blob();
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                          showAdminToast("Backup descargado correctamente");
-                        } catch {
-                          showAdminToast("Error al generar el backup", "error");
-                        }
-                      }}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Descargar Backup
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Restaurar Backup</CardTitle>
-                    <CardDescription>Restaura los datos desde un archivo JSON previamente exportado. Esto reemplazará todos los datos actuales.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <input
-                      id="backup-restore-input"
-                      type="file"
-                      accept=".json"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const inputEl = e.target;
-                        setConfirmDialog({
-                          open: true,
-                          title: "Restaurar backup",
-                          message: "Esto reemplazará TODOS los datos actuales. ¿Estás seguro?",
-                          onConfirm: async () => {
-                            try {
-                              showAdminToast("Restaurando backup...");
-                              const text = await file.text();
-                              const json = JSON.parse(text);
-                              const res = await fetch("/api/backup", {
-                                method: "PUT",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify(json),
-                              });
-                              const result = await res.json();
-                              if (!res.ok) throw new Error(result.error);
-                              showAdminToast(`Backup restaurado: ${result.success_count} tablas exitosas`);
-                            } catch {
-                              showAdminToast("Error al restaurar el backup", "error");
-                            }
-                            inputEl.value = "";
-                          },
-                        });
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => document.getElementById("backup-restore-input")?.click()}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Seleccionar archivo JSON
-                    </Button>
-                    <p className="text-xs text-destructive">
-                      Advertencia: La restauración eliminará los datos actuales y los reemplazará con los del backup.
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
         </div>
       </div>
-
-      {/* Confirm Dialog */}
-      <Dialog open={confirmDialog.open} onOpenChange={(o) => { if (!o) { setConfirmDialog(prev => ({ ...prev, open: false })); const el = document.getElementById("backup-restore-input") as HTMLInputElement; if (el) el.value = ""; } }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>{confirmDialog.title}</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">{confirmDialog.message}</p>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => { setConfirmDialog(prev => ({ ...prev, open: false })); const el = document.getElementById("backup-restore-input") as HTMLInputElement; if (el) el.value = ""; }}>Cancelar</Button>
-            <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
