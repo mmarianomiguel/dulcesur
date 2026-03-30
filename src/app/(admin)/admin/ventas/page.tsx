@@ -647,6 +647,8 @@ export default function VentasPage() {
           if (medioPres) {
             const prod = products.find((p) => p.id === i.producto_id);
             const newDiscount = prod ? getProductDiscount(prod, medioPres.nombre || "Medio Carton") : i.discount;
+            const medioUnits = Number(medioPres.cantidad) || 0.5;
+            const newCosto = medioPres.costo > 0 ? medioPres.costo : (prod?.costo ?? 0) * medioUnits;
             return {
               ...i,
               qty: 1,
@@ -654,9 +656,10 @@ export default function VentasPage() {
               code: medioPres.codigo || prod?.codigo || i.code,
               description: prod ? `${prod.nombre} (${medioPres.nombre || "Medio Cartón"})` : i.description,
               presentacion: medioPres.nombre || "Medio Carton",
-              unidades_por_presentacion: Number(medioPres.cantidad) || 0.5,
+              unidades_por_presentacion: medioUnits,
               discount: newDiscount,
               subtotal: medioPres.precio * (1 - newDiscount / 100),
+              costo_unitario: newCosto,
             };
           }
         }
@@ -672,6 +675,7 @@ export default function VentasPage() {
           if (unitPres || prod) {
             const newQty = i.unidades_por_presentacion - 1;
             const newDiscount = prod ? getProductDiscount(prod, "Unidad") : i.discount;
+            const newCosto = unitPres?.costo && unitPres.costo > 0 ? unitPres.costo : (prod?.costo ?? 0);
             return {
               ...i,
               qty: newQty,
@@ -682,6 +686,7 @@ export default function VentasPage() {
               unidades_por_presentacion: 1,
               discount: newDiscount,
               subtotal: unitPrice * newQty * (1 - newDiscount / 100),
+              costo_unitario: newCosto,
             };
           }
           // No unit presentation or product found: don't go below 1
@@ -698,6 +703,7 @@ export default function VentasPage() {
           const unitCode = unitPres?.codigo || prod?.codigo || i.code;
           if (unitPres || prod) {
             const newDiscount = prod ? getProductDiscount(prod, "Unidad") : i.discount;
+            const newCosto = unitPres?.costo && unitPres.costo > 0 ? unitPres.costo : (prod?.costo ?? 0);
             return {
               ...i,
               qty: 1,
@@ -708,6 +714,7 @@ export default function VentasPage() {
               unidades_por_presentacion: 1,
               discount: newDiscount,
               subtotal: unitPrice * (1 - newDiscount / 100),
+              costo_unitario: newCosto,
             };
           }
         }
@@ -719,6 +726,7 @@ export default function VentasPage() {
           if (match) {
             const prod = products.find((p) => p.id === i.producto_id);
             const newDiscount = prod ? getProductDiscount(prod, match.nombre) : i.discount;
+            const newCosto = match.costo > 0 ? match.costo : (prod?.costo ?? 0) * Number(match.cantidad);
             return {
               ...i,
               qty: 1,
@@ -729,6 +737,7 @@ export default function VentasPage() {
               unidades_por_presentacion: Number(match.cantidad),
               discount: newDiscount,
               subtotal: match.precio * (1 - newDiscount / 100),
+              costo_unitario: newCosto,
             };
           }
         }
