@@ -170,15 +170,15 @@ export default function TiendaFooter() {
               <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Contacto</h4>
               <div className="space-y-4">
                 {config.direccion && (
-                  <div className="flex items-start gap-3">
+                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(config.direccion)}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 group">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-800">
                       <MapPin className="h-4 w-4 text-primary/80" />
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-500">Dirección</p>
-                      <p className="text-sm text-gray-300">{config.direccion}</p>
+                      <p className="text-sm text-gray-300 transition group-hover:text-primary">{config.direccion}</p>
                     </div>
-                  </div>
+                  </a>
                 )}
                 {config.telefono && (
                   <div className="flex items-start gap-3">
