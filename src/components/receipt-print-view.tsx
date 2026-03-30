@@ -97,10 +97,6 @@ export interface ReceiptSale {
   cuentaBancaria?: string;
 }
 
-// Items per page (conservative to avoid overflow)
-const ITEMS_FIRST_PAGE = 25; // First page has header + client info
-const ITEMS_OTHER_PAGE = 32; // Other pages only have header
-
 export function ReceiptPrintView({
   sale,
   config,
@@ -119,16 +115,41 @@ export function ReceiptPrintView({
   const rowPad = "4px 5px";
   const altRowBg = "#f0f0f0";
 
+  // Dynamic items per page based on font size
+  // A4 = 297mm, padding 8mm*2 = 281mm usable ≈ 1063px at 96dpi
+  const pageHeightPx = 1063;
+  const headerPx = Math.max(120, (config.logoHeight || 60) + 70); // logo + company info + border
+  const clientPx = fsCliente * 3.5; // client info box (~2-3 lines)
+  const rowHeightPx = fsProductos * 1.4 + 10; // line height + padding
+  const totalsPx = 140; // totals + payment + footer
+  const pageNumPx = 20;
+
+  // For single page: first page must fit header + client + items + totals
+  const singlePageItems = Math.floor((pageHeightPx - headerPx - clientPx - totalsPx) / rowHeightPx);
+  // For multi-page: first page has no totals (they go on last page), so more room
+  const multiFirstPageItems = Math.floor((pageHeightPx - headerPx - clientPx - pageNumPx - 30) / rowHeightPx); // 30px for "continúa..."
+  const multiOtherPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - 30 - 30) / rowHeightPx); // client ref line + continúa
+  const multiLastPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - 30 - totalsPx) / rowHeightPx); // totals on last page
+
   // Split items into pages
   const pages: ReceiptLineItem[][] = [];
   const allItems = [...sale.items];
 
-  if (allItems.length <= ITEMS_FIRST_PAGE) {
+  if (allItems.length <= singlePageItems) {
+    // Everything fits on one page
     pages.push(allItems);
   } else {
-    pages.push(allItems.splice(0, ITEMS_FIRST_PAGE));
+    // First page (no totals, more room)
+    pages.push(allItems.splice(0, multiFirstPageItems));
+    // Middle + last pages
     while (allItems.length > 0) {
-      pages.push(allItems.splice(0, ITEMS_OTHER_PAGE));
+      if (allItems.length <= multiLastPageItems) {
+        // Remaining items fit on last page (with totals)
+        pages.push(allItems.splice(0));
+      } else {
+        // Middle page (no totals)
+        pages.push(allItems.splice(0, multiOtherPageItems));
+      }
     }
   }
 
