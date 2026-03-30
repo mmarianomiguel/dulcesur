@@ -340,9 +340,10 @@ function ProductosContent() {
       if (precioMin) query = query.gte("precio", Number(precioMin));
       if (precioMax) query = query.lte("precio", Number(precioMax));
       // Hide out-of-stock products not updated in X days (unless filtering for sin_stock)
+      // Combos have stock=0 in the table (calculated dynamically), so exclude them from this filter
       if (disponibilidad !== "sin_stock" && diasOcultarSinStock > 0) {
         const cutoff = new Date(Date.now() - diasOcultarSinStock * 24 * 60 * 60 * 1000).toISOString();
-        query = query.or(`stock.gt.0,updated_at.gt.${cutoff}`);
+        query = query.or(`stock.gt.0,updated_at.gt.${cutoff},es_combo.eq.true`);
       }
       if (disponibilidad === "en_stock") query = query.gt("stock", 0);
       if (disponibilidad === "sin_stock") query = query.eq("stock", 0);
