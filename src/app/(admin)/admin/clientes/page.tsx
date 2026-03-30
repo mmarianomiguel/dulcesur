@@ -318,8 +318,12 @@ export default function ClientesPage() {
     setDialogOpen(true);
   };
 
+  const [savingClient, setSavingClient] = useState(false);
+
   const handleSave = async () => {
+    if (savingClient) return;
     if (!form.nombre.trim()) { showAdminToast("El nombre del cliente es obligatorio.", "error"); return; }
+    setSavingClient(true);
     const selectedZona = zonas.find((z) => z.id === form.zona_entrega);
     const payload = {
       codigo_cliente: form.codigo_cliente || null,
@@ -377,6 +381,7 @@ export default function ClientesPage() {
     setDialogOpen(false);
     resetForm();
     fetchClients();
+    setSavingClient(false);
   };
 
   const handleResetPassword = async () => {
@@ -1084,7 +1089,7 @@ export default function ClientesPage() {
                     {recentClients.map((c) => (
                       <div key={c.id} className="flex justify-between text-[11px]">
                         <span className="text-muted-foreground truncate mr-2">{c.nombre}</span>
-                        <span className="font-medium shrink-0 text-blue-600">{new Date(c.created_at!).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+                        <span className="font-medium shrink-0 text-blue-600">{new Date(c.created_at!).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                       </div>
                     ))}
                   </div>
@@ -2527,7 +2532,7 @@ export default function ClientesPage() {
           </Tabs>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>{editingClient ? "Guardar cambios" : "Crear cliente"}</Button>
+            <Button onClick={handleSave} disabled={savingClient}>{savingClient ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}{editingClient ? "Guardar cambios" : "Crear cliente"}</Button>
           </div>
         </DialogContent>
       </Dialog>
