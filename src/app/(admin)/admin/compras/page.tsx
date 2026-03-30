@@ -109,8 +109,13 @@ interface CompraItem {
   costo_unitario: number;
   costo_original: number;
   precio_original: number;
+  descuento: number;
   subtotal: number;
   actualizarPrecio: boolean;
+}
+
+function calcSubtotal(costo: number, cantidad: number, descuento: number) {
+  return Math.round(costo * cantidad * (1 - descuento / 100) * 100) / 100;
 }
 
 /* ───────── helpers ───────── */
@@ -425,10 +430,10 @@ export default function ComprasPage() {
           if (it.unidades_por_caja > 0) {
             const newCajas = it.cajas + 1;
             const newTotal = newCajas * it.unidades_por_caja + it.sueltas;
-            return { ...it, cajas: newCajas, cantidad: newTotal, subtotal: it.costo_unitario * newTotal };
+            return { ...it, cajas: newCajas, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) };
           }
           const newQty = it.cantidad + 1;
-          return { ...it, cantidad: newQty, sueltas: newQty, subtotal: it.costo_unitario * newQty };
+          return { ...it, cantidad: newQty, sueltas: newQty, subtotal: calcSubtotal(it.costo_unitario, newQty, it.descuento) };
         }));
       } else if (e.key === "ArrowLeft" || e.key === "-") {
         e.preventDefault();
@@ -438,10 +443,10 @@ export default function ComprasPage() {
           if (it.unidades_por_caja > 0) {
             const newCajas = Math.max(0, it.cajas - 1);
             const newTotal = newCajas * it.unidades_por_caja + it.sueltas;
-            return { ...it, cajas: newCajas, cantidad: newTotal, subtotal: it.costo_unitario * newTotal };
+            return { ...it, cajas: newCajas, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) };
           }
           const newQty = Math.max(1, it.cantidad - 1);
-          return { ...it, cantidad: newQty, sueltas: newQty, subtotal: it.costo_unitario * newQty };
+          return { ...it, cantidad: newQty, sueltas: newQty, subtotal: calcSubtotal(it.costo_unitario, newQty, it.descuento) };
         }));
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
@@ -575,7 +580,8 @@ export default function ComprasPage() {
                 costo_unitario: costoUnit,
                 costo_original: prod.costo,
                 precio_original: prod.precio,
-                subtotal: costoUnit * cantidad,
+                descuento: 0,
+                subtotal: calcSubtotal(costoUnit, cantidad, 0),
                 actualizarPrecio: true,
               } as CompraItem;
             })
@@ -665,7 +671,8 @@ export default function ComprasPage() {
         costo_unitario: costoUnit,
         costo_original: costoUnit,
         precio_original: product.precio,
-        subtotal: costoUnit * cantidad,
+        descuento: 0,
+        subtotal: calcSubtotal(costoUnit, cantidad, 0),
         actualizarPrecio: true,
       },
     ]);
@@ -693,14 +700,17 @@ export default function ComprasPage() {
 
   const updateItemField = (
     index: number,
-    field: "cantidad" | "costo_unitario",
+    field: "cantidad" | "costo_unitario" | "descuento",
     value: number
   ) => {
     setItems((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
-      updated[index].subtotal =
-        updated[index].cantidad * updated[index].costo_unitario;
+      updated[index].subtotal = calcSubtotal(
+        updated[index].costo_unitario,
+        updated[index].cantidad,
+        updated[index].descuento
+      );
       return updated;
     });
   };
@@ -1067,6 +1077,7 @@ export default function ComprasPage() {
           costo_unitario: ci.precio_unitario,
           costo_original: prod?.costo || ci.precio_unitario,
           precio_original: prod?.precio || 0,
+          descuento: 0,
           subtotal: ci.subtotal,
           actualizarPrecio: false,
           imagen_url: prod?.imagen_url || null,
@@ -1583,6 +1594,7 @@ export default function ComprasPage() {
                       <th className="text-center py-3 px-3 font-medium">Total un.</th>
                       <th className="text-right py-3 px-3 font-medium">Costo Unit.</th>
                       <th className="text-right py-3 px-3 font-medium">Costo Caja</th>
+                      <th className="text-center py-3 px-2 font-medium">Dto%</th>
                       <th className="text-right py-3 px-3 font-medium">Subtotal</th>
                       <th className="text-center py-3 px-3 font-medium">Mod.</th>
                       <th className="text-center py-3 px-2 font-medium">Actualizar PVP</th>
@@ -1624,7 +1636,7 @@ export default function ComprasPage() {
                                 onChange={(e) => {
                                   const newCajas = Math.max(0, Number(e.target.value));
                                   const newTotal = newCajas * item.unidades_por_caja + item.sueltas;
-                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cajas: newCajas, cantidad: newTotal, subtotal: it.costo_unitario * newTotal } : it));
+                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cajas: newCajas, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) } : it));
                                 }}
                                 className="w-16 mx-auto text-center h-8"
                               />
@@ -1641,9 +1653,9 @@ export default function ComprasPage() {
                                 const val = Math.max(0, Number(e.target.value));
                                 if (item.unidades_por_caja > 0) {
                                   const newTotal = item.cajas * item.unidades_por_caja + val;
-                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, sueltas: val, cantidad: newTotal, subtotal: it.costo_unitario * newTotal } : it));
+                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, sueltas: val, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) } : it));
                                 } else {
-                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: Math.max(1, val), sueltas: val, subtotal: it.costo_unitario * Math.max(1, val) } : it));
+                                  setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: Math.max(1, val), sueltas: val, subtotal: calcSubtotal(it.costo_unitario, Math.max(1, val), it.descuento) } : it));
                                 }
                               }}
                               className="w-16 mx-auto text-center h-8"
@@ -1669,6 +1681,17 @@ export default function ComprasPage() {
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={item.descuento || ""}
+                              onChange={(e) => updateItemField(idx, "descuento", Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                              placeholder="0"
+                              className="w-14 mx-auto text-center h-8"
+                            />
                           </td>
                           <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
                           <td className="py-2 px-3 text-center">

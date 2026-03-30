@@ -3140,14 +3140,39 @@ export default function ProductosPage() {
 
             {/* TAB: stock */}
             <div className={editingProduct && editTab !== "stock" ? "hidden" : ""}>
+              {(() => {
+                const effectiveStock = isCombo && comboItems.length > 0
+                  ? Math.min(...comboItems.map((ci) => ci.cantidad > 0 ? Math.floor((ci.producto?.stock || 0) / ci.cantidad) : 0))
+                  : form.stock;
+                return (
               <div className="space-y-6">
                 <div className="text-center py-4">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Stock actual</p>
-                  <p className={`text-5xl font-bold ${form.stock <= form.stock_minimo && form.stock > 0 ? "text-orange-600" : form.stock === 0 ? "text-red-600" : "text-foreground"}`}>
-                    {form.stock}
+                  <p className={`text-5xl font-bold ${effectiveStock <= form.stock_minimo && effectiveStock > 0 ? "text-orange-600" : effectiveStock <= 0 ? "text-red-600" : "text-foreground"}`}>
+                    {effectiveStock}
                   </p>
-                  <p className="text-sm text-muted-foreground mt-1">{form.unidad_medida === "KG" ? "kilogramos" : "unidades"}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{isCombo ? "combos disponibles" : form.unidad_medida === "KG" ? "kilogramos" : "unidades"}</p>
+                  {isCombo && (
+                    <p className="text-xs text-muted-foreground mt-2">Calculado según el stock de los componentes</p>
+                  )}
                 </div>
+
+                {isCombo && comboItems.length > 0 && (
+                  <div className="border rounded-xl p-4 space-y-2">
+                    <p className="text-xs text-muted-foreground mb-2">Detalle por componente</p>
+                    {comboItems.map((ci) => {
+                      const available = ci.cantidad > 0 ? Math.floor((ci.producto?.stock || 0) / ci.cantidad) : 0;
+                      return (
+                        <div key={ci.producto_id} className="flex items-center justify-between text-sm">
+                          <span>{ci.producto?.nombre || ci.producto_id}</span>
+                          <span className="text-muted-foreground">
+                            {ci.producto?.stock || 0} un. / {ci.cantidad} = <strong className={available <= 0 ? "text-red-500" : ""}>{available} combos</strong>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="border rounded-xl p-4 space-y-2">
@@ -3165,17 +3190,17 @@ export default function ProductosPage() {
                 {/* Stock status indicator */}
                 <div className="border rounded-xl p-4">
                   <p className="text-xs text-muted-foreground mb-3">Estado del stock</p>
-                  {form.stock === 0 ? (
+                  {effectiveStock <= 0 ? (
                     <div className="flex items-center gap-2 text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                       <AlertTriangle className="w-4 h-4" />
                       <span className="text-sm font-medium">Sin stock</span>
                     </div>
-                  ) : form.stock <= form.stock_minimo ? (
+                  ) : effectiveStock <= form.stock_minimo ? (
                     <div className="flex items-center gap-2 text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
                       <AlertTriangle className="w-4 h-4" />
                       <span className="text-sm font-medium">Stock bajo — por debajo del mínimo ({form.stock_minimo})</span>
                     </div>
-                  ) : form.stock_maximo > 0 && form.stock >= form.stock_maximo ? (
+                  ) : form.stock_maximo > 0 && effectiveStock >= form.stock_maximo ? (
                     <div className="flex items-center gap-2 text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
                       <Package className="w-4 h-4" />
                       <span className="text-sm font-medium">Stock al máximo</span>
@@ -3195,8 +3220,8 @@ export default function ProductosPage() {
                       </div>
                       <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all ${form.stock <= form.stock_minimo ? "bg-orange-500" : form.stock >= form.stock_maximo ? "bg-blue-500" : "bg-emerald-500"}`}
-                          style={{ width: `${Math.min(100, (form.stock / form.stock_maximo) * 100)}%` }}
+                          className={`h-full rounded-full transition-all ${effectiveStock <= form.stock_minimo ? "bg-orange-500" : effectiveStock >= form.stock_maximo ? "bg-blue-500" : "bg-emerald-500"}`}
+                          style={{ width: `${Math.min(100, (effectiveStock / form.stock_maximo) * 100)}%` }}
                         />
                       </div>
                       {form.stock_minimo > 0 && (
@@ -3211,13 +3236,13 @@ export default function ProductosPage() {
                 </div>
 
                 {/* Box breakdown */}
-                {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).length > 0 && (
+                {!isCombo && presentaciones.filter((p) => !p._deleted && p.cantidad > 1).length > 0 && (
                   <div className="border rounded-xl p-4">
                     <p className="text-xs text-muted-foreground mb-3">Desglose por presentación</p>
                     <div className="space-y-2">
                       {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).map((box, i) => {
-                        const stockCajas = box.cantidad > 0 ? Math.floor(form.stock / box.cantidad) : 0;
-                        const restoUnidades = box.cantidad > 0 ? form.stock % box.cantidad : form.stock;
+                        const stockCajas = box.cantidad > 0 ? Math.floor(effectiveStock / box.cantidad) : 0;
+                        const restoUnidades = box.cantidad > 0 ? effectiveStock % box.cantidad : effectiveStock;
                         return (
                           <div key={i} className="flex items-center justify-between bg-muted/30 rounded-lg px-4 py-2.5">
                             <div className="flex items-center gap-2">
@@ -3236,6 +3261,8 @@ export default function ProductosPage() {
                   </div>
                 )}
               </div>
+                );
+              })()}
             </div>
             {/* END TAB: stock */}
 

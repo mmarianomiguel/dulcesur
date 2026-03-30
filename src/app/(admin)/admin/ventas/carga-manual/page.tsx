@@ -98,6 +98,10 @@ export default function CargaManualPage() {
   const [observacion, setObservacion] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Selection
+  const [selectedItemIdx, setSelectedItemIdx] = useState(-1);
+  const [searchHighlight, setSearchHighlight] = useState(0);
+
   // Dialogs
   const [searchOpen, setSearchOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
@@ -163,19 +167,19 @@ export default function CargaManualPage() {
   const addItem = (product: Producto) => {
     const existing = items.find((i) => i.producto_id === product.id);
     if (existing) {
-      setItems(
-        items.map((i) =>
-          i.id === existing.id
-            ? {
-                ...i,
-                qty: i.qty + 1,
-                subtotal: i.price * (i.qty + 1) * (1 - i.discount / 100),
-              }
-            : i
-        )
+      const newItems = items.map((i) =>
+        i.id === existing.id
+          ? {
+              ...i,
+              qty: i.qty + 1,
+              subtotal: i.price * (i.qty + 1) * (1 - i.discount / 100),
+            }
+          : i
       );
+      setItems(newItems);
+      setSelectedItemIdx(newItems.findIndex((i) => i.id === existing.id));
     } else {
-      setItems([
+      const newItems = [
         ...items,
         {
           id: crypto.randomUUID(),
@@ -189,15 +193,18 @@ export default function CargaManualPage() {
           subtotal: product.precio,
           costo_unitario: product.costo || 0,
         },
-      ]);
+      ];
+      setItems(newItems);
+      setSelectedItemIdx(newItems.length - 1);
     }
     setSearchOpen(false);
     setProductSearch("");
+    setSearchHighlight(0);
   };
 
   const addFreeItem = () => {
     if (!freeDesc.trim() || freePrice <= 0) return;
-    setItems([
+    const newItems = [
       ...items,
       {
         id: crypto.randomUUID(),
@@ -211,14 +218,21 @@ export default function CargaManualPage() {
         subtotal: freePrice * freeQty,
         costo_unitario: 0,
       },
-    ]);
+    ];
+    setItems(newItems);
+    setSelectedItemIdx(newItems.length - 1);
     setFreeDesc("");
     setFreePrice(0);
     setFreeQty(1);
     setFreeText(false);
   };
 
-  const removeItem = (id: string) => setItems(items.filter((i) => i.id !== id));
+  const removeItem = (id: string) => {
+    const newItems = items.filter((i) => i.id !== id);
+    setItems(newItems);
+    if (selectedItemIdx >= newItems.length) setSelectedItemIdx(Math.max(0, newItems.length - 1));
+    if (newItems.length === 0) setSelectedItemIdx(-1);
+  };
 
   const updateQty = (id: string, qty: number) => {
     if (qty < 1) return;
@@ -401,6 +415,7 @@ export default function CargaManualPage() {
 
       // Reset
       setItems([]);
+      setSelectedItemIdx(-1);
       setNumero("");
       setObservacion("");
       setDescuento(0);
@@ -582,8 +597,8 @@ export default function CargaManualPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id} className="border-b last:border-0">
+                      {items.map((item, idx) => (
+                        <tr key={item.id} className={`border-b last:border-0 ${idx === selectedItemIdx ? "bg-primary/5 ring-1 ring-primary/20" : ""}`} onClick={() => setSelectedItemIdx(idx)}>
                           <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
                             {item.code}
                           </td>
@@ -828,17 +843,31 @@ export default function CargaManualPage() {
             <Input
               placeholder="Buscar por código o descripción..."
               value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
+              onChange={(e) => { setProductSearch(e.target.value); setSearchHighlight(0); }}
+              onKeyDown={(e) => {
+                const list = filteredProducts.slice(0, 20);
+                if (e.key === "ArrowDown") { e.preventDefault(); setSearchHighlight((h) => Math.min(h + 1, list.length - 1)); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHighlight((h) => Math.max(h - 1, 0)); }
+                else if (e.key === "Enter" && list.length > 0) {
+                  e.preventDefault();
+                  const p = list[searchHighlight];
+                  if (p) addItem(p);
+                }
+              }}
               className="pl-9"
               autoFocus
             />
           </div>
           <div className="space-y-2 max-h-[300px] overflow-y-auto">
-            {filteredProducts.slice(0, 20).map((p) => (
+            {filteredProducts.slice(0, 20).map((p, idx) => {
+              const highlighted = idx === searchHighlight;
+              return (
               <button
                 key={p.id}
+                ref={highlighted ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                 onClick={() => addItem(p)}
-                className="w-full rounded-xl border p-3 transition-colors hover:border-primary/30 hover:bg-primary/5 text-left flex items-center gap-3"
+                onMouseEnter={() => setSearchHighlight(idx)}
+                className={`w-full rounded-xl border p-3 transition-colors text-left flex items-center gap-3 ${highlighted ? "ring-2 ring-primary border-primary bg-muted/50" : "hover:border-primary/30 hover:bg-primary/5"}`}
               >
                 <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                   {(p as any).imagen_url ? (
@@ -858,7 +887,8 @@ export default function CargaManualPage() {
                   </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
             {filteredProducts.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">
                 No se encontraron productos

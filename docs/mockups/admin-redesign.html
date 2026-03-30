@@ -1,0 +1,2375 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Admin — Rediseño Completo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --primary: #2563eb;
+    --primary-light: #dbeafe;
+    --primary-dark: #1d4ed8;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #3b82f6;
+    --sidebar-bg: hsl(220 25% 11%);
+    --sidebar-hover: hsl(220 20% 16%);
+    --sidebar-active: hsl(220 50% 25%);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+    --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── App Shell ── */
+  .app { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 240px;
+    background: var(--sidebar-bg);
+    color: #94a3b8;
+    padding: 0;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    overflow-y: auto;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: hsl(220 20% 25%); border-radius: 4px; }
+
+  .sidebar-brand {
+    padding: 20px 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid hsl(220 20% 18%);
+  }
+  .sidebar-brand .logo {
+    width: 32px; height: 32px;
+    background: var(--primary);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; color: #fff;
+  }
+  .sidebar-brand .name { font-weight: 700; font-size: 15px; color: #f1f5f9; }
+
+  .sidebar-section {
+    padding: 16px 12px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(220 15% 40%);
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    margin: 1px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+    position: relative;
+  }
+  .nav-item:hover { background: var(--sidebar-hover); color: #e2e8f0; }
+  .nav-item.active { background: var(--sidebar-active); color: #fff; font-weight: 500; }
+  .nav-item .icon { width: 18px; text-align: center; font-size: 14px; opacity: .7; }
+  .nav-item.active .icon { opacity: 1; }
+  .nav-item .badge {
+    margin-left: auto;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+
+  /* ── Main ── */
+  .main {
+    flex: 1;
+    margin-left: 240px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-left .breadcrumb {
+    font-size: 13px; color: var(--text-muted);
+  }
+  .topbar-left .breadcrumb span { color: var(--text); font-weight: 500; }
+  .topbar-search {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px;
+    font-size: 13px; color: var(--text-muted);
+    width: 280px;
+  }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .topbar-right .avatar {
+    width: 32px; height: 32px;
+    background: var(--primary-light); color: var(--primary);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 12px;
+  }
+
+  /* ── Content ── */
+  .content { flex: 1; padding: 24px 32px; }
+
+  /* ── Page Header ── */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .page-header-left { display: flex; align-items: center; gap: 12px; }
+  .page-header .page-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .page-header h1 { font-size: 20px; font-weight: 700; }
+  .page-header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .page-header-actions { display: flex; gap: 8px; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all .15s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-outline { background: var(--card); color: var(--text); border-color: var(--border); }
+  .btn-outline:hover { background: var(--bg); }
+  .btn-ghost { background: transparent; color: var(--text-muted); }
+  .btn-ghost:hover { background: var(--bg); color: var(--text); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+  }
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-header h3 { font-size: 14px; font-weight: 600; }
+  .card-body { padding: 20px; }
+  .card-body-compact { padding: 16px 20px; }
+
+  /* ── Stat Cards ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .stat-card .stat-header {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .stat-card .stat-label {
+    font-size: 12px; color: var(--text-muted); font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .stat-card .stat-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .stat-card .stat-value {
+    font-size: 28px; font-weight: 700; line-height: 1;
+  }
+  .stat-card .stat-change {
+    font-size: 12px; font-weight: 500;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .stat-card .stat-change.up { color: var(--success); }
+  .stat-card .stat-change.down { color: var(--danger); }
+
+  /* ── Sparkline ── */
+  .sparkline {
+    height: 32px;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    margin-top: 4px;
+  }
+  .sparkline .bar {
+    flex: 1;
+    background: var(--primary-light);
+    border-radius: 2px;
+    min-height: 3px;
+  }
+
+  /* ── Tables ── */
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: #f8fafc; }
+  th {
+    padding: 10px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+  tbody tr:hover { background: #f8fafc; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-success { background: #ecfdf5; color: #059669; }
+  .badge-warning { background: #fffbeb; color: #d97706; }
+  .badge-danger { background: #fef2f2; color: #dc2626; }
+  .badge-info { background: #eff6ff; color: #2563eb; }
+  .badge-gray { background: #f1f5f9; color: #64748b; }
+  .badge-primary { background: var(--primary-light); color: var(--primary); }
+
+  /* ── Progress ── */
+  .progress-bar {
+    height: 6px;
+    background: #f1f5f9;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-bar .fill { height: 100%; border-radius: 3px; }
+
+  /* ── Filter Bar ── */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .filter-input {
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    background: var(--card);
+    color: var(--text);
+    min-width: 160px;
+  }
+  .filter-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .tab {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all .15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  /* ── Charts (placeholder) ── */
+  .chart-placeholder {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    padding: 40px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .chart-bar-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 160px;
+    padding: 0 4px;
+  }
+  .chart-bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .chart-bar {
+    width: 100%;
+    max-width: 40px;
+    border-radius: 4px 4px 0 0;
+    transition: all .3s;
+  }
+  .chart-bar-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ── Avatar ── */
+  .user-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  /* ── Grid layouts ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+  .grid-3-1 { display: grid; grid-template-columns: 3fr 1fr; gap: 20px; }
+
+  /* ── Section label ── */
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-muted);
+  }
+  .empty-state .icon { font-size: 40px; opacity: .3; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; }
+
+  /* ── Redesign Banner ── */
+  .redesign-banner {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--text);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 12px;
+    z-index: 100;
+    box-shadow: 0 10px 25px rgba(0,0,0,.2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .redesign-banner .dot {
+    width: 8px; height: 8px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+  }
+
+  /* ── Section pages (toggle visibility) ── */
+  .page-section { display: none; }
+  .page-section.active { display: block; }
+
+  /* ── KPI mini ── */
+  .kpi-mini {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+  }
+  .kpi-mini .value { font-weight: 700; font-size: 15px; }
+
+  /* ── Activity timeline ── */
+  .timeline-item {
+    display: flex; gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .timeline-item:last-child { border-bottom: none; }
+  .timeline-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .timeline-item .time {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 2px;
+  }
+
+  /* ── Quick actions grid ── */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .quick-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 16px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all .15s;
+    border: 1px solid transparent;
+    text-align: center;
+  }
+  .quick-action:hover {
+    background: var(--bg);
+    border-color: var(--border);
+  }
+  .quick-action .qa-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .quick-action .qa-label { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+
+  /* ── Donut chart (CSS) ── */
+  .donut {
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .donut-center {
+    position: absolute;
+    text-align: center;
+  }
+  .donut-center .value { font-size: 18px; font-weight: 700; }
+  .donut-center .label { font-size: 10px; color: var(--text-muted); }
+
+  /* ── Client/Product row avatar ── */
+  .entity-row {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .entity-avatar {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 12px;
+    flex-shrink: 0;
+  }
+  .entity-info .name { font-weight: 500; font-size: 13px; }
+  .entity-info .sub { font-size: 11px; color: var(--text-muted); }
+
+  /* ── Stock level bar ── */
+  .stock-level {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .stock-bar {
+    width: 60px; height: 6px;
+    background: #f1f5f9;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .stock-bar .fill { height: 100%; border-radius: 3px; }
+
+  /* ── Delivery route card ── */
+  .route-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    background: var(--card);
+  }
+  .route-card + .route-card { margin-top: 12px; }
+
+  /* ── POS Layout ── */
+  .pos-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    height: calc(100vh - 56px);
+    margin: -24px -32px;
+  }
+  .pos-left {
+    padding: 20px;
+    overflow-y: auto;
+    background: var(--bg);
+  }
+  .pos-right {
+    background: var(--card);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .pos-cart-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .pos-cart-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .pos-cart-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 4px;
+    transition: background .1s;
+  }
+  .pos-cart-item:hover { background: var(--bg); }
+  .pos-cart-item.selected { background: var(--primary-light); }
+  .pos-cart-footer {
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+  }
+
+  /* ── Caja shift card ── */
+  .shift-card {
+    border: 2px solid;
+    border-radius: var(--radius);
+    padding: 24px;
+    text-align: center;
+  }
+  .shift-card.open { border-color: var(--success); background: #f0fdf4; }
+  .shift-card.closed { border-color: var(--border); background: var(--bg); }
+
+  /* ── Legend ── */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* ── Vendor commission bar ── */
+  .commission-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+  }
+  .commission-bar .name { font-weight: 500; font-size: 13px; width: 120px; }
+  .commission-bar .bar-wrap { flex: 1; }
+
+  /* ── Audit action colors ── */
+  .audit-create { color: #059669; }
+  .audit-update { color: #2563eb; }
+  .audit-delete { color: #dc2626; }
+  .audit-login { color: #64748b; }
+
+  /* ── Page annotation ── */
+  .annotation {
+    background: #fefce8;
+    border: 1px solid #fde68a;
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #92400e;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .annotation .icon { font-size: 16px; flex-shrink: 0; }
+
+  /* transitions */
+  .fade-in { animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ══════════ SIDEBAR ══════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">DS</div>
+      <div class="name">Dulcesur</div>
+    </div>
+
+    <div class="sidebar-section">Principal</div>
+    <div class="nav-item active" data-page="dashboard">
+      <span class="icon">📊</span> Dashboard
+    </div>
+
+    <div class="sidebar-section">Ventas</div>
+    <div class="nav-item" data-page="pos">
+      <span class="icon">🛒</span> Punto de Venta
+    </div>
+    <div class="nav-item" data-page="ventas">
+      <span class="icon">📋</span> Historial
+      <span class="badge">3</span>
+    </div>
+    <div class="nav-item" data-page="hoja-ruta">
+      <span class="icon">🚚</span> Hojas de Ruta
+    </div>
+
+    <div class="sidebar-section">Inventario</div>
+    <div class="nav-item" data-page="productos">
+      <span class="icon">📦</span> Productos
+    </div>
+    <div class="nav-item" data-page="stock">
+      <span class="icon">📊</span> Stock
+    </div>
+    <div class="nav-item" data-page="compras">
+      <span class="icon">🏷️</span> Compras
+    </div>
+    <div class="nav-item" data-page="proveedores">
+      <span class="icon">🏢</span> Proveedores
+    </div>
+
+    <div class="sidebar-section">CRM</div>
+    <div class="nav-item" data-page="clientes">
+      <span class="icon">👥</span> Clientes
+    </div>
+    <div class="nav-item" data-page="vendedores">
+      <span class="icon">🎯</span> Vendedores
+    </div>
+
+    <div class="sidebar-section">Finanzas</div>
+    <div class="nav-item" data-page="caja">
+      <span class="icon">💰</span> Caja
+    </div>
+    <div class="nav-item" data-page="reportes">
+      <span class="icon">📈</span> Reportes
+    </div>
+
+    <div class="sidebar-section">Sistema</div>
+    <div class="nav-item" data-page="auditoria">
+      <span class="icon">🔍</span> Auditoría
+    </div>
+    <div class="nav-item" data-page="configuracion">
+      <span class="icon">⚙️</span> Configuración
+    </div>
+  </aside>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <div class="main">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="breadcrumb" id="breadcrumb">
+          Admin / <span>Dashboard</span>
+        </div>
+      </div>
+      <div class="topbar-search">
+        🔍 Buscar productos, clientes, ventas... <span style="margin-left:auto;opacity:.5;font-size:11px">⌘K</span>
+      </div>
+      <div class="topbar-right">
+        <div style="cursor:pointer;font-size:14px">🔔</div>
+        <div class="avatar">NB</div>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- DASHBOARD -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section active" id="page-dashboard">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta de rediseño:</strong> Dashboard más limpio con KPIs principales arriba, gráfico de ventas centralizado, acciones rápidas y actividad reciente. Se eliminan los widgets redundantes y se agrupan las métricas por relevancia.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div>
+              <h1>Buenos días, Neyen 👋</h1>
+              <p>Resumen del día — Lunes 30 de Marzo, 2026</p>
+            </div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline">📅 Hoy</div>
+            <div class="btn btn-outline">Esta semana</div>
+            <div class="btn btn-outline">Este mes</div>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Ventas hoy</span>
+              <div class="stat-icon" style="background:#eff6ff;color:#2563eb;">💰</div>
+            </div>
+            <div class="stat-value">$847.500</div>
+            <div class="stat-change up">↑ 12.5% vs ayer</div>
+            <div class="sparkline">
+              <div class="bar" style="height:40%"></div>
+              <div class="bar" style="height:60%"></div>
+              <div class="bar" style="height:35%"></div>
+              <div class="bar" style="height:80%"></div>
+              <div class="bar" style="height:55%"></div>
+              <div class="bar" style="height:70%"></div>
+              <div class="bar" style="height:100%;background:#2563eb;"></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Operaciones</span>
+              <div class="stat-icon" style="background:#ecfdf5;color:#059669;">🧾</div>
+            </div>
+            <div class="stat-value">18</div>
+            <div class="stat-change up">↑ 3 más que ayer</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Ticket promedio</span>
+              <div class="stat-icon" style="background:#fef3c7;color:#d97706;">📊</div>
+            </div>
+            <div class="stat-value">$47.083</div>
+            <div class="stat-change down">↓ 5.2%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Pedidos online</span>
+              <div class="stat-icon" style="background:#fce7f3;color:#db2777;">🛍️</div>
+            </div>
+            <div class="stat-value">4</div>
+            <div class="badge badge-warning" style="width:fit-content">2 pendientes</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Caja actual</span>
+              <div class="stat-icon" style="background:#ecfdf5;color:#059669;">✅</div>
+            </div>
+            <div class="stat-value" style="font-size:14px;font-weight:500;color:var(--success)">Abierta</div>
+            <div style="font-size:12px;color:var(--text-muted)">Desde 08:15 — Admin</div>
+          </div>
+        </div>
+
+        <!-- Main area: Chart + Sidebar -->
+        <div class="grid-3-1">
+          <div>
+            <!-- Sales Chart -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header">
+                <h3>Ventas de la semana</h3>
+                <div style="display:flex;gap:8px">
+                  <div class="btn btn-sm btn-outline">Diario</div>
+                  <div class="btn btn-sm btn-ghost">Semanal</div>
+                  <div class="btn btn-sm btn-ghost">Mensual</div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="chart-bar-container">
+                  <div class="chart-bar-group">
+                    <div class="chart-bar" style="height:60%;background:#2563eb;"></div>
+                    <div class="chart-bar-label">Lun</div>
+                  </div>
+                  <div class="chart-bar-group">
+                    <div class="chart-bar" style="height:85%;background:#2563eb;"></div>
+                    <div class="chart-bar-label">Mar</div>
+                  </div>
+                  <div class="chart-bar-group">
+                    <div class="chart-bar" style="height:45%;background:#2563eb;"></div>
+                    <div class="chart-bar-label">Mié</div>
+                  </div>
+                  <div class="chart-bar-group">
+                    <div class="chart-bar" style="height:95%;background:#2563eb;"></div>
+                    <div class="chart-bar-label">Jue</div>
+                  </div>
+                  <div class="chart-bar-group">
+                    <div class="chart-bar" style="height:70%;background:#2563eb;"></div>
+                    <div class="chart-bar-label">Vie</div>
+                  </div>
+                  <div class="chart-bar-group">
+                    <div class="chart-bar" style="height:100%;background:#2563eb;"></div>
+                    <div class="chart-bar-label">Sáb</div>
+                  </div>
+                  <div class="chart-bar-group">
+                    <div class="chart-bar" style="height:20%;background:#cbd5e1;"></div>
+                    <div class="chart-bar-label" style="color:var(--primary);font-weight:600">Hoy</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Desglose por forma de pago -->
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header">
+                <h3>Desglose por forma de pago</h3>
+              </div>
+              <div class="card-body">
+                <div style="display:flex;gap:16px;">
+                  <div style="flex:1;padding:12px;background:#f0fdf4;border-radius:8px;text-align:center">
+                    <div style="font-size:11px;color:#059669;font-weight:500">Efectivo</div>
+                    <div style="font-size:20px;font-weight:700;margin-top:4px">$425.000</div>
+                    <div style="font-size:11px;color:var(--text-muted)">50.1%</div>
+                  </div>
+                  <div style="flex:1;padding:12px;background:#eff6ff;border-radius:8px;text-align:center">
+                    <div style="font-size:11px;color:#2563eb;font-weight:500">Transferencia</div>
+                    <div style="font-size:20px;font-weight:700;margin-top:4px">$338.500</div>
+                    <div style="font-size:11px;color:var(--text-muted)">39.9%</div>
+                  </div>
+                  <div style="flex:1;padding:12px;background:#fefce8;border-radius:8px;text-align:center">
+                    <div style="font-size:11px;color:#d97706;font-weight:500">Cta. Corriente</div>
+                    <div style="font-size:20px;font-weight:700;margin-top:4px">$84.000</div>
+                    <div style="font-size:11px;color:var(--text-muted)">10.0%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Últimas ventas -->
+            <div class="card">
+              <div class="card-header">
+                <h3>Últimas ventas</h3>
+                <div class="btn btn-sm btn-ghost">Ver todo →</div>
+              </div>
+              <div class="table-wrap" style="border:none;border-radius:0">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Hora</th>
+                      <th>Cliente</th>
+                      <th>Comprobante</th>
+                      <th>Pago</th>
+                      <th style="text-align:right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="font-variant-numeric:tabular-nums">14:32</td>
+                      <td><div class="entity-row"><div class="entity-avatar" style="background:#dbeafe;color:#2563eb">MG</div><div class="entity-info"><div class="name">Maxikiosco Gloria</div><div class="sub">Villa Devoto</div></div></div></td>
+                      <td><span class="badge badge-gray">Remito X</span></td>
+                      <td><span class="badge badge-success">Efectivo</span></td>
+                      <td style="text-align:right;font-weight:600">$125.400</td>
+                    </tr>
+                    <tr>
+                      <td>13:45</td>
+                      <td><div class="entity-row"><div class="entity-avatar" style="background:#fce7f3;color:#db2777">DP</div><div class="entity-info"><div class="name">Dist. Palermo</div><div class="sub">Palermo</div></div></div></td>
+                      <td><span class="badge badge-gray">Remito X</span></td>
+                      <td><span class="badge badge-info">Transferencia</span></td>
+                      <td style="text-align:right;font-weight:600">$89.200</td>
+                    </tr>
+                    <tr>
+                      <td>12:10</td>
+                      <td><div class="entity-row"><div class="entity-avatar" style="background:#ecfdf5;color:#059669">LC</div><div class="entity-info"><div class="name">La Casona</div><div class="sub">Caballito</div></div></div></td>
+                      <td><span class="badge badge-gray">Factura B</span></td>
+                      <td><span class="badge badge-warning">Cta. Cte.</span></td>
+                      <td style="text-align:right;font-weight:600">$245.800</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right sidebar -->
+          <div>
+            <!-- Quick Actions -->
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-header"><h3>Acciones rápidas</h3></div>
+              <div class="card-body">
+                <div class="quick-actions" style="grid-template-columns: repeat(2, 1fr);">
+                  <div class="quick-action">
+                    <div class="qa-icon" style="background:#eff6ff">🛒</div>
+                    <div class="qa-label">Nueva venta</div>
+                  </div>
+                  <div class="quick-action">
+                    <div class="qa-icon" style="background:#ecfdf5">👤</div>
+                    <div class="qa-label">Nuevo cliente</div>
+                  </div>
+                  <div class="quick-action">
+                    <div class="qa-icon" style="background:#fef3c7">📦</div>
+                    <div class="qa-label">Ajustar stock</div>
+                  </div>
+                  <div class="quick-action">
+                    <div class="qa-icon" style="background:#fce7f3">🚚</div>
+                    <div class="qa-label">Hoja de ruta</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Alertas -->
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-header"><h3>⚠️ Alertas</h3></div>
+              <div class="card-body" style="padding:12px 16px;">
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#fef2f2;border-radius:6px;font-size:12px;color:#dc2626">
+                    <span>🔴</span> 5 productos sin stock
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#fffbeb;border-radius:6px;font-size:12px;color:#d97706">
+                    <span>🟡</span> 12 productos con stock bajo
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#eff6ff;border-radius:6px;font-size:12px;color:#2563eb">
+                    <span>🔵</span> 2 pedidos online pendientes
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actividad reciente -->
+            <div class="card">
+              <div class="card-header"><h3>Actividad reciente</h3></div>
+              <div class="card-body" style="padding:8px 16px">
+                <div class="timeline-item">
+                  <div class="timeline-dot" style="background:var(--success)"></div>
+                  <div>
+                    <div style="font-size:12px">Venta #00234 completada</div>
+                    <div class="time">hace 5 min</div>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-dot" style="background:var(--info)"></div>
+                  <div>
+                    <div style="font-size:12px">Compra a Chil registrada</div>
+                    <div class="time">hace 25 min</div>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-dot" style="background:var(--warning)"></div>
+                  <div>
+                    <div style="font-size:12px">Pedido online #P-0045</div>
+                    <div class="time">hace 1 hora</div>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-dot" style="background:var(--text-light)"></div>
+                  <div>
+                    <div style="font-size:12px">Caja abierta por Admin</div>
+                    <div class="time">08:15</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- POS -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-pos">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Layout split-screen fijo. A la izquierda búsqueda de productos con resultados inmediatos (cards con imagen). A la derecha carrito persistente con selección de item activo, cliente, y resumen. Navegación por teclado mejorada. El panel de pago se expande al confirmar.</div>
+        </div>
+
+        <div class="pos-layout">
+          <!-- Left: Search & Products -->
+          <div class="pos-left">
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+              <div style="flex:1;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 14px;">
+                <span style="font-size:16px">🔍</span>
+                <input type="text" placeholder="Buscar producto, código o escanear..." style="border:none;outline:none;font-size:14px;flex:1;background:transparent;font-family:inherit" />
+                <span style="font-size:10px;color:var(--text-light);background:var(--bg);padding:2px 6px;border-radius:4px">F2</span>
+              </div>
+              <div class="btn btn-outline" style="white-space:nowrap">📷 Scan</div>
+            </div>
+
+            <!-- Product Grid -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor='#2563eb'" onmouseout="this.style.borderColor='var(--border)'">
+                <div style="background:#f1f5f9;border-radius:8px;height:80px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:28px">🍫</div>
+                <div style="font-size:12px;font-weight:600">Chocolate Águila 150g</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+                  <span style="font-size:14px;font-weight:700;color:var(--primary)">$2.450</span>
+                  <span class="badge badge-success">Stock: 45</span>
+                </div>
+              </div>
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;">
+                <div style="background:#f1f5f9;border-radius:8px;height:80px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:28px">🍬</div>
+                <div style="font-size:12px;font-weight:600">Caramelos Flynn Paff x100</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+                  <span style="font-size:14px;font-weight:700;color:var(--primary)">$8.900</span>
+                  <span class="badge badge-success">Stock: 23</span>
+                </div>
+              </div>
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;">
+                <div style="background:#f1f5f9;border-radius:8px;height:80px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:28px">🥜</div>
+                <div style="font-size:12px;font-weight:600">Maní Salado Cabrales 1kg</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+                  <span style="font-size:14px;font-weight:700;color:var(--primary)">$5.200</span>
+                  <span class="badge badge-warning">Stock: 8</span>
+                </div>
+              </div>
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;">
+                <div style="background:#f1f5f9;border-radius:8px;height:80px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:28px">🍪</div>
+                <div style="font-size:12px;font-weight:600">Galletitas Pepitos 354g</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+                  <span style="font-size:14px;font-weight:700;color:var(--primary)">$3.150</span>
+                  <span class="badge badge-success">Stock: 60</span>
+                </div>
+              </div>
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;">
+                <div style="background:#f1f5f9;border-radius:8px;height:80px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:28px">🧃</div>
+                <div style="font-size:12px;font-weight:600">Jugo Cepita 1L</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+                  <span style="font-size:14px;font-weight:700;color:var(--primary)">$1.890</span>
+                  <span class="badge badge-danger">Stock: 2</span>
+                </div>
+              </div>
+              <div style="background:var(--card);border:2px dashed var(--border);border-radius:10px;padding:12px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;color:var(--text-muted)">
+                <span style="font-size:24px;opacity:.4">+</span>
+                <span style="font-size:11px">Item libre</span>
+              </div>
+            </div>
+
+            <div style="margin-top:20px;display:flex;gap:8px;font-size:11px;color:var(--text-light)">
+              <span style="background:var(--bg);padding:3px 8px;border-radius:4px"><strong>↑↓</strong> Navegar</span>
+              <span style="background:var(--bg);padding:3px 8px;border-radius:4px"><strong>Enter</strong> Agregar</span>
+              <span style="background:var(--bg);padding:3px 8px;border-radius:4px"><strong>←→</strong> Cantidad</span>
+              <span style="background:var(--bg);padding:3px 8px;border-radius:4px"><strong>Del</strong> Eliminar</span>
+              <span style="background:var(--bg);padding:3px 8px;border-radius:4px"><strong>F4</strong> Cobrar</span>
+            </div>
+          </div>
+
+          <!-- Right: Cart -->
+          <div class="pos-right">
+            <div class="pos-cart-header">
+              <div>
+                <div style="font-weight:600;font-size:14px">Carrito</div>
+                <div style="font-size:11px;color:var(--text-muted)">3 items</div>
+              </div>
+              <div style="display:flex;gap:6px">
+                <select style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;background:var(--card);cursor:pointer">
+                  <option>👤 Sin cliente</option>
+                  <option>Maxikiosco Gloria</option>
+                  <option>Dist. Palermo</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="pos-cart-items">
+              <div class="pos-cart-item selected">
+                <div style="width:36px;height:36px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🍫</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Chocolate Águila 150g</div>
+                  <div style="font-size:11px;color:var(--text-muted)">$2.450 × 3</div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:13px;font-weight:600">$7.350</div>
+                </div>
+              </div>
+              <div class="pos-cart-item">
+                <div style="width:36px;height:36px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🍬</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;font-weight:500">Caramelos Flynn Paff x100</div>
+                  <div style="font-size:11px;color:var(--text-muted)">$8.900 × 1</div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:13px;font-weight:600">$8.900</div>
+                </div>
+              </div>
+              <div class="pos-cart-item">
+                <div style="width:36px;height:36px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🥜</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;font-weight:500">Maní Salado 1kg</div>
+                  <div style="font-size:11px;color:var(--text-muted)">$5.200 × 2 <span class="badge badge-primary" style="font-size:9px">Caja</span></div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:13px;font-weight:600">$10.400</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pos-cart-footer">
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px">
+                <span>Subtotal</span><span>$26.650</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:8px">
+                <span>Descuento</span><span>-$0</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--border)">
+                <span style="font-weight:600;font-size:14px">Total</span>
+                <span style="font-weight:800;font-size:24px;color:var(--primary)">$26.650</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+                <div class="btn btn-outline" style="justify-content:center">🧾 Remito X</div>
+                <div class="btn btn-primary" style="justify-content:center;font-size:14px;padding:12px">💰 Cobrar</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- VENTAS (Historial) -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-ventas">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Filtros colapsables en una barra compacta. Tabs para separar Todos / Pendientes / Cerradas. Filas expandibles con click. Acciones agrupadas en menú contextual (···) en lugar de múltiples botones. Export a Excel siempre visible.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#eff6ff">📋</div>
+            <div><h1>Historial de ventas</h1><p>Todas las ventas y comprobantes</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline">⬇️ Exportar</div>
+            <div class="btn btn-primary">+ Carga manual</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active">Todas <span class="badge badge-gray" style="margin-left:4px">247</span></div>
+          <div class="tab">Pendientes <span class="badge badge-warning" style="margin-left:4px">3</span></div>
+          <div class="tab">Cerradas</div>
+          <div class="tab">Anuladas</div>
+        </div>
+
+        <div class="filter-bar">
+          <input type="date" class="filter-input" value="2026-03-01" style="width:140px" />
+          <span style="color:var(--text-muted);font-size:13px">a</span>
+          <input type="date" class="filter-input" value="2026-03-30" style="width:140px" />
+          <input type="text" class="filter-input" placeholder="🔍 Buscar cliente..." />
+          <select class="filter-input">
+            <option>Todos los comprobantes</option>
+            <option>Remito X</option>
+            <option>Factura B</option>
+          </select>
+          <select class="filter-input">
+            <option>Todas las formas de pago</option>
+            <option>Efectivo</option>
+            <option>Transferencia</option>
+          </select>
+          <div class="btn btn-ghost btn-sm" style="color:var(--danger)">✕ Limpiar</div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th style="width:30px"></th>
+              <th>Número</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Comprobante</th>
+              <th>Pago</th>
+              <th>Vendedor</th>
+              <th style="text-align:right">Total</th>
+              <th>Estado</th>
+              <th style="width:40px"></th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td style="cursor:pointer;color:var(--text-muted)">▸</td>
+                <td style="font-family:monospace;font-size:12px">00001-00000234</td>
+                <td>30/03/2026</td>
+                <td><div class="entity-row"><div class="entity-avatar" style="background:#dbeafe;color:#2563eb;width:28px;height:28px;font-size:10px">MG</div><span style="font-size:13px">Maxikiosco Gloria</span></div></td>
+                <td><span class="badge badge-gray">Remito X</span></td>
+                <td><span class="badge badge-success">Efectivo</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">Neyen</td>
+                <td style="text-align:right;font-weight:600">$125.400</td>
+                <td><span class="badge badge-success">Cerrada</span></td>
+                <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+              </tr>
+              <tr>
+                <td style="cursor:pointer;color:var(--text-muted)">▸</td>
+                <td style="font-family:monospace;font-size:12px">00001-00000233</td>
+                <td>30/03/2026</td>
+                <td><div class="entity-row"><div class="entity-avatar" style="background:#fce7f3;color:#db2777;width:28px;height:28px;font-size:10px">DP</div><span style="font-size:13px">Dist. Palermo</span></div></td>
+                <td><span class="badge badge-gray">Remito X</span></td>
+                <td><span class="badge badge-info">Transferencia</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">Mariano</td>
+                <td style="text-align:right;font-weight:600">$89.200</td>
+                <td><span class="badge badge-success">Cerrada</span></td>
+                <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+              </tr>
+              <tr style="background:#fffbeb">
+                <td style="cursor:pointer;color:var(--text-muted)">▸</td>
+                <td style="font-family:monospace;font-size:12px">00001-00000232</td>
+                <td>30/03/2026</td>
+                <td><div class="entity-row"><div class="entity-avatar" style="background:#fef3c7;color:#d97706;width:28px;height:28px;font-size:10px">KV</div><span style="font-size:13px">Kiosco Vélez</span></div></td>
+                <td><span class="badge badge-gray">Remito X</span></td>
+                <td><span class="badge badge-warning">Cta. Cte.</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">Neyen</td>
+                <td style="text-align:right;font-weight:600">$67.800</td>
+                <td><span class="badge badge-warning">Pendiente</span></td>
+                <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--text-muted)">
+          <span>Mostrando 1-20 de 247 ventas</span>
+          <div style="display:flex;gap:4px">
+            <div class="btn btn-outline btn-sm">← Anterior</div>
+            <div class="btn btn-primary btn-sm">1</div>
+            <div class="btn btn-outline btn-sm">2</div>
+            <div class="btn btn-outline btn-sm">3</div>
+            <div class="btn btn-outline btn-sm">Siguiente →</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- CLIENTES -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-clientes">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Card-based summary arriba (total clientes, saldo total, activos). Tabs para Listado / Cobranzas / Zonas (actualmente son tabs, se mantiene pero más limpio). Filtros colapsables. Cada cliente muestra avatar con iniciales, saldo inline. Acciones en menú contextual.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#ecfdf5">👥</div>
+            <div><h1>Clientes</h1><p>Gestión de clientes y cobranzas</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline">⬇️ Exportar</div>
+            <div class="btn btn-primary">+ Nuevo cliente</div>
+          </div>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 20px;">
+          <div class="stat-card">
+            <span class="stat-label">Total clientes</span>
+            <div class="stat-value" style="font-size:24px">156</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Activos (último mes)</span>
+            <div class="stat-value" style="font-size:24px;color:var(--success)">89</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Saldo total adeudado</span>
+            <div class="stat-value" style="font-size:24px;color:var(--danger)">$1.234.500</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Zonas de entrega</span>
+            <div class="stat-value" style="font-size:24px">8</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active">Listado</div>
+          <div class="tab">Cobranzas <span class="badge badge-danger" style="margin-left:4px">12</span></div>
+          <div class="tab">Zonas de entrega</div>
+        </div>
+
+        <div class="filter-bar">
+          <input type="text" class="filter-input" placeholder="🔍 Buscar cliente..." style="width:250px" />
+          <select class="filter-input"><option>Todas las zonas</option><option>Zona 1 - Centro</option></select>
+          <select class="filter-input"><option>Todos los vendedores</option><option>Neyen</option><option>Mariano</option></select>
+          <select class="filter-input"><option>Ordenar: A-Z</option><option>Por saldo</option><option>Más reciente</option></select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Cliente</th>
+              <th>Zona</th>
+              <th>Vendedor</th>
+              <th>Últ. compra</th>
+              <th style="text-align:right">Saldo</th>
+              <th style="text-align:right">Total compras</th>
+              <th style="width:40px"></th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="entity-row"><div class="entity-avatar" style="background:#dbeafe;color:#2563eb">MG</div><div class="entity-info"><div class="name">Maxikiosco Gloria</div><div class="sub">CUIT: 20-12345678-9 · Villa Devoto</div></div></div></td>
+                <td><span class="badge badge-primary">Zona 1</span></td>
+                <td style="font-size:12px">Neyen</td>
+                <td style="font-size:12px;color:var(--text-muted)">28/03/2026</td>
+                <td style="text-align:right"><span style="font-weight:600;color:var(--success)">$0</span></td>
+                <td style="text-align:right;font-weight:500">$2.456.800</td>
+                <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+              </tr>
+              <tr>
+                <td><div class="entity-row"><div class="entity-avatar" style="background:#fce7f3;color:#db2777">DP</div><div class="entity-info"><div class="name">Distribuidora Palermo</div><div class="sub">CUIT: 30-98765432-1 · Palermo</div></div></div></td>
+                <td><span class="badge badge-info">Zona 3</span></td>
+                <td style="font-size:12px">Mariano</td>
+                <td style="font-size:12px;color:var(--text-muted)">30/03/2026</td>
+                <td style="text-align:right"><span style="font-weight:600;color:var(--danger)">$89.200</span></td>
+                <td style="text-align:right;font-weight:500">$1.890.400</td>
+                <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+              </tr>
+              <tr>
+                <td><div class="entity-row"><div class="entity-avatar" style="background:#ecfdf5;color:#059669">LC</div><div class="entity-info"><div class="name">La Casona Almacén</div><div class="sub">CUIT: 27-55667788-3 · Caballito</div></div></div></td>
+                <td><span class="badge badge-gray">Zona 5</span></td>
+                <td style="font-size:12px">Neyen</td>
+                <td style="font-size:12px;color:var(--text-muted)">25/03/2026</td>
+                <td style="text-align:right"><span style="font-weight:600;color:var(--danger)">$245.800</span></td>
+                <td style="text-align:right;font-weight:500">$3.120.600</td>
+                <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- PRODUCTOS -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-productos">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Toggle entre vista tabla y vista grilla (cards). Filtros en sidebar colapsable a la izquierda. Bulk actions toolbar que aparece al seleccionar items. Quick-edit inline para precio y stock. Indicadores visuales de stock nivel. Sub-nav para Catálogo / Precios / Descuentos / Marcas.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#fef3c7">📦</div>
+            <div><h1>Productos</h1><p>Catálogo de productos y precios</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline">📊 Grid</div>
+            <div class="btn btn-outline">⬇️ Exportar</div>
+            <div class="btn btn-primary">+ Nuevo producto</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active">Catálogo <span class="badge badge-gray" style="margin-left:4px">342</span></div>
+          <div class="tab">Editar Precios</div>
+          <div class="tab">Descuentos</div>
+          <div class="tab">Marcas</div>
+          <div class="tab">Combos</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:200px 1fr;gap:20px;">
+          <!-- Sidebar Filters -->
+          <div>
+            <div class="card">
+              <div class="card-body" style="padding:16px;">
+                <div class="section-label">Filtros</div>
+                <div style="margin-bottom:12px">
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Categoría</label>
+                  <select class="filter-input" style="width:100%;min-width:0">
+                    <option>Todas</option>
+                    <option>Golosinas</option>
+                    <option>Cigarrillos</option>
+                    <option>Bebidas</option>
+                  </select>
+                </div>
+                <div style="margin-bottom:12px">
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Marca</label>
+                  <select class="filter-input" style="width:100%;min-width:0">
+                    <option>Todas</option>
+                    <option>Águila</option>
+                    <option>Arcor</option>
+                  </select>
+                </div>
+                <div style="margin-bottom:12px">
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Stock</label>
+                  <select class="filter-input" style="width:100%;min-width:0">
+                    <option>Todos</option>
+                    <option>Con stock</option>
+                    <option>Sin stock</option>
+                    <option>Stock bajo</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">Visibilidad</label>
+                  <select class="filter-input" style="width:100%;min-width:0">
+                    <option>Todos</option>
+                    <option>Publicados</option>
+                    <option>Ocultos</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Product Table -->
+          <div>
+            <div class="filter-bar">
+              <input type="text" class="filter-input" placeholder="🔍 Buscar producto, código..." style="flex:1" />
+              <select class="filter-input" style="min-width:120px"><option>Ordenar: A-Z</option><option>Por stock</option><option>Por precio</option></select>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th style="width:30px"><input type="checkbox" /></th>
+                  <th style="width:44px"></th>
+                  <th>Código</th>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th style="text-align:center">Stock</th>
+                  <th style="text-align:right">Costo</th>
+                  <th style="text-align:right">Precio</th>
+                  <th style="text-align:center">Visible</th>
+                  <th style="width:40px"></th>
+                </tr></thead>
+                <tbody>
+                  <tr>
+                    <td><input type="checkbox" /></td>
+                    <td><div style="width:36px;height:36px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center">🍫</div></td>
+                    <td style="font-family:monospace;font-size:12px;color:var(--text-muted)">7790001</td>
+                    <td><div style="font-weight:500">Chocolate Águila 150g</div><div style="font-size:11px;color:var(--text-muted)">Águila · Caja x24</div></td>
+                    <td><span class="badge badge-gray">Golosinas</span></td>
+                    <td style="text-align:center">
+                      <div class="stock-level" style="justify-content:center">
+                        <span style="font-weight:600">45</span>
+                        <div class="stock-bar"><div class="fill" style="width:60%;background:var(--success)"></div></div>
+                      </div>
+                    </td>
+                    <td style="text-align:right;font-size:12px;color:var(--text-muted)">$1.200</td>
+                    <td style="text-align:right;font-weight:600">$2.450</td>
+                    <td style="text-align:center;color:var(--success)">✓</td>
+                    <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" /></td>
+                    <td><div style="width:36px;height:36px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center">🥜</div></td>
+                    <td style="font-family:monospace;font-size:12px;color:var(--text-muted)">7790045</td>
+                    <td><div style="font-weight:500">Maní Salado Cabrales 1kg</div><div style="font-size:11px;color:var(--text-muted)">Cabrales</div></td>
+                    <td><span class="badge badge-gray">Snacks</span></td>
+                    <td style="text-align:center">
+                      <div class="stock-level" style="justify-content:center">
+                        <span style="font-weight:600;color:var(--warning)">8</span>
+                        <div class="stock-bar"><div class="fill" style="width:15%;background:var(--warning)"></div></div>
+                      </div>
+                    </td>
+                    <td style="text-align:right;font-size:12px;color:var(--text-muted)">$2.800</td>
+                    <td style="text-align:right;font-weight:600">$5.200</td>
+                    <td style="text-align:center;color:var(--success)">✓</td>
+                    <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+                  </tr>
+                  <tr style="background:#fef2f2">
+                    <td><input type="checkbox" /></td>
+                    <td><div style="width:36px;height:36px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center">🧃</div></td>
+                    <td style="font-family:monospace;font-size:12px;color:var(--text-muted)">7790112</td>
+                    <td><div style="font-weight:500">Jugo Cepita 1L</div><div style="font-size:11px;color:var(--text-muted)">Cepita</div></td>
+                    <td><span class="badge badge-gray">Bebidas</span></td>
+                    <td style="text-align:center">
+                      <div class="stock-level" style="justify-content:center">
+                        <span style="font-weight:600;color:var(--danger)">0</span>
+                        <div class="stock-bar"><div class="fill" style="width:0%;background:var(--danger)"></div></div>
+                      </div>
+                    </td>
+                    <td style="text-align:right;font-size:12px;color:var(--text-muted)">$950</td>
+                    <td style="text-align:right;font-weight:600">$1.890</td>
+                    <td style="text-align:center;color:var(--text-light)">✕</td>
+                    <td><div class="btn btn-ghost btn-sm" style="padding:4px">···</div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- COMPRAS -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-compras">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Formulario más compacto con búsqueda de productos inline. Descuento por item visible en la tabla. Toggle rápido de "actualizar precio" por item. Resumen lateral sticky. Sub-tabs: Registrar / Historial / Reposición automática.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#fef3c7">🏷️</div>
+            <div><h1>Compras</h1><p>Registro de compras a proveedores</p></div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active">Registrar compra</div>
+          <div class="tab">Historial</div>
+          <div class="tab">Reposición automática</div>
+          <div class="tab">Pedidos a proveedores</div>
+        </div>
+
+        <div class="grid-3-1">
+          <div>
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-body-compact">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                  <div><label style="font-size:11px;color:var(--text-muted)">Proveedor</label><select class="filter-input" style="width:100%;margin-top:4px"><option>Seleccionar proveedor</option><option>Chil</option><option>Arcor</option></select></div>
+                  <div><label style="font-size:11px;color:var(--text-muted)">Fecha</label><input type="date" class="filter-input" value="2026-03-30" style="width:100%;margin-top:4px" /></div>
+                  <div><label style="font-size:11px;color:var(--text-muted)">Forma de pago</label><select class="filter-input" style="width:100%;margin-top:4px"><option>Efectivo</option><option>Transferencia</option><option>Cuenta Corriente</option></select></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3>Items de compra</h3>
+                <div class="btn btn-primary btn-sm">+ Agregar producto</div>
+              </div>
+              <table style="font-size:13px">
+                <thead><tr>
+                  <th>Producto</th>
+                  <th style="text-align:center">Cajas</th>
+                  <th style="text-align:center">Sueltas</th>
+                  <th style="text-align:center">Total</th>
+                  <th style="text-align:right">Costo unit.</th>
+                  <th style="text-align:center;color:var(--primary)">Dto%</th>
+                  <th style="text-align:right">Subtotal</th>
+                  <th style="text-align:center">Act. PVP</th>
+                  <th style="width:30px"></th>
+                </tr></thead>
+                <tbody>
+                  <tr>
+                    <td><div style="font-weight:500">Papas Lays Clásicas</div><div style="font-size:11px;color:var(--text-muted)">7790001 · Stock: 24</div></td>
+                    <td style="text-align:center"><input type="number" value="10" style="width:50px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:4px;font-size:12px" /></td>
+                    <td style="text-align:center">0</td>
+                    <td style="text-align:center;font-weight:600">120</td>
+                    <td style="text-align:right">$850</td>
+                    <td style="text-align:center"><input type="number" value="0" style="width:45px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:4px;font-size:12px" /></td>
+                    <td style="text-align:right;font-weight:600">$102.000</td>
+                    <td style="text-align:center"><input type="checkbox" checked /></td>
+                    <td><span style="cursor:pointer;color:var(--text-light)">✕</span></td>
+                  </tr>
+                  <tr style="background:#f0fdf4">
+                    <td><div style="font-weight:500">Papas Lays Clásicas</div><div style="font-size:11px;color:var(--success)">🎁 Bonificación</div></td>
+                    <td style="text-align:center"><input type="number" value="1" style="width:50px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:4px;font-size:12px" /></td>
+                    <td style="text-align:center">0</td>
+                    <td style="text-align:center;font-weight:600">12</td>
+                    <td style="text-align:right">$850</td>
+                    <td style="text-align:center"><input type="number" value="100" style="width:45px;text-align:center;border:1px solid #10b981;border-radius:4px;padding:4px;font-size:12px;color:#059669;font-weight:600" /></td>
+                    <td style="text-align:right;font-weight:600;color:var(--success)">$0</td>
+                    <td style="text-align:center">—</td>
+                    <td><span style="cursor:pointer;color:var(--text-light)">✕</span></td>
+                  </tr>
+                  <tr>
+                    <td><div style="font-weight:500">Papas Lays Saborizadas</div><div style="font-size:11px;color:var(--text-muted)">7790002 · Stock: 18</div></td>
+                    <td style="text-align:center"><input type="number" value="5" style="width:50px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:4px;font-size:12px" /></td>
+                    <td style="text-align:center">0</td>
+                    <td style="text-align:center;font-weight:600">60</td>
+                    <td style="text-align:right">$900</td>
+                    <td style="text-align:center"><input type="number" value="0" style="width:45px;text-align:center;border:1px solid var(--border);border-radius:4px;padding:4px;font-size:12px" /></td>
+                    <td style="text-align:right;font-weight:600">$54.000</td>
+                    <td style="text-align:center"><input type="checkbox" /></td>
+                    <td><span style="cursor:pointer;color:var(--text-light)">✕</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Summary -->
+          <div>
+            <div class="card" style="position:sticky;top:80px">
+              <div class="card-body">
+                <div class="section-label">Resumen</div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+                  <span style="color:var(--text-muted)">3 productos</span><span>192 unidades</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+                  <span style="color:var(--text-muted)">Subtotal</span><span>$156.000</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;color:var(--success)">
+                  <span>Bonificación</span><span>-$10.200</span>
+                </div>
+                <div style="border-top:1px solid var(--border);margin:12px 0;"></div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-weight:600">Total</span>
+                  <span style="font-size:22px;font-weight:700">$145.800</span>
+                </div>
+                <div style="display:grid;gap:8px;margin-top:16px">
+                  <div class="btn btn-primary" style="justify-content:center">💾 Confirmar compra</div>
+                  <div class="btn btn-outline" style="justify-content:center">📋 Guardar pendiente</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- PROVEEDORES -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-proveedores">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Cards con info clave del proveedor (saldo, productos, última compra). Vista rápida expandible sin modal. Tabs para Listado / Pagos pendientes. Indicador visual de saldo pendiente.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#f3e8ff">🏢</div>
+            <div><h1>Proveedores</h1><p>Gestión de proveedores y pagos</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-primary">+ Nuevo proveedor</div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <input type="text" class="filter-input" placeholder="🔍 Buscar proveedor..." style="width:300px" />
+          <select class="filter-input"><option>Todos</option><option>Con saldo pendiente</option><option>Sin saldo</option></select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+          <div class="card" style="cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='#2563eb'" onmouseout="this.style.borderColor='var(--border)'">
+            <div class="card-body">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                <div class="entity-avatar" style="background:#fef3c7;color:#d97706;width:44px;height:44px;font-size:16px">CH</div>
+                <div>
+                  <div style="font-weight:600">Chil</div>
+                  <div style="font-size:11px;color:var(--text-muted)">Snacks y papas fritas</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+                <div style="background:var(--bg);padding:8px;border-radius:6px">
+                  <div style="color:var(--text-muted)">Productos</div>
+                  <div style="font-weight:600;font-size:14px">24</div>
+                </div>
+                <div style="background:#fef2f2;padding:8px;border-radius:6px">
+                  <div style="color:var(--text-muted)">Saldo</div>
+                  <div style="font-weight:600;font-size:14px;color:var(--danger)">$145.800</div>
+                </div>
+              </div>
+              <div style="margin-top:8px;font-size:11px;color:var(--text-light)">Última compra: 30/03/2026</div>
+            </div>
+          </div>
+
+          <div class="card" style="cursor:pointer">
+            <div class="card-body">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                <div class="entity-avatar" style="background:#dbeafe;color:#2563eb;width:44px;height:44px;font-size:16px">AR</div>
+                <div>
+                  <div style="font-weight:600">Arcor</div>
+                  <div style="font-size:11px;color:var(--text-muted)">Golosinas y galletitas</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+                <div style="background:var(--bg);padding:8px;border-radius:6px">
+                  <div style="color:var(--text-muted)">Productos</div>
+                  <div style="font-weight:600;font-size:14px">56</div>
+                </div>
+                <div style="background:#ecfdf5;padding:8px;border-radius:6px">
+                  <div style="color:var(--text-muted)">Saldo</div>
+                  <div style="font-weight:600;font-size:14px;color:var(--success)">$0</div>
+                </div>
+              </div>
+              <div style="margin-top:8px;font-size:11px;color:var(--text-light)">Última compra: 28/03/2026</div>
+            </div>
+          </div>
+
+          <div class="card" style="cursor:pointer">
+            <div class="card-body">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                <div class="entity-avatar" style="background:#ecfdf5;color:#059669;width:44px;height:44px;font-size:16px">PM</div>
+                <div>
+                  <div style="font-weight:600">Philip Morris</div>
+                  <div style="font-size:11px;color:var(--text-muted)">Cigarrillos</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+                <div style="background:var(--bg);padding:8px;border-radius:6px">
+                  <div style="color:var(--text-muted)">Productos</div>
+                  <div style="font-weight:600;font-size:14px">18</div>
+                </div>
+                <div style="background:#fef2f2;padding:8px;border-radius:6px">
+                  <div style="color:var(--text-muted)">Saldo</div>
+                  <div style="font-weight:600;font-size:14px;color:var(--danger)">$320.000</div>
+                </div>
+              </div>
+              <div style="margin-top:8px;font-size:11px;color:var(--text-light)">Última compra: 27/03/2026</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- CAJA -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-caja">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Estado del turno prominente arriba. Cards de resumen por forma de pago más visuales. Timeline de movimientos con iconos y colores. Botón de cierre de caja con resumen pre-cierre más claro.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#ecfdf5">💰</div>
+            <div><h1>Caja</h1><p>Gestión de caja y movimientos</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline">+ Ingreso</div>
+            <div class="btn btn-outline">- Egreso</div>
+            <div class="btn btn-danger">🔒 Cerrar caja</div>
+          </div>
+        </div>
+
+        <!-- Shift Status -->
+        <div class="shift-card open" style="margin-bottom:20px">
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px">
+            <div style="width:10px;height:10px;background:var(--success);border-radius:50%;animation:pulse 2s infinite"></div>
+            <span style="font-weight:600;color:var(--success)">Caja abierta</span>
+          </div>
+          <div style="font-size:13px;color:var(--text-muted)">Abierta por <strong>Admin</strong> a las 08:15 — Monto inicial: $50.000</div>
+        </div>
+
+        <!-- Cards -->
+        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div class="stat-card">
+            <span class="stat-label">Total ventas</span>
+            <div class="stat-value" style="font-size:22px">$847.500</div>
+            <div style="font-size:11px;color:var(--text-muted)">18 operaciones</div>
+          </div>
+          <div class="stat-card" style="border-left:3px solid var(--success)">
+            <span class="stat-label">Efectivo</span>
+            <div class="stat-value" style="font-size:22px;color:var(--success)">$425.000</div>
+            <div style="font-size:11px;color:var(--text-muted)">10 ops</div>
+          </div>
+          <div class="stat-card" style="border-left:3px solid var(--info)">
+            <span class="stat-label">Transferencia</span>
+            <div class="stat-value" style="font-size:22px;color:var(--info)">$338.500</div>
+            <div style="font-size:11px;color:var(--text-muted)">6 ops</div>
+          </div>
+          <div class="stat-card" style="border-left:3px solid var(--warning)">
+            <span class="stat-label">Cta. Corriente</span>
+            <div class="stat-value" style="font-size:22px;color:var(--warning)">$84.000</div>
+            <div style="font-size:11px;color:var(--text-muted)">2 ops</div>
+          </div>
+        </div>
+
+        <!-- Cash expected -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-body">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:12px;color:var(--text-muted)">Efectivo esperado en caja</div>
+                <div style="font-size:28px;font-weight:700;margin-top:4px">$475.000</div>
+                <div style="font-size:12px;color:var(--text-muted)">$50.000 inicial + $425.000 ventas</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:12px;color:var(--text-muted)">Egresos</div>
+                <div style="font-size:18px;font-weight:600;color:var(--danger)">-$15.000</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Movements -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Movimientos del día</h3>
+            <div style="display:flex;gap:6px">
+              <div class="btn btn-sm btn-ghost" style="font-size:11px">Todos</div>
+              <div class="btn btn-sm btn-ghost" style="font-size:11px">Ingresos</div>
+              <div class="btn btn-sm btn-ghost" style="font-size:11px">Egresos</div>
+            </div>
+          </div>
+          <table>
+            <thead><tr>
+              <th>Hora</th>
+              <th>Tipo</th>
+              <th>Descripción</th>
+              <th>Método</th>
+              <th style="text-align:right">Monto</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td style="font-variant-numeric:tabular-nums">14:32</td>
+                <td><span class="badge badge-success">Ingreso</span></td>
+                <td>Venta #00234 — Maxikiosco Gloria</td>
+                <td><span class="badge badge-gray">Efectivo</span></td>
+                <td style="text-align:right;font-weight:600;color:var(--success)">+$125.400</td>
+              </tr>
+              <tr>
+                <td>13:45</td>
+                <td><span class="badge badge-success">Ingreso</span></td>
+                <td>Venta #00233 — Dist. Palermo</td>
+                <td><span class="badge badge-gray">Transferencia</span></td>
+                <td style="text-align:right;font-weight:600;color:var(--success)">+$89.200</td>
+              </tr>
+              <tr>
+                <td>12:00</td>
+                <td><span class="badge badge-danger">Egreso</span></td>
+                <td>Pago a proveedor — Chil</td>
+                <td><span class="badge badge-gray">Efectivo</span></td>
+                <td style="text-align:right;font-weight:600;color:var(--danger)">-$15.000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- STOCK -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-stock">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Vista de stock con indicadores visuales (barras de nivel). Filtros por categoría y estado. Ajuste rápido inline. Historial de movimientos expandible. Alertas de stock bajo destacadas arriba.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#fef3c7">📊</div>
+            <div><h1>Stock</h1><p>Control de inventario y ajustes</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-primary">+ Ajuste de stock</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active">Inventario</div>
+          <div class="tab">Ajustes recientes</div>
+          <div class="tab">Autoconsumo</div>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+          <div class="stat-card"><span class="stat-label">Total productos</span><div class="stat-value" style="font-size:22px">342</div></div>
+          <div class="stat-card" style="border-left:3px solid var(--danger)"><span class="stat-label">Sin stock</span><div class="stat-value" style="font-size:22px;color:var(--danger)">5</div></div>
+          <div class="stat-card" style="border-left:3px solid var(--warning)"><span class="stat-label">Stock bajo</span><div class="stat-value" style="font-size:22px;color:var(--warning)">12</div></div>
+          <div class="stat-card" style="border-left:3px solid var(--success)"><span class="stat-label">Stock normal</span><div class="stat-value" style="font-size:22px;color:var(--success)">325</div></div>
+        </div>
+
+        <div class="filter-bar">
+          <input type="text" class="filter-input" placeholder="🔍 Buscar producto..." style="width:250px" />
+          <select class="filter-input"><option>Todos los estados</option><option>🔴 Sin stock</option><option>🟡 Stock bajo</option><option>🟢 Normal</option></select>
+          <select class="filter-input"><option>Todas las categorías</option></select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Producto</th>
+              <th style="text-align:center">Stock</th>
+              <th style="text-align:center">Mínimo</th>
+              <th style="text-align:center">Máximo</th>
+              <th style="text-align:center">Nivel</th>
+              <th>Último mov.</th>
+              <th style="width:100px"></th>
+            </tr></thead>
+            <tbody>
+              <tr style="background:#fef2f2">
+                <td><div class="entity-row"><div style="width:8px;height:8px;border-radius:50%;background:var(--danger);flex-shrink:0"></div><div class="entity-info"><div class="name">Jugo Cepita 1L</div><div class="sub">Bebidas · 7790112</div></div></div></td>
+                <td style="text-align:center;font-weight:700;color:var(--danger)">0</td>
+                <td style="text-align:center;color:var(--text-muted)">10</td>
+                <td style="text-align:center;color:var(--text-muted)">100</td>
+                <td><div class="progress-bar"><div class="fill" style="width:0%;background:var(--danger)"></div></div></td>
+                <td style="font-size:11px;color:var(--text-muted)">Venta · hace 2h</td>
+                <td><div class="btn btn-sm btn-outline" style="font-size:11px">Ajustar</div></td>
+              </tr>
+              <tr style="background:#fffbeb">
+                <td><div class="entity-row"><div style="width:8px;height:8px;border-radius:50%;background:var(--warning);flex-shrink:0"></div><div class="entity-info"><div class="name">Maní Salado 1kg</div><div class="sub">Snacks · 7790045</div></div></div></td>
+                <td style="text-align:center;font-weight:700;color:var(--warning)">8</td>
+                <td style="text-align:center;color:var(--text-muted)">15</td>
+                <td style="text-align:center;color:var(--text-muted)">80</td>
+                <td><div class="progress-bar"><div class="fill" style="width:10%;background:var(--warning)"></div></div></td>
+                <td style="font-size:11px;color:var(--text-muted)">Compra · hace 1d</td>
+                <td><div class="btn btn-sm btn-outline" style="font-size:11px">Ajustar</div></td>
+              </tr>
+              <tr>
+                <td><div class="entity-row"><div style="width:8px;height:8px;border-radius:50%;background:var(--success);flex-shrink:0"></div><div class="entity-info"><div class="name">Chocolate Águila 150g</div><div class="sub">Golosinas · 7790001</div></div></div></td>
+                <td style="text-align:center;font-weight:700">45</td>
+                <td style="text-align:center;color:var(--text-muted)">10</td>
+                <td style="text-align:center;color:var(--text-muted)">80</td>
+                <td><div class="progress-bar"><div class="fill" style="width:56%;background:var(--success)"></div></div></td>
+                <td style="font-size:11px;color:var(--text-muted)">Venta · hace 3h</td>
+                <td><div class="btn btn-sm btn-outline" style="font-size:11px">Ajustar</div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- HOJA DE RUTA -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-hoja-ruta">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Vista tipo kanban con columnas por estado (Pendiente → En camino → Entregado). Drag & drop entre columnas. Mapa integrado opcional. Resumen de entrega con botón de cobro rápido.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#fce7f3">🚚</div>
+            <div><h1>Hojas de Ruta</h1><p>Gestión de entregas y rutas</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-primary">+ Nueva hoja de ruta</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+          <!-- Pendiente -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--warning);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--warning)"></div>
+              Pendientes (3)
+            </div>
+            <div class="route-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-weight:600;font-size:13px">Maxikiosco Gloria</span>
+                <span class="badge badge-warning">Pendiente</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">📍 Av. Rivadavia 5200, Devoto</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🧾 Remito X #00234 · $125.400</div>
+              <div style="display:flex;gap:6px">
+                <div class="btn btn-sm btn-primary" style="font-size:11px">💰 Cobrar</div>
+                <div class="btn btn-sm btn-outline" style="font-size:11px">📋 Detalle</div>
+              </div>
+            </div>
+            <div class="route-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-weight:600;font-size:13px">Kiosco Vélez</span>
+                <span class="badge badge-warning">Pendiente</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">📍 Calle 123, Floresta</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🧾 Remito X #00232 · $67.800</div>
+              <div style="display:flex;gap:6px">
+                <div class="btn btn-sm btn-primary" style="font-size:11px">💰 Cobrar</div>
+                <div class="btn btn-sm btn-outline" style="font-size:11px">📋 Detalle</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- En camino -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--info);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--info)"></div>
+              En camino (1)
+            </div>
+            <div class="route-card" style="border-color:var(--info)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-weight:600;font-size:13px">Dist. Palermo</span>
+                <span class="badge badge-info">En camino</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">📍 Honduras 4500, Palermo</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🧾 Remito X #00233 · $89.200</div>
+              <div class="btn btn-sm btn-success" style="font-size:11px;width:100%;justify-content:center">✅ Marcar entregado</div>
+            </div>
+          </div>
+
+          <!-- Entregado -->
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--success);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--success)"></div>
+              Entregados (5)
+            </div>
+            <div class="route-card" style="border-color:var(--success);opacity:.7">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <span style="font-weight:600;font-size:13px">La Casona</span>
+                <span class="badge badge-success">Entregado</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted)">$245.800 · Cobrado en transferencia</div>
+            </div>
+            <div class="route-card" style="border-color:var(--success);opacity:.7">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <span style="font-weight:600;font-size:13px">Mini Market Sol</span>
+                <span class="badge badge-success">Entregado</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted)">$156.300 · Cobrado en efectivo</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- REPORTES -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-reportes">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Dashboard de reportes con selector de período prominente. KPIs comparativos (vs período anterior). Gráficos más grandes. Sub-tabs para diferentes tipos de reporte. Export siempre disponible.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#eff6ff">📈</div>
+            <div><h1>Reportes</h1><p>Análisis de ventas y rendimiento</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline">⬇️ Exportar Excel</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active">General</div>
+          <div class="tab">Resumen mensual</div>
+          <div class="tab">Ranking clientes</div>
+          <div class="tab">Por vendedor</div>
+          <div class="tab">Percepciones</div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:20px">
+          <div class="btn btn-outline btn-sm">Hoy</div>
+          <div class="btn btn-outline btn-sm">Esta semana</div>
+          <div class="btn btn-primary btn-sm">Este mes</div>
+          <div class="btn btn-outline btn-sm">Personalizado</div>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+          <div class="stat-card">
+            <span class="stat-label">Revenue total</span>
+            <div class="stat-value" style="font-size:22px">$12.456.800</div>
+            <div class="stat-change up">↑ 18.3% vs mes anterior</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Operaciones</span>
+            <div class="stat-value" style="font-size:22px">247</div>
+            <div class="stat-change up">↑ 12 más</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Ticket promedio</span>
+            <div class="stat-value" style="font-size:22px">$50.430</div>
+            <div class="stat-change down">↓ 3.1%</div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Clientes activos</span>
+            <div class="stat-value" style="font-size:22px">89</div>
+            <div class="stat-change up">↑ 5 nuevos</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>Ventas por día</h3></div>
+            <div class="card-body">
+              <div class="chart-bar-container" style="height:180px">
+                <div class="chart-bar-group"><div class="chart-bar" style="height:45%;background:#2563eb"></div><div class="chart-bar-label">1</div></div>
+                <div class="chart-bar-group"><div class="chart-bar" style="height:65%;background:#2563eb"></div><div class="chart-bar-label">5</div></div>
+                <div class="chart-bar-group"><div class="chart-bar" style="height:55%;background:#2563eb"></div><div class="chart-bar-label">10</div></div>
+                <div class="chart-bar-group"><div class="chart-bar" style="height:80%;background:#2563eb"></div><div class="chart-bar-label">15</div></div>
+                <div class="chart-bar-group"><div class="chart-bar" style="height:70%;background:#2563eb"></div><div class="chart-bar-label">20</div></div>
+                <div class="chart-bar-group"><div class="chart-bar" style="height:95%;background:#2563eb"></div><div class="chart-bar-label">25</div></div>
+                <div class="chart-bar-group"><div class="chart-bar" style="height:60%;background:#93c5fd"></div><div class="chart-bar-label">30</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3>Top 5 clientes</h3></div>
+            <div class="card-body" style="padding:12px 16px">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:12px;font-weight:600;width:18px;color:var(--primary)">#1</span>
+                  <div style="flex:1;font-size:13px">La Casona Almacén</div>
+                  <span style="font-weight:600;font-size:13px">$1.890.400</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:12px;font-weight:600;width:18px;color:var(--text-muted)">#2</span>
+                  <div style="flex:1;font-size:13px">Maxikiosco Gloria</div>
+                  <span style="font-weight:600;font-size:13px">$1.456.800</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:12px;font-weight:600;width:18px;color:var(--text-muted)">#3</span>
+                  <div style="flex:1;font-size:13px">Distribuidora Palermo</div>
+                  <span style="font-weight:600;font-size:13px">$1.234.500</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:12px;font-weight:600;width:18px;color:var(--text-muted)">#4</span>
+                  <div style="flex:1;font-size:13px">Kiosco Vélez</div>
+                  <span style="font-weight:600;font-size:13px">$987.200</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:12px;font-weight:600;width:18px;color:var(--text-muted)">#5</span>
+                  <div style="flex:1;font-size:13px">Mini Market Sol</div>
+                  <span style="font-weight:600;font-size:13px">$876.500</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- VENDEDORES -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-vendedores">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Cards por vendedor con métricas visuales (ventas, comisión, ranking). Barras comparativas de rendimiento. Detalle expandible con breakdown por categoría. Período seleccionable arriba.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#fce7f3">🎯</div>
+            <div><h1>Vendedores</h1><p>Rendimiento y comisiones</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline btn-sm">Hoy</div>
+            <div class="btn btn-outline btn-sm">Semana</div>
+            <div class="btn btn-primary btn-sm">Mes</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px">
+          <!-- Vendedor 1 -->
+          <div class="card">
+            <div class="card-body">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                <div class="user-avatar" style="background:#dbeafe;color:#2563eb;width:48px;height:48px;font-size:16px">NB</div>
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:15px">Neyen Berardi</div>
+                  <div style="font-size:12px;color:var(--text-muted)">Comisión: 5%</div>
+                </div>
+                <div class="badge badge-primary" style="font-size:12px;padding:4px 10px">🏆 #1</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+                <div style="background:var(--bg);padding:10px;border-radius:8px;text-align:center">
+                  <div style="font-size:10px;color:var(--text-muted)">Ventas</div>
+                  <div style="font-size:16px;font-weight:700">$7.890.000</div>
+                </div>
+                <div style="background:var(--bg);padding:10px;border-radius:8px;text-align:center">
+                  <div style="font-size:10px;color:var(--text-muted)">Operaciones</div>
+                  <div style="font-size:16px;font-weight:700">145</div>
+                </div>
+                <div style="background:#ecfdf5;padding:10px;border-radius:8px;text-align:center">
+                  <div style="font-size:10px;color:var(--text-muted)">Comisión</div>
+                  <div style="font-size:16px;font-weight:700;color:var(--success)">$394.500</div>
+                </div>
+              </div>
+              <div class="progress-bar" style="height:8px;margin-bottom:4px">
+                <div class="fill" style="width:78%;background:var(--primary)"></div>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted)">78% del objetivo mensual</div>
+            </div>
+          </div>
+
+          <!-- Vendedor 2 -->
+          <div class="card">
+            <div class="card-body">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                <div class="user-avatar" style="background:#ecfdf5;color:#059669;width:48px;height:48px;font-size:16px">MM</div>
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:15px">Mariano Miguel</div>
+                  <div style="font-size:12px;color:var(--text-muted)">Comisión: 5%</div>
+                </div>
+                <div class="badge badge-gray" style="font-size:12px;padding:4px 10px">#2</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+                <div style="background:var(--bg);padding:10px;border-radius:8px;text-align:center">
+                  <div style="font-size:10px;color:var(--text-muted)">Ventas</div>
+                  <div style="font-size:16px;font-weight:700">$4.566.800</div>
+                </div>
+                <div style="background:var(--bg);padding:10px;border-radius:8px;text-align:center">
+                  <div style="font-size:10px;color:var(--text-muted)">Operaciones</div>
+                  <div style="font-size:16px;font-weight:700">102</div>
+                </div>
+                <div style="background:#ecfdf5;padding:10px;border-radius:8px;text-align:center">
+                  <div style="font-size:10px;color:var(--text-muted)">Comisión</div>
+                  <div style="font-size:16px;font-weight:700;color:var(--success)">$228.340</div>
+                </div>
+              </div>
+              <div class="progress-bar" style="height:8px;margin-bottom:4px">
+                <div class="fill" style="width:52%;background:var(--primary)"></div>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted)">52% del objetivo mensual</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- AUDITORIA -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-auditoria">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Propuesta:</strong> Log más visual con íconos por tipo de acción. JSON diff side-by-side mejorado. Filtros inline. Badges de color por módulo. Timeline visual en lugar de tabla plana.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#f1f5f9">🔍</div>
+            <div><h1>Auditoría</h1><p>Registro de actividad del sistema</p></div>
+          </div>
+          <div class="page-header-actions">
+            <div class="btn btn-outline">⬇️ Exportar</div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <input type="date" class="filter-input" value="2026-03-30" style="width:140px" />
+          <input type="date" class="filter-input" value="2026-03-30" style="width:140px" />
+          <select class="filter-input"><option>Todos los módulos</option><option>Ventas</option><option>Productos</option><option>Clientes</option><option>Compras</option></select>
+          <select class="filter-input"><option>Todas las acciones</option><option>CREATE</option><option>UPDATE</option><option>DELETE</option><option>LOGIN</option></select>
+          <input type="text" class="filter-input" placeholder="🔍 Buscar usuario..." />
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Fecha/Hora</th>
+              <th>Usuario</th>
+              <th>Acción</th>
+              <th>Módulo</th>
+              <th>Detalle</th>
+              <th style="width:30px"></th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td style="font-variant-numeric:tabular-nums;font-size:12px">30/03 14:32:15</td>
+                <td><div class="entity-row"><div class="user-avatar" style="background:#dbeafe;color:#2563eb;width:24px;height:24px;font-size:9px">NB</div><span style="font-size:12px">Neyen</span></div></td>
+                <td><span class="badge badge-success">CREATE</span></td>
+                <td><span class="badge badge-primary">Ventas</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">Venta #00234 — $125.400 — Maxikiosco Gloria</td>
+                <td><span style="cursor:pointer;color:var(--text-light)">▸</span></td>
+              </tr>
+              <tr>
+                <td style="font-variant-numeric:tabular-nums;font-size:12px">30/03 13:20:00</td>
+                <td><div class="entity-row"><div class="user-avatar" style="background:#dbeafe;color:#2563eb;width:24px;height:24px;font-size:9px">NB</div><span style="font-size:12px">Neyen</span></div></td>
+                <td><span class="badge badge-info">UPDATE</span></td>
+                <td><span class="badge badge-gray">Productos</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">Actualizado precio: Chocolate Águila ($2.200 → $2.450)</td>
+                <td><span style="cursor:pointer;color:var(--text-light)">▸</span></td>
+              </tr>
+              <tr>
+                <td style="font-variant-numeric:tabular-nums;font-size:12px">30/03 12:15:30</td>
+                <td><div class="entity-row"><div class="user-avatar" style="background:#ecfdf5;color:#059669;width:24px;height:24px;font-size:9px">MM</div><span style="font-size:12px">Mariano</span></div></td>
+                <td><span class="badge badge-danger">DELETE</span></td>
+                <td><span class="badge badge-gray">Stock</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">Ajuste de stock: Jugo Cepita (5 → 0) — Mercadería vencida</td>
+                <td><span style="cursor:pointer;color:var(--text-light)">▸</span></td>
+              </tr>
+              <tr>
+                <td style="font-variant-numeric:tabular-nums;font-size:12px">30/03 08:15:00</td>
+                <td><div class="entity-row"><div class="user-avatar" style="background:#dbeafe;color:#2563eb;width:24px;height:24px;font-size:9px">NB</div><span style="font-size:12px">Neyen</span></div></td>
+                <td><span class="badge badge-gray">LOGIN</span></td>
+                <td><span class="badge badge-gray">Sistema</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">Inicio de sesión desde 192.168.1.100</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- CONFIGURACION -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="page-section" id="page-configuracion">
+        <div class="annotation">
+          <span class="icon">💡</span>
+          <div><strong>Ya rediseñado:</strong> Este módulo ya fue rediseñado con layout compartido y sub-navegación agrupada (Negocio, Tienda Online, Sistema). Ver mockup anterior en <code>configuracion-redesign.html</code>.</div>
+        </div>
+
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-icon" style="background:#f1f5f9">⚙️</div>
+            <div><h1>Configuración</h1><p>Ya rediseñado — ver mockup anterior</p></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body" style="text-align:center;padding:60px">
+            <div style="font-size:48px;opacity:.2;margin-bottom:12px">⚙️</div>
+            <p style="color:var(--text-muted);margin-bottom:16px">Este módulo ya fue rediseñado e implementado con la nueva estructura de navegación agrupada.</p>
+            <div class="btn btn-primary">Ver mockup de Configuración →</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Banner -->
+<div class="redesign-banner">
+  <div class="dot"></div>
+  <span>Mockup — Rediseño Panel Admin Dulcesur</span>
+</div>
+
+<script>
+// Navigation
+document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+  item.addEventListener('click', () => {
+    // Deactivate all
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
+
+    // Activate clicked
+    item.classList.add('active');
+    const pageId = 'page-' + item.dataset.page;
+    const page = document.getElementById(pageId);
+    if (page) {
+      page.classList.add('active');
+      page.classList.add('fade-in');
+    }
+
+    // Update breadcrumb
+    const name = item.textContent.trim().split('\n')[0].trim();
+    document.getElementById('breadcrumb').innerHTML = 'Admin / <span>' + name + '</span>';
+
+    // Scroll to top
+    document.getElementById('content').scrollTop = 0;
+  });
+});
+</script>
+
+</body>
+</html>
