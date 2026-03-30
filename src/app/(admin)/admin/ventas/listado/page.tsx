@@ -320,6 +320,25 @@ export default function ListadoVentasPage() {
     const { data } = await query;
     let results = (data as unknown as VentaRow[]) || [];
 
+    // Recover client names for ventas where join returned null but cliente_id exists
+    // This can happen due to RLS policies or FK issues
+    const missingClientIds = [...new Set(results.filter((v) => v.cliente_id && !v.clientes).map((v) => v.cliente_id!))];
+    if (missingClientIds.length > 0) {
+      const { data: missingClients } = await supabase
+        .from("clientes")
+        .select("id, nombre, cuit, tipo_factura, domicilio, telefono, email, situacion_iva, localidad, provincia, codigo_postal, numero_documento")
+        .in("id", missingClientIds);
+      if (missingClients && missingClients.length > 0) {
+        const clientMap = new Map(missingClients.map((c: any) => [c.id, c]));
+        results = results.map((v) => {
+          if (v.cliente_id && !v.clientes && clientMap.has(v.cliente_id)) {
+            return { ...v, clientes: clientMap.get(v.cliente_id)! as ClienteInfo };
+          }
+          return v;
+        });
+      }
+    }
+
     if (searchClient) {
       results = results.filter((v) =>
         norm(v.clientes?.nombre || "").includes(norm(searchClient)) ||
@@ -1785,7 +1804,7 @@ export default function ListadoVentasPage() {
                               {est.label}
                             </span>
                             <Badge variant="outline" className={`text-[10px] font-normal ${isHistorial ? "border-gray-300 text-gray-600 bg-gray-50" : "border-blue-300 text-blue-700 bg-blue-50"}`}>
-                              {isHistorial ? <><Store className="w-3 h-3 mr-0.5" />POS</> : <><Globe className="w-3 h-3 mr-0.5" />Online</>}
+                              {(order.isOnline || order._source === "pedidos" || order._tipo_comprobante === "Pedido Web") ? <><Globe className="w-3 h-3 mr-0.5" />Online</> : <><Store className="w-3 h-3 mr-0.5" />POS</>}
                             </Badge>
                             {isNC && <Badge variant="destructive" className="text-[10px]">NC</Badge>}
                           </div>
