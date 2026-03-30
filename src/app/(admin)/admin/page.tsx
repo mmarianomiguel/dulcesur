@@ -1356,9 +1356,7 @@ export default function DashboardPage() {
                   <div className="border rounded-lg overflow-hidden">
                     <div className="divide-y">
                       {items.map((item, i) => {
-                        const qty = item.unidades_por_presentacion && item.unidades_por_presentacion > 1
-                          ? item.cantidad / item.unidades_por_presentacion
-                          : item.cantidad;
+                        const qty = item.cantidad;
                         const desc = cleanItemDescription(item.descripcion, item.presentacion);
                         return (
                           <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
