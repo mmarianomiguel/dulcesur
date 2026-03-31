@@ -63,6 +63,7 @@ interface Product {
   precioOfertaCaja: number;
   precioPorCaja: boolean;
   unidadesCaja: number;
+  nombrePresentacion: string;
   hayStock: boolean;
   id: string;
   categoria: string;
@@ -334,6 +335,7 @@ export default function ListaPreciosPage() {
         precioOfertaCaja,
         precioPorCaja: precioCaja > 0,
         unidadesCaja,
+        nombrePresentacion: boxPres?.nombre || "Caja",
         hayStock: p.stock > 0,
         id: p.id,
         categoria: dbCategoria || "Sin categoría",
@@ -563,7 +565,7 @@ export default function ListaPreciosPage() {
           pdf.setTextColor(140);
           pdf.text("Efectivo", x + pad, efectLabelY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, efectLabelY, { align: "right" });
+            pdf.text(`${product.nombrePresentacion} x${product.unidadesCaja}`, x + cellW - pad, efectLabelY, { align: "right" });
           }
           pdf.setTextColor(0);
           pdf.setFont("helvetica", "bold");
@@ -582,7 +584,7 @@ export default function ListaPreciosPage() {
           pdf.setTextColor(140);
           pdf.text(`Transf. (${config.porcentajeTransferencia}%)`, x + pad, transfLabelY);
           if (config.combinado_mostrarPrecioCaja && hasUnits && boxPrice > 0) {
-            pdf.text(`Caja x${product.unidadesCaja}`, x + cellW - pad, transfLabelY, { align: "right" });
+            pdf.text(`${product.nombrePresentacion} x${product.unidadesCaja}`, x + cellW - pad, transfLabelY, { align: "right" });
           }
           pdf.setTextColor(0);
           pdf.setFont("helvetica", "bold");
@@ -724,8 +726,10 @@ export default function ListaPreciosPage() {
             pdf.text(lineText, x + cellW / 2, nameY + li * nameLineH, { align: "center" });
           }
 
-          // ── 2. BIG PRICE (centered in middle zone) ──
-          const priceCenterY = zPrice + (zDetail - zPrice) / 2;
+          // ── 2. BIG PRICE (centered between name end and detail zone) ──
+          const nameEnd = nameY + maxNameLines * nameLineH + 1;
+          const priceTop = Math.max(nameEnd, zPrice);
+          const priceCenterY = priceTop + (zDetail - priceTop) / 2;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.duo_tamañoPrecio);
           pdf.setTextColor(0);
@@ -778,7 +782,7 @@ export default function ListaPreciosPage() {
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(5.5);
             pdf.setTextColor(100);
-            pdf.text(`Caja x${product.unidadesCaja}`, rX, zDetail + detailH * 0.2);
+            pdf.text(`${product.nombrePresentacion} x${product.unidadesCaja}`, rX, zDetail + detailH * 0.2);
             pdf.setTextColor(0);
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(8);
@@ -882,8 +886,10 @@ export default function ListaPreciosPage() {
             pdf.text(lineText, x + cellW / 2, nameY + li * nameLineH, { align: "center" });
           }
 
-          // ── 2. BIG PRICE (centered) ──
-          const priceCenterY = zPrice + (zDetail - zPrice) / 2;
+          // ── 2. BIG PRICE (centered between name end and detail zone) ──
+          const nameEnd = nameY + maxNameLines * nameLineH + 1;
+          const priceTop = Math.max(nameEnd, zPrice);
+          const priceCenterY = priceTop + (zDetail - priceTop) / 2;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.duo_tamañoPrecio);
           pdf.setTextColor(0);
@@ -901,18 +907,17 @@ export default function ListaPreciosPage() {
             pdf.setFillColor(243, 243, 243);
             pdf.rect(x + 0.15, zDetail + 0.1, cellW - 0.3, detailH - 0.2, "F");
 
-            // Presentación label (left)
-            const presLabel = product.unidadesCaja >= 20 ? "Bulto" : product.unidadesCaja >= 6 ? "Display" : "Caja";
+            // Presentación label (left, uses real name from DB)
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(7);
-            pdf.setTextColor(80);
-            pdf.text(`${presLabel} x${product.unidadesCaja}`, x + pad + 1, zDetail + detailH * 0.5 + 1);
+            pdf.setFontSize(11);
+            pdf.setTextColor(60);
+            pdf.text(`${product.nombrePresentacion} x${product.unidadesCaja}`, x + pad + 1, zDetail + detailH * 0.55);
 
             // Box price (right, big)
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(12);
+            pdf.setFontSize(18);
             pdf.setTextColor(0);
-            pdf.text(formatCurrency(boxPrice), x + cellW - pad - 1, zDetail + detailH * 0.5 + 1.5, { align: "right" });
+            pdf.text(formatCurrency(boxPrice), x + cellW - pad - 1, zDetail + detailH * 0.6, { align: "right" });
           }
 
           // ── 4. FOOTER ──
