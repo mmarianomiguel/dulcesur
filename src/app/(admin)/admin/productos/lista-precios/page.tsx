@@ -677,12 +677,11 @@ export default function ListaPreciosPage() {
           const hasUnits = product.unidadesCaja > 0 && boxPrice > 0;
 
           // ── ZONES as % of cellH ──
-          // Top 15%: logo + marca + nombre
-          // Middle 40%: precio grande centrado
+          // Top 25%: logo + marca + nombre (logo row + name row below)
+          // Middle 30%: precio grande centrado
           // Lower 30%: efectivo/transf unitario (left) + caja efectivo/transf (right)
           // Bottom 15%: footer line + web + fecha
-          const zName = y + cellH * 0.02;
-          const zPrice = y + cellH * 0.15;
+          const zPrice = y + cellH * 0.25;
           const zDetail = y + cellH * 0.55;
           const zFooter = y + cellH * 0.85;
 
@@ -700,7 +699,8 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(0);
           }
 
-          // Name
+          // Name — starts below logo row
+          const logoRowH = config.duo_mostrarLogo && logoBase64 ? config.logoTamaño + 1 : 4;
           const nameMaxW = cellW - pad * 2;
           let nameFontSize = config.duo_tamañoNombre;
           pdf.setFont("helvetica", "bold");
@@ -714,7 +714,7 @@ export default function ListaPreciosPage() {
           }
           const nameLineH = nameFontSize * 0.45;
           const maxNameLines = Math.min(nameLines.length, 2);
-          const nameY = zName + pad + 4;
+          const nameY = y + logoRowH + pad;
           for (let li = 0; li < maxNameLines; li++) {
             let lineText = String(nameLines[li]);
             if (li === maxNameLines - 1 && nameLines.length > maxNameLines) {
