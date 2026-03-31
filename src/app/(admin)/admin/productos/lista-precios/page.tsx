@@ -682,8 +682,8 @@ export default function ListaPreciosPage() {
           // Lower 30%: efectivo/transf unitario (left) + caja efectivo/transf (right)
           // Bottom 15%: footer line + web + fecha
           const zPrice = y + cellH * 0.25;
-          const zDetail = y + cellH * 0.55;
-          const zFooter = y + cellH * 0.85;
+          const zDetail = y + cellH * 0.58;
+          const zFooter = y + cellH * 0.90;
 
           // ── 1. TOP: Logo + Marca + Nombre ──
           if (config.duo_mostrarLogo && logoBase64) {
