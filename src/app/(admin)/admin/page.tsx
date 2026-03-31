@@ -248,7 +248,7 @@ export default function DashboardPage() {
   const [ncPorPedido, setNcPorPedido] = useState<Record<string, number>>({});
 
   // ─── New dashboard widgets state ───
-  const [turnoAbierto, setTurnoAbierto] = useState<{ id: string; apertura: string; saldo_inicial: number } | null>(null);
+  const [turnoAbierto, setTurnoAbierto] = useState<{ id: string; fecha_apertura: string; hora_apertura: string; efectivo_inicial: number } | null>(null);
   const [ultimasVentas, setUltimasVentas] = useState<{ id: string; numero: number; cliente: string; total: number; forma_pago: string; fecha: string }[]>([]);
   const [itemsSinCosto, setItemsSinCosto] = useState(0);
 
@@ -479,7 +479,7 @@ export default function DashboardPage() {
     const pedidosOnlinePromise = fetchPedidosOnline();
 
     // ─── Turno de caja abierto ───
-    supabase.from("turnos_caja").select("id, apertura, saldo_inicial").eq("estado", "abierto").order("apertura", { ascending: false }).limit(1).then(({ data }) => {
+    supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
       setTurnoAbierto(data && data.length > 0 ? data[0] as any : null);
     });
 
@@ -1040,7 +1040,7 @@ export default function DashboardPage() {
               </p>
               {turnoAbierto && (
                 <p className="text-xs text-muted-foreground">
-                  Desde {new Date(turnoAbierto.apertura).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })} — Inicio: {formatCurrency(turnoAbierto.saldo_inicial)}
+                  Desde {turnoAbierto.hora_apertura?.slice(0, 5) || "—"} — Inicio: {formatCurrency(turnoAbierto.efectivo_inicial)}
                 </p>
               )}
             </div>
