@@ -641,42 +641,65 @@ export default function ListaPreciosPage() {
       }
 
       if (style === "poster") {
+        // Generate QR code for web URL
+        let qrDataUrl: string | null = null;
+        if (config.poster_mostrarWeb && config.webUrl) {
+          try {
+            const QRCode = (await import("qrcode")).default;
+            const url = config.webUrl.startsWith("http") ? config.webUrl : `https://${config.webUrl}`;
+            qrDataUrl = await QRCode.toDataURL(url, { width: 200, margin: 1, color: { dark: "#000000", light: "#ffffff" } });
+          } catch {}
+        }
+
         selectedProducts.forEach((product, idx) => {
           if (idx > 0) pdf.addPage();
           const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
           const boxPrice = product.precioCaja > 0 ? product.precioCaja : 0;
           const hasUnits = product.unidadesCaja > 0;
 
+          // ── Logo (centered at top) ──
+          let contentY = margin + 8;
           if (config.poster_mostrarLogo && logoBase64) {
-            const posterLogoH = config.logoTamaño * 1.5;
+            const posterLogoH = config.logoTamaño * 2.5;
             const posterLogoW = posterLogoH * logoAspectRatio;
-            try { pdf.addImage(logoBase64, "PNG", margin + 3, margin + 3, posterLogoW, posterLogoH); } catch {}
+            const logoX = (pageW - posterLogoW) / 2;
+            try { pdf.addImage(logoBase64, "PNG", logoX, margin + 5, posterLogoW, posterLogoH); } catch {}
+            contentY = margin + 5 + posterLogoH + 8;
           }
 
-          // "OFERTA" header
-          const ofertaY = 85;
-          pdf.setFont("helvetica", "bolditalic");
-          pdf.setFontSize(32);
+          // ── "OFERTA" badge (rounded dark pill) ──
+          const ofertaFontSize = 28;
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(ofertaFontSize);
+          const ofertaText = "OFERTA";
+          const ofertaTextW = pdf.getTextWidth(ofertaText);
+          const pillW = ofertaTextW + 30;
+          const pillH = 18;
+          const pillX = (pageW - pillW) / 2;
+          const pillY = contentY;
+          const pillR = pillH / 2;
+          // Draw rounded rect (pill shape)
+          pdf.setFillColor(20, 20, 20);
+          pdf.roundedRect(pillX, pillY, pillW, pillH, pillR, pillR, "F");
+          // Text inside pill
+          pdf.setTextColor(255, 255, 255);
+          pdf.text(ofertaText, pageW / 2, pillY + pillH / 2 + ofertaFontSize * 0.13, { align: "center" });
           pdf.setTextColor(0);
-          pdf.text("OFERTA", pageW / 2, ofertaY, { align: "center" });
-          const ofertaW = pdf.getTextWidth("OFERTA");
-          pdf.setDrawColor(0);
-          pdf.setLineWidth(0.8);
-          pdf.line(pageW / 2 - ofertaW / 2, ofertaY + 1.5, pageW / 2 + ofertaW / 2, ofertaY + 1.5);
 
-          // Product name
-          const nameY = 115;
+          // ── Product name (centered) ──
+          const nameY = pillY + pillH + 15;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.poster_tamañoNombre);
-          const nameLines: string[] = pdf.splitTextToSize(product.nombre, pageW - margin * 2);
+          const nameLines: string[] = pdf.splitTextToSize(product.nombre, pageW - margin * 4);
           const displayLines = nameLines.slice(0, 3);
           const nameLH = config.poster_tamañoNombre * 0.5;
           for (let li = 0; li < displayLines.length; li++) {
             pdf.text(String(displayLines[li]), pageW / 2, nameY + li * nameLH, { align: "center" });
           }
 
+          // ── Price section ──
           const footerY = pageH - 25;
-          const priceY = footerY - 45;
+          const priceY = footerY - 35;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.poster_tamañoPrecio);
           pdf.setTextColor(0);
@@ -684,22 +707,44 @@ export default function ListaPreciosPage() {
           pdf.text(String(`${formatCurrency(mainPrice)}`), pageW / 2, priceY, { align: "center" });
 
           if (config.poster_mostrarPrecioUnitario && hasUnits) {
-            const mainPriceW = pdf.getTextWidth(`${formatCurrency(mainPrice)}`);
-            const unitX = pageW / 2 + mainPriceW / 2 + 3;
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(14);
-            pdf.text(String(`${formatCurrency(displayPrice)} Final c/u`), unitX, priceY);
+            pdf.setTextColor(100);
+            pdf.text(String(`${formatCurrency(displayPrice)} Final c/u`), pageW / 2, priceY + 12, { align: "center" });
+            pdf.setTextColor(0);
           }
 
-          pdf.setDrawColor(180);
+          // ── Footer: line + web text + QR ──
+          pdf.setDrawColor(200);
           pdf.setLineWidth(0.3);
-          pdf.line(margin, footerY, pageW - margin, footerY);
+          pdf.line(margin + 10, footerY, pageW - margin - 10, footerY);
 
           if (config.poster_mostrarWeb) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(11);
-            pdf.setTextColor(100);
-            pdf.text(`Mira todos nuestros productos en nuestra página web: ${config.webUrl}`, pageW / 2, footerY + 10, { align: "center" });
+            const qrSize = 18;
+            const footerTextY = footerY + 12;
+
+            if (qrDataUrl) {
+              // QR on the right
+              const qrX = pageW - margin - 10 - qrSize;
+              const qrY = footerY + 2;
+              try { pdf.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize); } catch {}
+              // Text centered in remaining space
+              const textAreaW = qrX - margin - 10;
+              const textCenterX = margin + 10 + textAreaW / 2;
+              pdf.setFont("helvetica", "normal");
+              pdf.setFontSize(10);
+              pdf.setTextColor(120);
+              pdf.text("Mirá todos nuestros productos en nuestra web:", textCenterX, footerTextY, { align: "center" });
+              pdf.setFont("helvetica", "bold");
+              pdf.setFontSize(11);
+              pdf.text(config.webUrl, textCenterX, footerTextY + 6, { align: "center" });
+            } else {
+              pdf.setFont("helvetica", "normal");
+              pdf.setFontSize(11);
+              pdf.setTextColor(120);
+              pdf.text(`Mirá todos nuestros productos en nuestra web: ${config.webUrl}`, pageW / 2, footerTextY, { align: "center" });
+            }
+            pdf.setTextColor(0);
           }
         });
       }
