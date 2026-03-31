@@ -103,7 +103,7 @@ export default function HojaDeRutaPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailVenta, setDetailVenta] = useState<VentaRow | null>(null);
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
-  const [dlvConfirm, setDlvConfirm] = useState<{ open: boolean; id: string; pendiente: number; type: "paid" | "unpaid" | "no_client" }>({ open: false, id: "", pendiente: 0, type: "paid" });
+  const [dlvConfirm, setDlvConfirm] = useState<{ open: boolean; ids: string[]; pendiente: number; type: "paid" | "unpaid" | "no_client"; clienteNombre?: string }>({ open: false, ids: [], pendiente: 0, type: "paid" });
   const [orden, setOrden] = useState<Record<string, number>>({});
   const [filterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
   const [search, setSearch] = useState("");
@@ -307,76 +307,64 @@ export default function HojaDeRutaPage() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
   })();
 
-  const handleMarkDelivered = async (id: string) => {
-    const venta = ventas.find((v) => v.id === id);
-    if (!venta) return;
+  const handleMarkDelivered = async (groupVentas: VentaRow[]) => {
+    const ids = groupVentas.map((v) => v.id);
+    const totalPendiente = groupVentas.reduce((s, v) => s + Math.max(0, v.total - (pagadoPorVenta[v.id] || 0)), 0);
+    const clienteId = groupVentas[0]?.cliente_id;
+    const clienteNombre = groupVentas[0]?.clientes?.nombre || "Sin cliente";
 
-    const pagado = pagadoPorVenta[id] || 0;
-    const pendiente = Math.max(0, venta.total - pagado);
-
-    if (pendiente > 0 && !venta.cliente_id) {
-      setDlvConfirm({ open: true, id, pendiente, type: "no_client" });
+    if (totalPendiente > 0 && !clienteId) {
+      setDlvConfirm({ open: true, ids, pendiente: totalPendiente, type: "no_client", clienteNombre });
       return;
     }
-    if (pendiente > 0) {
-      setDlvConfirm({ open: true, id, pendiente, type: "unpaid" });
+    if (totalPendiente > 0) {
+      setDlvConfirm({ open: true, ids, pendiente: totalPendiente, type: "unpaid", clienteNombre });
       return;
     }
-    setDlvConfirm({ open: true, id, pendiente: 0, type: "paid" });
+    setDlvConfirm({ open: true, ids, pendiente: 0, type: "paid", clienteNombre });
   };
 
   const executeDlvConfirm = async () => {
-    const { id, pendiente, type } = dlvConfirm;
-    const venta = ventas.find((v) => v.id === id);
-    if (!venta || type === "no_client") {
-      setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" });
+    const { ids, pendiente, type } = dlvConfirm;
+    const groupVentas = ventas.filter((v) => ids.includes(v.id));
+    if (groupVentas.length === 0 || type === "no_client") {
+      setDlvConfirm({ open: false, ids: [], pendiente: 0, type: "paid" });
       return;
     }
-    setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" });
+    setDlvConfirm({ open: false, ids: [], pendiente: 0, type: "paid" });
+    const clienteId = groupVentas[0].cliente_id;
 
-    if (type === "unpaid" && pendiente > 0 && venta.cliente_id) {
-      // Check if cuenta_corriente entry already exists for this venta (e.g. from partial payment)
-      const { data: existingCC } = await supabase
-        .from("cuenta_corriente")
-        .select("id")
-        .eq("venta_id", venta.id)
-        .gt("debe", 0)
-        .limit(1);
+    if (type === "unpaid" && pendiente > 0 && clienteId) {
+      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+      let runningClientSaldo = freshCli?.saldo ?? 0;
+      const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
-      if (!existingCC || existingCC.length === 0) {
-        const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single();
-        const saldoActual = freshCli?.saldo ?? 0;
-        const nuevoSaldo = saldoActual + pendiente;
-        const { error: saldoErr } = await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", venta.cliente_id).eq("saldo", saldoActual);
-        if (saldoErr) { const { data: retry } = await supabase.from("clientes").select("saldo").eq("id", venta.cliente_id).single(); await supabase.from("clientes").update({ saldo: (retry?.saldo ?? 0) + pendiente }).eq("id", venta.cliente_id); }
+      for (const venta of groupVentas) {
+        const ventaDeuda = Math.max(0, venta.total - (pagadoPorVenta[venta.id] || 0));
+        if (ventaDeuda <= 0) continue;
+        // Check if CC entry already exists
+        const { data: existingCC } = await supabase.from("cuenta_corriente").select("id").eq("venta_id", venta.id).gt("debe", 0).limit(1);
+        if (existingCC && existingCC.length > 0) continue;
+        runningClientSaldo += ventaDeuda;
         await supabase.from("cuenta_corriente").insert({
-          cliente_id: venta.cliente_id,
-          fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }),
+          cliente_id: clienteId, fecha: hoy,
           comprobante: `Entrega #${venta.numero}`,
           descripcion: `Saldo pendiente de entrega`,
-          debe: pendiente,
-          haber: 0,
-          saldo: nuevoSaldo,
-          forma_pago: venta.forma_pago || "Efectivo",
-          venta_id: venta.id,
+          debe: ventaDeuda, haber: 0, saldo: runningClientSaldo,
+          forma_pago: venta.forma_pago || "Efectivo", venta_id: venta.id,
         });
       }
+      await supabase.from("clientes").update({ saldo: runningClientSaldo }).eq("id", clienteId);
     }
 
-    const { error } = await supabase
-      .from("ventas")
-      .update({ entregado: true, estado: "entregado" })
-      .eq("id", id);
-    if (error) {
-      console.error(error);
-      return;
+    // Mark all ventas in group as delivered
+    for (const venta of groupVentas) {
+      await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id);
+      if (venta.numero) {
+        await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
+      }
     }
-    // Sync estado to linked pedido_tienda (so client sees "entregado")
-    if (venta.numero) {
-      const { error: syncErr } = await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
-      if (syncErr) console.error("Error syncing pedido_tienda:", syncErr);
-    }
-    setVentas((prev) => prev.filter((v) => v.id !== id));
+    setVentas((prev) => prev.filter((v) => !ids.includes(v.id)));
   };
 
   const handleViewDetail = async (venta: VentaRow) => {
@@ -434,118 +422,127 @@ export default function HojaDeRutaPage() {
     })();
   }, []);
 
-  const openPayDialog = (v: VentaRow) => {
-    const pagado = pagadoPorVenta[v.id] || 0;
-    const debe = Math.max(0, v.total - pagado);
+  const [payGroupVentas, setPayGroupVentas] = useState<VentaRow[]>([]);
+
+  const openPayDialog = (v: VentaRow, groupVentas?: VentaRow[]) => {
+    const allVentas = groupVentas || [v];
+    setPayGroupVentas(allVentas);
+    const totalDebe = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
     setPayVenta(v);
-    // Default to the payment method the client selected
     const metodoOriginal = v.forma_pago === "Transferencia" ? "Transferencia" : v.forma_pago === "Mixto" ? "Mixto" : "Efectivo";
     setPayMetodo(metodoOriginal);
-    setPayMonto(debe);
-    setPayEfectivo(metodoOriginal === "Mixto" ? Math.floor(debe / 2) : debe);
-    setPayTransferencia(metodoOriginal === "Mixto" ? debe - Math.floor(debe / 2) : 0);
+    setPayMonto(totalDebe);
+    setPayEfectivo(metodoOriginal === "Mixto" ? Math.floor(totalDebe / 2) : totalDebe);
+    setPayTransferencia(metodoOriginal === "Mixto" ? totalDebe - Math.floor(totalDebe / 2) : 0);
     setPayCuentaBancariaId("");
     setPayDialogOpen(true);
   };
 
   const handleRegistrarPago = async () => {
     if (!payVenta) return;
-    const pagado = pagadoPorVenta[payVenta.id] || 0;
-    const debe = Math.max(0, payVenta.total - pagado);
+    const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
+    const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
 
-    // Calculate total being paid
-    let totalPagando = 0;
-    if (payMetodo === "Mixto") {
-      totalPagando = payEfectivo + payTransferencia;
-    } else {
-      totalPagando = payMonto;
-    }
+    let totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMonto;
     if (totalPagando <= 0) return;
 
-    // Calculate transfer surcharge
-    let montoTransfConRecargo = 0;
+    // Transfer surcharge
     let surchargeAmount = 0;
     if (porcentajeTransferencia > 0) {
       const montoTransf = payMetodo === "Transferencia" ? payMonto : payMetodo === "Mixto" ? payTransferencia : 0;
       surchargeAmount = Math.round(montoTransf * (porcentajeTransferencia / 100));
-      montoTransfConRecargo = montoTransf + surchargeAmount;
     }
 
     setPaySaving(true);
     const hoy = getArgentinaToday();
     const hora = nowTimeARG();
-    const montoReal = Math.min(totalPagando, debe);
-    const saldoPendiente = debe - montoReal;
+    const montoReal = Math.min(totalPagando, totalDebeGrupo);
+    const saldoPendiente = totalDebeGrupo - montoReal;
     const cuentaSeleccionada = payCuentaBancariaId ? cuentasBancarias.find((c) => c.id === payCuentaBancariaId) : null;
+    const clienteNombre = payVenta.clientes?.nombre || "";
+    const nums = allVentas.map((v) => `#${v.numero}`).join(", ");
 
-    // Register payment(s) in caja — transfer entries include surcharge
-    if (payMetodo === "Mixto") {
-      if (payEfectivo > 0) {
+    // Distribute payment across ventas — fill each venta's debt in order
+    let remaining = montoReal;
+    const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
+    for (const v of allVentas) {
+      const deuda = Math.max(0, v.total - (pagadoPorVenta[v.id] || 0));
+      const pays = Math.min(remaining, deuda);
+      perVenta.push({ venta: v, paid: pays, debtLeft: deuda - pays });
+      remaining -= pays;
+    }
+
+    // Register caja entries per venta
+    for (const { venta, paid } of perVenta) {
+      if (paid <= 0) continue;
+      if (payMetodo === "Mixto") {
+        // Split proportionally between ef and tr for this venta
+        const ratio = totalPagando > 0 ? paid / totalPagando : 0;
+        const efPart = Math.round(payEfectivo * ratio);
+        const trPart = paid - efPart;
+        if (efPart > 0) {
+          await supabase.from("caja_movimientos").insert({
+            fecha: hoy, hora, tipo: "ingreso",
+            descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`,
+            metodo_pago: "Efectivo", monto: efPart,
+            referencia_id: venta.id, referencia_tipo: "venta",
+          });
+        }
+        if (trPart > 0) {
+          const trSurcharge = surchargeAmount > 0 ? Math.round(trPart * (porcentajeTransferencia / 100)) : 0;
+          await supabase.from("caja_movimientos").insert({
+            fecha: hoy, hora, tipo: "ingreso",
+            descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
+            metodo_pago: "Transferencia", monto: trPart + trSurcharge,
+            referencia_id: venta.id, referencia_tipo: "venta",
+            ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
+          });
+        }
+      } else if (payMetodo === "Transferencia") {
+        const trSurcharge = surchargeAmount > 0 ? Math.round(paid * (porcentajeTransferencia / 100)) : 0;
         await supabase.from("caja_movimientos").insert({
           fecha: hoy, hora, tipo: "ingreso",
-          descripcion: `Cobro entrega #${payVenta.numero} (Efectivo) — ${payVenta.clientes?.nombre || ""}`,
-          metodo_pago: "Efectivo",
-          monto: Math.min(payEfectivo, debe),
-          referencia_id: payVenta.id, referencia_tipo: "venta",
-        });
-      }
-      if (payTransferencia > 0) {
-        const montoTransfReal = montoTransfConRecargo > 0 ? montoTransfConRecargo : payTransferencia;
-        await supabase.from("caja_movimientos").insert({
-          fecha: hoy, hora, tipo: "ingreso",
-          descripcion: `Cobro entrega #${payVenta.numero} (Transferencia${surchargeAmount > 0 ? ` +${porcentajeTransferencia}% recargo` : ""}) — ${payVenta.clientes?.nombre || ""}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
-          metodo_pago: "Transferencia",
-          monto: montoTransfReal,
-          referencia_id: payVenta.id, referencia_tipo: "venta",
+          descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
+          metodo_pago: "Transferencia", monto: paid + trSurcharge,
+          referencia_id: venta.id, referencia_tipo: "venta",
           ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
         });
+      } else {
+        await supabase.from("caja_movimientos").insert({
+          fecha: hoy, hora, tipo: "ingreso",
+          descripcion: `Cobro entrega #${venta.numero} (${payMetodo}) — ${clienteNombre}`,
+          metodo_pago: payMetodo, monto: paid,
+          referencia_id: venta.id, referencia_tipo: "venta",
+        });
       }
-    } else if (payMetodo === "Transferencia") {
-      const montoTransfReal = montoTransfConRecargo > 0 ? montoTransfConRecargo : montoReal;
-      await supabase.from("caja_movimientos").insert({
-        fecha: hoy, hora, tipo: "ingreso",
-        descripcion: `Cobro entrega #${payVenta.numero} (Transferencia${surchargeAmount > 0 ? ` +${porcentajeTransferencia}% recargo` : ""}) — ${payVenta.clientes?.nombre || ""}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
-        metodo_pago: "Transferencia",
-        monto: montoTransfReal,
-        referencia_id: payVenta.id, referencia_tipo: "venta",
-        ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
-      });
-    } else {
-      await supabase.from("caja_movimientos").insert({
-        fecha: hoy, hora, tipo: "ingreso",
-        descripcion: `Cobro entrega #${payVenta.numero} (${payMetodo}) — ${payVenta.clientes?.nombre || ""}`,
-        metodo_pago: payMetodo,
-        monto: montoReal,
-        referencia_id: payVenta.id, referencia_tipo: "venta",
-      });
+      // Update forma_pago
+      await supabase.from("ventas").update({ forma_pago: payMetodo }).eq("id", venta.id);
     }
 
-    // If there's a pending balance, add to client's cuenta corriente
+    // Pending balance → cuenta corriente (aggregated for the group)
     if (saldoPendiente > 0 && payVenta.cliente_id) {
       const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", payVenta.cliente_id).single();
-      const clientSaldo = freshCli?.saldo ?? payVenta.clientes?.saldo ?? 0;
-      const newSaldo = clientSaldo + saldoPendiente;
-      await supabase.from("cuenta_corriente").insert({
-        cliente_id: payVenta.cliente_id,
-        fecha: hoy,
-        comprobante: `Saldo pendiente #${payVenta.numero}`,
-        descripcion: `Saldo pendiente de entrega — ${payVenta.numero}`,
-        debe: saldoPendiente,
-        haber: 0,
-        saldo: newSaldo,
-        forma_pago: "Cuenta Corriente",
-        venta_id: payVenta.id,
-      });
-      await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", payVenta.cliente_id);
+      let runningClientSaldo = freshCli?.saldo ?? payVenta.clientes?.saldo ?? 0;
+      for (const { venta, debtLeft } of perVenta) {
+        if (debtLeft <= 0) continue;
+        runningClientSaldo += debtLeft;
+        await supabase.from("cuenta_corriente").insert({
+          cliente_id: payVenta.cliente_id, fecha: hoy,
+          comprobante: `Saldo pendiente #${venta.numero}`,
+          descripcion: `Saldo pendiente de entrega — ${venta.numero}`,
+          debe: debtLeft, haber: 0, saldo: runningClientSaldo,
+          forma_pago: "Cuenta Corriente", venta_id: venta.id,
+        });
+      }
+      await supabase.from("clientes").update({ saldo: runningClientSaldo }).eq("id", payVenta.cliente_id);
     }
 
-    // Update venta forma_pago to reflect actual payment
-    await supabase.from("ventas").update({ forma_pago: payMetodo }).eq("id", payVenta.id);
-
-    // Auto-mark as delivered if full amount was paid
+    // Auto-mark as delivered if fully paid
     if (saldoPendiente <= 0) {
-      await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", payVenta.id);
-      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", payVenta.numero);
+      for (const v of allVentas) {
+        await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
+        await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
+      }
     }
 
     setPaySaving(false);
@@ -577,16 +574,22 @@ export default function HojaDeRutaPage() {
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
   const handleDrop = (targetId: string) => {
     if (!dragId || dragId === targetId) { handleDragEnd(); return; }
-    // Reorder: move dragId to targetId's position
-    const ids = sortedVentas.map((v) => v.id);
-    const fromIdx = ids.indexOf(dragId);
-    const toIdx = ids.indexOf(targetId);
+    // Reorder groups: move dragId group to targetId group's position
+    const keys = clientGroups.map((g) => g.key);
+    const fromIdx = keys.indexOf(dragId);
+    const toIdx = keys.indexOf(targetId);
     if (fromIdx === -1 || toIdx === -1) { handleDragEnd(); return; }
-    const reordered = [...ids];
+    const reordered = [...keys];
     reordered.splice(fromIdx, 1);
     reordered.splice(toIdx, 0, dragId);
+    // Rebuild orden mapping venta IDs from the new group order
     const newOrden: Record<string, number> = {};
-    reordered.forEach((id, i) => { newOrden[id] = i + 1; });
+    let counter = 1;
+    for (const key of reordered) {
+      const g = clientGroups.find((gr) => gr.key === key);
+      if (g) for (const v of g.ventas) { newOrden[v.id] = counter; }
+      counter++;
+    }
     setOrden(newOrden);
     handleDragEnd();
   };
@@ -609,8 +612,39 @@ export default function HojaDeRutaPage() {
     return 0; // preserve query order (most recent first)
   });
 
+  // ─── Group ventas by client ───
+  type ClientGroup = {
+    key: string;
+    clienteId: string | null;
+    cliente: ClienteInfo | null;
+    ventas: VentaRow[];
+  };
+  const clientGroups: ClientGroup[] = (() => {
+    const map: Record<string, VentaRow[]> = {};
+    const orderKeys: string[] = [];
+    for (const v of sortedVentas) {
+      const key = v.cliente_id || `_nocli_${v.id}`;
+      if (!map[key]) { map[key] = []; orderKeys.push(key); }
+      map[key].push(v);
+    }
+    return orderKeys.map((key) => {
+      const vts = map[key];
+      return { key, clienteId: vts[0].cliente_id, cliente: vts[0].clientes, ventas: vts };
+    });
+  })();
+
+  // Helper: group totals
+  const groupTotals = (g: ClientGroup) => {
+    const bruto = g.ventas.reduce((s, v) => s + v.total, 0);
+    const nc = g.ventas.reduce((s, v) => s + (ncPorVenta[v.id] || 0), 0);
+    const pagado = g.ventas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
+    const neto = bruto - nc;
+    const debe = Math.max(0, bruto - pagado);
+    return { bruto, nc, pagado, neto, debe };
+  };
+
   // Stats (from filtered)
-  const totalPedidos = filteredVentas.length;
+  const totalPedidos = clientGroups.length;
   const valorTotal = filteredVentas.reduce((s, v) => s + v.total - (ncPorVenta[v.id] || 0), 0);
   const totalYaPagado = filteredVentas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
   const totalACobrar = Math.max(0, valorTotal - totalYaPagado);
@@ -1052,17 +1086,16 @@ export default function HojaDeRutaPage() {
       )}
 
       {/* Route View */}
-      {viewMode === "ruta" && sortedVentas.length > 0 && (
+      {viewMode === "ruta" && clientGroups.length > 0 && (
         <div className="space-y-4">
           {/* Current stop card */}
           {(() => {
-            const venta = sortedVentas[currentStop];
-            if (!venta) return null;
-            const pagado = pagadoPorVenta[venta.id] || 0;
-            const debe = Math.max(0, venta.total - pagado);
-            const direccion = [venta.clientes?.domicilio, venta.clientes?.localidad].filter(Boolean).join(", ");
+            const group = clientGroups[currentStop];
+            if (!group) return null;
+            const { neto, nc, debe } = groupTotals(group);
+            const direccion = [group.cliente?.domicilio, group.cliente?.localidad].filter(Boolean).join(", ");
             const mapsUrl = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}` : null;
-            const tel = venta.clientes?.telefono?.replace(/\D/g, "") || "";
+            const tel = group.cliente?.telefono?.replace(/\D/g, "") || "";
             const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
 
             return (
@@ -1070,32 +1103,42 @@ export default function HojaDeRutaPage() {
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center gap-2 text-blue-700 text-sm font-semibold">
                     <Navigation className="w-4 h-4" />
-                    Siguiente Parada — {currentStop + 1} de {sortedVentas.length}
+                    Siguiente Parada — {currentStop + 1} de {clientGroups.length}
                   </div>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xl font-bold text-foreground">{venta.clientes?.nombre ?? "Sin cliente"}</p>
+                      <p className="text-xl font-bold text-foreground">{group.cliente?.nombre ?? "Sin cliente"}</p>
                       {direccion && (
                         <p className="flex items-start gap-1.5 text-sm text-muted-foreground mt-1">
                           <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                           {direccion}
                         </p>
                       )}
-                      {venta.clientes?.telefono && (
+                      {group.cliente?.telefono && (
                         <p className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1">
                           <Phone className="w-4 h-4 shrink-0" />
-                          {venta.clientes.telefono}
+                          {group.cliente.telefono}
                         </p>
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-2xl font-bold text-foreground">{formatCurrency(venta.total - (ncPorVenta[venta.id] || 0))}</p>
-                      {(ncPorVenta[venta.id] || 0) > 0 && <p className="text-xs text-amber-600">NC -{formatCurrency(ncPorVenta[venta.id])}</p>}
+                      <p className="text-2xl font-bold text-foreground">{formatCurrency(neto)}</p>
+                      {nc > 0 && <p className="text-xs text-amber-600">NC -{formatCurrency(nc)}</p>}
                       <Badge variant="secondary" className={debe > 0 ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"}>
                         {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
                       </Badge>
                     </div>
                   </div>
+                  {group.ventas.length > 1 && (
+                    <div className="bg-white/60 rounded-lg p-2 space-y-1">
+                      {group.ventas.map((v) => (
+                        <div key={v.id} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{v.tipo_comprobante} #{v.numero}</span>
+                          <span className="font-medium">{formatCurrency(v.total - (ncPorVenta[v.id] || 0))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 flex-wrap">
                     {mapsUrl && (
                       <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
@@ -1109,8 +1152,8 @@ export default function HojaDeRutaPage() {
                         WhatsApp
                       </a>
                     )}
-                    {venta.clientes?.telefono && (
-                      <a href={`tel:${venta.clientes.telefono}`} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-muted text-foreground text-sm font-medium hover:bg-muted transition-colors">
+                    {group.cliente?.telefono && (
+                      <a href={`tel:${group.cliente.telefono}`} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-muted text-foreground text-sm font-medium hover:bg-muted transition-colors">
                         <Phone className="w-4 h-4" />
                         Llamar
                       </a>
@@ -1120,7 +1163,7 @@ export default function HojaDeRutaPage() {
                         variant="outline"
                         size="sm"
                         className="h-10 text-sm text-emerald-600 border-emerald-300 hover:bg-emerald-50"
-                        onClick={() => openPayDialog(venta)}
+                        onClick={() => openPayDialog(group.ventas[0], group.ventas)}
                       >
                         <DollarSign className="w-4 h-4 mr-1" />
                         Cobrar
@@ -1130,9 +1173,8 @@ export default function HojaDeRutaPage() {
                       size="sm"
                       className="h-10 text-sm bg-green-600 hover:bg-green-700 text-white"
                       onClick={async () => {
-                        await handleMarkDelivered(venta.id);
-                        // Move to next stop (stays at same index since array shifts)
-                        setCurrentStop((prev) => Math.min(prev, sortedVentas.length - 2));
+                        await handleMarkDelivered(group.ventas);
+                        setCurrentStop((prev) => Math.min(prev, clientGroups.length - 2));
                       }}
                     >
                       <CheckCircle className="w-4 h-4 mr-1" />
@@ -1148,18 +1190,17 @@ export default function HojaDeRutaPage() {
           <Card>
             <CardContent className="p-4">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Paradas ({sortedVentas.length})
+                Paradas ({clientGroups.length})
               </h3>
               <div className="space-y-1">
-                {sortedVentas.map((venta, idx) => {
-                  const pagado = pagadoPorVenta[venta.id] || 0;
-                  const debe = Math.max(0, venta.total - pagado);
-                  const direccion = [venta.clientes?.domicilio, venta.clientes?.localidad].filter(Boolean).join(", ");
+                {clientGroups.map((group, idx) => {
+                  const { neto, debe } = groupTotals(group);
+                  const direccion = [group.cliente?.domicilio, group.cliente?.localidad].filter(Boolean).join(", ");
                   const isActive = idx === currentStop;
 
                   return (
                     <button
-                      key={venta.id}
+                      key={group.key}
                       onClick={() => setCurrentStop(idx)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
                         isActive ? "bg-blue-50 border border-blue-200" : "hover:bg-muted/50"
@@ -1172,14 +1213,17 @@ export default function HojaDeRutaPage() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className={`font-medium truncate ${isActive ? "text-blue-900" : "text-foreground"}`}>
-                          {venta.clientes?.nombre ?? "Sin cliente"}
+                          {group.cliente?.nombre ?? "Sin cliente"}
                         </p>
                         {direccion && (
                           <p className="text-xs text-muted-foreground truncate">{direccion}</p>
                         )}
+                        {group.ventas.length > 1 && (
+                          <p className="text-[10px] text-muted-foreground">{group.ventas.length} facturas</p>
+                        )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-foreground">{formatCurrency(venta.total - (ncPorVenta[venta.id] || 0))}</p>
+                        <p className="text-sm font-bold text-foreground">{formatCurrency(neto)}</p>
                         <span className={`text-xs ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
                           {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
                         </span>
@@ -1236,48 +1280,47 @@ export default function HojaDeRutaPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {sortedVentas.map((venta, idx) => {
-                const pagado = pagadoPorVenta[venta.id] || 0;
-                const debe = Math.max(0, venta.total - pagado);
+              {clientGroups.map((group, idx) => {
+                const { neto, nc, debe } = groupTotals(group);
                 const estaPago = debe <= 0;
-                const direccion = [venta.clientes?.domicilio, venta.clientes?.localidad].filter(Boolean).join(", ");
+                const direccion = [group.cliente?.domicilio, group.cliente?.localidad].filter(Boolean).join(", ");
                 const mapsUrl = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}` : null;
-                const tel = venta.clientes?.telefono?.replace(/\D/g, "") || "";
+                const tel = group.cliente?.telefono?.replace(/\D/g, "") || "";
                 const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
 
                 return (
                   <Card
-                    key={venta.id}
+                    key={group.key}
                     draggable
-                    onDragStart={() => handleDragStart(venta.id)}
-                    onDragOver={(e) => handleDragOver(e, venta.id)}
-                    onDrop={() => handleDrop(venta.id)}
+                    onDragStart={() => handleDragStart(group.key)}
+                    onDragOver={(e) => handleDragOver(e, group.key)}
+                    onDrop={() => handleDrop(group.key)}
                     onDragEnd={handleDragEnd}
-                    className={`overflow-hidden cursor-grab active:cursor-grabbing transition-all ${estaPago ? "border-green-200" : "border-orange-200"} ${dragId === venta.id ? "opacity-50 scale-95" : ""} ${dragOverId === venta.id && dragId !== venta.id ? "ring-2 ring-primary/50 scale-[1.01]" : ""}`}
+                    className={`overflow-hidden cursor-grab active:cursor-grabbing transition-all ${estaPago ? "border-green-200" : "border-orange-200"} ${dragId === group.key ? "opacity-50 scale-95" : ""} ${dragOverId === group.key && dragId !== group.key ? "ring-2 ring-primary/50 scale-[1.01]" : ""}`}
                   >
                     <CardContent className="p-0">
                       {/* Header row */}
                       <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b">
                         <div className="flex items-center gap-2">
                           <span className="flex items-center justify-center w-7 h-7 rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                            {orden[venta.id] ?? idx + 1}
+                            {idx + 1}
                           </span>
-                          <div>
-                            <span className="font-mono text-xs font-semibold text-foreground">{venta.numero}</span>
-                            <span className="text-xs text-muted-foreground ml-2">{venta.tipo_comprobante}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {group.ventas.map((v) => (
+                              <span key={v.id} className="flex items-center gap-1">
+                                <span className="font-mono text-xs font-semibold text-foreground">{v.numero}</span>
+                                {v.origen === "tienda" && <Badge variant="outline" className="text-[10px] px-1 py-0 border-pink-300 text-pink-600 bg-pink-50">Web</Badge>}
+                              </span>
+                            ))}
                           </div>
-                          {venta.origen === "tienda" && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-pink-300 text-pink-600 bg-pink-50">Web</Badge>
-                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className={estaPago ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}>
                             {estaPago ? "Pagado" : `Debe ${formatCurrency(debe)}`}
                           </Badge>
-                          {/* Order arrows - desktop */}
                           <div className="hidden sm:flex flex-col">
-                            <button onClick={() => moveOrder(venta.id, "up")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowUp className="w-3 h-3" /></button>
-                            <button onClick={() => moveOrder(venta.id, "down")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowDown className="w-3 h-3" /></button>
+                            <button onClick={() => moveOrder(group.ventas[0].id, "up")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowUp className="w-3 h-3" /></button>
+                            <button onClick={() => moveOrder(group.ventas[0].id, "down")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowDown className="w-3 h-3" /></button>
                           </div>
                         </div>
                       </div>
@@ -1286,32 +1329,49 @@ export default function HojaDeRutaPage() {
                       <div className="px-4 py-3 space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-foreground truncate text-base">{venta.clientes?.nombre ?? "Sin cliente"}</p>
+                            <p className="font-semibold text-foreground truncate text-base">{group.cliente?.nombre ?? "Sin cliente"}</p>
                             {direccion && (
                               <p className="flex items-start gap-1.5 text-sm text-muted-foreground mt-0.5">
                                 <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                                 <span>{direccion}</span>
                               </p>
                             )}
-                            {venta.clientes?.telefono && (
+                            {group.cliente?.telefono && (
                               <p className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
                                 <Phone className="w-3.5 h-3.5 shrink-0" />
-                                {venta.clientes.telefono}
+                                {group.cliente.telefono}
                               </p>
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-lg font-bold text-foreground">{formatCurrency(venta.total - (ncPorVenta[venta.id] || 0))}</p>
-                            {(ncPorVenta[venta.id] || 0) > 0 && <p className="text-xs text-amber-600">NC -{formatCurrency(ncPorVenta[venta.id])}</p>}
-                            <p className="text-xs text-muted-foreground">{venta.forma_pago}</p>
-                            <p className="text-xs text-muted-foreground">{venta.fecha}</p>
+                            <p className="text-lg font-bold text-foreground">{formatCurrency(neto)}</p>
+                            {nc > 0 && <p className="text-xs text-amber-600">NC -{formatCurrency(nc)}</p>}
                           </div>
                         </div>
 
+                        {/* Individual invoices breakdown */}
+                        {group.ventas.length > 1 && (
+                          <div className="bg-muted/30 rounded-lg p-2 space-y-1">
+                            {group.ventas.map((v) => (
+                              <div key={v.id} className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">{v.tipo_comprobante} #{v.numero} <span className="ml-1 opacity-60">{v.forma_pago}</span></span>
+                                <span className="font-medium">{formatCurrency(v.total - (ncPorVenta[v.id] || 0))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {group.ventas.length === 1 && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{group.ventas[0].tipo_comprobante}</span>
+                            <span>{group.ventas[0].forma_pago}</span>
+                            <span>{group.ventas[0].fecha}</span>
+                          </div>
+                        )}
+
                         {/* Quick contact buttons */}
                         <div className="flex items-center gap-2 pt-1">
-                          {venta.clientes?.telefono && (
-                            <a href={`tel:${venta.clientes.telefono}`} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors">
+                          {group.cliente?.telefono && (
+                            <a href={`tel:${group.cliente.telefono}`} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors">
                               <Phone className="w-3.5 h-3.5" />
                               Llamar
                             </a>
@@ -1328,10 +1388,12 @@ export default function HojaDeRutaPage() {
                               Cómo llegar
                             </a>
                           )}
-                          <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground ml-auto" onClick={() => handleViewDetail(venta)}>
-                            <Eye className="w-3.5 h-3.5 mr-1" />
-                            Ver items
-                          </Button>
+                          {group.ventas.map((v) => (
+                            <Button key={v.id} variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground ml-auto" onClick={() => handleViewDetail(v)}>
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              {group.ventas.length > 1 ? `#${v.numero}` : "Ver items"}
+                            </Button>
+                          ))}
                         </div>
                       </div>
 
@@ -1342,16 +1404,16 @@ export default function HojaDeRutaPage() {
                             variant="outline"
                             size="sm"
                             className="flex-1 sm:flex-none h-9 text-sm text-emerald-600 border-emerald-300 hover:bg-emerald-50"
-                            onClick={() => openPayDialog(venta)}
+                            onClick={() => openPayDialog(group.ventas[0], group.ventas)}
                           >
                             <DollarSign className="w-4 h-4 mr-1.5" />
-                            Cobrar
+                            Cobrar {group.ventas.length > 1 ? `(${group.ventas.length})` : ""}
                           </Button>
                         )}
                         <Button
                           size="sm"
                           className="flex-1 sm:flex-none h-9 text-sm bg-green-600 hover:bg-green-700 text-white"
-                          onClick={() => handleMarkDelivered(venta.id)}
+                          onClick={() => handleMarkDelivered(group.ventas)}
                         >
                           <CheckCircle className="w-4 h-4 mr-1.5" />
                           Marcar Entregado
@@ -1403,7 +1465,7 @@ export default function HojaDeRutaPage() {
       />
 
       {/* Delivery Confirmation Modal */}
-      <Dialog open={dlvConfirm.open} onOpenChange={(v) => !v && setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" })}>
+      <Dialog open={dlvConfirm.open} onOpenChange={(v) => !v && setDlvConfirm({ open: false, ids: [], pendiente: 0, type: "paid" })}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1417,36 +1479,46 @@ export default function HojaDeRutaPage() {
             </DialogTitle>
           </DialogHeader>
           {(() => {
-            const v = ventas.find((x) => x.id === dlvConfirm.id);
+            const groupVentas = ventas.filter((x) => dlvConfirm.ids.includes(x.id));
             const fmtCur = (n: number) => formatCurrency(n);
+            const nombre = dlvConfirm.clienteNombre || "Sin cliente";
+            const nums = groupVentas.map((v) => `#${v.numero}`).join(", ");
             return (
               <div className="space-y-4">
-                {dlvConfirm.type === "paid" && v && (
+                {dlvConfirm.type === "paid" && (
                   <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
                     <p className="text-sm text-emerald-800">
-                      Pedido <b>#{v.numero}</b> de <b>{v.clientes?.nombre}</b> por <b>{fmtCur(v.total)}</b>
+                      {groupVentas.length > 1 ? `${groupVentas.length} pedidos` : `Pedido ${nums}`} de <b>{nombre}</b>
                     </p>
-                    <p className="text-xs text-emerald-600 mt-1">Pago completo</p>
+                    <p className="text-xs text-emerald-600 mt-1">Pago completo — listo para entregar</p>
                   </div>
                 )}
-                {dlvConfirm.type === "unpaid" && v && (
+                {dlvConfirm.type === "unpaid" && (
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2">
                     <p className="text-sm text-amber-900">
-                      <b>{v.clientes?.nombre}</b> tiene <b className="text-amber-700">{fmtCur(dlvConfirm.pendiente)}</b> sin cobrar.
+                      <b>{nombre}</b> tiene <b className="text-amber-700">{fmtCur(dlvConfirm.pendiente)}</b> sin cobrar.
                     </p>
+                    {groupVentas.length > 1 && (
+                      <div className="space-y-0.5">
+                        {groupVentas.map((v) => {
+                          const d = Math.max(0, v.total - (pagadoPorVenta[v.id] || 0));
+                          return d > 0 ? <p key={v.id} className="text-xs text-amber-700">#{v.numero}: {fmtCur(d)}</p> : null;
+                        })}
+                      </div>
+                    )}
                     <p className="text-xs text-amber-700">Se cargará a su cuenta corriente como deuda.</p>
                   </div>
                 )}
                 {dlvConfirm.type === "no_client" && (
                   <div className="rounded-lg bg-red-50 border border-red-200 p-4 space-y-2">
                     <p className="text-sm text-red-900">
-                      Este pedido tiene <b>{fmtCur(dlvConfirm.pendiente)}</b> sin cobrar y no tiene cliente asignado.
+                      {groupVentas.length > 1 ? "Estos pedidos tienen" : "Este pedido tiene"} <b>{fmtCur(dlvConfirm.pendiente)}</b> sin cobrar y no tiene cliente asignado.
                     </p>
                     <p className="text-xs text-red-700">No se puede registrar la deuda. Cobrá primero o asigná un cliente.</p>
                   </div>
                 )}
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={() => setDlvConfirm({ open: false, id: "", pendiente: 0, type: "paid" })}>
+                  <Button variant="outline" onClick={() => setDlvConfirm({ open: false, ids: [], pendiente: 0, type: "paid" })}>
                     Cancelar
                   </Button>
                   {dlvConfirm.type !== "no_client" && (
@@ -1469,24 +1541,36 @@ export default function HojaDeRutaPage() {
             <DialogTitle>Registrar Pago</DialogTitle>
           </DialogHeader>
           {payVenta && (() => {
-            const pagado = pagadoPorVenta[payVenta.id] || 0;
-            const debe = Math.max(0, payVenta.total - pagado);
+            const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
+            const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
+            const totalPagadoGrupo = allVentas.reduce((s, vt) => s + (pagadoPorVenta[vt.id] || 0), 0);
             const totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMonto;
-            const saldoPendiente = debe - Math.min(totalPagando, debe);
+            const saldoPendiente = totalDebeGrupo - Math.min(totalPagando, totalDebeGrupo);
             const montoTransfDialog = payMetodo === "Transferencia" ? payMonto : payMetodo === "Mixto" ? payTransferencia : 0;
             const surchargeDialog = porcentajeTransferencia > 0 && montoTransfDialog > 0 ? Math.round(montoTransfDialog * (porcentajeTransferencia / 100)) : 0;
             return (
               <div className="space-y-4">
                 {/* Summary */}
                 <div className="text-sm space-y-1 bg-muted/50 rounded-lg p-3">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{payVenta.clientes?.nombre || "—"}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatCurrency(payVenta.total)}</span></div>
-                  {pagado > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Ya pagado</span><span className="text-emerald-600">{formatCurrency(pagado)}</span></div>}
-                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(debe)}</span></div>
-                  {payVenta.origen === "tienda" && (
-                    <div className="flex justify-between"><span className="text-muted-foreground">Pago elegido por cliente</span><span className="font-medium">{payVenta.forma_pago}</span></div>
+                  {allVentas.length === 1 ? (
+                    <>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatCurrency(payVenta.total)}</span></div>
+                    </>
+                  ) : (
+                    <>
+                      {allVentas.map((v) => (
+                        <div key={v.id} className="flex justify-between">
+                          <span className="text-muted-foreground">#{v.numero}</span>
+                          <span className="font-medium">{formatCurrency(v.total)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
+                    </>
                   )}
+                  {totalPagadoGrupo > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoGrupo)}</span></div>}
+                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(totalDebeGrupo)}</span></div>
                 </div>
 
                 {/* Payment method */}
@@ -1498,8 +1582,8 @@ export default function HojaDeRutaPage() {
                         key={m}
                         onClick={() => {
                           setPayMetodo(m);
-                          if (m === "Mixto") { setPayEfectivo(Math.floor(debe / 2)); setPayTransferencia(debe - Math.floor(debe / 2)); }
-                          else { setPayMonto(debe); }
+                          if (m === "Mixto") { setPayEfectivo(Math.floor(totalDebeGrupo / 2)); setPayTransferencia(totalDebeGrupo - Math.floor(totalDebeGrupo / 2)); }
+                          else { setPayMonto(totalDebeGrupo); }
                         }}
                         className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
                           payMetodo === m ? "bg-foreground text-white border-foreground" : "bg-white text-muted-foreground border-border hover:border-foreground/30"
@@ -1516,11 +1600,11 @@ export default function HojaDeRutaPage() {
                   <div className="space-y-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Efectivo</Label>
-                      <Input type="number" value={payEfectivo} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setPayEfectivo(v); setPayTransferencia(Math.max(0, debe - v)); }} min={0} max={debe} />
+                      <Input type="number" value={payEfectivo} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setPayEfectivo(v); setPayTransferencia(Math.max(0, totalDebeGrupo - v)); }} min={0} max={totalDebeGrupo} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Transferencia</Label>
-                      <Input type="number" value={payTransferencia} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setPayTransferencia(v); setPayEfectivo(Math.max(0, debe - v)); }} min={0} max={debe} />
+                      <Input type="number" value={payTransferencia} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setPayTransferencia(v); setPayEfectivo(Math.max(0, totalDebeGrupo - v)); }} min={0} max={totalDebeGrupo} />
                     </div>
                     {payTransferencia > 0 && cuentasBancarias.length > 0 && (
                       <div className="space-y-1.5">
@@ -1548,7 +1632,7 @@ export default function HojaDeRutaPage() {
                 ) : (
                   <div className="space-y-2">
                     <Label>Monto a cobrar</Label>
-                    <Input type="number" value={payMonto} onChange={(e) => setPayMonto(Math.max(0, Math.min(debe, Number(e.target.value))))} min={0} max={debe} />
+                    <Input type="number" value={payMonto} onChange={(e) => setPayMonto(Math.max(0, Math.min(totalDebeGrupo, Number(e.target.value))))} min={0} max={totalDebeGrupo} />
                     {payMetodo === "Transferencia" && cuentasBancarias.length > 0 && (
                       <div className="space-y-1.5 mt-2">
                         <Label className="text-xs">Cuenta bancaria</Label>
@@ -1573,7 +1657,7 @@ export default function HojaDeRutaPage() {
                 {/* Pending balance warning */}
                 {saldoPendiente > 0 && payVenta.cliente_id && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                    El saldo pendiente de <strong>{formatCurrency(saldoPendiente)}</strong> se cargará a la cuenta corriente del cliente, vinculado al comprobante <strong>#{payVenta.numero}</strong>.
+                    El saldo pendiente de <strong>{formatCurrency(saldoPendiente)}</strong> se cargará a la cuenta corriente del cliente.
                   </div>
                 )}
                 {saldoPendiente > 0 && !payVenta.cliente_id && (
@@ -1586,7 +1670,7 @@ export default function HojaDeRutaPage() {
                   <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancelar</Button>
                   <Button onClick={handleRegistrarPago} disabled={paySaving || totalPagando <= 0 || (saldoPendiente > 0 && !payVenta.cliente_id)}>
                     {paySaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Confirmar Cobro — {formatCurrency(Math.min(totalPagando, debe))}
+                    Confirmar Cobro — {formatCurrency(Math.min(totalPagando, totalDebeGrupo))}
                   </Button>
                 </div>
               </div>

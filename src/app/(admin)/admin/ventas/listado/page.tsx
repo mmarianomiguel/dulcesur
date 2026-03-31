@@ -260,6 +260,7 @@ export default function ListadoVentasPage() {
   const [poSaving, setPoSaving] = useState(false);
   const [poHasChanges, setPoHasChanges] = useState(false);
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
+  const [recargoTransferencia, setRecargoTransferencia] = useState(0);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
 
@@ -368,7 +369,7 @@ export default function ListadoVentasPage() {
       supabase.from("cuentas_bancarias").select("*").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre").eq("activo", true),
       supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single(),
-      supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
+      supabase.from("tienda_config").select("logo_url, url_tienda, recargo_transferencia").limit(1).single(),
     ]).then(([cuentasRes, usuariosRes, empresaRes, tiendaRes]) => {
       if (cuentasRes.error) console.error("Error cargando cuentas bancarias:", cuentasRes.error);
       if (usuariosRes.error) console.error("Error cargando vendedores:", usuariosRes.error);
@@ -394,6 +395,7 @@ export default function ListadoVentasPage() {
           logoUrl: prev.logoUrl || "https://res.cloudinary.com/dss3lnovd/image/upload/v1774505786/dulcesur/logo-dulcesur-negro.jpg",
           empresaWeb: prev.empresaWeb || tc.url_tienda || "",
         }));
+        if (tc.recargo_transferencia > 0) setRecargoTransferencia(tc.recargo_transferencia);
       }
     }).catch((err) => console.error("Error cargando datos de referencia:", err));
   }, []);
@@ -2120,17 +2122,31 @@ export default function ListadoVentasPage() {
                   </div>
                 </div>
 
-                {/* Registrar cobro — any order with pending amount (except CC which doesn't go to caja) */}
+                {/* Registrar cobro — any order with pending amount */}
                 {!isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
                   const pagado = detailPagos.reduce((s, p) => s + p.monto, 0);
-                  const pendiente = poSelectedPedido.total - pagado;
-                  if (pendiente < 1) return null; // Already fully paid
+                  const pendiente = Math.round((poSelectedPedido.total - pagado) * 100) / 100;
+                  if (pendiente < 1) return null;
                   const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
-                  if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null; // POS CC already handled at sale time
+                  if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
                   const cobroMetodo = (poSelectedPedido as any)._cobroMetodo || "Efectivo";
+                  const cobroMonto = (poSelectedPedido as any)._cobroMonto;
                   const cobroMixtoEf = (poSelectedPedido as any)._cobroMixtoEf || 0;
                   const cobroMixtoTr = (poSelectedPedido as any)._cobroMixtoTr || 0;
+                  const cobroCuentaBancaria = (poSelectedPedido as any)._cobroCuentaBancaria || "";
                   const setCobroField = (field: string, val: any) => setPoSelectedPedido((prev: any) => ({ ...prev, [field]: val }));
+                  const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
+
+                  // Calculate totals
+                  let totalCobrado = 0;
+                  if (cobroMetodo === "Mixto") totalCobrado = cobroMixtoEf + cobroMixtoTr;
+                  else if (cobroMetodo === "Cuenta Corriente") totalCobrado = 0;
+                  else totalCobrado = cobroMonto ?? pendiente;
+                  const restanteCC = Math.max(0, Math.round((pendiente - totalCobrado) * 100) / 100);
+
+                  // Surcharge calc
+                  const montoTransf = cobroMetodo === "Transferencia" ? (cobroMonto ?? pendiente) : cobroMetodo === "Mixto" ? cobroMixtoTr : 0;
+                  const surcharge = recargoTransferencia > 0 && montoTransf > 0 ? Math.round(montoTransf * (recargoTransferencia / 100)) : 0;
 
                   return (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-3">
@@ -2143,13 +2159,12 @@ export default function ListadoVentasPage() {
                         <p className="text-xs text-emerald-600">Ya pagado: {formatCurrency(pagado)} — Resta: {formatCurrency(pendiente)}</p>
                       )}
 
-                      {/* Payment method selector — same style as POS */}
                       <div className="grid grid-cols-4 gap-1.5">
                         {[
                           { key: "Efectivo", label: "Efect.", icon: DollarSign },
                           { key: "Transferencia", label: "Transf.", icon: ArrowLeftRight },
                           { key: "Mixto", label: "Mixto", icon: Shuffle },
-                          { key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen },
+                          ...(clienteId ? [{ key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen }] : []),
                         ].map(({ key, label, icon: Icon }) => (
                           <button
                             key={key}
@@ -2166,6 +2181,14 @@ export default function ListadoVentasPage() {
                         ))}
                       </div>
 
+                      {/* Amount input for Efectivo/Transferencia */}
+                      {(cobroMetodo === "Efectivo" || cobroMetodo === "Transferencia") && (
+                        <div>
+                          <label className="text-[10px] text-gray-500">Monto a cobrar</label>
+                          <Input type="number" value={cobroMonto ?? ""} placeholder={String(pendiente)} onChange={(e) => setCobroField("_cobroMonto", e.target.value === "" ? undefined : Number(e.target.value))} className="h-8 text-sm" max={pendiente} />
+                        </div>
+                      )}
+
                       {/* Mixto inputs */}
                       {cobroMetodo === "Mixto" && (
                         <div className="grid grid-cols-2 gap-2">
@@ -2180,10 +2203,49 @@ export default function ListadoVentasPage() {
                         </div>
                       )}
 
+                      {/* Bank account selector */}
+                      {(cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && cuentasBancarias.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-gray-500">Cuenta bancaria</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {cuentasBancarias.map((cb: any) => (
+                              <button key={cb.id} onClick={() => setCobroField("_cobroCuentaBancaria", cb.nombre)}
+                                className={`flex items-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-xs transition-all text-left ${cobroCuentaBancaria === cb.nombre ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>
+                                <span className="truncate">{cb.alias || cb.nombre}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Transfer surcharge indicator */}
+                      {surcharge > 0 && (
+                        <div className="rounded-lg bg-violet-50 border border-violet-200 p-2">
+                          <p className="text-xs text-violet-800">
+                            Cliente debe transferir <span className="font-bold">{formatCurrency(montoTransf + surcharge)}</span>
+                            <span className="text-violet-600"> (incluye {recargoTransferencia}% recargo: {formatCurrency(surcharge)})</span>
+                          </p>
+                        </div>
+                      )}
+
+                      {/* CC remainder indicator */}
+                      {cobroMetodo !== "Cuenta Corriente" && restanteCC > 0 && clienteId && (
+                        <div className="rounded-lg bg-blue-50 border border-blue-200 p-2">
+                          <p className="text-xs text-blue-800">
+                            Restante <span className="font-bold">{formatCurrency(restanteCC)}</span> queda en cuenta corriente
+                          </p>
+                        </div>
+                      )}
+                      {cobroMetodo !== "Cuenta Corriente" && restanteCC > 0 && !clienteId && (
+                        <div className="rounded-lg bg-red-50 border border-red-200 p-2">
+                          <p className="text-xs text-red-700">Sin cliente — no se puede dejar saldo en cuenta corriente</p>
+                        </div>
+                      )}
+
                       <Button
                         size="sm"
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={cobroMetodo === "Mixto" && (cobroMixtoEf + cobroMixtoTr) < pendiente * 0.99}
+                        disabled={cobroMetodo !== "Cuenta Corriente" && totalCobrado <= 0}
                         onClick={async () => {
                           const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
                           const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
@@ -2193,21 +2255,40 @@ export default function ListadoVentasPage() {
                             ventaId = v?.id;
                           }
                           const entries: any[] = [];
+
                           if (cobroMetodo === "Mixto") {
                             if (cobroMixtoEf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: ventaId, referencia_tipo: "venta" });
-                            if (cobroMixtoTr > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: ventaId, referencia_tipo: "venta" });
-                          } else if (cobroMetodo === "Cuenta Corriente") {
-                            const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
-                            if (clienteId) {
-                              const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-                              const newSaldo = (cl?.saldo || 0) + pendiente;
-                              await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
-                              await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: `Saldo pendiente a cuenta corriente`, debe: pendiente, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: ventaId });
+                            if (cobroMixtoTr > 0) {
+                              const s = recargoTransferencia > 0 ? Math.round(cobroMixtoTr * (recargoTransferencia / 100)) : 0;
+                              entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia${s > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: cobroMixtoTr + s, referencia_id: ventaId, referencia_tipo: "venta", ...(cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
                             }
+                          } else if (cobroMetodo === "Cuenta Corriente") {
+                            // All to CC — handled below in remainder logic
                           } else {
-                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}`, metodo_pago: cobroMetodo, monto: pendiente, referencia_id: ventaId, referencia_tipo: "venta" });
+                            const monto = cobroMonto ?? pendiente;
+                            if (monto > 0) {
+                              const s = (cobroMetodo === "Transferencia" && recargoTransferencia > 0) ? Math.round(monto * (recargoTransferencia / 100)) : 0;
+                              entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${s > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: cobroMetodo, monto: cobroMetodo === "Transferencia" ? monto + s : monto, referencia_id: ventaId, referencia_tipo: "venta", ...(cobroMetodo === "Transferencia" && cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
+                            }
                           }
+
                           if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+
+                          // CC remainder
+                          const realRestante = cobroMetodo === "Cuenta Corriente" ? pendiente : restanteCC;
+                          if (realRestante > 0 && clienteId) {
+                            const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+                            const newSaldo = (cl?.saldo || 0) + realRestante;
+                            await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
+                            await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: `Saldo pendiente a cuenta corriente`, debe: realRestante, haber: 0, saldo: newSaldo, forma_pago: cobroMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: ventaId });
+                          }
+
+                          // Update forma_pago on venta
+                          if (ventaId) {
+                            await supabase.from("ventas").update({ forma_pago: cobroMetodo }).eq("id", ventaId);
+                          }
+
+                          // Refresh payment breakdown
                           if (ventaId) {
                             const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
                               supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
@@ -2225,7 +2306,7 @@ export default function ListadoVentasPage() {
                         }}
                       >
                         <DollarSign className="w-4 h-4 mr-1" />
-                        Confirmar cobro
+                        {cobroMetodo === "Cuenta Corriente" ? "Cargar a Cta Cte" : "Confirmar cobro"}
                       </Button>
                     </div>
                   );

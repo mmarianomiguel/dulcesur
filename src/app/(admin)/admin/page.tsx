@@ -213,6 +213,7 @@ export default function DashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMonto?: number; cobroMixtoEf?: number; cobroMixtoTr?: number; cobroCuentaBancaria?: string }>({ open: false, venta: null, pendiente: 0, type: "paid" });
   const [deliveryCuentasBancarias, setDeliveryCuentasBancarias] = useState<{ id: string; nombre: string; alias?: string }[]>([]);
+  const [recargoTransferencia, setRecargoTransferencia] = useState(0);
 
   // ─── Widget visibility ───
   const WIDGETS = [
@@ -463,7 +464,7 @@ export default function DashboardPage() {
       monthlyDataResult,
       // fetchPedidosOnline runs in parallel too (fire-and-forget resolved below)
     ] = await Promise.all([
-      supabase.from("tienda_config").select("dias_entrega").single(),
+      supabase.from("tienda_config").select("dias_entrega, recargo_transferencia").single(),
       supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
       supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso"),
       supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).limit(10000),
@@ -489,6 +490,7 @@ export default function DashboardPage() {
 
     // ─── Tienda config ───
     if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
+    if ((tiendaConfig as any)?.recargo_transferencia > 0) setRecargoTransferencia((tiendaConfig as any).recargo_transferencia);
 
     // ─── Period sales (reuse single ventas query for both totals and margin) ───
     const periodSales = (periodSalesRaw || []).filter((v) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
@@ -675,17 +677,23 @@ export default function DashboardPage() {
 
       // Calculate how much is actually being paid in cash/transfer
       let totalCobrado = 0;
+      let surchargeAmount = 0;
       if (metodo === "Mixto") {
         totalCobrado = (cobroMixtoEf || 0) + (cobroMixtoTr || 0);
         if ((cobroMixtoEf || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: venta.id, referencia_tipo: "venta" });
-        if ((cobroMixtoTr || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: venta.id, referencia_tipo: "venta", ...(cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
+        if ((cobroMixtoTr || 0) > 0) {
+          surchargeAmount = recargoTransferencia > 0 ? Math.round((cobroMixtoTr || 0) * (recargoTransferencia / 100)) : 0;
+          entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${surchargeAmount > 0 ? ` +${recargoTransferencia}%` : ""})${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Transferencia", monto: (cobroMixtoTr || 0) + surchargeAmount, referencia_id: venta.id, referencia_tipo: "venta", ...(cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
+        }
       } else if (metodo === "Cuenta Corriente") {
         totalCobrado = 0; // everything goes to CC
       } else {
         // Efectivo or Transferencia — use cobroMonto if specified, otherwise full pendiente
         totalCobrado = cobroMonto ?? pendiente;
         if (totalCobrado > 0) {
-          entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: metodo, monto: totalCobrado, referencia_id: venta.id, referencia_tipo: "venta", ...(metodo === "Transferencia" && cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
+          surchargeAmount = (metodo === "Transferencia" && recargoTransferencia > 0) ? Math.round(totalCobrado * (recargoTransferencia / 100)) : 0;
+          const montoFinal = metodo === "Transferencia" ? totalCobrado + surchargeAmount : totalCobrado;
+          entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${surchargeAmount > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: metodo, monto: montoFinal, referencia_id: venta.id, referencia_tipo: "venta", ...(metodo === "Transferencia" && cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
         }
       }
 
@@ -1745,6 +1753,19 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   )}
+                  {recargoTransferencia > 0 && (metodo === "Transferencia" || metodo === "Mixto") && (() => {
+                    const montoTransf = metodo === "Transferencia" ? (montoIngresado ?? pend) : mixTr;
+                    const recargo = Math.round(montoTransf * (recargoTransferencia / 100));
+                    if (recargo <= 0) return null;
+                    return (
+                      <div className="rounded-lg bg-violet-50 border border-violet-200 p-2.5">
+                        <p className="text-xs text-violet-800">
+                          Cliente debe transferir <span className="font-bold">{fmt(montoTransf + recargo)}</span>
+                          <span className="text-violet-600"> (incluye {recargoTransferencia}% recargo: {fmt(recargo)})</span>
+                        </p>
+                      </div>
+                    );
+                  })()}
                   {metodo !== "Cuenta Corriente" && restanteCC > 0 && hasClient && (
                     <div className="rounded-lg bg-blue-50 border border-blue-200 p-2.5">
                       <p className="text-xs text-blue-800">
