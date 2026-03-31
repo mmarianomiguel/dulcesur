@@ -436,8 +436,8 @@ export default function CheckoutPage() {
       errs.push("Completá la dirección de envío.");
     }
     if (metodoEntrega === "envio" && !fechaEntrega) errs.push("Seleccioná una fecha de entrega.");
-    if (metodoPago === "mixto" && Math.abs(Math.round(mixtoEfectivo + mixtoTransferencia) - Math.round(subtotal + costoEnvio + recargoTransf)) > 1) {
-      errs.push(`La suma de efectivo ($${mixtoEfectivo.toLocaleString("es-AR")}) y transferencia ($${mixtoTransferencia.toLocaleString("es-AR")}) debe igualar $${(subtotal + costoEnvio + recargoTransf).toLocaleString("es-AR")}.`);
+    if (metodoPago === "mixto" && Math.abs(Math.round(mixtoEfectivo + mixtoTransferencia) - Math.round(subtotal + costoEnvio)) > 1) {
+      errs.push(`La suma de efectivo ($${mixtoEfectivo.toLocaleString("es-AR")}) y transferencia ($${mixtoTransferencia.toLocaleString("es-AR")}) debe igualar $${(subtotal + costoEnvio).toLocaleString("es-AR")}.`);
     }
 
     if (errs.length > 0) {
@@ -641,6 +641,9 @@ export default function CheckoutPage() {
         if (authRec?.cliente_id) ventaClienteId = authRec.cliente_id;
       }
 
+      const ventaCuentaAlias = (metodoPago === "transferencia" || metodoPago === "mixto")
+        ? cuentasBancarias.find(c => c.id === selectedCuentaId)?.alias || cuentasBancarias.find(c => c.id === selectedCuentaId)?.nombre || null
+        : null;
       const { data: venta, error: ventaError } = await supabase.from("ventas").insert({
         numero,
         tipo_comprobante: "Pedido Web",
@@ -654,6 +657,7 @@ export default function CheckoutPage() {
         total: vTotal,
         monto_efectivo: metodoPago === "mixto" ? mixtoEfectivo : (metodoPago === "efectivo" ? vTotal : 0),
         monto_transferencia: metodoPago === "mixto" ? (mixtoTransferencia + vRecargoTransf) : (metodoPago === "transferencia" ? vTotal : 0),
+        cuenta_transferencia_alias: ventaCuentaAlias,
         estado: "pendiente",
         observacion: observacion || null,
         entregado: false,
