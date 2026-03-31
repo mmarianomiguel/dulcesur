@@ -263,6 +263,7 @@ export default function ListadoVentasPage() {
   const [recargoTransferencia, setRecargoTransferencia] = useState(0);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
+  const [detailNCs, setDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
 
   // PO Cancel confirmation
   const [poCancelPedido, setPoCancelPedido] = useState<Pedido | null>(null);
@@ -942,7 +943,7 @@ export default function ListadoVentasPage() {
         supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
         supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
         // Find NCs linked to this original sale (NC has remito_origen_id pointing to original)
-        supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+        supabase.from("ventas").select("id, numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       ]);
       for (const m of movs || []) {
         // Detect surcharge from description (e.g. "Transferencia +2%")
@@ -964,6 +965,17 @@ export default function ListadoVentasPage() {
       if (ncTotal > 0) {
         pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
       }
+      // Save NC details for display
+      setDetailNCs((ncVentas || []).map((nc: any) => ({
+        numero: nc.numero,
+        total: nc.total,
+        items: (nc.venta_items || []).map((i: any) => ({
+          descripcion: i.descripcion,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario,
+          subtotal: i.subtotal,
+        })),
+      })));
     }
     // For Mixto online orders: enrich with pedidos_tienda to show original payment split
     const fpLower = ((pedido as any).forma_pago || pedido.metodo_pago || "").toLowerCase();
@@ -1027,6 +1039,7 @@ export default function ListadoVentasPage() {
       }
     }
     setDetailPagos(pagos);
+    if (!ventaId) setDetailNCs([]);
 
     setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId } as any);
     setPoEditItems(items.map((i) => ({ ...i })));
@@ -2141,9 +2154,21 @@ export default function ListadoVentasPage() {
                               </div>
                             ))}
                             {ncPagos.map((p, i) => (
-                              <div key={`nc-${i}`} className="flex items-center justify-between">
-                                <span className="text-red-600">{p.metodo}</span>
-                                <span className="font-medium text-red-600">-{formatCurrency(p.monto)}</span>
+                              <div key={`nc-${i}`}>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-red-600">{p.metodo}</span>
+                                  <span className="font-medium text-red-600">-{formatCurrency(p.monto)}</span>
+                                </div>
+                                {detailNCs.length > 0 && (
+                                  <div className="mt-1 ml-2 space-y-0.5">
+                                    {detailNCs.flatMap((nc) => nc.items).map((item, j) => (
+                                      <div key={j} className="flex items-center justify-between text-[11px] text-red-500 pl-2 border-l-2 border-red-200">
+                                        <span className="truncate mr-2">{item.cantidad}x {item.descripcion}</span>
+                                        <span className="shrink-0">-{formatCurrency(item.subtotal)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             ))}
                             <div className="border-t pt-2 flex items-center justify-between">
