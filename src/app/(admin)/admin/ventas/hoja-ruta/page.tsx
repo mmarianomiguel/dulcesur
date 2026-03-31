@@ -728,19 +728,20 @@ export default function HojaDeRutaPage() {
                 onChange={(e) => setShowAllPending(e.target.checked)}
                 className="rounded border-border"
               />
-              Todas las pendientes
+              Todas las pendientes (hasta hoy)
             </label>
-            {!showAllPending && (
-              <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-muted-foreground" />
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-44"
-                />
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-muted-foreground" />
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setShowAllPending(false);
+                }}
+                className="w-44"
+              />
+            </div>
           </div>
         )}
       </div>
