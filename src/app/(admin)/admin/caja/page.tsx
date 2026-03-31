@@ -636,11 +636,9 @@ export default function CajaPage() {
     ventasEfectivo,
     ventasTransferencia,
     transferenciaPorCuenta,
-    ventasCuentaCorriente,
     cobrosCCTotal,
     cobrosCCEfectivo,
     cobrosCCTransferencia,
-    saldosParcialesCC,
     totalVentas,
     depositos,
     gastos,
@@ -710,20 +708,6 @@ export default function CajaPage() {
       }
     }
 
-    // CC: pure CC ventas + mixto CC portion (only when CC was explicitly used via POS)
-    const ventasCuentaCorriente = ventasPorMetodo("Cuenta Corriente")
-      + ventas.filter((v) => v.forma_pago === "Mixto").reduce((acc, v) => {
-        // Check if this mixto sale has a CC component in caja_movimientos
-        const ccMovTotal = movements
-          .filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso" && m.metodo_pago === "Cuenta Corriente")
-          .reduce((a, m) => a + m.monto, 0);
-        if (ccMovTotal > 0) return acc + ccMovTotal;
-        // For ventas sin caja_movimientos (online orders):
-        // Online Mixto = Efectivo + Transferencia only (no CC option in checkout)
-        // Any gap between stored amounts and total is recargo rounding, NOT CC
-        const storedCC = (v as any).monto_cuenta_corriente || 0;
-        return acc + storedCC;
-      }, 0);
     const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
 
     // Cobros de cuenta corriente del día (pagos que reducen deuda CC)
@@ -731,13 +715,6 @@ export default function CajaPage() {
     const cobrosCCTotal = cobrosCC.reduce((a, m) => a + m.monto, 0);
     const cobrosCCEfectivo = cobrosCC.filter((m) => m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0);
     const cobrosCCTransferencia = cobrosCC.filter((m) => m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0);
-
-    // Saldos parciales cargados a CC hoy (pagos parciales cuyo resto fue a CC)
-    // Exclude entries whose venta_id belongs to a full CC sale (already counted in ventasCuentaCorriente)
-    const ventasIdCC = new Set(ventas.filter((v) => v.forma_pago === "Cuenta Corriente").map((v) => v.id));
-    const saldosParcialesCC = (ccEntries || [])
-      .filter((e) => e.venta_id && !ventasIdCC.has(e.venta_id))
-      .reduce((a, e) => a + (e.debe || 0), 0);
 
     const depositosEfectivo = movements
       .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta")
@@ -784,56 +761,67 @@ export default function CajaPage() {
       .filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta")
       .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: m.monto, metodo: m.metodo_pago || "Efectivo" }));
 
-    // Ventas breakdown by forma_pago — decompose Mixto into real methods
+    // Ventas breakdown by ACTUAL money flow (caja_movimientos + CC entries)
+    // This is the source of truth — not forma_pago on the venta record
     const ventasDesglose: Record<string, { count: number; total: number }> = {};
+    const ventasCounted: Record<string, Set<string>> = {}; // track which ventas counted per method
+    const addDesglose = (method: string, amount: number, ventaId?: string) => {
+      if (amount <= 0) return;
+      if (!ventasDesglose[method]) ventasDesglose[method] = { count: 0, total: 0 };
+      if (!ventasCounted[method]) ventasCounted[method] = new Set();
+      ventasDesglose[method].total += amount;
+      if (ventaId && !ventasCounted[method].has(ventaId)) {
+        ventasCounted[method].add(ventaId);
+        ventasDesglose[method].count++;
+      }
+    };
+
+    // Build CC entries map by venta_id for quick lookup
+    const ccByVenta: Record<string, number> = {};
+    for (const e of (ccEntries || [])) {
+      if (e.venta_id) ccByVenta[e.venta_id] = (ccByVenta[e.venta_id] || 0) + (e.debe || 0);
+    }
+
     for (const v of ventas) {
-      if (v.forma_pago === "Mixto") {
-        // Try to decompose from caja_movimientos
-        const ventaMovs = movements.filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso");
-        if (ventaMovs.length > 0) {
-          for (const m of ventaMovs) {
-            const mp = m.metodo_pago || "Otro";
-            if (!ventasDesglose[mp]) ventasDesglose[mp] = { count: 0, total: 0 };
-            ventasDesglose[mp].total += m.monto;
-          }
-          // Count the sale once under each method that has a portion
-          const methods = new Set(ventaMovs.map((m) => m.metodo_pago || "Otro"));
-          for (const mp of methods) {
-            if (!ventasDesglose[mp]) ventasDesglose[mp] = { count: 0, total: 0 };
-            ventasDesglose[mp].count++;
-          }
-        } else {
-          // Online orders without caja_movimientos: use stored amounts
-          const ef = (v as any).monto_efectivo || 0;
-          const tr = (v as any).monto_transferencia || 0;
-          const cc = (v as any).monto_cuenta_corriente || 0;
-          if (ef > 0) {
-            if (!ventasDesglose["Efectivo"]) ventasDesglose["Efectivo"] = { count: 0, total: 0 };
-            ventasDesglose["Efectivo"].count++;
-            ventasDesglose["Efectivo"].total += ef;
-          }
-          if (tr > 0) {
-            if (!ventasDesglose["Transferencia"]) ventasDesglose["Transferencia"] = { count: 0, total: 0 };
-            ventasDesglose["Transferencia"].count++;
-            ventasDesglose["Transferencia"].total += tr;
-          }
-          if (cc > 0) {
-            if (!ventasDesglose["Cuenta Corriente"]) ventasDesglose["Cuenta Corriente"] = { count: 0, total: 0 };
-            ventasDesglose["Cuenta Corriente"].count++;
-            ventasDesglose["Cuenta Corriente"].total += cc;
-          }
-          // If nothing found, fallback
-          if (ef === 0 && tr === 0 && cc === 0) {
-            if (!ventasDesglose["Otro"]) ventasDesglose["Otro"] = { count: 0, total: 0 };
-            ventasDesglose["Otro"].count++;
-            ventasDesglose["Otro"].total += v.total;
-          }
+      // 1. Check caja_movimientos for this venta (actual payments received)
+      const ventaMovs = movements.filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso");
+      let accounted = 0;
+
+      if (ventaMovs.length > 0) {
+        for (const m of ventaMovs) {
+          addDesglose(m.metodo_pago || "Otro", m.monto, v.id);
+          accounted += m.monto;
         }
-      } else {
-        const fp = v.forma_pago || "Otro";
-        if (!ventasDesglose[fp]) ventasDesglose[fp] = { count: 0, total: 0 };
-        ventasDesglose[fp].count++;
-        ventasDesglose[fp].total += v.total;
+      }
+
+      // 2. Check CC entries for this venta (partial payment remainders)
+      const ccAmount = ccByVenta[v.id] || 0;
+      if (ccAmount > 0) {
+        addDesglose("Cuenta Corriente", ccAmount, v.id);
+        accounted += ccAmount;
+      }
+
+      // 3. If full CC sale with no caja entries (forma_pago is CC and no movements)
+      if (v.forma_pago === "Cuenta Corriente" && ventaMovs.length === 0 && ccAmount === 0) {
+        addDesglose("Cuenta Corriente", v.total, v.id);
+        accounted += v.total;
+      }
+
+      // 4. Remaining unaccounted amount (web orders not yet delivered/paid)
+      const remaining = v.total - accounted;
+      if (remaining > 1) {
+        // Use stored amounts for online orders, or forma_pago as hint
+        const ef = (v as any).monto_efectivo || 0;
+        const tr = (v as any).monto_transferencia || 0;
+        if (ef > 0 && tr > 0 && v.forma_pago === "Mixto") {
+          // Online mixto without caja entries yet
+          addDesglose("Efectivo (pendiente)", ef, v.id);
+          addDesglose("Transferencia", Math.max(0, remaining - ef), v.id);
+        } else if (v.forma_pago === "Transferencia" || tr > 0) {
+          addDesglose("Transferencia", remaining, v.id);
+        } else {
+          addDesglose("Pendiente de cobro", remaining, v.id);
+        }
       }
     }
 
@@ -841,11 +829,9 @@ export default function CajaPage() {
       ventasEfectivo,
       ventasTransferencia,
       transferenciaPorCuenta,
-      ventasCuentaCorriente,
       cobrosCCTotal,
       cobrosCCEfectivo,
       cobrosCCTransferencia,
-      saldosParcialesCC,
       totalVentas,
       depositos,
       gastos,
@@ -1277,29 +1263,19 @@ export default function CajaPage() {
               </Card>
             ))}
             {/* Cuenta Corriente — todo lo que fue a CC hoy */}
-            <Card>
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-3">
-                  <Wallet className="w-5 h-5 text-muted-foreground shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground truncate">Cuenta Corriente</p>
-                    <p className="text-base font-semibold">{formatCurrency(ventasCuentaCorriente + saldosParcialesCC)}</p>
-                  </div>
-                </div>
-                {(ventasCuentaCorriente > 0 && saldosParcialesCC > 0) && (
-                  <div className="mt-2 pt-2 border-t space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">Ventas completas en CC</span>
-                      <span className="font-medium">{formatCurrency(ventasCuentaCorriente)}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">Saldos parciales a CC</span>
-                      <span className="font-medium">{formatCurrency(saldosParcialesCC)}</span>
+            {(ventasDesglose["Cuenta Corriente"]?.total || 0) > 0 && (
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center gap-3">
+                    <Wallet className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground truncate">Cuenta Corriente</p>
+                      <p className="text-base font-semibold">{formatCurrency(ventasDesglose["Cuenta Corriente"].total)}</p>
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
             {/* Cobros CC del día — plata que entró por cobros de deuda */}
             {cobrosCCTotal > 0 && (
               <Card>
@@ -1873,10 +1849,10 @@ export default function CajaPage() {
                       ))}
                     </>
                   )}
-                  {ventasCuentaCorriente > 0 && (
+                  {(ventasDesglose["Cuenta Corriente"]?.total || 0) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Cuenta Corriente</span>
-                      <span>{formatCurrency(ventasCuentaCorriente)}</span>
+                      <span>{formatCurrency(ventasDesglose["Cuenta Corriente"].total)}</span>
                     </div>
                   )}
                 </div>
