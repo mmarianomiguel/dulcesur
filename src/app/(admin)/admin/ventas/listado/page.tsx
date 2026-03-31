@@ -939,15 +939,21 @@ export default function ListadoVentasPage() {
     const pagos: { metodo: string; monto: number }[] = [];
     if (ventaId) {
       const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
-        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
         supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
         // Find NCs linked to this original sale (NC has remito_origen_id pointing to original)
         supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       ]);
       for (const m of movs || []) {
-        const existing = pagos.find((p) => p.metodo === m.metodo_pago);
+        // Detect surcharge from description (e.g. "Transferencia +2%")
+        let label = m.metodo_pago;
+        if (m.metodo_pago === "Transferencia" && m.descripcion) {
+          const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
+          if (match) label = `Transferencia (${match[1]}%)`;
+        }
+        const existing = pagos.find((p) => p.metodo === label);
         if (existing) existing.monto += m.monto;
-        else pagos.push({ metodo: m.metodo_pago, monto: m.monto });
+        else pagos.push({ metodo: label, monto: m.monto });
       }
       const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
       if (ccTotal > 0) {
@@ -2121,20 +2127,32 @@ export default function ListadoVentasPage() {
                       <DollarSign className="w-4 h-4" /> Detalle de Pago
                     </h3>
                     <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm">
-                      {detailPagos.length > 0 ? (
-                        <>
-                          {detailPagos.map((p, i) => (
-                            <div key={i} className="flex items-center justify-between">
-                              <span className="text-muted-foreground">{p.metodo}</span>
-                              <span className="font-medium">{formatCurrency(p.monto)}</span>
+                      {detailPagos.length > 0 ? (() => {
+                        const ncPagos = detailPagos.filter(p => p.metodo.includes("Nota de Crédito"));
+                        const realPagos = detailPagos.filter(p => !p.metodo.includes("Nota de Crédito") && !p.metodo.includes("(a cobrar)"));
+                        const ncTotal = ncPagos.reduce((s, p) => s + p.monto, 0);
+                        const pagadoTotal = realPagos.reduce((s, p) => s + p.monto, 0);
+                        return (
+                          <>
+                            {realPagos.map((p, i) => (
+                              <div key={i} className="flex items-center justify-between">
+                                <span className="text-muted-foreground">{p.metodo}</span>
+                                <span className="font-medium">{formatCurrency(p.monto)}</span>
+                              </div>
+                            ))}
+                            {ncPagos.map((p, i) => (
+                              <div key={`nc-${i}`} className="flex items-center justify-between">
+                                <span className="text-red-600">{p.metodo}</span>
+                                <span className="font-medium text-red-600">-{formatCurrency(p.monto)}</span>
+                              </div>
+                            ))}
+                            <div className="border-t pt-2 flex items-center justify-between">
+                              <span className="font-bold">Total</span>
+                              <span className="font-bold text-base">{formatCurrency(pagadoTotal - ncTotal)}</span>
                             </div>
-                          ))}
-                          <div className="border-t pt-2 flex items-center justify-between">
-                            <span className="font-bold">Total</span>
-                            <span className="font-bold text-base">{formatCurrency(poSelectedPedido.total)}</span>
-                          </div>
-                        </>
-                      ) : (
+                          </>
+                        );
+                      })() : (
                         <div className="flex items-center justify-between">
                           <span className="font-medium">{formatPago((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago)}</span>
                           <span className="font-bold">{formatCurrency(poSelectedPedido.total)}</span>
@@ -2318,11 +2336,21 @@ export default function ListadoVentasPage() {
                           // Refresh payment breakdown
                           if (ventaId) {
                             const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
-                              supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+                              supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
                               supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
                               supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
                             ]);
-                            const newPagos = (movs || []).map((m: any) => ({ metodo: m.metodo_pago, monto: m.monto }));
+                            const newPagos: { metodo: string; monto: number }[] = [];
+                            for (const m of movs || []) {
+                              let label = m.metodo_pago;
+                              if (m.metodo_pago === "Transferencia" && m.descripcion) {
+                                const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
+                                if (match) label = `Transferencia (${match[1]}%)`;
+                              }
+                              const existing = newPagos.find((p) => p.metodo === label);
+                              if (existing) existing.monto += m.monto;
+                              else newPagos.push({ metodo: label, monto: m.monto });
+                            }
                             const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
                             if (ccTotal > 0) newPagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
                             const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
@@ -2555,17 +2583,16 @@ export default function ListadoVentasPage() {
 
                   {/* Totals */}
                   <div className="mt-3 space-y-1 text-sm text-right">
-                    <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
+                    {(descPct > 0 || recPct > 0 || envio > 0) && (
+                      <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
+                    )}
                     {descPct > 0 && (
                       <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
-                    )}
-                    {recPct > 0 && (
-                      <p className="text-muted-foreground">Recargo ({recPct}%): <span className="font-medium text-foreground">+{formatCurrency(itemsSubtotal * recPct / 100)}</span></p>
                     )}
                     {envio > 0 && (
                       <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
                     )}
-                    <p className="text-base font-bold">Total: {formatCurrency(computedTotal)}</p>
+                    <p className="text-base font-bold">Total: {formatCurrency(poSelectedPedido.total)}</p>
                   </div>
                 </div>
               </div>
