@@ -450,14 +450,16 @@ export default function VentasPage() {
 
   const total = baseTotal + transferSurcharge;
 
-  const mixtoSum = Math.round((mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente) * 100) / 100;
-  // Compare against baseTotal (without surcharge) — surcharge is added automatically on transfer
-  const mixtoRemaining = formaPago === "Mixto" ? Math.round((baseTotal - mixtoSum) * 100) / 100 : 0;
-  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 0.01 && mixtoSum > 0);
-
   const cashReceivedNum = parseFloat(cashReceived) || 0;
   const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
   const totalACobrar = total + saldoPendienteCliente;
+
+  // Mixto base: includes saldo pendiente when cobrarSaldo is checked
+  const mixtoBase = baseTotal + saldoPendienteCliente;
+  const mixtoSum = Math.round((mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente) * 100) / 100;
+  // Compare against mixtoBase (sale + saldo pendiente, without surcharge)
+  const mixtoRemaining = formaPago === "Mixto" ? Math.round((mixtoBase - mixtoSum) * 100) / 100 : 0;
+  const mixtoValid = formaPago !== "Mixto" || (Math.abs(mixtoRemaining) < 0.01 && mixtoSum > 0);
   const cashChange = cashReceivedNum - totalACobrar;
 
   // ---------- presentaciones ----------
@@ -795,9 +797,11 @@ export default function VentasPage() {
       values[changedField] = changedValue;
 
       // Recalculate total with surcharge based on current transfer value
+      // Include saldo pendiente when cobrarSaldo is checked
+      const saldoExtra = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
       const currentTransfer = values["transferencia"] || 0;
       const surcharge = currentTransfer * (porcentajeTransferencia / 100);
-      const effectiveTotal = baseTotal + surcharge;
+      const effectiveTotal = baseTotal + saldoExtra + surcharge;
 
       // Find the last active field that is NOT the changed field
       const others = active.filter((f) => f !== changedField);
@@ -818,7 +822,7 @@ export default function VentasPage() {
         if (lastOther === "corriente") setMixtoCuentaCorriente(Math.max(0, Math.round(remaining * 100) / 100));
       }
     },
-    [baseTotal, porcentajeTransferencia, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente, mixtoToggleEfectivo, mixtoToggleTransferencia, mixtoToggleCuentaCorriente]
+    [baseTotal, porcentajeTransferencia, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente, mixtoToggleEfectivo, mixtoToggleTransferencia, mixtoToggleCuentaCorriente, cobrarSaldo, selectedClient]
   );
 
   const handleMixtoInputChange = (field: string, value: number, setter: (v: number) => void) => {
@@ -1683,7 +1687,59 @@ export default function VentasPage() {
 
           // Handle CC entry separately with atomic saldo update
           const ccEntry = mixtoEntries.find((e) => e.metodo === "Cuenta Corriente");
-          if (ccEntry && clientId) {
+          const cobrarSaldoInMixto = cobrarSaldo && clientId && saldoRealAntesDeTodo > 0;
+
+          if (cobrarSaldoInMixto && clientId) {
+            // ─── Combined flow: sale + cobro saldo in one operation ───
+            // The Mixto total includes saldo pendiente. The CC portion is the NET remaining debt.
+            // We need to split it into: new sale debt (debe) and old debt collection (haber).
+            const totalPaid = mixtoEfectivo + mixtoTransferencia; // actual cash+transfer received
+            const saleCCPortion = Math.max(0, Math.round((baseTotal - totalPaid) * 100) / 100); // unpaid portion of this sale
+            const oldDebtCollected = Math.min(saldoRealAntesDeTodo, Math.max(0, Math.round((totalPaid - baseTotal) * 100) / 100)); // excess payment applied to old debt
+
+            let saldoActualMixto = 0;
+            let newSaldoMixto = 0;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const { data: freshCCMixto } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+              saldoActualMixto = freshCCMixto?.saldo ?? 0;
+              // Net saldo change: + new sale debt - old debt collected
+              newSaldoMixto = Math.round((saldoActualMixto + saleCCPortion - oldDebtCollected) * 100) / 100;
+              const { data: mixtoUpd } = await supabase.from("clientes").update({ saldo: newSaldoMixto }).eq("id", clientId).eq("saldo", saldoActualMixto).select("id");
+              if (mixtoUpd && mixtoUpd.length > 0) break;
+            }
+
+            // CC entry for the sale portion (new debt)
+            if (saleCCPortion > 0) {
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: clientId,
+                fecha: hoy,
+                comprobante: `Venta #${numero}`,
+                descripcion: `Venta - Cuenta Corriente (parcial)`,
+                debe: saleCCPortion,
+                haber: 0,
+                saldo: saldoActualMixto + saleCCPortion,
+                forma_pago: "Cuenta Corriente",
+                venta_id: venta.id,
+              });
+            }
+            // CC entry for old debt collection (cobro)
+            if (oldDebtCollected > 0) {
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: clientId,
+                fecha: hoy,
+                comprobante: `Cobro saldo - Venta #${numero}`,
+                descripcion: `Cobro saldo anterior (Mixto)`,
+                debe: 0,
+                haber: oldDebtCollected,
+                saldo: newSaldoMixto,
+                forma_pago: "Efectivo",
+                venta_id: venta.id,
+              });
+            }
+            // Update local state
+            setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoMixto } : c));
+          } else if (ccEntry && clientId) {
+            // ─── Standard flow: no cobrar saldo, just CC portion of the sale ───
             let saldoActualMixto = 0;
             let newSaldoMixto = 0;
             for (let attempt = 0; attempt < 5; attempt++) {
@@ -1708,7 +1764,7 @@ export default function VentasPage() {
               venta_id: venta.id,
             });
           }
-          // Handle non-CC entries (Efectivo, Transferencia)
+          // Handle non-CC entries (Efectivo, Transferencia) → caja
           for (const entry of mixtoEntries) {
             if (entry.metodo !== "Cuenta Corriente") {
               const mixCuenta = entry.metodo === "Transferencia" && cuentaBancariaId
@@ -1745,8 +1801,9 @@ export default function VentasPage() {
         }
 
         // Collect pending balance if toggled
+        // For Mixto: already handled above in the combined flow — skip here
         // Collect ONLY the pre-existing debt (not what was just added by this sale's CC)
-        if (formaPago !== "Pendiente" && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
+        if (formaPago !== "Pendiente" && formaPago !== "Mixto" && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
           const saldoActualDB = saldoRealAntesDeTodo;
           if (saldoActualDB > 0) {
             const saldoPendiente = saldoActualDB;
@@ -2453,9 +2510,17 @@ export default function VentasPage() {
 
               <div className="space-y-4">
                 {/* Total */}
-                <div className="rounded-lg border px-4 py-3 flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Total a pagar</span>
-                  <span className="text-lg font-bold text-emerald-600">{formatCurrency(baseTotal)}</span>
+                <div className="rounded-lg border px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Total a pagar</span>
+                    <span className="text-lg font-bold text-emerald-600">{formatCurrency(mixtoBase)}</span>
+                  </div>
+                  {saldoPendienteCliente > 0 && (
+                    <div className="flex items-center justify-between text-[10px] text-orange-600 mt-1">
+                      <span>Incluye saldo pendiente</span>
+                      <span>+{formatCurrency(saldoPendienteCliente)}</span>
+                    </div>
+                  )}
                 </div>
                 {mixtoToggleTransferencia && mixtoTransferencia > 0 && porcentajeTransferencia > 0 && (
                   <div className="flex items-center justify-between text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg -mt-2">
@@ -2531,7 +2596,7 @@ export default function VentasPage() {
                 {mixtoActiveMethods.length >= 2 && (
                   <div className="flex items-center justify-between text-xs">
                     <span className={Math.abs(mixtoRemaining) < 1 ? "text-emerald-600 font-medium" : "text-amber-600 font-medium"}>
-                      Asignado: {formatCurrency(mixtoSum)} / {formatCurrency(baseTotal)}
+                      Asignado: {formatCurrency(mixtoSum)} / {formatCurrency(mixtoBase)}
                     </span>
                     {mixtoRemaining > 0.01 && (
                       <span className="text-amber-600 font-medium">Falta: {formatCurrency(mixtoRemaining)}</span>
@@ -2567,18 +2632,18 @@ export default function VentasPage() {
                                 value={value ? new Intl.NumberFormat("es-AR").format(value) : ""}
                                 onChange={(e) => {
                                   const raw = e.target.value.replace(/\./g, "").replace(",", ".");
-                                  const val = Math.min(parseFloat(raw) || 0, baseTotal);
+                                  const val = Math.min(parseFloat(raw) || 0, mixtoBase);
                                   setter(val);
                                   // Auto-calculate the other field as remainder
                                   if (mixtoToggleTransferencia) {
                                     const otherNonTransf = key === "efectivo"
                                       ? mixtoCuentaCorriente
                                       : mixtoEfectivo;
-                                    setMixtoTransferencia(Math.max(0, baseTotal - val - otherNonTransf));
+                                    setMixtoTransferencia(Math.max(0, mixtoBase - val - otherNonTransf));
                                   } else {
                                     // No transfer: auto-fill the other field
                                     const otherSetter = key === "efectivo" ? setMixtoCuentaCorriente : setMixtoEfectivo;
-                                    otherSetter(Math.max(0, baseTotal - val));
+                                    otherSetter(Math.max(0, mixtoBase - val));
                                   }
                                 }}
                                 className="pl-6 h-9 text-right text-sm"

@@ -652,26 +652,14 @@ export default function ListadoVentasPage() {
   const preparePrint = async (v: VentaRow) => {
     const { data } = await supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at");
     const items = (data as VentaItemRow[]) || [];
+    // Always use current client saldo for reprints (reflects latest cobranzas)
     let saldo = 0;
     let saldoAnteriorCC = 0;
     if (v.cliente_id) {
-      // Get saldo at the time of this sale from cuenta_corriente (not current client saldo)
-      const { data: ccRow } = await supabase
-        .from("cuenta_corriente")
-        .select("saldo, debe")
-        .eq("venta_id", v.id)
-        .eq("cliente_id", v.cliente_id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      if (ccRow) {
-        saldo = ccRow.saldo;
-        saldoAnteriorCC = ccRow.saldo - ccRow.debe;
-      } else {
-        // No CC entry for this sale — use current client saldo as fallback
-        const { data: cd } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
-        saldo = cd?.saldo || 0;
-      }
+      const { data: cd } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
+      saldo = cd?.saldo || 0;
+      // saldoAnteriorCC not applicable for reprints — just show current state
+      saldoAnteriorCC = 0;
     }
 
     // Load combo data for combo products
@@ -760,7 +748,7 @@ export default function ListadoVentasPage() {
       metodoEntrega: v.metodo_entrega || null,
       vendedor: vendedorName,
       fecha: formatDatePDF(v.fecha),
-      saldoAnterior: saldoAnteriorCC || (saldo - (pagoCC || 0)),
+      saldoAnterior: saldo, // current saldo at time of reprint
       saldoNuevo: saldo,
       items: lineItems,
       pagoEfectivo: pagoEf || undefined,
