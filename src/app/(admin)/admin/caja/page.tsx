@@ -708,7 +708,7 @@ export default function CajaPage() {
       }
     }
 
-    const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
+    // totalVentas is computed AFTER ventasDesglose (below) as the sum of actual money flow
 
     // Cobros de cuenta corriente del día (pagos que reducen deuda CC)
     const cobrosCC = movements.filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC"));
@@ -824,6 +824,9 @@ export default function CajaPage() {
         }
       }
     }
+
+    // totalVentas = sum of all desglose entries (actual money flow, not venta.total)
+    const totalVentas = Object.values(ventasDesglose).reduce((a, d) => a + d.total, 0);
 
     return {
       ventasEfectivo,
