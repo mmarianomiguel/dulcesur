@@ -1621,15 +1621,6 @@ export default function HojaDeRutaPage() {
                         </Select>
                       </div>
                     )}
-                    {surchargeDialog > 0 && (
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800">
-                        El cliente debe transferir <strong>{formatCurrency(payTransferencia + surchargeDialog)}</strong> (incluye recargo {porcentajeTransferencia}%: {formatCurrency(surchargeDialog)})
-                      </div>
-                    )}
-                    <div className="text-xs text-right text-muted-foreground">
-                      Total a cobrar: <strong className="text-foreground">{formatCurrency(payEfectivo + payTransferencia)}</strong>
-                      {surchargeDialog > 0 && <span className="text-blue-600 ml-1">(+{formatCurrency(surchargeDialog)} recargo)</span>}
-                    </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1648,20 +1639,56 @@ export default function HojaDeRutaPage() {
                         </Select>
                       </div>
                     )}
-                    {surchargeDialog > 0 && (
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800 mt-2">
-                        El cliente debe transferir <strong>{formatCurrency(payMonto + surchargeDialog)}</strong> (incluye recargo {porcentajeTransferencia}%: {formatCurrency(surchargeDialog)})
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* Pending balance warning */}
-                {saldoPendiente > 0 && payVenta.cliente_id && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                    El saldo pendiente de <strong>{formatCurrency(saldoPendiente)}</strong> se cargará a la cuenta corriente del cliente.
-                  </div>
-                )}
+                {/* ── Payment breakdown summary ── */}
+                {(() => {
+                  const efectivoFinal = payMetodo === "Mixto" ? payEfectivo : payMetodo === "Efectivo" ? payMonto : 0;
+                  const transfBase = payMetodo === "Mixto" ? payTransferencia : payMetodo === "Transferencia" ? payMonto : 0;
+                  const recargo = surchargeDialog;
+                  const transfConRecargo = transfBase + recargo;
+                  const totalEntraCaja = efectivoFinal + transfConRecargo;
+                  const cobradoBase = Math.min(totalPagando, totalDebeGrupo);
+                  return (
+                    <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5 text-sm">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Resumen del cobro</p>
+                      {efectivoFinal > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Efectivo</span>
+                          <span className="font-medium">{formatCurrency(efectivoFinal)}</span>
+                        </div>
+                      )}
+                      {transfBase > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Transferencia</span>
+                          <span className="font-medium">{formatCurrency(transfBase)}</span>
+                        </div>
+                      )}
+                      {recargo > 0 && (
+                        <div className="flex justify-between text-blue-700">
+                          <span>Recargo transferencia ({porcentajeTransferencia}%)</span>
+                          <span className="font-medium">+{formatCurrency(recargo)}</span>
+                        </div>
+                      )}
+                      {saldoPendiente > 0 && payVenta.cliente_id && (
+                        <div className="flex justify-between text-amber-700">
+                          <span>Saldo a Cuenta Corriente</span>
+                          <span className="font-medium">{formatCurrency(saldoPendiente)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t pt-1.5 mt-1">
+                        <span className="font-semibold">Total ingresa a caja</span>
+                        <span className="font-bold text-base">{formatCurrency(totalEntraCaja)}</span>
+                      </div>
+                      {recargo > 0 && (
+                        <p className="text-xs text-blue-600 text-right">El cliente debe transferir {formatCurrency(transfConRecargo)}</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Pending balance warning — only if no client for CC */}
                 {saldoPendiente > 0 && !payVenta.cliente_id && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                     Esta venta no tiene cliente asignado. No se puede dejar saldo pendiente en cuenta corriente.
