@@ -244,6 +244,7 @@ export default function DashboardPage() {
   // ─── Combo data for preview ───
   const [comboProductIds, setComboProductIds] = useState<Set<string>>(new Set());
   const [comboItemsMap, setComboItemsMap] = useState<Record<string, { nombre: string; cantidad: number }[]>>({});
+  const [ncPorPedido, setNcPorPedido] = useState<Record<string, number>>({});
 
   // ─── New dashboard widgets state ───
   const [turnoAbierto, setTurnoAbierto] = useState<{ id: string; apertura: string; saldo_inicial: number } | null>(null);
@@ -334,15 +335,28 @@ export default function DashboardPage() {
     const allProductIds = rows.flatMap((v) => v.venta_items.map((i) => i.producto_id)).filter(Boolean) as string[];
     const numeros = rows.map((v) => v.numero);
 
-    // Fire both independent queries in parallel
-    const [prodsResult, pedidosTiendaResult] = await Promise.all([
+    // Fire all independent queries in parallel
+    const ventaIds = rows.map((v) => v.id);
+    const [prodsResult, pedidosTiendaResult, ncResult] = await Promise.all([
       allProductIds.length > 0
         ? supabase.from("productos").select("id, es_combo").in("id", [...new Set(allProductIds)])
         : Promise.resolve({ data: [] }),
       numeros.length > 0
         ? supabase.from("pedidos_tienda").select("numero, fecha_entrega, estado").in("numero", numeros)
         : Promise.resolve({ data: [] }),
+      ventaIds.length > 0
+        ? supabase.from("ventas").select("remito_origen_id, total").in("remito_origen_id", ventaIds).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada")
+        : Promise.resolve({ data: [] }),
     ]);
+
+    // Build NC map
+    const ncMap: Record<string, number> = {};
+    ((ncResult.data || []) as any[]).forEach((nc: any) => {
+      if (nc.remito_origen_id) {
+        ncMap[nc.remito_origen_id] = (ncMap[nc.remito_origen_id] || 0) + (nc.total || 0);
+      }
+    });
+    setNcPorPedido(ncMap);
 
     // Process combos
     if (allProductIds.length > 0) {
@@ -620,14 +634,16 @@ export default function DashboardPage() {
 
   // ─── Pedido actions ───
   const handleMarkDelivered = async (venta: PedidoVenta) => {
-    // Check how much is already paid in caja + cuenta corriente (NC excluded — handled separately)
-    const [{ data: cajaMovs }, { data: ccMovs }] = await Promise.all([
+    // Check how much is already paid in caja + cuenta corriente + NC refunds
+    const [{ data: cajaMovs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
       supabase.from("caja_movimientos").select("monto").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
       supabase.from("cuenta_corriente").select("debe").eq("venta_id", venta.id),
+      supabase.from("ventas").select("total").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
     ]);
     const pagadoCaja = (cajaMovs || []).reduce((s: number, m: any) => s + m.monto, 0);
     const pagadoCC = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
-    const pagado = pagadoCaja + pagadoCC;
+    const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+    const pagado = pagadoCaja + pagadoCC + ncTotal;
     const pendiente = Math.max(0, venta.total - pagado);
 
     if (pendiente > 0 && !(venta as any).cliente_id) {
@@ -877,7 +893,7 @@ export default function DashboardPage() {
   if (pedidoFilter === "envio") tabPedidos = tabPedidos.filter((p) => p.metodo_entrega === "envio");
   if (pedidoFilter === "retiro") tabPedidos = tabPedidos.filter((p) => p.metodo_entrega === "retiro");
 
-  const totalPedidos = tabPedidos.reduce((s, p) => s + p.total, 0);
+  const totalPedidos = tabPedidos.reduce((s, p) => s + p.total - (ncPorPedido[p.id] || 0), 0);
   const countEnvio = pedidosOnline.filter((p) => p.metodo_entrega === "envio").length;
   const countRetiro = pedidosOnline.filter((p) => p.metodo_entrega === "retiro").length;
 
@@ -1260,7 +1276,8 @@ export default function DashboardPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className="font-bold text-sm">{formatCurrency(p.total)}</span>
+                            <span className="font-bold text-sm">{formatCurrency(p.total - (ncPorPedido[p.id] || 0))}</span>
+                            {(ncPorPedido[p.id] || 0) > 0 && <span className="block text-[10px] text-amber-600">NC -{formatCurrency(ncPorPedido[p.id])}</span>}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -1653,8 +1670,9 @@ export default function DashboardPage() {
                 <p className="text-sm text-emerald-800">
                   Pedido <span className="font-bold">#{deliveryConfirm.venta.numero}</span> de{" "}
                   <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "cliente"}</span> por{" "}
-                  <span className="font-bold">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.venta.total)}</span>
+                  <span className="font-bold">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.venta.total - (ncPorPedido[deliveryConfirm.venta.id] || 0))}</span>
                 </p>
+                {(ncPorPedido[deliveryConfirm.venta?.id] || 0) > 0 && <p className="text-xs text-amber-600 mt-1">Incluye NC -{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(ncPorPedido[deliveryConfirm.venta.id])}</p>}
                 <p className="text-xs text-emerald-600 mt-1">Pago completo — listo para entregar</p>
               </div>
             )}

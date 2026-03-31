@@ -125,6 +125,7 @@ export default function HojaDeRutaPage() {
 
   // Track how much was actually paid per order (from caja_movimientos)
   const [pagadoPorVenta, setPagadoPorVenta] = useState<Record<string, number>>({});
+  const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
 
   const fetchVentas = useCallback(async () => {
     setLoading(true);
@@ -181,14 +182,18 @@ export default function HojaDeRutaPage() {
         pagadoMap[m.referencia_id] = (pagadoMap[m.referencia_id] || 0) + m.monto;
       });
       // Add NC refund amounts as "paid" (they reduce what the client owes)
+      const ncMap: Record<string, number> = {};
       (ncVentas || []).forEach((nc: any) => {
         if (nc.remito_origen_id) {
           pagadoMap[nc.remito_origen_id] = (pagadoMap[nc.remito_origen_id] || 0) + (nc.total || 0);
+          ncMap[nc.remito_origen_id] = (ncMap[nc.remito_origen_id] || 0) + (nc.total || 0);
         }
       });
       setPagadoPorVenta(pagadoMap);
+      setNcPorVenta(ncMap);
     } else {
       setPagadoPorVenta({});
+      setNcPorVenta({});
     }
 
     // Initialize order sequence
@@ -606,7 +611,7 @@ export default function HojaDeRutaPage() {
 
   // Stats (from filtered)
   const totalPedidos = filteredVentas.length;
-  const valorTotal = filteredVentas.reduce((s, v) => s + v.total, 0);
+  const valorTotal = filteredVentas.reduce((s, v) => s + v.total - (ncPorVenta[v.id] || 0), 0);
   const totalYaPagado = filteredVentas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
   const totalACobrar = Math.max(0, valorTotal - totalYaPagado);
 
@@ -884,7 +889,7 @@ export default function HojaDeRutaPage() {
                                     </Badge>
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-semibold text-foreground">
-                                    {formatCurrency(venta.total)}
+                                    {formatCurrency(ncMonto > 0 ? venta.total - ncMonto : venta.total)}
                                   </td>
                                   <td className={`py-2.5 px-3 text-right font-medium ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
                                     {cobradoReal > 0 ? formatCurrency(cobradoReal) : "$0"}
@@ -1084,7 +1089,8 @@ export default function HojaDeRutaPage() {
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-2xl font-bold text-foreground">{formatCurrency(venta.total)}</p>
+                      <p className="text-2xl font-bold text-foreground">{formatCurrency(venta.total - (ncPorVenta[venta.id] || 0))}</p>
+                      {(ncPorVenta[venta.id] || 0) > 0 && <p className="text-xs text-amber-600">NC -{formatCurrency(ncPorVenta[venta.id])}</p>}
                       <Badge variant="secondary" className={debe > 0 ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"}>
                         {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
                       </Badge>
@@ -1173,7 +1179,7 @@ export default function HojaDeRutaPage() {
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-foreground">{formatCurrency(venta.total)}</p>
+                        <p className="text-sm font-bold text-foreground">{formatCurrency(venta.total - (ncPorVenta[venta.id] || 0))}</p>
                         <span className={`text-xs ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
                           {debe > 0 ? `Debe ${formatCurrency(debe)}` : "Pagado"}
                         </span>
@@ -1295,7 +1301,8 @@ export default function HojaDeRutaPage() {
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-lg font-bold text-foreground">{formatCurrency(venta.total)}</p>
+                            <p className="text-lg font-bold text-foreground">{formatCurrency(venta.total - (ncPorVenta[venta.id] || 0))}</p>
+                            {(ncPorVenta[venta.id] || 0) > 0 && <p className="text-xs text-amber-600">NC -{formatCurrency(ncPorVenta[venta.id])}</p>}
                             <p className="text-xs text-muted-foreground">{venta.forma_pago}</p>
                             <p className="text-xs text-muted-foreground">{venta.fecha}</p>
                           </div>
