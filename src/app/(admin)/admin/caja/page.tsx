@@ -40,6 +40,7 @@ import {
   AlertTriangle,
   Download,
   ChevronDown,
+  DollarSign,
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
@@ -1247,42 +1248,48 @@ export default function CajaPage() {
                 </CardContent>
               </Card>
             ))}
-            {/* Cuenta Corriente card with cobros breakdown */}
+            {/* Cuenta Corriente — ventas fiadas hoy */}
             <Card>
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center gap-3">
                   <Wallet className="w-5 h-5 text-muted-foreground shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground truncate">Cuenta Corriente</p>
+                    <p className="text-xs text-muted-foreground truncate">Ventas en Cta Cte</p>
                     <p className="text-base font-semibold">{formatCurrency(ventasCuentaCorriente)}</p>
                   </div>
                 </div>
-                {cobrosCCTotal > 0 && (
-                  <div className="mt-2 pt-2 border-t space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">Facturado en CC</span>
-                      <span className="font-medium">{formatCurrency(ventasCuentaCorriente)}</span>
-                    </div>
-                    {cobrosCCEfectivo > 0 && (
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-emerald-600">Cobrado en efectivo</span>
-                        <span className="font-medium text-emerald-600">-{formatCurrency(cobrosCCEfectivo)}</span>
-                      </div>
-                    )}
-                    {cobrosCCTransferencia > 0 && (
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-emerald-600">Cobrado en transferencia</span>
-                        <span className="font-medium text-emerald-600">-{formatCurrency(cobrosCCTransferencia)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-[11px] border-t pt-1">
-                      <span className="font-medium text-orange-600">Pendiente CC</span>
-                      <span className="font-semibold text-orange-600">{formatCurrency(Math.max(0, ventasCuentaCorriente - cobrosCCTotal))}</span>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
+            {/* Cobros CC del día — plata que entró por cobros de deuda */}
+            {cobrosCCTotal > 0 && (
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center gap-3">
+                    <DollarSign className="w-5 h-5 text-emerald-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground truncate">Cobros Cta Cte</p>
+                      <p className="text-base font-semibold text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
+                    </div>
+                  </div>
+                  {(cobrosCCEfectivo > 0 && cobrosCCTransferencia > 0) && (
+                    <div className="mt-2 pt-2 border-t space-y-1">
+                      {cobrosCCEfectivo > 0 && (
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-muted-foreground">Efectivo</span>
+                          <span className="font-medium">{formatCurrency(cobrosCCEfectivo)}</span>
+                        </div>
+                      )}
+                      {cobrosCCTransferencia > 0 && (
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-muted-foreground">Transferencia</span>
+                          <span className="font-medium">{formatCurrency(cobrosCCTransferencia)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Transactions table */}
