@@ -630,6 +630,8 @@ export default function CheckoutPage() {
 
       // Also create a venta record so it appears in the admin sales listing
       const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      // For delivery orders, use the delivery date as the venta date so it appears on the correct day
+      const ventaFecha = (metodoEntrega !== "retiro" && fechaEntrega) ? fechaEntrega : hoy;
       // Get linked cliente_id from clientes_auth
       let ventaClienteId = null;
       if (clienteId) {
@@ -647,7 +649,7 @@ export default function CheckoutPage() {
       const { data: venta, error: ventaError } = await supabase.from("ventas").insert({
         numero,
         tipo_comprobante: "Pedido Web",
-        fecha: hoy,
+        fecha: ventaFecha,
         cliente_id: ventaClienteId,
         forma_pago: metodoPago === "efectivo" ? "Efectivo" : metodoPago === "transferencia" ? "Transferencia" : "Mixto",
         moneda: "Peso",

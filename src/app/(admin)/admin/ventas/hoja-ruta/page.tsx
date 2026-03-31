@@ -392,7 +392,7 @@ export default function HojaDeRutaPage() {
   // Payment dialog state
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [payVenta, setPayVenta] = useState<VentaRow | null>(null);
-  const [payMetodo, setPayMetodo] = useState<"Efectivo" | "Transferencia" | "Mixto">("Efectivo");
+  const [payMetodo, setPayMetodo] = useState<"Efectivo" | "Transferencia" | "Mixto" | "Cuenta Corriente">("Efectivo");
   const [payMonto, setPayMonto] = useState(0);
   const [payEfectivo, setPayEfectivo] = useState(0);
   const [payTransferencia, setPayTransferencia] = useState(0);
@@ -443,8 +443,8 @@ export default function HojaDeRutaPage() {
     const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
     const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
 
-    let totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMonto;
-    if (totalPagando <= 0) return;
+    let totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMetodo === "Cuenta Corriente" ? 0 : payMonto;
+    if (totalPagando <= 0 && payMetodo !== "Cuenta Corriente") return;
 
     // Transfer surcharge
     let surchargeAmount = 0;
@@ -516,7 +516,14 @@ export default function HojaDeRutaPage() {
         });
       }
       // Update forma_pago
-      await supabase.from("ventas").update({ forma_pago: payMetodo }).eq("id", venta.id);
+      await supabase.from("ventas").update({ forma_pago: payMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : payMetodo }).eq("id", venta.id);
+    }
+
+    // For Cuenta Corriente: all goes to CC, update forma_pago for all ventas
+    if (payMetodo === "Cuenta Corriente") {
+      for (const v of allVentas) {
+        await supabase.from("ventas").update({ forma_pago: "Cuenta Corriente" }).eq("id", v.id);
+      }
     }
 
     // Pending balance → cuenta corriente (aggregated for the group)
@@ -1535,9 +1542,9 @@ export default function HojaDeRutaPage() {
       </Dialog>
 
       {/* Payment Dialog */}
-      <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
+      <Dialog open={payDialogOpen} onOpenChange={(v) => { if (!v) setPayDialogOpen(false); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
+          <DialogHeader className="pr-8">
             <DialogTitle>Registrar Pago</DialogTitle>
           </DialogHeader>
           {payVenta && (() => {
@@ -1578,27 +1585,31 @@ export default function HojaDeRutaPage() {
                 {/* Payment method */}
                 <div className="space-y-2">
                   <Label>Método de pago</Label>
-                  <div className="flex gap-2">
-                    {(["Efectivo", "Transferencia", "Mixto"] as const).map((m) => (
+                  <div className="flex gap-2 flex-wrap">
+                    {(["Efectivo", "Transferencia", "Mixto", ...(payVenta.cliente_id ? ["Cuenta Corriente"] : [])] as const).map((m) => (
                       <button
                         key={m}
                         onClick={() => {
-                          setPayMetodo(m);
+                          setPayMetodo(m as any);
                           if (m === "Mixto") { setPayEfectivo(Math.floor(totalDebeGrupo / 2)); setPayTransferencia(totalDebeGrupo - Math.floor(totalDebeGrupo / 2)); }
-                          else { setPayMonto(totalDebeGrupo); }
+                          else if (m !== "Cuenta Corriente") { setPayMonto(totalDebeGrupo); }
                         }}
-                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
+                        className={`flex-1 min-w-[80px] py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
                           payMetodo === m ? "bg-foreground text-white border-foreground" : "bg-white text-muted-foreground border-border hover:border-foreground/30"
                         }`}
                       >
-                        {m}
+                        {m === "Cuenta Corriente" ? "Cta Cte" : m}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* Amount inputs */}
-                {payMetodo === "Mixto" ? (
+                {payMetodo === "Cuenta Corriente" ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    Se cargará <strong>{formatCurrency(totalDebeGrupo)}</strong> a la cuenta corriente del cliente.
+                  </div>
+                ) : payMetodo === "Mixto" ? (
                   <div className="space-y-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Efectivo</Label>
@@ -1643,7 +1654,7 @@ export default function HojaDeRutaPage() {
                 )}
 
                 {/* ── Payment breakdown summary ── */}
-                {(() => {
+                {payMetodo !== "Cuenta Corriente" && (() => {
                   const efectivoFinal = payMetodo === "Mixto" ? payEfectivo : payMetodo === "Efectivo" ? payMonto : 0;
                   const transfBase = payMetodo === "Mixto" ? payTransferencia : payMetodo === "Transferencia" ? payMonto : 0;
                   const recargo = surchargeDialog;
@@ -1697,9 +1708,9 @@ export default function HojaDeRutaPage() {
 
                 <div className="flex justify-end gap-2 pt-1">
                   <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancelar</Button>
-                  <Button onClick={handleRegistrarPago} disabled={paySaving || totalPagando <= 0 || (saldoPendiente > 0 && !payVenta.cliente_id)}>
+                  <Button onClick={handleRegistrarPago} disabled={paySaving || (payMetodo !== "Cuenta Corriente" && totalPagando <= 0) || (payMetodo === "Cuenta Corriente" && !payVenta.cliente_id) || (saldoPendiente > 0 && !payVenta.cliente_id)}>
                     {paySaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Confirmar Cobro — {formatCurrency(Math.min(totalPagando, totalDebeGrupo) + surchargeDialog)}
+                    {payMetodo === "Cuenta Corriente" ? `Cargar a Cta Cte — ${formatCurrency(totalDebeGrupo)}` : `Confirmar Cobro — ${formatCurrency(Math.min(totalPagando, totalDebeGrupo) + surchargeDialog)}`}
                   </Button>
                 </div>
               </div>
