@@ -518,8 +518,12 @@ export default function HojaDeRutaPage() {
           referencia_id: venta.id, referencia_tipo: "venta",
         });
       }
-      // Update forma_pago
-      await supabase.from("ventas").update({ forma_pago: payMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : payMetodo }).eq("id", venta.id);
+      // Update forma_pago + cuenta_transferencia_alias
+      const ventaUpdate: Record<string, any> = { forma_pago: payMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : payMetodo };
+      if ((payMetodo === "Transferencia" || payMetodo === "Mixto") && cuentaSeleccionada) {
+        ventaUpdate.cuenta_transferencia_alias = cuentaSeleccionada.alias || cuentaSeleccionada.nombre;
+      }
+      await supabase.from("ventas").update(ventaUpdate).eq("id", venta.id);
     }
 
     // For Cuenta Corriente: all goes to CC, update forma_pago for all ventas
@@ -547,12 +551,11 @@ export default function HojaDeRutaPage() {
       await supabase.from("clientes").update({ saldo: runningClientSaldo }).eq("id", payVenta.cliente_id);
     }
 
-    // Auto-mark as delivered if fully paid
-    if (saldoPendiente <= 0) {
-      for (const v of allVentas) {
-        await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
-        await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
-      }
+    // Mark as delivered — payment was registered so the order has been delivered
+    // (even if there's pending balance going to CC, the physical delivery happened)
+    for (const v of allVentas) {
+      await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
+      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
     }
 
     setPaySaving(false);

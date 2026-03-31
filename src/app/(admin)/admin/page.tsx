@@ -707,6 +707,13 @@ export default function DashboardPage() {
       }
 
       if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+
+      // Update forma_pago + cuenta_transferencia_alias on the venta
+      const ventaUpdate: Record<string, any> = { forma_pago: metodo };
+      if ((metodo === "Transferencia" || metodo === "Mixto") && cobroCuentaBancaria) {
+        ventaUpdate.cuenta_transferencia_alias = cobroCuentaBancaria;
+      }
+      await supabase.from("ventas").update(ventaUpdate).eq("id", venta.id);
     }
 
     await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id);

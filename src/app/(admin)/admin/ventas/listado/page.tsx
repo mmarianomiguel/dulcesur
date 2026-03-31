@@ -2305,9 +2305,14 @@ export default function ListadoVentasPage() {
                             await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: `Saldo pendiente a cuenta corriente`, debe: realRestante, haber: 0, saldo: newSaldo, forma_pago: cobroMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: ventaId });
                           }
 
-                          // Update forma_pago on venta
+                          // Update forma_pago + cuenta + mark as delivered on venta
                           if (ventaId) {
-                            await supabase.from("ventas").update({ forma_pago: cobroMetodo }).eq("id", ventaId);
+                            const ventaUpd: Record<string, any> = { forma_pago: cobroMetodo, entregado: true, estado: "entregado" };
+                            if ((cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && cobroCuentaBancaria) {
+                              ventaUpd.cuenta_transferencia_alias = cobroCuentaBancaria;
+                            }
+                            await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
+                            await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", poSelectedPedido.numero);
                           }
 
                           // Refresh payment breakdown
