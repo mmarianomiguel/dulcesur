@@ -2148,7 +2148,7 @@ export default function ListadoVentasPage() {
                             ))}
                             <div className="border-t pt-2 flex items-center justify-between">
                               <span className="font-bold">Total</span>
-                              <span className="font-bold text-base">{formatCurrency(pagadoTotal - ncTotal)}</span>
+                              <span className="font-bold text-base">{formatCurrency(pagadoTotal)}</span>
                             </div>
                           </>
                         );
