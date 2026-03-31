@@ -230,6 +230,25 @@ export default function CajaPage() {
     deps: [turno],
   });
 
+  // Fetch CC entries for today (partial payment remainders + full CC sales)
+  const fetchCCEntries = useCallback(async () => {
+    if (!turno) return [];
+    const fechaApertura = turno.fecha_apertura || today;
+    let query = supabase.from("cuenta_corriente").select("debe, cliente_id, comprobante, descripcion, forma_pago, venta_id").gt("debe", 0);
+    if (fechaApertura === today) {
+      query = query.eq("fecha", today);
+    } else {
+      query = query.gte("fecha", fechaApertura).lte("fecha", today);
+    }
+    const { data } = await query;
+    return data || [];
+  }, [today, turno]);
+  const { data: ccEntries, refetch: refetchCC } = useAsyncData({
+    fetcher: fetchCCEntries,
+    initialData: [] as { debe: number; cliente_id: string; comprobante: string; descripcion: string; forma_pago: string; venta_id: string }[],
+    deps: [turno],
+  });
+
   // ─── Expandable stat cards ───
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const toggleCard = (key: string) => setExpandedCard((prev) => prev === key ? null : key);
@@ -621,6 +640,7 @@ export default function CajaPage() {
     cobrosCCTotal,
     cobrosCCEfectivo,
     cobrosCCTransferencia,
+    saldosParcialesCC,
     totalVentas,
     depositos,
     gastos,
@@ -711,6 +731,13 @@ export default function CajaPage() {
     const cobrosCCTotal = cobrosCC.reduce((a, m) => a + m.monto, 0);
     const cobrosCCEfectivo = cobrosCC.filter((m) => m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0);
     const cobrosCCTransferencia = cobrosCC.filter((m) => m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0);
+
+    // Saldos parciales cargados a CC hoy (pagos parciales cuyo resto fue a CC)
+    // Exclude entries whose venta_id belongs to a full CC sale (already counted in ventasCuentaCorriente)
+    const ventasIdCC = new Set(ventas.filter((v) => v.forma_pago === "Cuenta Corriente").map((v) => v.id));
+    const saldosParcialesCC = (ccEntries || [])
+      .filter((e) => e.venta_id && !ventasIdCC.has(e.venta_id))
+      .reduce((a, e) => a + (e.debe || 0), 0);
 
     const depositosEfectivo = movements
       .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta")
@@ -818,6 +845,7 @@ export default function CajaPage() {
       cobrosCCTotal,
       cobrosCCEfectivo,
       cobrosCCTransferencia,
+      saldosParcialesCC,
       totalVentas,
       depositos,
       gastos,
@@ -830,7 +858,7 @@ export default function CajaPage() {
       ingresosDetalle,
       ventasDesglose,
     };
-  }, [ventas, movements, turno]);
+  }, [ventas, movements, turno, ccEntries]);
 
   const loading = turnoLoading || movLoading || ventasLoading;
 
@@ -1248,16 +1276,28 @@ export default function CajaPage() {
                 </CardContent>
               </Card>
             ))}
-            {/* Cuenta Corriente — ventas fiadas hoy */}
+            {/* Cuenta Corriente — todo lo que fue a CC hoy */}
             <Card>
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center gap-3">
                   <Wallet className="w-5 h-5 text-muted-foreground shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground truncate">Ventas en Cta Cte</p>
-                    <p className="text-base font-semibold">{formatCurrency(ventasCuentaCorriente)}</p>
+                    <p className="text-xs text-muted-foreground truncate">Cuenta Corriente</p>
+                    <p className="text-base font-semibold">{formatCurrency(ventasCuentaCorriente + saldosParcialesCC)}</p>
                   </div>
                 </div>
+                {(ventasCuentaCorriente > 0 && saldosParcialesCC > 0) && (
+                  <div className="mt-2 pt-2 border-t space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-muted-foreground">Ventas completas en CC</span>
+                      <span className="font-medium">{formatCurrency(ventasCuentaCorriente)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-muted-foreground">Saldos parciales a CC</span>
+                      <span className="font-medium">{formatCurrency(saldosParcialesCC)}</span>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
             {/* Cobros CC del día — plata que entró por cobros de deuda */}
