@@ -217,7 +217,7 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPr
                     ))}
                     <div className="flex items-center justify-between text-xs border-t pt-1">
                       <span className="font-bold">Total</span>
-                      <span className="font-bold">{formatCurrency(data.total)}</span>
+                      <span className="font-bold">{formatCurrency(pagos.reduce((s, p) => s + p.monto, 0))}</span>
                     </div>
                   </div>
                 ) : (
@@ -227,12 +227,9 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPr
                   const fp = ((data.forma_pago || "") + " " + (data.metodo_pago || "")).toLowerCase();
                   const hasTransferPayment = fp.includes("transferencia") || (fp.includes("mixto") && ((data as any).monto_transferencia > 0 || (pagos || []).some((p: any) => (p.metodo_pago || p.metodo) === "Transferencia")));
                   if (!hasTransferPayment) return null;
-                  return data.cuenta_transferencia_alias ? (
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Banknote className="w-3 h-3" />
-                      Cuenta: <span className="font-medium text-foreground">{data.cuenta_transferencia_alias}</span>
-                    </p>
-                  ) : (
+                  // Check both venta field and caja_movimientos pagos
+                  const cuentaAlias = data.cuenta_transferencia_alias || (pagos || []).find((p: any) => p.cuenta_bancaria)?.cuenta_bancaria;
+                  return cuentaAlias ? null : (
                     <p className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
                       <AlertTriangle className="w-3 h-3" />
                       Falta asignar cuenta bancaria
