@@ -650,11 +650,12 @@ export default function ListaPreciosPage() {
       }
 
       if (style === "duo") {
+        // Same grid as combinado, same structure, but with prominent caja section
         const cols = config.duo_columnas;
         const rows = config.duo_filas;
+        const perPage = cols * rows;
         const cellW = (pageW - margin * 2) / cols;
         const cellH = (pageH - margin * 2) / rows;
-        const perPage = cols * rows;
 
         selectedProducts.forEach((product, idx) => {
           if (idx > 0 && idx % perPage === 0) pdf.addPage();
@@ -664,6 +665,7 @@ export default function ListaPreciosPage() {
           const x = margin + col * cellW;
           const y = margin + row * cellH;
           const pad = 2.5;
+          const bottom = y + cellH;
 
           pdf.setDrawColor(200);
           pdf.setLineWidth(0.3);
@@ -675,14 +677,105 @@ export default function ListaPreciosPage() {
           const transferBox = boxPrice * (1 + config.porcentajeTransferencia / 100);
           const hasUnits = product.unidadesCaja > 0;
 
-          // ── Logo (top-left, tight) ──
-          const logoSize = config.duo_mostrarLogo && logoBase64 ? config.logoTamaño : 0;
+          // ── FOOTER (same as combinado) ──
+          const footerTextY = bottom - 2;
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5);
+          pdf.setTextColor(150);
+          if (config.duo_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, footerTextY);
+          if (config.duo_mostrarFecha) {
+            const prodDate = product.fechaActualizacion
+              ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
+              : today;
+            pdf.text(prodDate, x + cellW - pad - 1, footerTextY, { align: "right" });
+          }
+          pdf.setTextColor(0);
+
+          // Footer line
+          const footerLineY = bottom - 4.5;
+          pdf.setDrawColor(220);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + pad, footerLineY, x + cellW - pad, footerLineY);
+
+          // ── CAJA SECTION (shaded band above footer) ──
+          const cajaH = hasUnits && boxPrice > 0 ? 11 : 0;
+          const cajaY = footerLineY - cajaH;
+
+          if (hasUnits && boxPrice > 0) {
+            // Shaded background
+            pdf.setFillColor(242, 242, 242);
+            pdf.rect(x + 0.15, cajaY, cellW - 0.3, cajaH, "F");
+
+            // Top border of caja section
+            pdf.setDrawColor(210);
+            pdf.setLineWidth(0.2);
+            pdf.line(x + pad, cajaY, x + cellW - pad, cajaY);
+
+            // "Caja x10" label (left)
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(6.5);
+            pdf.setTextColor(80);
+            pdf.text(`Caja x${product.unidadesCaja}`, x + pad, cajaY + 4);
+
+            // Box efectivo price (big, right-aligned)
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(14);
+            pdf.setTextColor(0);
+            pdf.text(formatCurrency(boxPrice), x + cellW - pad, cajaY + 5, { align: "right" });
+
+            // Box transfer price (smaller, below)
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(5);
+            pdf.setTextColor(130);
+            pdf.text(`Transf. (${config.porcentajeTransferencia}%)`, x + pad, cajaY + 8.5);
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7);
+            pdf.setTextColor(100);
+            pdf.text(formatCurrency(transferBox), x + cellW - pad, cajaY + 8.5, { align: "right" });
+            pdf.setTextColor(0);
+          }
+
+          // ── UNIT PRICE SECTION (between name and caja) ──
+          const dividerY = cajaY > 0 ? cajaY : footerLineY;
+
+          // Efectivo label + unit price (left-aligned)
+          const efectY = dividerY - 2;
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5.5);
+          pdf.setTextColor(140);
+          pdf.text("Efectivo", x + pad, efectY - 4.5);
+          pdf.setTextColor(0);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(7);
+          pdf.text(formatCurrency(displayPrice), x + pad, efectY - 1);
+
+          // Transfer label + unit price
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5.5);
+          pdf.setTextColor(140);
+          pdf.text(`Transf. (${config.porcentajeTransferencia}%)`, x + pad, efectY + 2.5);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(7);
+          pdf.setTextColor(100);
+          pdf.text(formatCurrency(transferPrice), x + pad, efectY + 6);
+          pdf.setTextColor(0);
+
+          // Divider above unit prices
+          const unitDivY = efectY - 8;
+          pdf.setDrawColor(220);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + pad, unitDivY, x + cellW - pad, unitDivY);
+
+          // ── TOP ZONE ──
+
+          // Logo (top-left)
           if (config.duo_mostrarLogo && logoBase64) {
+            const logoSize = config.logoTamaño;
             const logoW = logoSize * logoAspectRatio;
             try { pdf.addImage(logoBase64, "PNG", x + 1, y + 0.8, logoW, logoSize); } catch {}
           }
 
-          // ── Marca (top-right) ──
+          // Marca (top-right)
           if (product.marca) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(5);
@@ -691,8 +784,8 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(0);
           }
 
-          // ── Product name (centered, below logo line) ──
-          const nameStartY = y + pad + 5;
+          // Product name (centered)
+          const topAreaEnd = y + pad + 4;
           const nameMaxW = cellW - pad * 2;
           let nameFontSize = config.duo_tamañoNombre;
           pdf.setFont("helvetica", "bold");
@@ -706,120 +799,23 @@ export default function ListaPreciosPage() {
           }
           const nameLineH = nameFontSize * 0.45;
           const maxNameLines = Math.min(nameLines.length, 2);
+          const nameY = topAreaEnd + 1;
           for (let li = 0; li < maxNameLines; li++) {
             let lineText = String(nameLines[li]);
             if (li === maxNameLines - 1 && nameLines.length > maxNameLines) {
               while (pdf.getTextWidth(lineText + "...") > nameMaxW && lineText.length > 0) lineText = lineText.slice(0, -1);
               lineText += "...";
             }
-            pdf.text(lineText, x + cellW / 2, nameStartY + li * nameLineH, { align: "center" });
+            pdf.text(lineText, x + cellW / 2, nameY + li * nameLineH, { align: "center" });
           }
 
-          // ── Two-column price zone ──
-          const priceZoneY = nameStartY + maxNameLines * nameLineH + 3;
-          const halfW = (cellW - pad * 2) / 2;
-          const leftX = x + pad;
-          const rightX = x + pad + halfW;
-          const bottom = y + cellH;
-
-          // Footer zone
-          const footerH = 5;
-          const footerY = bottom - footerH;
-
-          // Divider line between price zone and footer
-          pdf.setDrawColor(220);
-          pdf.setLineWidth(0.2);
-          pdf.line(x + pad, footerY, x + cellW - pad, footerY);
-
-          // Footer: web + date
-          if (config.duo_mostrarWeb) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(4.5);
-            pdf.setTextColor(150);
-            pdf.text(config.webUrl, x + pad + 1, footerY + 3);
-            pdf.setTextColor(0);
-          }
-          if (config.duo_mostrarFecha) {
-            const prodDate = product.fechaActualizacion
-              ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
-              : today;
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(4.5);
-            pdf.setTextColor(150);
-            pdf.text(prodDate, x + cellW - pad - 1, footerY + 3, { align: "right" });
-            pdf.setTextColor(0);
-          }
-
-          // Available height for price columns
-          const priceZoneBottom = footerY - 1.5;
-          const priceZoneH = priceZoneBottom - priceZoneY;
-
-          // Vertical center line
-          pdf.setDrawColor(210);
-          pdf.setLineWidth(0.15);
-          pdf.line(x + cellW / 2, priceZoneY, x + cellW / 2, priceZoneBottom);
-
-          // ── LEFT COLUMN: UNIDAD ──
-          const colCenterLeft = leftX + halfW / 2;
-          // Label
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(6);
-          pdf.setTextColor(100);
-          pdf.text("UNIDAD", colCenterLeft, priceZoneY + 4, { align: "center" });
-
-          // Efectivo price (big)
+          // Big unit price (centered between name and divider)
+          const nameEnd = nameY + maxNameLines * nameLineH;
+          const bigPriceCenter = nameEnd + (unitDivY - nameEnd) / 2;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.duo_tamañoPrecio);
           pdf.setTextColor(0);
-          pdf.text(formatCurrency(displayPrice), colCenterLeft, priceZoneY + priceZoneH * 0.45, { align: "center" });
-
-          // Transfer label + price
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(5);
-          pdf.setTextColor(140);
-          pdf.text(`Transf. (${config.porcentajeTransferencia}%)`, colCenterLeft, priceZoneBottom - 5, { align: "center" });
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(7);
-          pdf.setTextColor(100);
-          pdf.text(formatCurrency(transferPrice), colCenterLeft, priceZoneBottom - 1.5, { align: "center" });
-          pdf.setTextColor(0);
-
-          // ── RIGHT COLUMN: CAJA ──
-          if (hasUnits && boxPrice > 0) {
-            const colCenterRight = rightX + halfW / 2;
-            // Shaded background for caja column
-            pdf.setFillColor(245, 245, 245);
-            pdf.rect(rightX, priceZoneY, halfW, priceZoneH, "F");
-            // Re-draw vertical line on top of fill
-            pdf.setDrawColor(210);
-            pdf.setLineWidth(0.15);
-            pdf.line(x + cellW / 2, priceZoneY, x + cellW / 2, priceZoneBottom);
-
-            // Label
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(6);
-            pdf.setTextColor(100);
-            pdf.text(`CAJA x${product.unidadesCaja}`, colCenterRight, priceZoneY + 4, { align: "center" });
-
-            // Efectivo price (big)
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(config.duo_tamañoPrecio);
-            pdf.setTextColor(0);
-            pdf.text(formatCurrency(boxPrice), colCenterRight, priceZoneY + priceZoneH * 0.45, { align: "center" });
-
-            // Transfer label + price
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(5);
-            pdf.setTextColor(140);
-            pdf.text(`Transf. (${config.porcentajeTransferencia}%)`, colCenterRight, priceZoneBottom - 5, { align: "center" });
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(7);
-            pdf.setTextColor(100);
-            pdf.text(formatCurrency(transferBox), colCenterRight, priceZoneBottom - 1.5, { align: "center" });
-            pdf.setTextColor(0);
-          } else {
-            // No box price — expand unit price to full width (already drawn)
-          }
+          pdf.text(formatCurrency(displayPrice), x + cellW / 2, bigPriceCenter + config.duo_tamañoPrecio * 0.15, { align: "center" });
         });
       }
 
