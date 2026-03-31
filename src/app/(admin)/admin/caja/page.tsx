@@ -214,7 +214,11 @@ export default function CajaPage() {
       if ((v as any).tipo_comprobante?.toLowerCase().startsWith("nota de crédito")) return false;
       if (v.estado === "anulada") return false;
       const d = new Date(v.created_at);
-      if (d < aperturaDate) return false;
+      // Web orders from today: always include (they may arrive before caja opens)
+      const isWebOrder = (v as any).origen === "tienda";
+      if (!isWebOrder) {
+        if (d < aperturaDate) return false;
+      }
       if (cierreDate && d > cierreDate) return false;
       return true;
     });
@@ -421,7 +425,11 @@ export default function CajaPage() {
     });
     const filteredVts = (vts || []).filter((v: any) => {
       const d = new Date(v.created_at);
-      if (d < aperturaDate) return false;
+      // Web orders: don't filter by apertura time (they may arrive before caja opens)
+      const isWebOrder = v.origen === "tienda";
+      if (!isWebOrder) {
+        if (d < aperturaDate) return false;
+      }
       if (cierreDate && d > cierreDate) return false;
       return true;
     });
