@@ -588,10 +588,10 @@ export default function ListaPreciosPage() {
 
           // ── TOP ZONE (flows down from top) ──
 
-          // Logo (top-left) — respect aspect ratio
+          // Logo (top-left, tight to corner) — respect aspect ratio
           if (config.combinado_mostrarLogo && logoBase64) {
             const logoW = logoSize * logoAspectRatio;
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + pad, logoW, logoSize); } catch {}
+            try { pdf.addImage(logoBase64, "PNG", x + 1, y + 0.8, logoW, logoSize); } catch {}
           }
 
           // Marca (top-right corner)
