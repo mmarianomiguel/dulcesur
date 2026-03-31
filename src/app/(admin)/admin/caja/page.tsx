@@ -249,6 +249,25 @@ export default function CajaPage() {
     deps: [turno],
   });
 
+  // Fetch NC (Nota de Crédito) amounts linked to today's ventas
+  const fetchNCEntries = useCallback(async () => {
+    if (!turno) return [];
+    const fechaApertura = turno.fecha_apertura || today;
+    let query = supabase.from("ventas").select("remito_origen_id, total").ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada").not("remito_origen_id", "is", null);
+    if (fechaApertura === today) {
+      query = query.eq("fecha", today);
+    } else {
+      query = query.gte("fecha", fechaApertura).lte("fecha", today);
+    }
+    const { data } = await query;
+    return (data || []) as { remito_origen_id: string; total: number }[];
+  }, [today, turno]);
+  const { data: ncEntries } = useAsyncData({
+    fetcher: fetchNCEntries,
+    initialData: [] as { remito_origen_id: string; total: number }[],
+    deps: [turno],
+  });
+
   // ─── Expandable stat cards ───
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const toggleCard = (key: string) => setExpandedCard((prev) => prev === key ? null : key);
@@ -782,6 +801,12 @@ export default function CajaPage() {
       if (e.venta_id) ccByVenta[e.venta_id] = (ccByVenta[e.venta_id] || 0) + (e.debe || 0);
     }
 
+    // Build NC map by remito_origen_id (NC reduces effective venta total)
+    const ncByVenta: Record<string, number> = {};
+    for (const nc of (ncEntries || [])) {
+      if (nc.remito_origen_id) ncByVenta[nc.remito_origen_id] = (ncByVenta[nc.remito_origen_id] || 0) + (nc.total || 0);
+    }
+
     for (const v of ventas) {
       // 1. Check caja_movimientos for this venta (actual payments received)
       const ventaMovs = movements.filter((m) => m.referencia_id === v.id && m.referencia_tipo === "venta" && m.tipo === "ingreso");
@@ -808,7 +833,9 @@ export default function CajaPage() {
       }
 
       // 4. Remaining unaccounted amount (web orders not yet delivered/paid)
-      const remaining = v.total - accounted;
+      // Subtract NC amount — NC settles part of the venta without cash payment
+      const ncAmount = ncByVenta[v.id] || 0;
+      const remaining = v.total - accounted - ncAmount;
       if (remaining > 1) {
         // Use stored amounts for online orders, or forma_pago as hint
         const ef = (v as any).monto_efectivo || 0;
@@ -847,7 +874,7 @@ export default function CajaPage() {
       ingresosDetalle,
       ventasDesglose,
     };
-  }, [ventas, movements, turno, ccEntries]);
+  }, [ventas, movements, turno, ccEntries, ncEntries]);
 
   const loading = turnoLoading || movLoading || ventasLoading;
 
