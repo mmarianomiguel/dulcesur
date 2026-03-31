@@ -2348,11 +2348,21 @@ export default function ListadoVentasPage() {
                             await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: `Saldo pendiente a cuenta corriente`, debe: realRestante, haber: 0, saldo: newSaldo, forma_pago: cobroMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: ventaId });
                           }
 
-                          // Update forma_pago + cuenta + mark as delivered on venta
+                          // Update forma_pago + cuenta + surcharge + mark as delivered on venta
                           if (ventaId) {
                             const ventaUpd: Record<string, any> = { forma_pago: cobroMetodo, entregado: true, estado: "entregado" };
                             if ((cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && cobroCuentaBancaria) {
                               ventaUpd.cuenta_transferencia_alias = cobroCuentaBancaria;
+                            }
+                            if (recargoTransferencia > 0) {
+                              let trBase = 0;
+                              if (cobroMetodo === "Transferencia") trBase = cobroMonto ?? pendiente;
+                              else if (cobroMetodo === "Mixto") trBase = cobroMixtoTr;
+                              const surchargeToAdd = trBase > 0 ? Math.round(trBase * (recargoTransferencia / 100)) : 0;
+                              if (surchargeToAdd > 0) {
+                                const { data: ventaRow } = await supabase.from("ventas").select("total").eq("id", ventaId).single();
+                                if (ventaRow) ventaUpd.total = (ventaRow as any).total + surchargeToAdd;
+                              }
                             }
                             await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
                             await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", poSelectedPedido.numero);

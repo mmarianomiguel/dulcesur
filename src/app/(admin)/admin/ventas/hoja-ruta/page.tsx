@@ -519,10 +519,20 @@ export default function HojaDeRutaPage() {
           referencia_id: venta.id, referencia_tipo: "venta",
         });
       }
-      // Update forma_pago + cuenta_transferencia_alias
+      // Update forma_pago + cuenta_transferencia_alias + total (add surcharge)
       const ventaUpdate: Record<string, any> = { forma_pago: payMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : payMetodo };
       if ((payMetodo === "Transferencia" || payMetodo === "Mixto") && cuentaSeleccionada) {
         ventaUpdate.cuenta_transferencia_alias = cuentaSeleccionada.alias || cuentaSeleccionada.nombre;
+      }
+      if (porcentajeTransferencia > 0) {
+        let trBase = 0;
+        if (payMetodo === "Transferencia") trBase = paid;
+        else if (payMetodo === "Mixto") {
+          const ratio = totalPagando > 0 ? paid / totalPagando : 0;
+          trBase = paid - Math.round(payEfectivo * ratio);
+        }
+        const ventaSurcharge = trBase > 0 ? Math.round(trBase * (porcentajeTransferencia / 100)) : 0;
+        if (ventaSurcharge > 0) ventaUpdate.total = venta.total + ventaSurcharge;
       }
       await supabase.from("ventas").update(ventaUpdate).eq("id", venta.id);
     }
