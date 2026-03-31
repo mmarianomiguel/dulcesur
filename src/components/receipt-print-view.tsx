@@ -120,23 +120,29 @@ export function ReceiptPrintView({
   const pageHeightPx = 1063;
   const headerPx = Math.max(120, (config.logoHeight || 60) + 70); // logo + company info + border
   const clientPx = fsCliente * 3.5; // client info box (~2-3 lines)
-  const rowHeightPx = fsProductos * 1.4 + 10; // line height + padding
-  const totalsPx = 110; // totals bar + payment + footer (tightened from 140)
+  const rowHeightPx = fsProductos * 1.4 + 6; // line height + padding (CSS padding is 4px+5px)
+  const totalsPx = 100; // totals bar + payment + footer
   const pageNumPx = 20;
+  const continuaPx = 25; // "Continúa en la siguiente página..."
 
   // For single page: first page must fit header + client + items + totals
   const singlePageItems = Math.floor((pageHeightPx - headerPx - clientPx - totalsPx) / rowHeightPx);
   // For multi-page: first page has no totals (they go on last page), so more room
-  const multiFirstPageItems = Math.floor((pageHeightPx - headerPx - clientPx - pageNumPx - 30) / rowHeightPx); // 30px for "continúa..."
-  const multiOtherPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - 30 - 30) / rowHeightPx); // client ref line + continúa
-  const multiLastPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - 30 - totalsPx) / rowHeightPx); // totals on last page
+  const multiFirstPageItems = Math.floor((pageHeightPx - headerPx - clientPx - pageNumPx - continuaPx) / rowHeightPx);
+  const multiOtherPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - continuaPx - 25) / rowHeightPx); // client ref line + continúa
+  const multiLastPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - 25 - totalsPx) / rowHeightPx); // totals on last page
 
   // Split items into pages
   const pages: ReceiptLineItem[][] = [];
   const allItems = [...sale.items];
 
-  if (allItems.length <= singlePageItems) {
+  // Squeeze check: if only a few items overflow, force single page
+  const overflow = allItems.length - singlePageItems;
+  if (overflow <= 0) {
     // Everything fits on one page
+    pages.push(allItems);
+  } else if (overflow <= 5) {
+    // Small overflow — squeeze onto one page (rows will compress slightly)
     pages.push(allItems);
   } else {
     // First page (no totals, more room)
