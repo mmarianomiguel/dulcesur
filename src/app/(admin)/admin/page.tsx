@@ -211,7 +211,7 @@ export default function DashboardPage() {
   const [pedidoDetailPagos, setPedidoDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [printedPedidos, setPrintedPedidos] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMixtoEf?: number; cobroMixtoTr?: number; cobroCuentaBancaria?: string }>({ open: false, venta: null, pendiente: 0, type: "paid" });
+  const [deliveryConfirm, setDeliveryConfirm] = useState<{ open: boolean; venta: PedidoVenta | null; pendiente: number; type: "paid" | "unpaid" | "no_client"; cobroMetodo?: string; cobroMonto?: number; cobroMixtoEf?: number; cobroMixtoTr?: number; cobroCuentaBancaria?: string }>({ open: false, venta: null, pendiente: 0, type: "paid" });
   const [deliveryCuentasBancarias, setDeliveryCuentasBancarias] = useState<{ id: string; nombre: string; alias?: string }[]>([]);
 
   // ─── Widget visibility ───
@@ -642,7 +642,7 @@ export default function DashboardPage() {
   };
 
   const confirmDelivery = async () => {
-    const { venta, pendiente, type, cobroMetodo, cobroMixtoEf, cobroMixtoTr, cobroCuentaBancaria } = deliveryConfirm;
+    const { venta, pendiente, type, cobroMetodo, cobroMonto, cobroMixtoEf, cobroMixtoTr, cobroCuentaBancaria } = deliveryConfirm;
     if (!venta) return;
     try {
     setActionLoading(venta.id);
@@ -653,23 +653,35 @@ export default function DashboardPage() {
       const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
       const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
       const clienteNombre = (venta as any).clientes?.nombre || "";
+      const clienteId = (venta as any).cliente_id;
       const metodo = cobroMetodo || "Efectivo";
       const entries: any[] = [];
 
+      // Calculate how much is actually being paid in cash/transfer
+      let totalCobrado = 0;
       if (metodo === "Mixto") {
+        totalCobrado = (cobroMixtoEf || 0) + (cobroMixtoTr || 0);
         if ((cobroMixtoEf || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: venta.id, referencia_tipo: "venta" });
         if ((cobroMixtoTr || 0) > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia)${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: "Transferencia", monto: cobroMixtoTr, referencia_id: venta.id, referencia_tipo: "venta", ...(cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
       } else if (metodo === "Cuenta Corriente") {
-        const clienteId = (venta as any).cliente_id;
-        if (clienteId) {
-          const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-          const newSaldo = (cl?.saldo || 0) + pendiente;
-          await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
-          await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Entrega #${venta.numero}`, descripcion: `Cobro entrega — ${clienteNombre}`, debe: pendiente, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: venta.id });
-        }
+        totalCobrado = 0; // everything goes to CC
       } else {
-        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: metodo, monto: pendiente, referencia_id: venta.id, referencia_tipo: "venta", ...(metodo === "Transferencia" && cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
+        // Efectivo or Transferencia — use cobroMonto if specified, otherwise full pendiente
+        totalCobrado = cobroMonto ?? pendiente;
+        if (totalCobrado > 0) {
+          entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${clienteNombre ? ` — ${clienteNombre}` : ""}`, metodo_pago: metodo, monto: totalCobrado, referencia_id: venta.id, referencia_tipo: "venta", ...(metodo === "Transferencia" && cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
+        }
       }
+
+      // Remainder goes to cuenta corriente
+      const restanteCC = Math.max(0, Math.round((pendiente - totalCobrado) * 100) / 100);
+      if (restanteCC > 0 && clienteId) {
+        const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+        const newSaldo = (cl?.saldo || 0) + restanteCC;
+        await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
+        await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Entrega #${venta.numero}`, descripcion: `Saldo pendiente entrega — ${clienteNombre}`, debe: restanteCC, haber: 0, saldo: newSaldo, forma_pago: metodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: venta.id });
+      }
+
       if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
     }
 
@@ -1651,13 +1663,22 @@ export default function DashboardPage() {
               const metodo = deliveryConfirm.cobroMetodo || "Efectivo";
               const mixEf = deliveryConfirm.cobroMixtoEf || 0;
               const mixTr = deliveryConfirm.cobroMixtoTr || 0;
+              const montoIngresado = deliveryConfirm.cobroMonto;
               const setField = (field: string, val: any) => setDeliveryConfirm((prev) => ({ ...prev, [field]: val }));
+              const hasClient = !!(deliveryConfirm.venta as any).cliente_id;
+              // Calculate remainder to CC
+              let totalCobrado = 0;
+              if (metodo === "Mixto") totalCobrado = mixEf + mixTr;
+              else if (metodo === "Cuenta Corriente") totalCobrado = 0;
+              else totalCobrado = montoIngresado ?? pend;
+              const restanteCC = Math.max(0, Math.round((pend - totalCobrado) * 100) / 100);
+              const fmt = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
               return (
                 <div className="space-y-3">
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
                     <p className="text-sm text-amber-900">
                       <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "Cliente"}</span> debe{" "}
-                      <span className="font-bold text-amber-700">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(pend)}</span>
+                      <span className="font-bold text-amber-700">{fmt(pend)}</span>
                     </p>
                   </div>
                   <p className="text-xs font-medium text-muted-foreground">Método de pago</p>
@@ -1666,7 +1687,7 @@ export default function DashboardPage() {
                       { key: "Efectivo", label: "Efect.", icon: DollarSign },
                       { key: "Transferencia", label: "Transf.", icon: ArrowLeftRight },
                       { key: "Mixto", label: "Mixto", icon: Shuffle },
-                      { key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen },
+                      ...(hasClient ? [{ key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen }] : []),
                     ].map(({ key, label, icon: Icon }) => (
                       <button key={key} onClick={() => setField("cobroMetodo", key)}
                         className={`flex flex-col items-center justify-center gap-0.5 rounded-lg border-2 p-1.5 transition-all text-[10px] font-medium ${metodo === key ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>
@@ -1674,6 +1695,12 @@ export default function DashboardPage() {
                       </button>
                     ))}
                   </div>
+                  {(metodo === "Efectivo" || metodo === "Transferencia") && (
+                    <div>
+                      <label className="text-[10px] text-gray-500">Monto cobrado</label>
+                      <input type="number" value={montoIngresado ?? ""} placeholder={String(pend)} onChange={(e) => setField("cobroMonto", e.target.value === "" ? undefined : Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" max={pend} />
+                    </div>
+                  )}
                   {metodo === "Mixto" && (
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -1700,6 +1727,21 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   )}
+                  {metodo !== "Cuenta Corriente" && restanteCC > 0 && hasClient && (
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-2.5">
+                      <p className="text-xs text-blue-800">
+                        <BookOpen className="w-3 h-3 inline mr-1" />
+                        Restante <span className="font-bold">{fmt(restanteCC)}</span> queda en cuenta corriente
+                      </p>
+                    </div>
+                  )}
+                  {metodo !== "Cuenta Corriente" && restanteCC > 0 && !hasClient && (
+                    <div className="rounded-lg bg-red-50 border border-red-200 p-2.5">
+                      <p className="text-xs text-red-800">
+                        Sin cliente asociado — no se puede dejar saldo en cuenta corriente. Cobrá el total o asociá un cliente.
+                      </p>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1709,7 +1751,7 @@ export default function DashboardPage() {
               </Button>
               <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmDelivery}>
                 <CheckCircle className="w-4 h-4 mr-1.5" />
-                {deliveryConfirm.type === "paid" ? "Marcar entregado" : `Cobrar y entregar`}
+                {deliveryConfirm.type === "paid" ? "Marcar entregado" : deliveryConfirm.cobroMetodo === "Cuenta Corriente" ? "Dejar en Cta Cte y entregar" : "Cobrar y entregar"}
               </Button>
             </div>
           </div>

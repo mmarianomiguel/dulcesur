@@ -814,14 +814,7 @@ export default function CheckoutPage() {
               cuenta_bancaria: cuentaNombre,
             });
           }
-          if (mixtoEfectivo > 0) {
-            cajaEntries.push({
-              fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-              descripcion: `Pedido Web #${numero} (Efectivo)`,
-              metodo_pago: "Efectivo", monto: mixtoEfectivo,
-              referencia_id: venta.id, referencia_tipo: "venta",
-            });
-          }
+          // Efectivo portion: NO caja entry — cash is collected at delivery, admin registers it then
         }
         if (cajaEntries.length > 0) {
           await supabase.from("caja_movimientos").insert(cajaEntries);
