@@ -750,7 +750,7 @@ export default function TiendaPage() {
 
             const { data: prods } = await query.limit(maxItems);
             if (prods) {
-              setProductos(prods);
+              setProductos(prods as unknown as Producto[]);
               // Load presentations in parallel (no dependency on categories)
               const ids = prods.map((p: any) => p.id);
               if (ids.length > 0) {
