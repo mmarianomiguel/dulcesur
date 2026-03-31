@@ -617,6 +617,9 @@ export default function CajaPage() {
     ventasTransferencia,
     transferenciaPorCuenta,
     ventasCuentaCorriente,
+    cobrosCCTotal,
+    cobrosCCEfectivo,
+    cobrosCCTransferencia,
     totalVentas,
     depositos,
     gastos,
@@ -701,6 +704,12 @@ export default function CajaPage() {
         return acc + storedCC;
       }, 0);
     const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
+
+    // Cobros de cuenta corriente del día (pagos que reducen deuda CC)
+    const cobrosCC = movements.filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC"));
+    const cobrosCCTotal = cobrosCC.reduce((a, m) => a + m.monto, 0);
+    const cobrosCCEfectivo = cobrosCC.filter((m) => m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0);
+    const cobrosCCTransferencia = cobrosCC.filter((m) => m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0);
 
     const depositosEfectivo = movements
       .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta")
@@ -805,6 +814,9 @@ export default function CajaPage() {
       ventasTransferencia,
       transferenciaPorCuenta,
       ventasCuentaCorriente,
+      cobrosCCTotal,
+      cobrosCCEfectivo,
+      cobrosCCTransferencia,
       totalVentas,
       depositos,
       gastos,
@@ -1211,7 +1223,6 @@ export default function CajaPage() {
             {[
               { label: "Efectivo", value: ventasEfectivo, icon: Banknote },
               { label: "Transferencia", value: ventasTransferencia, icon: ArrowRightLeft },
-              { label: "Cuenta Corriente", value: ventasCuentaCorriente, icon: Wallet },
             ].map((item) => (
               <Card key={item.label}>
                 <CardContent className="pt-4 pb-4">
@@ -1236,6 +1247,42 @@ export default function CajaPage() {
                 </CardContent>
               </Card>
             ))}
+            {/* Cuenta Corriente card with cobros breakdown */}
+            <Card>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-3">
+                  <Wallet className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">Cuenta Corriente</p>
+                    <p className="text-base font-semibold">{formatCurrency(ventasCuentaCorriente)}</p>
+                  </div>
+                </div>
+                {cobrosCCTotal > 0 && (
+                  <div className="mt-2 pt-2 border-t space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-muted-foreground">Facturado en CC</span>
+                      <span className="font-medium">{formatCurrency(ventasCuentaCorriente)}</span>
+                    </div>
+                    {cobrosCCEfectivo > 0 && (
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-emerald-600">Cobrado en efectivo</span>
+                        <span className="font-medium text-emerald-600">-{formatCurrency(cobrosCCEfectivo)}</span>
+                      </div>
+                    )}
+                    {cobrosCCTransferencia > 0 && (
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-emerald-600">Cobrado en transferencia</span>
+                        <span className="font-medium text-emerald-600">-{formatCurrency(cobrosCCTransferencia)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-[11px] border-t pt-1">
+                      <span className="font-medium text-orange-600">Pendiente CC</span>
+                      <span className="font-semibold text-orange-600">{formatCurrency(Math.max(0, ventasCuentaCorriente - cobrosCCTotal))}</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* Transactions table */}
