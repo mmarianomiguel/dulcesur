@@ -78,6 +78,7 @@ interface VentaRow {
 interface CuentaBancaria {
   id: string;
   nombre: string;
+  alias?: string;
 }
 
 interface VentaItemRow {
