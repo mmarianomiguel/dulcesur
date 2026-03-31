@@ -211,7 +211,7 @@ function ProductosContent() {
         supabase.from("categorias").select("id, nombre, restringida"),
         supabase.from("subcategorias").select("id, nombre, categoria_id"),
         supabase.from("marcas").select("id, nombre"),
-        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("descuentos").select("id, aplica_a, porcentaje, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo").eq("activo", true).lte("fecha_inicio", today),
         supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
         supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible"),
       ]);
@@ -309,7 +309,7 @@ function ProductosContent() {
       setLoading(true);
       let query = supabase
         .from("productos")
-        .select("*, categorias(nombre), marcas(nombre)", { count: "exact" });
+        .select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" });
 
       query = query.eq("activo", true).eq("visibilidad", "visible");
 
@@ -318,9 +318,7 @@ function ProductosContent() {
         .filter((c) => c.restringida && !(permitidas || []).includes(c.id))
         .map((c) => c.id);
       if (restrictedIds.length > 0 && !categoriaId) {
-        for (const rid of restrictedIds) {
-          query = query.neq("categoria_id", rid);
-        }
+        query = query.not("categoria_id", "in", `(${restrictedIds.join(",")})`);
       }
       // If navigating to a restricted category without permission, show nothing
       if (categoriaId && restrictedIds.includes(categoriaId)) {
@@ -372,17 +370,23 @@ function ProductosContent() {
 
       const { data, count } = await query;
       const prods = (data as Producto[]) || [];
+      const ids = prods.map((p) => p.id);
+      const comboIds = prods.filter((p) => p.es_combo).map((p) => p.id);
 
-      // Compute effective stock for combo products from their components
-      const comboProds = prods.filter((p) => p.es_combo);
-      if (comboProds.length > 0) {
-        const comboIds = comboProds.map((p) => p.id);
-        const { data: comboItems } = await supabase
-          .from("combo_items")
-          .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)")
-          .in("combo_id", comboIds);
+      // Fetch combo stock + presentaciones in parallel (single render instead of two)
+      const [comboResult, presResult] = await Promise.all([
+        comboIds.length > 0
+          ? supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)").in("combo_id", comboIds)
+          : Promise.resolve({ data: null }),
+        ids.length > 0
+          ? supabase.from("presentaciones").select("producto_id, nombre, cantidad, precio").in("producto_id", ids).order("cantidad")
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      // Apply combo effective stock
+      if (comboResult.data) {
         const comboStockMap: Record<string, number> = {};
-        for (const ci of (comboItems || []) as any[]) {
+        for (const ci of (comboResult.data || []) as any[]) {
           const compStock = ci.productos?.stock ?? 0;
           const maxFromComp = Math.floor(compStock / (ci.cantidad || 1));
           comboStockMap[ci.combo_id] = ci.combo_id in comboStockMap
@@ -390,51 +394,35 @@ function ProductosContent() {
             : maxFromComp;
         }
         for (const p of prods) {
-          if (p.es_combo && p.id in comboStockMap) {
-            p.stock = comboStockMap[p.id];
-          }
+          if (p.es_combo && p.id in comboStockMap) p.stock = comboStockMap[p.id];
         }
       }
 
-      setProductos(prods);
-      setTotal(count || 0);
-      setLoading(false);
-    }
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad, tipoFilter, permitidas, categorias, diasOcultarSinStock]);
-
-  // Fetch presentaciones for displayed products
-  useEffect(() => {
-    async function loadPresentaciones() {
-      if (productos.length === 0) { setPresentacionesMap({}); return; }
-      const ids = productos.map((p) => p.id);
-      const { data } = await supabase
-        .from("presentaciones")
-        .select("producto_id, nombre, cantidad, precio")
-        .in("producto_id", ids)
-        .order("cantidad");
-      const map: Record<string, { nombre: string; cantidad: number; precio: number }[]> = {};
-      (data || []).forEach((pr: { producto_id: string; nombre: string; cantidad: number; precio: number }) => {
-        if (!map[pr.producto_id]) map[pr.producto_id] = [];
-        map[pr.producto_id].push({ nombre: pr.nombre, cantidad: pr.cantidad, precio: pr.precio });
+      // Build presentaciones map + defaults
+      const presMap: Record<string, { nombre: string; cantidad: number; precio: number }[]> = {};
+      (presResult.data || []).forEach((pr: { producto_id: string; nombre: string; cantidad: number; precio: number }) => {
+        if (!presMap[pr.producto_id]) presMap[pr.producto_id] = [];
+        presMap[pr.producto_id].push({ nombre: pr.nombre, cantidad: pr.cantidad, precio: pr.precio });
       });
-      setPresentacionesMap(map);
-      // Default Mt/Medio Cartón products to "Unidad" presentation
       const defaults: Record<string, number> = {};
-      for (const [prodId, pres] of Object.entries(map)) {
+      for (const [prodId, pres] of Object.entries(presMap)) {
         const hasMedio = pres.some((p) => p.cantidad <= 0.5 || p.nombre.toLowerCase().includes("medio"));
         if (hasMedio) {
           const unitIdx = pres.findIndex((p) => p.cantidad === 1);
           if (unitIdx >= 0) defaults[prodId] = unitIdx;
         }
       }
-      if (Object.keys(defaults).length > 0) {
-        setSelectedPres((prev) => ({ ...defaults, ...prev }));
-      }
+
+      // Set all state at once — single render pass
+      setProductos(prods);
+      setTotal(count || 0);
+      setPresentacionesMap(presMap);
+      if (Object.keys(defaults).length > 0) setSelectedPres((prev) => ({ ...defaults, ...prev }));
+      setLoading(false);
     }
-    loadPresentaciones();
-  }, [productos]);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad, tipoFilter, permitidas, categorias, diasOcultarSinStock]);
 
   const totalPages = Math.ceil(total / PER_PAGE);
   const activeCategoryName = categorias.find(

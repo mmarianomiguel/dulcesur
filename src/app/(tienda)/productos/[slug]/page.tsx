@@ -190,8 +190,8 @@ export default function ProductoDetallePage() {
       // Fetch product + discounts in parallel
       const today = new Date().toISOString().split("T")[0];
       const [{ data: prod }, { data: discountsRaw }] = await Promise.all([
-        supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("id", id).single(),
-        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("productos").select("id, nombre, descripcion, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", id).single(),
+        supabase.from("descuentos").select("id, aplica_a, porcentaje, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo").eq("activo", true).lte("fecha_inicio", today),
       ]);
       setActiveDiscounts((discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
 
@@ -199,7 +199,7 @@ export default function ProductoDetallePage() {
         // Parallel: category restriction check + presentaciones + combo items
         const [{ data: cat }, { data: pres }, comboResult] = await Promise.all([
           supabase.from("categorias").select("restringida").eq("id", prod.categoria_id).single(),
-          supabase.from("presentaciones").select("*").eq("producto_id", id).order("cantidad"),
+          supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku").eq("producto_id", id).order("cantidad"),
           prod.es_combo
             ? supabase.from("combo_items").select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, precio, imagen_url)").eq("combo_id", id)
             : Promise.resolve({ data: null }),
@@ -259,12 +259,12 @@ export default function ProductoDetallePage() {
         const MAX_RELATED = 8;
         const relatedQueries = await Promise.all([
           prod.marca_id
-            ? supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
+            ? supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
             : Promise.resolve({ data: [] }),
           prod.subcategoria_id
-            ? supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("subcategoria_id", prod.subcategoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
+            ? supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("subcategoria_id", prod.subcategoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
             : Promise.resolve({ data: [] }),
-          supabase.from("productos").select("*, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED),
+          supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED),
         ]);
 
         const related: Producto[] = [];
@@ -281,7 +281,7 @@ export default function ProductoDetallePage() {
           setRelacionados(related);
           // Lazy-load related presentations (non-blocking)
           const ids = related.map((r: Producto) => r.id);
-          supabase.from("presentaciones").select("*").in("producto_id", ids).order("cantidad").then(({ data: relPres }) => {
+          supabase.from("presentaciones").select("producto_id, nombre, cantidad, precio, precio_oferta, sku").in("producto_id", ids).order("cantidad").then(({ data: relPres }) => {
             const map: Record<string, Presentacion[]> = {};
             (relPres || []).forEach((p: Presentacion) => {
               if (!map[p.producto_id]) map[p.producto_id] = [];

@@ -701,7 +701,7 @@ export default function TiendaPage() {
           (async () => {
             const { data: destacadas } = await supabase
               .from("categorias_destacadas")
-              .select("*, categorias(*)");
+              .select("id, categorias(id, nombre, imagen_url)");
 
             if (destacadas && destacadas.length > 0) {
               const seen = new Set<number>();
@@ -716,7 +716,7 @@ export default function TiendaPage() {
             } else {
               const { data: cats } = await supabase
                 .from("categorias")
-                .select("*")
+                .select("id, nombre, imagen_url")
                 .limit(maxCats);
               if (cats) setCategorias(cats);
             }
@@ -736,7 +736,7 @@ export default function TiendaPage() {
           (async () => {
             let query = supabase
               .from("productos")
-              .select("*, categorias(*)")
+              .select("id, nombre, precio, imagen_url, stock, es_combo, precio_anterior, fecha_actualizacion, created_at, updated_at, categorias(id, nombre)")
               .eq("activo", true)
               .eq("visibilidad", "visible");
 

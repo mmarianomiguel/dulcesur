@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["lucide-react", "recharts"],
   },
   images: {
+    loader: "custom",
+    loaderFile: "./src/lib/cloudinary-loader.ts",
     remotePatterns: [
       {
         protocol: "https",
