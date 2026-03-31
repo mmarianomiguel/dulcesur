@@ -121,7 +121,7 @@ export function ReceiptPrintView({
   const headerPx = Math.max(120, (config.logoHeight || 60) + 70); // logo + company info + border
   const clientPx = fsCliente * 3.5; // client info box (~2-3 lines)
   const rowHeightPx = fsProductos * 1.4 + 10; // line height + padding
-  const totalsPx = 140; // totals + payment + footer
+  const totalsPx = 110; // totals bar + payment + footer (tightened from 140)
   const pageNumPx = 20;
 
   // For single page: first page must fit header + client + items + totals
@@ -312,7 +312,7 @@ export function ReceiptPrintView({
   );
 
   // Totals + Payment section (only on last page) — compact, B&W friendly
-  const TotalsAndPayment = () => {
+  const TotalsAndPayment = ({ pushToBottom = true }: { pushToBottom?: boolean }) => {
     const fs = config.fontSize;
     const showDesglose = sale.formaPago === "Mixto" || sale.pagoEfectivo || sale.pagoTransferencia || sale.pagoCuentaCorriente;
     const showVuelto = config.mostrarVuelto && sale.formaPago === "Efectivo" && sale.cashReceived != null && sale.cashReceived > 0;
@@ -342,8 +342,8 @@ export function ReceiptPrintView({
 
     return (
       <>
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
+        {/* Spacer — only push to bottom on single-page receipts */}
+        {pushToBottom ? <div style={{ flex: 1 }} /> : <div style={{ height: "12px" }} />}
 
         {/* TOTAL bar — bold, big, clear */}
         <div style={{ borderTop: "2px solid #000", borderBottom: "2px solid #000", padding: "6px 4px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -464,7 +464,7 @@ export function ReceiptPrintView({
         <PageHeader pageNum={1} />
         <ClientInfo />
         <ItemsTable items={pages[0]} />
-        <TotalsAndPayment />
+        <TotalsAndPayment pushToBottom={true} />
       </div>
     );
   }
@@ -500,7 +500,7 @@ export function ReceiptPrintView({
               </div>
             )}
             <ItemsTable items={pageItems} showContinue={!isLastPage} />
-            {isLastPage && <TotalsAndPayment />}
+            {isLastPage && <TotalsAndPayment pushToBottom={false} />}
             {!isLastPage && <div style={{ flex: 1 }} />}
           </div>
         );
