@@ -369,7 +369,7 @@ function ProductosContent() {
       query = query.range(from, from + PER_PAGE - 1);
 
       const { data, count } = await query;
-      const prods = (data as Producto[]) || [];
+      const prods = (data as unknown as Producto[]) || [];
       const ids = prods.map((p) => p.id);
       const comboIds = prods.filter((p) => p.es_combo).map((p) => p.id);
 

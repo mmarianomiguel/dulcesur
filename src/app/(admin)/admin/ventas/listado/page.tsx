@@ -757,6 +757,7 @@ export default function ListadoVentasPage() {
       clienteDireccion: v.clientes?.domicilio || null,
       clienteTelefono: v.clientes?.telefono || null,
       clienteCondicionIva: v.clientes?.situacion_iva || null,
+      metodoEntrega: v.metodo_entrega || null,
       vendedor: vendedorName,
       fecha: formatDatePDF(v.fecha),
       saldoAnterior: saldoAnteriorCC || (saldo - (pagoCC || 0)),

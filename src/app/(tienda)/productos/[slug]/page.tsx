@@ -228,7 +228,7 @@ export default function ProductoDetallePage() {
           }
         }
 
-        setProducto(prod as Producto);
+        setProducto(prod as unknown as Producto);
         addRecentlyViewed({ id: prod.id, nombre: prod.nombre, precio: prod.precio, imagen_url: prod.imagen_url });
         document.title = `${prod.nombre} | Dulcesur`;
 
@@ -273,7 +273,7 @@ export default function ProductoDetallePage() {
         for (const { data: batch } of relatedQueries) {
           for (const p of batch || []) {
             if (related.length >= MAX_RELATED) break;
-            if (!usedIds.has(p.id)) { related.push(p as Producto); usedIds.add(p.id); }
+            if (!usedIds.has(p.id)) { related.push(p as unknown as Producto); usedIds.add(p.id); }
           }
         }
 
@@ -283,7 +283,7 @@ export default function ProductoDetallePage() {
           const ids = related.map((r: Producto) => r.id);
           supabase.from("presentaciones").select("producto_id, nombre, cantidad, precio, precio_oferta, sku").in("producto_id", ids).order("cantidad").then(({ data: relPres }) => {
             const map: Record<string, Presentacion[]> = {};
-            (relPres || []).forEach((p: Presentacion) => {
+            (relPres || []).forEach((p: any) => {
               if (!map[p.producto_id]) map[p.producto_id] = [];
               map[p.producto_id].push(p);
             });

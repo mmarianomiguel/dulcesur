@@ -40,6 +40,11 @@ import {
   User,
   Wallet,
   SlidersHorizontal,
+  BarChart3,
+  FileText,
+  AlertCircle,
+  Info,
+  ArrowRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -217,6 +222,10 @@ export default function DashboardPage() {
     { key: "categories", label: "Ventas por categoría" },
     { key: "pedidos", label: "Pedidos online" },
     { key: "saldos", label: "Alertas de saldo" },
+    { key: "caja", label: "Estado de caja" },
+    { key: "stockbajo", label: "Productos con stock bajo" },
+    { key: "ultimasventas", label: "Últimas ventas" },
+    { key: "briefing", label: "Resumen operativo" },
   ];
   const [widgetConfig, setWidgetConfig] = useState<Record<string, boolean>>(() => {
     try {
@@ -235,6 +244,11 @@ export default function DashboardPage() {
   // ─── Combo data for preview ───
   const [comboProductIds, setComboProductIds] = useState<Set<string>>(new Set());
   const [comboItemsMap, setComboItemsMap] = useState<Record<string, { nombre: string; cantidad: number }[]>>({});
+
+  // ─── New dashboard widgets state ───
+  const [turnoAbierto, setTurnoAbierto] = useState<{ id: string; apertura: string; saldo_inicial: number } | null>(null);
+  const [ultimasVentas, setUltimasVentas] = useState<{ id: string; numero: number; cliente: string; total: number; forma_pago: string; fecha: string }[]>([]);
+  const [itemsSinCosto, setItemsSinCosto] = useState(0);
 
   // ─── Print state ───
   const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
@@ -449,6 +463,16 @@ export default function DashboardPage() {
     // Start pedidos online fetch in parallel with processing below
     const pedidosOnlinePromise = fetchPedidosOnline();
 
+    // ─── Turno de caja abierto ───
+    supabase.from("turnos_caja").select("id, apertura, saldo_inicial").eq("estado", "abierto").order("apertura", { ascending: false }).limit(1).then(({ data }) => {
+      setTurnoAbierto(data && data.length > 0 ? data[0] as any : null);
+    });
+
+    // ─── Últimas ventas (últimas 8) ───
+    supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").order("created_at", { ascending: false }).limit(8).then(({ data }) => {
+      setUltimasVentas((data || []).map((v: any) => ({ id: v.id, numero: v.numero, cliente: v.clientes?.nombre || "Cons. Final", total: v.total, forma_pago: v.forma_pago, fecha: v.fecha })));
+    });
+
     // ─── Tienda config ───
     if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
 
@@ -537,6 +561,14 @@ export default function DashboardPage() {
       }, 0);
     }
     setGananciaPeriodo(gananciaTotal);
+
+    // ─── Items sin costo (warning) ───
+    if (regularVentaIds.length > 0) {
+      const { count: sinCostoCount } = await supabase.from("venta_items").select("id", { count: "exact", head: true }).in("venta_id", regularVentaIds).or("costo_unitario.is.null,costo_unitario.eq.0");
+      setItemsSinCosto(sinCostoCount || 0);
+    } else {
+      setItemsSinCosto(0);
+    }
 
     // Wait for pedidos online to finish
     await pedidosOnlinePromise;
@@ -779,6 +811,7 @@ export default function DashboardPage() {
       })(),
       clienteTelefono: cliente?.telefono || (venta as any)._telefono || null,
       clienteCondicionIva: cliente?.situacion_iva || null,
+      metodoEntrega: venta.metodo_entrega || null,
       vendedor: "Mariano Miguel",
       items: saleItems,
       fecha: new Date(venta.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }),
@@ -871,6 +904,41 @@ export default function DashboardPage() {
         </Card>
       )}
 
+      {/* ─── Date filter (moved up — controls all KPIs and charts) ─── */}
+      <Card>
+        <CardContent className="pt-5 pb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Periodo</span>
+            </div>
+            <div className="flex border rounded-lg overflow-hidden">
+              {(["diario", "mensual", "rango"] as FilterMode[]).map((mode) => (
+                <button key={mode} onClick={() => setFilterMode(mode)}
+                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${filterMode === mode ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"}`}>
+                  {mode === "diario" ? "Diario" : mode === "mensual" ? "Mensual" : "Entre Fechas"}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 flex-1">
+              {filterMode === "diario" && (
+                <Input type="date" value={filterDate} onChange={(ev) => setFilterDate(ev.target.value)} className="h-9 w-44" />
+              )}
+              {filterMode === "mensual" && (
+                <Input type="month" value={filterMonth} onChange={(ev) => setFilterMonth(ev.target.value)} className="h-9 w-44" />
+              )}
+              {filterMode === "rango" && (
+                <div className="flex items-center gap-2">
+                  <Input type="date" value={filterFrom} onChange={(ev) => setFilterFrom(ev.target.value)} className="h-9 w-40" />
+                  <span className="text-sm text-muted-foreground">—</span>
+                  <Input type="date" value={filterTo} onChange={(ev) => setFilterTo(ev.target.value)} className="h-9 w-40" />
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ─── Accesos Rápidos ─── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Link href="/admin/ventas" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-emerald-300">
@@ -922,6 +990,70 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
+
+      {/* ─── Caja Status Banner ─── */}
+      {isWidgetVisible("caja") && (
+        <div className={`rounded-lg border p-3 flex items-center justify-between ${turnoAbierto ? "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20" : "border-amber-200 bg-amber-50 dark:bg-amber-950/20"}`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${turnoAbierto ? "bg-emerald-100 dark:bg-emerald-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
+              <Wallet className={`w-4 h-4 ${turnoAbierto ? "text-emerald-600" : "text-amber-600"}`} />
+            </div>
+            <div>
+              <p className={`text-sm font-semibold ${turnoAbierto ? "text-emerald-800 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300"}`}>
+                Caja {turnoAbierto ? "abierta" : "cerrada"}
+              </p>
+              {turnoAbierto && (
+                <p className="text-xs text-muted-foreground">
+                  Desde {new Date(turnoAbierto.apertura).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })} — Inicio: {formatCurrency(turnoAbierto.saldo_inicial)}
+                </p>
+              )}
+            </div>
+          </div>
+          <Link href="/admin/caja">
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+              <ArrowRight className="w-3 h-3" /> Ir a Caja
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {/* ─── Morning Briefing ─── */}
+      {isWidgetVisible("briefing") && (
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Info className="w-4 h-4 text-primary" />
+            <span className="text-sm font-semibold">Resumen operativo</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="text-center p-2 rounded-lg bg-muted/50">
+              <p className="text-lg font-bold">{pedidosOnline.length}</p>
+              <p className="text-[11px] text-muted-foreground">Pedidos por armar</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-muted/50">
+              <p className="text-lg font-bold">{pedidosOnline.filter(p => p.metodo_entrega === "envio").length}</p>
+              <p className="text-[11px] text-muted-foreground">Entregas pendientes</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-muted/50">
+              <p className="text-lg font-bold">{lowStockProducts.length}</p>
+              <p className="text-[11px] text-muted-foreground">Productos stock bajo</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-muted/50">
+              <p className="text-lg font-bold">{saldoMismatches.length}</p>
+              <p className="text-[11px] text-muted-foreground">Saldos descuadrados</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Warning: Items sin costo ─── */}
+      {itemsSinCosto > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-center gap-3">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <p className="text-xs text-amber-800 dark:text-amber-300">
+            <strong>{itemsSinCosto} item{itemsSinCosto !== 1 ? "s" : ""}</strong> vendido{itemsSinCosto !== 1 ? "s" : ""} en este periodo no tienen costo unitario registrado. El dato de ganancia puede estar inflado.
+          </p>
+        </div>
+      )}
 
       {/* ─── Saldos Descuadrados ─── */}
       {isWidgetVisible("saldos") && saldoMismatches.length > 0 && (
@@ -1170,64 +1302,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>}
 
-      {/* ─── Quick Actions ─── */}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => router.push("/admin/ventas")} className="gap-1.5">
-          <ShoppingCart className="w-4 h-4" /> Nueva Venta
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => router.push("/admin/compras")} className="gap-1.5">
-          <Receipt className="w-4 h-4" /> Nueva Compra
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => router.push("/admin/caja")} className="gap-1.5">
-          <Wallet className="w-4 h-4" /> Caja
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => router.push("/admin/clientes")} className="gap-1.5">
-          <Users className="w-4 h-4" /> Clientes
-        </Button>
-      </div>
-
-      {/* ─── Date filter ─── */}
-      <Card>
-        <CardContent className="pt-5 pb-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Resumen de Actividad</span>
-            </div>
-            <div className="flex border rounded-lg overflow-hidden">
-              {(["diario", "mensual", "rango"] as FilterMode[]).map((mode) => (
-                <button key={mode} onClick={() => setFilterMode(mode)}
-                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${filterMode === mode ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"}`}>
-                  {mode === "diario" ? "Diario" : mode === "mensual" ? "Mensual" : "Entre Fechas"}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2 flex-1">
-              {filterMode === "diario" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por dia</span>
-                  <Input type="date" value={filterDate} onChange={(ev) => setFilterDate(ev.target.value)} className="h-9 w-44" />
-                </div>
-              )}
-              {filterMode === "mensual" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Mes</span>
-                  <Input type="month" value={filterMonth} onChange={(ev) => setFilterMonth(ev.target.value)} className="h-9 w-44" />
-                </div>
-              )}
-              {filterMode === "rango" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Desde</span>
-                  <Input type="date" value={filterFrom} onChange={(ev) => setFilterFrom(ev.target.value)} className="h-9 w-40" />
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Hasta</span>
-                  <Input type="date" value={filterTo} onChange={(ev) => setFilterTo(ev.target.value)} className="h-9 w-40" />
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
       ) : (
@@ -1272,6 +1346,86 @@ export default function DashboardPage() {
           </div>
           )}
 
+          {/* Stock bajo + Últimas ventas */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Stock Bajo */}
+            {isWidgetVisible("stockbajo") && lowStockProducts.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  Stock bajo
+                  <Badge variant="secondary" className="text-xs">{lowStockProducts.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
+                  {lowStockProducts.slice(0, 10).map((p) => {
+                    const pct = p.stock_minimo > 0 ? Math.min((p.stock / p.stock_minimo) * 100, 100) : 0;
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 py-1.5 text-sm">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate text-xs">{p.nombre}</p>
+                          <p className="text-[10px] text-muted-foreground">{p.codigo}</p>
+                        </div>
+                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${pct < 30 ? "bg-red-500" : pct < 60 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className={`text-xs font-semibold w-12 text-right ${p.stock <= 0 ? "text-red-600" : "text-amber-600"}`}>
+                          {p.stock} / {p.stock_minimo}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {lowStockProducts.length > 10 && (
+                  <Link href="/admin/stock" className="text-xs text-primary hover:underline mt-2 inline-block">
+                    Ver todos ({lowStockProducts.length}) →
+                  </Link>
+                )}
+              </CardContent>
+            </Card>
+            )}
+
+            {/* Últimas Ventas */}
+            {isWidgetVisible("ultimasventas") && ultimasVentas.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-primary" />
+                    Últimas ventas
+                  </CardTitle>
+                  <Link href="/admin/ventas/listado">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground">
+                      Ver todas <ArrowRight className="w-3 h-3" />
+                    </Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1 max-h-[280px] overflow-y-auto">
+                  {ultimasVentas.map((v) => (
+                    <div key={v.id} className="flex items-center justify-between py-1.5 text-sm border-b last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">#{v.numero}</span>
+                          <span className="font-medium text-xs truncate">{v.cliente}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span>{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}</span>
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">{v.forma_pago}</Badge>
+                        </div>
+                      </div>
+                      <span className="font-bold text-xs">{formatCurrency(v.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            )}
+          </div>
+
           {/* Ventas por categoria */}
           {isWidgetVisible("categories") && (
           <Card>
@@ -1286,6 +1440,48 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
           )}
+
+          {/* ─── Reportes Quick Access ─── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                Reportes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Link href="/admin/reportes" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-medium">Resumen mensual</p>
+                    <p className="text-[10px] text-muted-foreground">Ventas y gastos</p>
+                  </div>
+                </Link>
+                <Link href="/admin/ventas/listado" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                  <Receipt className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-medium">Historial ventas</p>
+                    <p className="text-[10px] text-muted-foreground">Listado completo</p>
+                  </div>
+                </Link>
+                <Link href="/admin/caja" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                  <Wallet className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-medium">Movimientos caja</p>
+                    <p className="text-[10px] text-muted-foreground">Ingresos y egresos</p>
+                  </div>
+                </Link>
+                <Link href="/admin/clientes" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-medium">Cuenta corriente</p>
+                    <p className="text-[10px] text-muted-foreground">Saldos de clientes</p>
+                  </div>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
 

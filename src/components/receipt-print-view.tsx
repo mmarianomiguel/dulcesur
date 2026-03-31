@@ -83,6 +83,7 @@ export interface ReceiptSale {
   clienteDireccion?: string | null;
   clienteTelefono?: string | null;
   clienteCondicionIva?: string | null;
+  metodoEntrega?: string | null;
   vendedor: string;
   items: ReceiptLineItem[];
   fecha: string;
@@ -242,6 +243,9 @@ export function ReceiptPrintView({
       )}
       {!sale.clienteDireccion && config.mostrarFormaPago && (
         <div><span style={{ fontWeight: "bold" }}>Pago:</span> {sale.formaPago}</div>
+      )}
+      {sale.metodoEntrega && (
+        <div><span style={{ fontWeight: "bold" }}>Despacho:</span> {sale.metodoEntrega === "envio" ? "Envío a domicilio" : "Retiro del local"}</div>
       )}
     </div>
   );

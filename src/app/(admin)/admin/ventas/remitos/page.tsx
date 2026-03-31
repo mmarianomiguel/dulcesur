@@ -63,6 +63,7 @@ interface RemitoRow {
   facturado: boolean;
   cliente_id: string | null;
   vendedor_id: string | null;
+  metodo_entrega: string | null;
   clientes: ClienteInfo | null;
 }
 
@@ -333,6 +334,7 @@ export default function RemitosPage() {
       clienteDireccion: [r.clientes?.domicilio, r.clientes?.localidad].filter(Boolean).join(", ") || null,
       clienteTelefono: r.clientes?.telefono || null,
       clienteCondicionIva: r.clientes?.situacion_iva || null,
+      metodoEntrega: r.metodo_entrega || null,
       vendedor: getVendedorNombre(r.vendedor_id),
       fecha: formatDatePDF(r.fecha),
       saldoAnterior: saldo,

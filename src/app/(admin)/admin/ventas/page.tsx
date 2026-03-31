@@ -1846,6 +1846,7 @@ export default function VentasPage() {
           clienteDireccion: selectedClient?.domicilio || null,
           clienteTelefono: selectedClient?.telefono || null,
           clienteCondicionIva: selectedClient?.situacion_iva || null,
+          metodoEntrega: deliveryMethod === "delivery" ? "envio" : "retiro",
           vendedor: sellers.find((s) => s.id === vendedorId)?.nombre || "",
           items: [...items],
           fecha: (() => { const [y, m, d] = fechaVenta.split("-"); return `${d}/${m}/${y}`; })(),
