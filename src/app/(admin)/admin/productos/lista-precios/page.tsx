@@ -603,8 +603,8 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(0);
           }
 
-          // Product name — auto-shrink font if name is too long
-          const topAreaEnd = y + pad + Math.max(logoSize, 4) + config.combinado_nombreOffset;
+          // Product name — positioned at fixed offset from top (logo is in corner, name is centered)
+          const topAreaEnd = y + pad + 4 + config.combinado_nombreOffset;
           const nameMaxW = cellW - pad * 2;
           let nameFontSize = config.combinado_tamañoNombre;
           pdf.setFont("helvetica", "bold");
@@ -1535,7 +1535,7 @@ export default function ListaPreciosPage() {
                       {/* Marca */}
                       <span className="absolute text-[8px] text-gray-400 uppercase" style={{ top: "12px", right: "8px" }}>MARCA</span>
                       {/* Nombre */}
-                      <p className="absolute left-0 right-0 text-center font-bold text-black" style={{ top: `${Math.max(config.combinado_mostrarLogo ? config.logoTamaño * 2.5 : 0, 16) + 8 + config.combinado_nombreOffset * 3}px`, fontSize: `${config.combinado_tamañoNombre}px`, padding: "0 8px" }}>
+                      <p className="absolute left-0 right-0 text-center font-bold text-black" style={{ top: `${18 + config.combinado_nombreOffset * 3}px`, fontSize: `${config.combinado_tamañoNombre}px`, padding: "0 8px" }}>
                         Producto Ejemplo
                       </p>
                       {/* Precio grande */}
