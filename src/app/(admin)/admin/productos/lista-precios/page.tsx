@@ -120,7 +120,7 @@ interface PdfConfig {
   poster_mostrarPrecioUnitario: boolean;
 }
 
-type PdfStyle = "combinado" | "duo" | "poster" | "lista" | "variaciones";
+type PdfStyle = "combinado" | "duo" | "simple" | "poster" | "lista" | "variaciones";
 type ConfigTab = "general" | PdfStyle;
 
 const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", fechaDesde: "", fechaHasta: "" };
@@ -793,6 +793,126 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(100);
             pdf.text(formatCurrency(transferBox), rX, zDetail + detailH * 0.87);
             pdf.setTextColor(0);
+          }
+
+          // ── 4. FOOTER ──
+          pdf.setDrawColor(220);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + pad, zFooter, x + cellW - pad, zFooter);
+
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5);
+          pdf.setTextColor(150);
+          if (config.duo_mostrarWeb) pdf.text(config.webUrl, x + pad + 1, zFooter + 3);
+          if (config.duo_mostrarFecha) {
+            const prodDate = product.fechaActualizacion
+              ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
+              : today;
+            pdf.text(prodDate, x + cellW - pad - 1, zFooter + 3, { align: "right" });
+          }
+          pdf.setTextColor(0);
+        });
+      }
+
+      if (style === "simple") {
+        // Same as duo but bottom zone only shows caja/bulto/display + price (no efectivo/transf)
+        const cols = config.duo_columnas;
+        const rows = config.duo_filas;
+        const perPage = cols * rows;
+        const cellW = (pageW - margin * 2) / cols;
+        const cellH = (pageH - margin * 2) / rows;
+
+        selectedProducts.forEach((product, idx) => {
+          if (idx > 0 && idx % perPage === 0) pdf.addPage();
+          const posInPage = idx % perPage;
+          const col = posInPage % cols;
+          const row = Math.floor(posInPage / cols);
+          const x = margin + col * cellW;
+          const y = margin + row * cellH;
+          const pad = 2.5;
+
+          pdf.setDrawColor(200);
+          pdf.setLineWidth(0.3);
+          pdf.rect(x, y, cellW, cellH);
+
+          const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
+          const boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
+          const hasUnits = product.unidadesCaja > 0 && boxPrice > 0;
+
+          // Zones
+          const zPrice = y + cellH * 0.25;
+          const zDetail = y + cellH * 0.58;
+          const zFooter = y + cellH * 0.90;
+
+          // ── 1. TOP: Logo + Marca + Nombre ──
+          if (config.duo_mostrarLogo && logoBase64) {
+            const logoSize = config.logoTamaño;
+            const logoW = logoSize * logoAspectRatio;
+            try { pdf.addImage(logoBase64, "PNG", x + 1, y + 0.8, logoW, logoSize); } catch {}
+          }
+          if (product.marca) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(5);
+            pdf.setTextColor(130);
+            pdf.text(product.marca.toUpperCase(), x + cellW - pad, y + pad + 3, { align: "right" });
+            pdf.setTextColor(0);
+          }
+
+          const logoRowH = config.duo_mostrarLogo && logoBase64 ? config.logoTamaño + 1 : 4;
+          const nameMaxW = cellW - pad * 2;
+          let nameFontSize = config.duo_tamañoNombre;
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(nameFontSize);
+          let nameLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
+          const minNameFont = nameFontSize * 0.6;
+          while (nameLines.length > 2 && nameFontSize > minNameFont) {
+            nameFontSize -= 0.5;
+            pdf.setFontSize(nameFontSize);
+            nameLines = pdf.splitTextToSize(product.nombre, nameMaxW);
+          }
+          const nameLineH = nameFontSize * 0.45;
+          const maxNameLines = Math.min(nameLines.length, 2);
+          const nameY = y + logoRowH + pad;
+          for (let li = 0; li < maxNameLines; li++) {
+            let lineText = String(nameLines[li]);
+            if (li === maxNameLines - 1 && nameLines.length > maxNameLines) {
+              while (pdf.getTextWidth(lineText + "...") > nameMaxW && lineText.length > 0) lineText = lineText.slice(0, -1);
+              lineText += "...";
+            }
+            pdf.text(lineText, x + cellW / 2, nameY + li * nameLineH, { align: "center" });
+          }
+
+          // ── 2. BIG PRICE (centered) ──
+          const priceCenterY = zPrice + (zDetail - zPrice) / 2;
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(config.duo_tamañoPrecio);
+          pdf.setTextColor(0);
+          pdf.text(formatCurrency(displayPrice), x + cellW / 2, priceCenterY + config.duo_tamañoPrecio * 0.13, { align: "center" });
+
+          // ── 3. CAJA SECTION (simple: just label + price, centered) ──
+          pdf.setDrawColor(210);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + pad, zDetail, x + cellW - pad, zDetail);
+
+          const detailH = zFooter - zDetail;
+
+          if (hasUnits) {
+            // Shaded background
+            pdf.setFillColor(243, 243, 243);
+            pdf.rect(x + 0.15, zDetail + 0.1, cellW - 0.3, detailH - 0.2, "F");
+
+            // Presentación label (left)
+            const presLabel = product.unidadesCaja >= 20 ? "Bulto" : product.unidadesCaja >= 6 ? "Display" : "Caja";
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7);
+            pdf.setTextColor(80);
+            pdf.text(`${presLabel} x${product.unidadesCaja}`, x + pad + 1, zDetail + detailH * 0.5 + 1);
+
+            // Box price (right, big)
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(12);
+            pdf.setTextColor(0);
+            pdf.text(formatCurrency(boxPrice), x + cellW - pad - 1, zDetail + detailH * 0.5 + 1.5, { align: "right" });
           }
 
           // ── 4. FOOTER ──
@@ -1560,7 +1680,7 @@ export default function ListaPreciosPage() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 grid grid-cols-3 gap-4 max-w-4xl mx-auto">
+            <div className="p-6 grid grid-cols-4 gap-4 max-w-5xl mx-auto">
               {/* Carteles de precios */}
               <button onClick={() => generatePDF("combinado")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
                 <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
@@ -1631,6 +1751,28 @@ export default function ListaPreciosPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">Dos columnas: precio unitario y por caja, ambos visibles</p>
               </button>
 
+              {/* Simple — Precio + Caja */}
+              <button onClick={() => generatePDF("simple")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
+                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="w-3 h-3 bg-muted-foreground/30 rounded-sm"></div>
+                    <span className="text-[4px] text-muted-foreground">MARCA</span>
+                  </div>
+                  <p className="text-[6px] font-bold text-center leading-tight mb-0.5">Producto Ejemplo</p>
+                  <p className="text-[10px] font-bold text-center mb-1">$1.200</p>
+                  <div className="bg-muted/60 rounded-sm px-1 py-0.5 flex justify-between items-center">
+                    <span className="text-[5px] font-bold text-muted-foreground">Caja x12</span>
+                    <span className="text-[7px] font-bold">$14.400</span>
+                  </div>
+                  <div className="border-t border-border mt-1 pt-0.5 flex justify-between">
+                    <span className="text-[4px] text-muted-foreground">www.dulcesur.com</span>
+                    <span className="text-[4px] text-muted-foreground">30/3/2026</span>
+                  </div>
+                </div>
+                <p className="font-semibold text-sm">Precio + Caja</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Precio unitario grande + banda con precio por caja</p>
+              </button>
+
               {/* Poster */}
               <button onClick={() => generatePDF("poster")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
                 <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
@@ -1649,7 +1791,7 @@ export default function ListaPreciosPage() {
               </button>
 
               {/* Lista General */}
-              <div className="col-span-3 border-2 border-border rounded-xl p-4 space-y-3">
+              <div className="col-span-4 border-2 border-border rounded-xl p-4 space-y-3">
                 <div className="border border-border rounded-lg p-3 bg-accent/30">
                   <p className="text-[6px] font-bold text-center mb-1">LISTA DE PRECIOS - DULCESUR</p>
                   <div className="space-y-0.5">
@@ -1682,7 +1824,7 @@ export default function ListaPreciosPage() {
               </div>
 
               {/* Variaciones de precio */}
-              <div className="col-span-3 border-2 border-border rounded-xl p-4 space-y-3">
+              <div className="col-span-4 border-2 border-border rounded-xl p-4 space-y-3">
                 <div className="border border-border rounded-lg p-3 bg-accent/30">
                   <p className="text-[6px] font-bold mb-1">Lista de Precios Actualizados</p>
                   <div className="space-y-0.5">
