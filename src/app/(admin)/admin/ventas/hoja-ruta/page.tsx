@@ -1543,7 +1543,8 @@ export default function HojaDeRutaPage() {
           {payVenta && (() => {
             const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
             const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
-            const totalPagadoGrupo = allVentas.reduce((s, vt) => s + (pagadoPorVenta[vt.id] || 0), 0);
+            const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
+            const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
             const totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMonto;
             const saldoPendiente = totalDebeGrupo - Math.min(totalPagando, totalDebeGrupo);
             const montoTransfDialog = payMetodo === "Transferencia" ? payMonto : payMetodo === "Mixto" ? payTransferencia : 0;
@@ -1569,7 +1570,8 @@ export default function HojaDeRutaPage() {
                       <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
                     </>
                   )}
-                  {totalPagadoGrupo > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoGrupo)}</span></div>}
+                  {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
+                  {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
                   <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(totalDebeGrupo)}</span></div>
                 </div>
 
@@ -1670,7 +1672,7 @@ export default function HojaDeRutaPage() {
                   <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancelar</Button>
                   <Button onClick={handleRegistrarPago} disabled={paySaving || totalPagando <= 0 || (saldoPendiente > 0 && !payVenta.cliente_id)}>
                     {paySaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Confirmar Cobro — {formatCurrency(Math.min(totalPagando, totalDebeGrupo))}
+                    Confirmar Cobro — {formatCurrency(Math.min(totalPagando, totalDebeGrupo) + surchargeDialog)}
                   </Button>
                 </div>
               </div>

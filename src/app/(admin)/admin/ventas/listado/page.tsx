@@ -2328,7 +2328,7 @@ export default function ListadoVentasPage() {
                         }}
                       >
                         <DollarSign className="w-4 h-4 mr-1" />
-                        {cobroMetodo === "Cuenta Corriente" ? "Cargar a Cta Cte" : "Confirmar cobro"}
+                        {cobroMetodo === "Cuenta Corriente" ? "Cargar a Cta Cte" : `Confirmar cobro — ${formatCurrency(totalCobrado + surcharge)}`}
                       </Button>
                     </div>
                   );
