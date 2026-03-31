@@ -192,7 +192,13 @@ export default function ListaPreciosPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortOrder, setSortOrder] = useState<"nombre" | "modificacion">("nombre");
   const [page, setPage] = useState(1);
-  const [config, setConfig] = useState<PdfConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<PdfConfig>(() => {
+    try {
+      const saved = localStorage.getItem("listaPreciosConfig");
+      if (saved) return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+    } catch {}
+    return DEFAULT_CONFIG;
+  });
   const [showConfig, setShowConfig] = useState(false);
   const [configTab, setConfigTab] = useState<ConfigTab>("general");
   const [showStylePicker, setShowStylePicker] = useState(false);
@@ -200,24 +206,34 @@ export default function ListaPreciosPage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
+  const [logoAspectRatio, setLogoAspectRatio] = useState(1); // width / height
   const [generating, setGenerating] = useState(false);
   const itemsPerPage = 50;
 
-  // Load config and logo from localStorage on mount
+  // Load logo from localStorage on mount
   useEffect(() => {
     try {
-      const savedConfig = localStorage.getItem("listaPreciosConfig");
-      if (savedConfig) setConfig({ ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) });
       const savedLogo = localStorage.getItem("listaPreciosLogo");
       if (savedLogo) {
         setLogoBase64(savedLogo);
+        const img = new window.Image();
+        img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
+        img.src = savedLogo;
       } else {
         // Auto-load default logo
         fetch("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png")
           .then((r) => r.blob())
           .then((blob) => {
             const reader = new FileReader();
-            reader.onloadend = () => { if (reader.result) setLogoBase64(reader.result as string); };
+            reader.onloadend = () => {
+              if (reader.result) {
+                const src = reader.result as string;
+                setLogoBase64(src);
+                const img = new window.Image();
+                img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
+                img.src = src;
+              }
+            };
             reader.readAsDataURL(blob);
           })
           .catch(() => {});
@@ -428,11 +444,21 @@ export default function ListaPreciosPage() {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
+  const computeLogoAspectRatio = (src: string) => {
+    const img = new window.Image();
+    img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
+    img.src = src;
+  };
+
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setLogoBase64(reader.result as string);
+    reader.onload = () => {
+      const result = reader.result as string;
+      setLogoBase64(result);
+      computeLogoAspectRatio(result);
+    };
     reader.readAsDataURL(file);
   };
 
@@ -562,9 +588,10 @@ export default function ListaPreciosPage() {
 
           // ── TOP ZONE (flows down from top) ──
 
-          // Logo (top-left)
+          // Logo (top-left) — respect aspect ratio
           if (config.combinado_mostrarLogo && logoBase64) {
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + pad, logoSize, logoSize); } catch {}
+            const logoW = logoSize * logoAspectRatio;
+            try { pdf.addImage(logoBase64, "PNG", x + pad, y + pad, logoW, logoSize); } catch {}
           }
 
           // Marca (top-right corner)
@@ -621,7 +648,9 @@ export default function ListaPreciosPage() {
           const hasUnits = product.unidadesCaja > 0;
 
           if (config.poster_mostrarLogo && logoBase64) {
-            try { pdf.addImage(logoBase64, "PNG", margin + 3, margin + 3, config.logoTamaño * 1.5, config.logoTamaño * 1.5); } catch {}
+            const posterLogoH = config.logoTamaño * 1.5;
+            const posterLogoW = posterLogoH * logoAspectRatio;
+            try { pdf.addImage(logoBase64, "PNG", margin + 3, margin + 3, posterLogoW, posterLogoH); } catch {}
           }
 
           // "OFERTA" header
@@ -1469,7 +1498,7 @@ export default function ListaPreciosPage() {
                   <div>
                     <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Logo</h3>
                     <div className="flex items-center gap-4">
-                      {logoBase64 && <img src={logoBase64} alt="Logo" className="w-12 h-12 object-contain border border-border rounded-lg p-1" />}
+                      {logoBase64 && <img src={logoBase64} alt="Logo" className="h-12 object-contain border border-border rounded-lg p-1" />}
                       <label className="cursor-pointer text-sm border border-border rounded-lg px-3 py-2 hover:bg-accent transition-colors">
                         {logoBase64 ? "Cambiar logo" : "Subir logo"}
                         <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
@@ -1498,15 +1527,15 @@ export default function ListaPreciosPage() {
                     <div className="border border-border rounded-lg bg-white relative" style={{ width: `${previewW}px`, height: `${previewH}px` }}>
                       {/* Logo */}
                       {config.combinado_mostrarLogo && logoBase64 && (
-                        <img src={logoBase64} alt="Logo" className="absolute object-contain" style={{ top: "8px", left: "8px", width: `${config.logoTamaño * 2.5}px`, height: `${config.logoTamaño * 2.5}px` }} />
+                        <img src={logoBase64} alt="Logo" className="absolute object-contain" style={{ top: "8px", left: "8px", height: `${config.logoTamaño * 2.5}px`, width: `${config.logoTamaño * 2.5 * logoAspectRatio}px` }} />
                       )}
                       {config.combinado_mostrarLogo && !logoBase64 && (
-                        <div className="absolute bg-gray-200 rounded" style={{ top: "8px", left: "8px", width: `${config.logoTamaño * 2.5}px`, height: `${config.logoTamaño * 2.5}px` }} />
+                        <div className="absolute bg-gray-200 rounded" style={{ top: "8px", left: "8px", height: `${config.logoTamaño * 2.5}px`, width: `${config.logoTamaño * 2.5 * logoAspectRatio}px` }} />
                       )}
                       {/* Marca */}
                       <span className="absolute text-[8px] text-gray-400 uppercase" style={{ top: "12px", right: "8px" }}>MARCA</span>
                       {/* Nombre */}
-                      <p className="absolute left-0 right-0 text-center font-bold text-black" style={{ top: `${Math.max(config.logoTamaño * 2.5, 16) + 8 + config.combinado_nombreOffset * 3}px`, fontSize: `${config.combinado_tamañoNombre}px`, padding: "0 8px" }}>
+                      <p className="absolute left-0 right-0 text-center font-bold text-black" style={{ top: `${Math.max(config.combinado_mostrarLogo ? config.logoTamaño * 2.5 : 0, 16) + 8 + config.combinado_nombreOffset * 3}px`, fontSize: `${config.combinado_tamañoNombre}px`, padding: "0 8px" }}>
                         Producto Ejemplo
                       </p>
                       {/* Precio grande */}
@@ -1633,6 +1662,22 @@ export default function ListaPreciosPage() {
                         <ToggleSwitch checked={config.combinado_mostrarFecha} onChange={() => updateConfig("combinado_mostrarFecha", !config.combinado_mostrarFecha)} label="Fecha actual" />
                       </div>
                     </div>
+                    {config.combinado_mostrarLogo && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Logo</h3>
+                      <div className="flex items-center gap-4">
+                        {logoBase64 && <img src={logoBase64} alt="Logo" className="h-12 object-contain border border-border rounded-lg p-1" />}
+                        <label className="cursor-pointer text-sm border border-border rounded-lg px-3 py-2 hover:bg-accent transition-colors">
+                          {logoBase64 ? "Cambiar logo" : "Subir logo"}
+                          <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                        </label>
+                      </div>
+                      <div className="mt-3">
+                        <label className="block text-xs text-muted-foreground mb-1">Tamaño del logo ({config.logoTamaño}mm)</label>
+                        <input type="range" min={4} max={30} step={1} value={config.logoTamaño} onChange={(e) => updateConfig("logoTamaño", Number(e.target.value))} className="w-full accent-primary" />
+                      </div>
+                    </div>
+                    )}
                   </div>
                 </div>
               )}
