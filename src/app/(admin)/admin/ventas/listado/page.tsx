@@ -973,16 +973,29 @@ export default function ListadoVentasPage() {
       }
     }
     // Fallback: if no caja_movimientos (online orders), read from ventas/pedidos_tienda
+    // For online orders: only count Transferencia as paid. Efectivo is collected at delivery.
+    const isOnlineOrder = pedido._source === "pedidos" || (pedido as any).isOnline || (pedido as any).origen === "tienda" || (pedido as any).tipo_comprobante === "Pedido Web" || (pedido as any)._tipo_comprobante === "Pedido Web";
     if (pagos.length === 0) {
       // Try ventas first
       if (ventaId) {
         const { data: ventaData } = await supabase.from("ventas").select("monto_efectivo, monto_transferencia, forma_pago, total").eq("id", ventaId).single();
         if (ventaData) {
-          if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ventaData.monto_efectivo });
-          if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
+          // For online orders, only transferencia counts as paid (cash collected at delivery)
+          if (isOnlineOrder) {
+            if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
+            // Show efectivo as pending/to-collect, not as paid
+            if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ventaData.monto_efectivo });
+          } else {
+            if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ventaData.monto_efectivo });
+            if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
+          }
           if (pagos.length === 0) {
-            // No stored amounts, use forma_pago + total
-            pagos.push({ metodo: ventaData.forma_pago || pedido.metodo_pago || "Efectivo", monto: ventaData.total || pedido.total });
+            if (isOnlineOrder) {
+              // Online with no stored amounts — nothing is paid yet, show as pending
+              pagos.push({ metodo: `${ventaData.forma_pago || pedido.metodo_pago || "Efectivo"} (a cobrar)`, monto: ventaData.total || pedido.total });
+            } else {
+              pagos.push({ metodo: ventaData.forma_pago || pedido.metodo_pago || "Efectivo", monto: ventaData.total || pedido.total });
+            }
           }
         }
       }
@@ -990,10 +1003,19 @@ export default function ListadoVentasPage() {
       if (pagos.length === 0 && pedido.numero) {
         const { data: ptData } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia, metodo_pago, total").eq("numero", pedido.numero).maybeSingle();
         if (ptData) {
-          if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ptData.monto_efectivo });
-          if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+          if (isOnlineOrder) {
+            if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+            if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptData.monto_efectivo });
+          } else {
+            if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ptData.monto_efectivo });
+            if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+          }
           if (pagos.length === 0) {
-            pagos.push({ metodo: ptData.metodo_pago || "Efectivo", monto: ptData.total || pedido.total });
+            if (isOnlineOrder) {
+              pagos.push({ metodo: `${ptData.metodo_pago || "Efectivo"} (a cobrar)`, monto: ptData.total || pedido.total });
+            } else {
+              pagos.push({ metodo: ptData.metodo_pago || "Efectivo", monto: ptData.total || pedido.total });
+            }
           }
         }
       }
@@ -2124,7 +2146,7 @@ export default function ListadoVentasPage() {
 
                 {/* Registrar cobro — any order with pending amount */}
                 {!isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
-                  const pagado = detailPagos.reduce((s, p) => s + p.monto, 0);
+                  const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
                   const pendiente = Math.round((poSelectedPedido.total - pagado) * 100) / 100;
                   if (pendiente < 1) return null;
                   const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
