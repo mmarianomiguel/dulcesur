@@ -142,9 +142,12 @@ export default function HojaDeRutaPage() {
       .not("cliente_id", "is", null)
       .order("created_at", { ascending: false });
 
-    // If not showing all pending, filter by selected date only
+    // If showing all pending, include today and past (not future deliveries)
+    // If showing specific date, filter by that date only
     if (!showAllPending) {
       query = query.eq("fecha", selectedDate);
+    } else {
+      query = query.lte("fecha", getArgentinaToday());
     }
 
     const { data, error } = await query;
