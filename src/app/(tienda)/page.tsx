@@ -736,7 +736,7 @@ export default function TiendaPage() {
           (async () => {
             let query = supabase
               .from("productos")
-              .select("id, nombre, precio, imagen_url, stock, es_combo, precio_anterior, fecha_actualizacion, created_at, updated_at, categorias(id, nombre)")
+              .select("id, nombre, precio, imagen_url, activo, stock, es_combo, precio_anterior, fecha_actualizacion, created_at, updated_at, categorias(id, nombre)")
               .eq("activo", true)
               .eq("visibilidad", "visible");
 
