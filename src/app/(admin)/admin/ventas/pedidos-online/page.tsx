@@ -135,15 +135,9 @@ export default function PedidosOnlinePage() {
   const [detailPayments, setDetailPayments] = useState<PaymentEntry[]>([]);
   const [detailNCs, setDetailNCs] = useState<NCDetail[]>([]);
 
-  // Payment registration (cobro)
-  const [cobroOpen, setCobroOpen] = useState(false);
-  const [cobroMetodo, setCobroMetodo] = useState("Efectivo");
-  const [cobroEfectivo, setCobroEfectivo] = useState("");
-  const [cobroTransferencia, setCobroTransferencia] = useState("");
-  const [cobroCuenta, setCobroCuenta] = useState("");
+  // Payment config
   const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; nombre: string; alias: string }[]>([]);
   const [recargoTransferencia, setRecargoTransferencia] = useState(0);
-  const [cobroSaving, setCobroSaving] = useState(false);
 
   // Print
   const [printOpen, setPrintOpen] = useState(false);
@@ -484,75 +478,6 @@ export default function PedidosOnlinePage() {
     fetchPedidos();
   };
 
-  // Register payment (cobro)
-  const handleRegistrarPago = async () => {
-    if (!selectedPedido || !selectedPedido.ventaId) return;
-    setCobroSaving(true);
-
-    try {
-      const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-      const hora = nowTimeARG();
-      const ventaId = selectedPedido.ventaId;
-      const monto = selectedPedido.total;
-
-      const entries: any[] = [];
-      let formaPago = cobroMetodo;
-      let totalConRecargo = monto;
-
-      if (cobroMetodo === "Mixto") {
-        const efvo = Number(cobroEfectivo) || 0;
-        const transf = Number(cobroTransferencia) || 0;
-        const surcharge = recargoTransferencia > 0 ? Math.round(transf * recargoTransferencia / 100) : 0;
-        if (efvo > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: efvo, referencia_id: ventaId, referencia_tipo: "venta" });
-        if (transf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero} (Transferencia${surcharge > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: transf + surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(cobroCuenta ? { cuenta_bancaria: cobroCuenta } : {}) });
-        totalConRecargo = efvo + transf + surcharge;
-        formaPago = "Mixto";
-      } else if (cobroMetodo === "Transferencia") {
-        const surcharge = recargoTransferencia > 0 ? Math.round(monto * recargoTransferencia / 100) : 0;
-        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero}${surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: "Transferencia", monto: monto + surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(cobroCuenta ? { cuenta_bancaria: cobroCuenta } : {}) });
-        totalConRecargo = monto + surcharge;
-      } else if (cobroMetodo === "Cuenta Corriente") {
-        // Move to cuenta corriente
-        formaPago = "Cuenta Corriente";
-      } else {
-        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero}`, metodo_pago: "Efectivo", monto, referencia_id: ventaId, referencia_tipo: "venta" });
-      }
-
-      // Insert caja entries
-      if (entries.length > 0) {
-        await supabase.from("caja_movimientos").insert(entries);
-      }
-
-      // Update venta
-      const ventaUpd: Record<string, unknown> = { forma_pago: formaPago };
-      if (totalConRecargo !== monto) ventaUpd.total = totalConRecargo;
-      await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
-
-      // Handle CC
-      if (cobroMetodo === "Cuenta Corriente" && selectedPedido.clienteId) {
-        const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", selectedPedido.clienteId).single();
-        const saldoActual = clienteData?.saldo || 0;
-        const nuevoSaldo = saldoActual + monto;
-        await supabase.from("cuenta_corriente").insert({
-          cliente_id: selectedPedido.clienteId, fecha: hoy,
-          comprobante: `Pedido Web #${selectedPedido.numero}`,
-          descripcion: "Pedido online a cuenta corriente",
-          debe: monto, haber: 0, saldo: nuevoSaldo,
-          forma_pago: "Cuenta Corriente", venta_id: ventaId,
-        });
-        await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", selectedPedido.clienteId);
-      }
-
-      showAdminToast("Pago registrado correctamente", "success");
-      setCobroOpen(false);
-      loadPaymentInfo(selectedPedido);
-    } catch (err: any) {
-      showAdminToast("Error al registrar pago: " + (err.message || ""), "error");
-    } finally {
-      setCobroSaving(false);
-    }
-  };
-
   // Print receipt
   const handlePrint = (pedido: Pedido) => {
     const items: ReceiptLineItem[] = pedido.items.map((i, idx) => ({
@@ -862,87 +787,60 @@ export default function PedidosOnlinePage() {
         onConfirmAction={(title, message, action) => {
           setConfirmDialog({ open: true, title, message, onConfirm: action });
         }}
-        footerExtra={
-          selectedPedido && !detailPayments.some(p => p.metodo !== "Pendiente de cobro") && selectedPedido.estado !== "entregado" && selectedPedido.estado !== "cancelado" ? (
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setCobroMetodo("Efectivo"); setCobroEfectivo(""); setCobroTransferencia(""); setCobroCuenta(""); setCobroOpen(true); }}>
-              <Banknote className="w-3 h-3" /> Registrar cobro
-            </Button>
-          ) : undefined
-        }
+        cobroConfig={{
+          cuentasBancarias,
+          recargoTransferencia,
+          onRegistrarCobro: async (metodo, monto, opts) => {
+            if (!selectedPedido?.ventaId) return;
+            const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+            const hora = nowTimeARG();
+            const ventaId = selectedPedido.ventaId;
+            const entries: any[] = [];
+            let formaPago = metodo;
+            let totalConRecargo = monto;
+
+            if (metodo === "Mixto") {
+              const efvo = opts.efectivo || 0;
+              const transf = opts.transferencia || 0;
+              const surcharge = recargoTransferencia > 0 ? Math.round(transf * recargoTransferencia / 100) : 0;
+              if (efvo > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: efvo, referencia_id: ventaId, referencia_tipo: "venta" });
+              if (transf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero} (Transferencia${surcharge > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: transf + surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(opts.cuenta ? { cuenta_bancaria: opts.cuenta } : {}) });
+              totalConRecargo = efvo + transf + surcharge;
+            } else if (metodo === "Transferencia") {
+              const surcharge = recargoTransferencia > 0 ? Math.round(monto * recargoTransferencia / 100) : 0;
+              entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero}${surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: "Transferencia", monto: monto + surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(opts.cuenta ? { cuenta_bancaria: opts.cuenta } : {}) });
+              totalConRecargo = monto + surcharge;
+            } else if (metodo === "Cuenta Corriente") {
+              formaPago = "Cuenta Corriente";
+            } else {
+              entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${selectedPedido.numero}`, metodo_pago: "Efectivo", monto, referencia_id: ventaId, referencia_tipo: "venta" });
+            }
+
+            if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+
+            const ventaUpd: Record<string, unknown> = { forma_pago: formaPago };
+            if (totalConRecargo !== monto) ventaUpd.total = totalConRecargo;
+            await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
+
+            if (metodo === "Cuenta Corriente" && selectedPedido.clienteId) {
+              const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", selectedPedido.clienteId).single();
+              const saldoActual = clienteData?.saldo || 0;
+              const nuevoSaldo = saldoActual + monto;
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: selectedPedido.clienteId, fecha: hoy,
+                comprobante: `Pedido Web #${selectedPedido.numero}`,
+                descripcion: "Pedido online a cuenta corriente",
+                debe: monto, haber: 0, saldo: nuevoSaldo,
+                forma_pago: "Cuenta Corriente", venta_id: ventaId,
+              });
+              await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", selectedPedido.clienteId);
+            }
+
+            showAdminToast("Pago registrado correctamente", "success");
+            loadPaymentInfo(selectedPedido);
+          },
+        }}
       />
-
-      {/* ═══ COBRO DIALOG ═══ */}
-      <Dialog open={cobroOpen} onOpenChange={setCobroOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Banknote className="w-5 h-5 text-primary" /> Registrar cobro
-            </DialogTitle>
-          </DialogHeader>
-          {selectedPedido && (
-            <div className="space-y-4">
-              <div className="bg-muted/30 rounded-lg p-3 flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total a cobrar</span>
-                <span className="text-lg font-bold">{formatCurrency(selectedPedido.total)}</span>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm">Método de pago</Label>
-                <Select value={cobroMetodo} onValueChange={(v) => v && setCobroMetodo(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Efectivo">Efectivo</SelectItem>
-                    <SelectItem value="Transferencia">Transferencia</SelectItem>
-                    <SelectItem value="Mixto">Mixto</SelectItem>
-                    <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {cobroMetodo === "Mixto" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Efectivo</Label>
-                    <Input type="number" placeholder="0" value={cobroEfectivo} onChange={(e) => setCobroEfectivo(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Transferencia</Label>
-                    <Input type="number" placeholder="0" value={cobroTransferencia} onChange={(e) => setCobroTransferencia(e.target.value)} />
-                  </div>
-                </div>
-              )}
-
-              {(cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && (
-                <>
-                  {recargoTransferencia > 0 && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" /> Recargo {recargoTransferencia}% por transferencia
-                    </p>
-                  )}
-                  {cuentasBancarias.length > 0 && (
-                    <div className="space-y-1">
-                      <Label className="text-xs">Cuenta bancaria</Label>
-                      <Select value={cobroCuenta} onValueChange={(v) => v && setCobroCuenta(v)}>
-                        <SelectTrigger><SelectValue placeholder="Seleccionar cuenta..." /></SelectTrigger>
-                        <SelectContent>
-                          {cuentasBancarias.map((c) => (
-                            <SelectItem key={c.id} value={c.alias || c.nombre}>{c.nombre}{c.alias ? ` (${c.alias})` : ""}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </>
-              )}
-
-              <Button className="w-full" onClick={handleRegistrarPago} disabled={cobroSaving}>
-                {cobroSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                Confirmar cobro
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* ═══ CONFIRM DIALOG ═══ */}
       <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>

@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/formatters";
 import {
   Receipt,
@@ -171,19 +173,33 @@ interface VentaDetailDialogProps {
   onSearchProducts?: (query: string) => Promise<ProductSearchResult[]>;
   // ─── Confirm dialog callback (optional) ───
   onConfirmAction?: (title: string, message: string, action: () => void) => void;
+  // ─── Cobro inline (optional) ───
+  cobroConfig?: {
+    cuentasBancarias: { id: string; nombre: string; alias: string }[];
+    recargoTransferencia: number;
+    onRegistrarCobro: (metodo: string, monto: number, opts: { efectivo?: number; transferencia?: number; cuenta?: string }) => Promise<void>;
+  };
 }
 
 export function VentaDetailDialog({
   open, onOpenChange, data, items, pagos, onPrint, footerExtra,
   editable, editItems, onEditItemsChange, onSave, saving, hasChanges,
-  onEstadoChange, ncs, onSearchProducts, onConfirmAction,
+  onEstadoChange, ncs, onSearchProducts, onConfirmAction, cobroConfig,
 }: VentaDetailDialogProps) {
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
 
-  // Reset search state when dialog closes
+  // Cobro inline state
+  const [cobroMetodo, setCobroMetodo] = useState("Efectivo");
+  const [cobroEfectivo, setCobroEfectivo] = useState("");
+  const [cobroTransferencia, setCobroTransferencia] = useState("");
+  const [cobroCuenta, setCobroCuenta] = useState("");
+  const [cobroSaving, setCobroSaving] = useState(false);
+  const [cobroMonto, setCobroMonto] = useState("");
+
+  // Reset state when dialog opens/closes
   useEffect(() => {
     if (!open) {
       setAddProductOpen(false);
@@ -191,6 +207,26 @@ export function VentaDetailDialog({
       setProductResults([]);
     }
   }, [open]);
+
+  // Pre-fill cobro with client's chosen payment method when opening a pending pedido
+  useEffect(() => {
+    if (open && data) {
+      const metodo = data.metodo_pago || data.forma_pago || "Efectivo";
+      const hasCobro = (pagos || []).some(p => !p.metodo.includes("Pendiente") && p.metodo !== (data.metodo_pago || ""));
+      if (!hasCobro) {
+        const normalizedMetodo = metodo.toLowerCase().includes("transferencia") ? "Transferencia"
+          : metodo.toLowerCase().includes("efectivo") ? "Efectivo"
+          : metodo.toLowerCase().includes("mixto") ? "Mixto"
+          : metodo.toLowerCase().includes("cuenta") ? "Cuenta Corriente"
+          : "Efectivo";
+        setCobroMetodo(normalizedMetodo);
+        setCobroMonto(String(data.total || 0));
+        setCobroEfectivo("");
+        setCobroTransferencia("");
+        setCobroCuenta("");
+      }
+    }
+  }, [open, data, pagos]);
 
   if (!data) return null;
 
@@ -213,6 +249,7 @@ export function VentaDetailDialog({
     ? itemsSubtotal + (envio || 0)
     : data.total - ncTotal;
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
+  const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr"));
   const nextStates = onEstadoChange ? (estadoFlow[estado] || []) : [];
 
   // Edit helpers
@@ -412,6 +449,113 @@ export function VentaDetailDialog({
               <p className="text-amber-700">{data.observacion}</p>
             </div>
           )}
+
+          {/* ═══ COBRO INLINE ═══ */}
+          {cobroConfig && isEditable && !hasCobro && (() => {
+            const montoTotal = editable && editItems
+              ? editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0) + (data.costo_envio || 0)
+              : data.total;
+            const handleConfirmarCobro = async () => {
+              setCobroSaving(true);
+              try {
+                const monto = Number(cobroMonto) || montoTotal;
+                await cobroConfig.onRegistrarCobro(cobroMetodo, monto, {
+                  efectivo: cobroMetodo === "Mixto" ? Number(cobroEfectivo) || 0 : undefined,
+                  transferencia: cobroMetodo === "Mixto" ? Number(cobroTransferencia) || 0 : undefined,
+                  cuenta: cobroCuenta || undefined,
+                });
+              } finally {
+                setCobroSaving(false);
+              }
+            };
+            return (
+              <div className="border-2 border-emerald-200 bg-emerald-50/30 rounded-xl p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 text-emerald-700">
+                    <Banknote className="w-4 h-4" /> Registrar cobro
+                  </h3>
+                  <span className="text-sm font-bold text-amber-600">Pendiente: {formatCurrency(montoTotal)}</span>
+                </div>
+
+                {/* Method selection as visual buttons */}
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { value: "Efectivo", label: "Efect.", icon: Banknote },
+                    { value: "Transferencia", label: "Transf.", icon: ArrowRight },
+                    { value: "Mixto", label: "Mixto", icon: CreditCard },
+                    { value: "Cuenta Corriente", label: "Cta Cte", icon: FileText },
+                  ].map(({ value, label, icon: Icon }) => (
+                    <button
+                      key={value}
+                      onClick={() => { setCobroMetodo(value); setCobroMonto(String(montoTotal)); }}
+                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg border-2 text-xs font-medium transition-all ${
+                        cobroMetodo === value
+                          ? "border-emerald-500 bg-emerald-100 text-emerald-700"
+                          : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/30"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Monto */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Monto a cobrar</Label>
+                  <Input
+                    type="number"
+                    value={cobroMonto}
+                    onChange={(e) => setCobroMonto(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+
+                {/* Mixto: split fields */}
+                {cobroMetodo === "Mixto" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Efectivo</Label>
+                      <Input type="number" placeholder="0" value={cobroEfectivo} onChange={(e) => setCobroEfectivo(e.target.value)} className="h-8" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Transferencia</Label>
+                      <Input type="number" placeholder="0" value={cobroTransferencia} onChange={(e) => setCobroTransferencia(e.target.value)} className="h-8" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Transfer options */}
+                {(cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && (
+                  <div className="space-y-2">
+                    {cobroConfig.recargoTransferencia > 0 && (
+                      <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Recargo {cobroConfig.recargoTransferencia}% por transferencia
+                      </p>
+                    )}
+                    {cobroConfig.cuentasBancarias.length > 0 && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Cuenta bancaria</Label>
+                        <Select value={cobroCuenta} onValueChange={(v) => v && setCobroCuenta(v)}>
+                          <SelectTrigger className="h-8"><SelectValue placeholder="Seleccionar cuenta..." /></SelectTrigger>
+                          <SelectContent>
+                            {cobroConfig.cuentasBancarias.map((c) => (
+                              <SelectItem key={c.id} value={c.alias || c.nombre}>{c.nombre}{c.alias ? ` (${c.alias})` : ""}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleConfirmarCobro} disabled={cobroSaving}>
+                  {cobroSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Banknote className="w-4 h-4 mr-2" />}
+                  Confirmar cobro — {formatCurrency(Number(cobroMonto) || montoTotal)}
+                </Button>
+              </div>
+            );
+          })()}
 
           {/* Status actions */}
           {nextStates.length > 0 && onEstadoChange && (
