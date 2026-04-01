@@ -90,6 +90,7 @@ interface Pedido {
   // Enriched fields
   ventaId?: string;
   clienteId?: string;
+  _preloadedPayments?: PaymentEntry[];
 }
 
 interface PaymentEntry {
@@ -194,34 +195,43 @@ export default function PedidosOnlinePage() {
 
     if (!data) { setLoading(false); return; }
 
-    // Fetch items for all pedidos
     const ids = data.map((p: any) => p.id);
-    const { data: allItems } = await supabase
-      .from("pedido_tienda_items")
-      .select("*")
-      .in("pedido_id", ids);
-
-    // Fetch linked ventas to get UPP and ventaId
     const numeros = data.map((p: any) => p.numero);
-    const { data: ventas } = await supabase
-      .from("ventas")
-      .select("id, numero, cliente_id")
-      .in("numero", numeros);
+
+    // Parallel: fetch items + linked ventas at the same time
+    const [{ data: allItems }, { data: ventas }] = await Promise.all([
+      supabase.from("pedido_tienda_items").select("*").in("pedido_id", ids),
+      supabase.from("ventas").select("id, numero, cliente_id").in("numero", numeros),
+    ]);
+
     const ventaMap: Record<string, { id: string; cliente_id: string }> = {};
     for (const v of ventas || []) ventaMap[v.numero] = { id: v.id, cliente_id: v.cliente_id };
     const ventaIds = Object.values(ventaMap).map(v => v.id);
 
-    let uppByProducto: Record<string, number> = {};
-    if (ventaIds.length > 0) {
-      const { data: vitems } = await supabase
-        .from("venta_items")
-        .select("producto_id, presentacion, unidades_por_presentacion")
-        .in("venta_id", ventaIds);
-      for (const vi of vitems || []) {
-        if (vi.producto_id && vi.unidades_por_presentacion) {
-          const key = `${vi.producto_id}_${vi.presentacion || ""}`;
-          uppByProducto[key] = vi.unidades_por_presentacion;
-        }
+    // Parallel: fetch UPP + payment info for all ventas
+    const [uppResult, movsResult] = await Promise.all([
+      ventaIds.length > 0
+        ? supabase.from("venta_items").select("producto_id, presentacion, unidades_por_presentacion, venta_id").in("venta_id", ventaIds)
+        : Promise.resolve({ data: [] }),
+      ventaIds.length > 0
+        ? supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria, referencia_id").eq("referencia_tipo", "venta").in("referencia_id", ventaIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const uppByProducto: Record<string, number> = {};
+    for (const vi of uppResult.data || []) {
+      if (vi.producto_id && vi.unidades_por_presentacion) {
+        uppByProducto[`${vi.producto_id}_${vi.presentacion || ""}`] = vi.unidades_por_presentacion;
+      }
+    }
+
+    // Pre-build payment info by ventaId
+    const paymentsByVentaId: Record<string, PaymentEntry[]> = {};
+    for (const m of movsResult.data || []) {
+      if (m.tipo === "ingreso" && m.monto > 0) {
+        const vid = m.referencia_id;
+        if (!paymentsByVentaId[vid]) paymentsByVentaId[vid] = [];
+        paymentsByVentaId[vid].push({ metodo: m.metodo_pago, monto: m.monto, cuenta_bancaria: (m as any).cuenta_bancaria });
       }
     }
 
@@ -233,13 +243,18 @@ export default function PedidosOnlinePage() {
       itemsByPedido[item.pedido_id].push({ ...item, unidades_por_presentacion: upp });
     });
 
-    setPedidos(data.map((p: any) => ({
-      ...p,
-      estado: (p.estado || "pendiente").toLowerCase(),
-      items: itemsByPedido[p.id] || [],
-      ventaId: ventaMap[p.numero]?.id || undefined,
-      clienteId: ventaMap[p.numero]?.cliente_id || undefined,
-    })));
+    setPedidos(data.map((p: any) => {
+      const ventaId = ventaMap[p.numero]?.id;
+      const preloadedPayments = ventaId ? paymentsByVentaId[ventaId] : undefined;
+      return {
+        ...p,
+        estado: (p.estado || "pendiente").toLowerCase(),
+        items: itemsByPedido[p.id] || [],
+        ventaId: ventaId || undefined,
+        clienteId: ventaMap[p.numero]?.cliente_id || undefined,
+        _preloadedPayments: preloadedPayments,
+      };
+    }));
     setLoading(false);
   }, []);
 
@@ -300,15 +315,38 @@ export default function PedidosOnlinePage() {
     setDetailNCs(ncs);
   };
 
-  // Open detail
+  // Open detail — use pre-loaded payments for instant display
   const openDetail = async (pedido: Pedido) => {
     setSelectedPedido(pedido);
     setEditItems(pedido.items.map((i) => ({ ...i })));
     setHasChanges(false);
-    setDetailPayments([]);
     setDetailNCs([]);
+
+    // Instantly show pre-loaded payments (or fallback)
+    if (pedido._preloadedPayments && pedido._preloadedPayments.length > 0) {
+      setDetailPayments(pedido._preloadedPayments);
+    } else {
+      setDetailPayments([{ metodo: pedido.metodo_pago || "Pendiente de cobro", monto: pedido.total }]);
+    }
+
     setDetailOpen(true);
-    loadPaymentInfo(pedido);
+
+    // Fetch NCs in background (less common, ok to be async)
+    if (pedido.ventaId) {
+      const { data: ncRows } = await supabase
+        .from("ventas")
+        .select("numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)")
+        .eq("remito_origen_id", pedido.ventaId)
+        .eq("tipo_comprobante", "NC");
+      setDetailNCs((ncRows || []).map((nc: any) => ({
+        numero: nc.numero,
+        total: nc.total,
+        items: (nc.venta_items || []).map((i: any) => ({
+          descripcion: i.descripcion, cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario, subtotal: i.subtotal,
+        })),
+      })));
+    }
   };
 
   // Save changes
