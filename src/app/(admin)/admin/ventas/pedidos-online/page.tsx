@@ -417,11 +417,20 @@ export default function PedidosOnlinePage() {
           const diferencia = nuevoTotal - totalAnterior;
           await supabase.from("ventas").update({ subtotal: nuevoSubtotal, total: nuevoTotal }).eq("id", venta.id);
           await supabase.from("venta_items").delete().eq("venta_id", venta.id);
+          // Fetch costo for each product so we preserve costo_unitario
+          const prodIds = [...new Set(editItems.map(i => i.producto_id).filter(Boolean))];
+          const { data: prodCostos } = prodIds.length > 0
+            ? await supabase.from("productos").select("id, costo").in("id", prodIds)
+            : { data: [] };
+          const costoMap: Record<string, number> = {};
+          for (const p of prodCostos || []) costoMap[p.id] = p.costo || 0;
+
           await supabase.from("venta_items").insert(
             editItems.map((item) => ({
               venta_id: venta.id, producto_id: item.producto_id,
               descripcion: item.presentacion && item.presentacion !== "Unidad" ? `${item.nombre} (${item.presentacion})` : item.nombre,
               cantidad: item.cantidad, precio_unitario: item.precio_unitario,
+              costo_unitario: costoMap[item.producto_id] || 0,
               subtotal: item.precio_unitario * item.cantidad, unidad_medida: "Un",
               presentacion: item.presentacion, unidades_por_presentacion: item.unidades_por_presentacion || 1,
             }))
