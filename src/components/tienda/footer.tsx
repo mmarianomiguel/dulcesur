@@ -94,7 +94,7 @@ export default function TiendaFooter() {
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-12">
             {/* Brand */}
             <div className="lg:col-span-3">
-              <img src={config.logo_url || "https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png"} alt={tiendaNombre} className="mb-4 h-10 w-auto" />
+              <img src={config.logo_url || "https://res.cloudinary.com/dss3lnovd/image/upload/w_200,q_auto,f_auto/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png"} alt={tiendaNombre} className="mb-4 h-10 w-auto" width={120} height={40} loading="lazy" />
               <p className="mb-5 text-sm leading-relaxed text-gray-400">{config.descripcion}</p>
               <div className="flex items-center gap-3">
                 {config.instagram_url && (

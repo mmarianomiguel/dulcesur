@@ -23,7 +23,7 @@ interface Categoria {
   nombre: string;
 }
 
-const FALLBACK_LOGO = "https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png";
+const FALLBACK_LOGO = "https://res.cloudinary.com/dss3lnovd/image/upload/w_200,q_auto,f_auto/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png";
 
 export default function TiendaNavbar() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -166,6 +166,8 @@ export default function TiendaNavbar() {
               src={logoSrc}
               alt={config?.nombre || "Tienda"}
               className="h-10 w-auto"
+              width={120}
+              height={40}
               fetchPriority="high"
               onError={() => {
                 if (logoSrc !== FALLBACK_LOGO) setLogoSrc(FALLBACK_LOGO);
@@ -314,6 +316,8 @@ export default function TiendaNavbar() {
             src={mobilLogoSrc}
             alt={config?.nombre || "Tienda"}
             className="h-8 w-auto"
+            width={96}
+            height={32}
             fetchPriority="high"
             onError={() => {
               if (mobilLogoSrc !== FALLBACK_LOGO) setMobilLogoSrc(FALLBACK_LOGO);

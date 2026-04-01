@@ -1169,7 +1169,7 @@ function ProductosContent() {
           ) : view === "grid" ? (
             /* ─── Grid view ─── */
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-              {productos.map((producto) => {
+              {productos.map((producto, idx) => {
                 const qty = getQty(producto.id);
                 const pres = presentacionesMap[producto.id];
                 const activePrice = pres && pres.length > 1 ? (pres[selectedPres[producto.id] ?? 0]?.precio ?? producto.precio) : producto.precio;
@@ -1221,7 +1221,7 @@ function ProductosContent() {
                             fill
                             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                             className="object-contain p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
-                            loading="lazy"
+                            {...(idx < 4 ? { priority: true } : { loading: "lazy" as const })}
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 to-gray-100">
@@ -1418,7 +1418,7 @@ function ProductosContent() {
           ) : (
             /* ─── List view ─── */
             <div className="space-y-3">
-              {productos.map((producto) => {
+              {productos.map((producto, idx) => {
                 const qty = getQty(producto.id);
                 const pres = presentacionesMap[producto.id];
                 const activePrice = pres && pres.length > 1 ? (pres[selectedPres[producto.id] ?? 0]?.precio ?? producto.precio) : producto.precio;
@@ -1440,7 +1440,7 @@ function ProductosContent() {
                           fill
                           sizes="144px"
                           className="object-contain p-4 group-hover:scale-105 transition-transform duration-500 ease-out"
-                          loading="lazy"
+                          {...(idx < 2 ? { priority: true } : { loading: "lazy" as const })}
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-gray-50 to-gray-100">
