@@ -407,7 +407,26 @@ export default function PedidosOnlinePage() {
 
       const nuevoSubtotal = editItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0);
       const nuevoTotal = nuevoSubtotal + (selectedPedido.costo_envio || 0);
-      await supabase.from("pedidos_tienda").update({ subtotal: nuevoSubtotal, total: nuevoTotal }).eq("id", selectedPedido.id);
+      // Reset payment amounts to match new total (surcharge will be re-applied on cobro save)
+      const metodo = (selectedPedido.metodo_pago || "efectivo").toLowerCase();
+      const pedidoUpdate: Record<string, unknown> = { subtotal: nuevoSubtotal, total: nuevoTotal };
+      if (metodo.includes("transferencia") && !metodo.includes("mixto")) {
+        pedidoUpdate.monto_transferencia = nuevoTotal;
+        pedidoUpdate.monto_efectivo = 0;
+        pedidoUpdate.recargo_transferencia = 0;
+      } else if (metodo.includes("mixto")) {
+        // Keep proportions: scale existing split to new total
+        const oldTotal = selectedPedido.total || 1;
+        const ratio = nuevoTotal / oldTotal;
+        pedidoUpdate.monto_efectivo = Math.round((selectedPedido.monto_efectivo || 0) * ratio);
+        pedidoUpdate.monto_transferencia = Math.round((selectedPedido.monto_transferencia || 0) * ratio);
+        pedidoUpdate.recargo_transferencia = 0;
+      } else {
+        pedidoUpdate.monto_efectivo = nuevoTotal;
+        pedidoUpdate.monto_transferencia = 0;
+        pedidoUpdate.recargo_transferencia = 0;
+      }
+      await supabase.from("pedidos_tienda").update(pedidoUpdate).eq("id", selectedPedido.id);
 
       // Sync linked venta
       if (selectedPedido.ventaId) {

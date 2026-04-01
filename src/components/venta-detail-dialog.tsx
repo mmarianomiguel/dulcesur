@@ -200,7 +200,6 @@ export function VentaDetailDialog({
   const [cobroTransferencia, setCobroTransferencia] = useState("");
   const [cobroCuenta, setCobroCuenta] = useState("");
   const [cobroSaving, setCobroSaving] = useState(false);
-  const [cobroMonto, setCobroMonto] = useState("");
 
   // Reset state when dialog opens/closes
   useEffect(() => {
@@ -221,7 +220,6 @@ export function VentaDetailDialog({
         : metodo.toLowerCase().includes("cuenta") ? "Cuenta Corriente"
         : "Efectivo";
       setCobroMetodo(normalizedMetodo);
-      setCobroMonto(String(data.total || 0));
       // Pre-fill mixto split amounts from saved data
       setCobroEfectivo(normalizedMetodo === "Mixto" && data.monto_efectivo ? String(data.monto_efectivo) : "");
       setCobroTransferencia(normalizedMetodo === "Mixto" && data.monto_transferencia ? String(data.monto_transferencia) : "");
@@ -461,24 +459,23 @@ export function VentaDetailDialog({
           {/* ═══ COBRO INLINE ═══ */}
           {cobroConfig && isEditable && (() => {
             const montoCobrar = displayTotal;
-            // Calculate surcharge preview
+            // Calculate surcharge preview — always use montoCobrar (current items total)
             const recPctTransf = cobroConfig.recargoTransferencia || 0;
-            const montoBase = Number(cobroMonto) || montoCobrar;
             let surchargePreview = 0;
             if (recPctTransf > 0) {
               if (cobroMetodo === "Transferencia") {
-                surchargePreview = Math.round(montoBase * recPctTransf / 100);
+                surchargePreview = Math.round(montoCobrar * recPctTransf / 100);
               } else if (cobroMetodo === "Mixto") {
                 const transfPart = Number(cobroTransferencia) || 0;
                 surchargePreview = Math.round(transfPart * recPctTransf / 100);
               }
             }
-            const totalConRecargo = montoBase + surchargePreview;
+            const totalConRecargo = montoCobrar + surchargePreview;
 
             const handleConfirmarCobro = async () => {
               setCobroSaving(true);
               try {
-                await cobroConfig.onRegistrarCobro(cobroMetodo, montoBase, {
+                await cobroConfig.onRegistrarCobro(cobroMetodo, montoCobrar, {
                   efectivo: cobroMetodo === "Mixto" ? Number(cobroEfectivo) || 0 : undefined,
                   transferencia: cobroMetodo === "Mixto" ? Number(cobroTransferencia) || 0 : undefined,
                   cuenta: cobroCuenta || undefined,
@@ -494,8 +491,10 @@ export function VentaDetailDialog({
                     <Banknote className="w-4 h-4" /> Método de pago
                   </h3>
                   <div className="text-right text-sm">
-                    {envio > 0 && <p className="text-xs text-muted-foreground">Subtotal: {formatCurrency(itemsSubtotal)} + Envío: {formatCurrency(envio)}</p>}
-                    <p className="font-bold">Total: {formatCurrency(montoCobrar)}</p>
+                    <p className="text-xs text-muted-foreground">Subtotal: {formatCurrency(itemsSubtotal)}</p>
+                    {envio > 0 && <p className="text-xs text-muted-foreground">Envío: {formatCurrency(envio)}</p>}
+                    {surchargePreview > 0 && <p className="text-xs text-amber-600">Recargo {recPctTransf}%: +{formatCurrency(surchargePreview)}</p>}
+                    <p className="font-bold">Total: {formatCurrency(totalConRecargo)}</p>
                   </div>
                 </div>
 
@@ -509,7 +508,7 @@ export function VentaDetailDialog({
                   ].map(({ value, label, icon: Icon }) => (
                     <button
                       key={value}
-                      onClick={() => { setCobroMetodo(value); setCobroMonto(String(montoCobrar)); }}
+                      onClick={() => setCobroMetodo(value)}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg border-2 text-xs font-medium transition-all ${
                         cobroMetodo === value
                           ? "border-blue-500 bg-blue-100 text-blue-700"
@@ -520,17 +519,6 @@ export function VentaDetailDialog({
                       {label}
                     </button>
                   ))}
-                </div>
-
-                {/* Monto */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Monto a cobrar</Label>
-                  <Input
-                    type="number"
-                    value={cobroMonto}
-                    onChange={(e) => setCobroMonto(e.target.value)}
-                    className="h-9"
-                  />
                 </div>
 
                 {/* Mixto: split fields */}
@@ -547,21 +535,19 @@ export function VentaDetailDialog({
                   </div>
                 )}
 
-                {/* Transfer options + surcharge preview */}
+                {/* Transfer options + surcharge detail */}
                 {(cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && (
                   <div className="space-y-2">
-                    {recPctTransf > 0 && (
+                    {recPctTransf > 0 && surchargePreview > 0 && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1">
                         <p className="text-xs text-amber-700 flex items-center gap-1 font-medium">
                           <AlertTriangle className="w-3 h-3" /> Recargo {recPctTransf}% por transferencia
                         </p>
-                        {surchargePreview > 0 && (
-                          <div className="text-xs space-y-0.5">
-                            <p className="text-muted-foreground">Monto base: {formatCurrency(montoBase)}</p>
-                            <p className="text-amber-700">+ Recargo: {formatCurrency(surchargePreview)}</p>
-                            <p className="font-bold text-foreground">Total a cobrar: {formatCurrency(totalConRecargo)}</p>
-                          </div>
-                        )}
+                        <div className="text-xs space-y-0.5">
+                          <p className="text-muted-foreground">Base: {formatCurrency(cobroMetodo === "Mixto" ? Number(cobroTransferencia) || 0 : montoCobrar)}</p>
+                          <p className="text-amber-700">+ Recargo: {formatCurrency(surchargePreview)}</p>
+                          <p className="font-bold text-foreground">Total con recargo: {formatCurrency(totalConRecargo)}</p>
+                        </div>
                       </div>
                     )}
                     {cobroConfig.cuentasBancarias.length > 0 && (
@@ -582,7 +568,7 @@ export function VentaDetailDialog({
 
                 <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleConfirmarCobro} disabled={cobroSaving}>
                   {cobroSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Banknote className="w-4 h-4 mr-2" />}
-                  Guardar método de pago — {formatCurrency(surchargePreview > 0 ? totalConRecargo : montoBase)}
+                  Guardar método de pago — {formatCurrency(totalConRecargo)}
                 </Button>
               </div>
             );
