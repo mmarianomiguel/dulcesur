@@ -851,6 +851,7 @@ export default function PedidosOnlinePage() {
           fecha_entrega: selectedPedido.fecha_entrega,
           monto_efectivo: selectedPedido.monto_efectivo,
           monto_transferencia: selectedPedido.monto_transferencia,
+          cuenta_transferencia_alias: selectedPedido.cuenta_bancaria_alias || null,
           origen: "pedidos",
         } : null}
         items={selectedPedido?.items.map(i => ({
