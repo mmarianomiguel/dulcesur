@@ -125,6 +125,7 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPr
   const recPct = data.recargo_porcentaje || 0;
   const envio = data.costo_envio || 0;
   const itemsSubtotal = data.subtotal || items.reduce((s, i) => s + i.subtotal, 0);
+  const ncTotal = (pagos || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -313,7 +314,10 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPr
               {envio > 0 && (
                 <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
               )}
-              <p className="text-base font-bold">Total: {formatCurrency(data.total)}</p>
+              {ncTotal > 0 && (
+                <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-amber-600">-{formatCurrency(ncTotal)}</span></p>
+              )}
+              <p className="text-base font-bold">Total: {formatCurrency(data.total - ncTotal)}</p>
             </div>
           </div>
         </div>
