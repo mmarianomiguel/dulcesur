@@ -255,9 +255,14 @@ export default function NotaCreditoPage() {
 
       // Suggest payment method from origin sale
       const origenVenta = clientVentas.find((v) => v.id === origenId);
+      if (origenVenta && origenVenta.cliente_id !== clientId) {
+        showAdminToast("El comprobante seleccionado pertenece a otro cliente", "error");
+        return;
+      }
       if (origenVenta?.forma_pago && origenVenta.forma_pago !== "Mixto") {
         setMetodoDev(origenVenta.forma_pago as MetodoDev);
       }
+      // When origin is Mixto, don't set a default — the dropdown stays visible for user to choose
     })();
   }, [origenId]);
 
@@ -444,20 +449,23 @@ export default function NotaCreditoPage() {
           if (match) upp = Number(match[1]);
         }
         const unitsToReturn = item.qty * upp;
-        const newStock = prod.stock + unitsToReturn;
-        await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+
+        // Atomic stock update via RPC
+        const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
+          p_producto_id: item.producto_id,
+          p_change: unitsToReturn,
+        });
         await supabase.from("stock_movimientos").insert({
           producto_id: item.producto_id,
           tipo: "devolucion",
-          cantidad_antes: prod.stock,
-          cantidad_despues: newStock,
+          cantidad_antes: stockResult?.stock_antes ?? 0,
+          cantidad_despues: stockResult?.stock_despues ?? 0,
           cantidad: unitsToReturn,
           referencia: `NC ${numero}`,
           descripcion: `Devolución - ${item.description}`,
           usuario: currentUser?.nombre || "Admin Sistema",
           orden_id: venta.id,
         });
-        prod.stock = newStock;
       }
     }
 
@@ -478,8 +486,11 @@ export default function NotaCreditoPage() {
     }
     // ── Cuenta corriente: solo si el método es Cuenta Corriente ──
     if (metodoDev === "Cuenta Corriente" && clientId) {
-      const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-      const nuevoSaldo = (freshCliente?.saldo ?? selectedClient?.saldo ?? 0) - total;
+      // Atomic saldo update via RPC (negative = reduce debt)
+      const { data: nuevoSaldo } = await supabase.rpc("atomic_update_client_saldo", {
+        p_client_id: clientId,
+        p_change: -total,
+      });
       await supabase.from("cuenta_corriente").insert({
         cliente_id: clientId,
         fecha: hoy,
@@ -491,7 +502,6 @@ export default function NotaCreditoPage() {
         forma_pago: "Cuenta Corriente",
         venta_id: venta.id,
       });
-      await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clientId);
     }
 
     // Reset form
@@ -507,7 +517,8 @@ export default function NotaCreditoPage() {
 
     let saldoMsg = "";
     if (metodoDev === "Cuenta Corriente" && clientId) {
-      const nuevoSaldo = (selectedClient?.saldo || 0) - total;
+      const { data: freshSaldoCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+      const nuevoSaldo = (freshSaldoCli?.saldo ?? 0);
       saldoMsg = nuevoSaldo < 0
         ? ` — Saldo a favor: ${formatCurrency(Math.abs(nuevoSaldo))}`
         : nuevoSaldo > 0

@@ -133,6 +133,10 @@ export default function FacturacionLotePage() {
         const tipoFactura = rawTipo.startsWith("Factura") ? rawTipo : `Factura ${rawTipo}`;
         const { data: numData } = await supabase.rpc("next_numero", { p_tipo: tipoFactura });
         const nuevoNumero = numData as string;
+        if (!nuevoNumero) {
+          errores.push(`${r.numero}: Error al generar número de comprobante`);
+          continue;
+        }
 
         const { data: items } = await supabase
           .from("venta_items")
@@ -155,14 +159,14 @@ export default function FacturacionLotePage() {
             estado: r.estado,
             observacion: r.observacion,
             entregado: r.entregado,
-            facturado: false,
+            facturado: true,
             remito_origen_id: r.id,
           })
           .select("id")
           .single();
 
         if (newVenta && items) {
-          const newItems = items.map((item: VentaItemRow) => ({
+          const newItems = items.map((item: any) => ({
             venta_id: newVenta.id,
             producto_id: item.producto_id,
             codigo: item.codigo,
@@ -172,6 +176,9 @@ export default function FacturacionLotePage() {
             precio_unitario: item.precio_unitario,
             descuento: item.descuento,
             subtotal: item.subtotal,
+            costo_unitario: item.costo_unitario || 0,
+            presentacion: item.presentacion || null,
+            unidades_por_presentacion: item.unidades_por_presentacion || null,
           }));
           await supabase.from("venta_items").insert(newItems);
         }

@@ -61,7 +61,7 @@ import { logAudit } from "@/lib/audit";
 
 // ─── Types ───
 
-interface TurnoCaja {
+export interface TurnoCaja {
   id: string;
   numero: number;
   fecha_apertura: string;
@@ -78,8 +78,10 @@ interface TurnoCaja {
 }
 
 // ─── Turno helpers ───
+// Exported so other modules (e.g. ventas/page.tsx) can check turno status.
+// Usage: import { getTurnoAbierto } from "@/app/(admin)/admin/caja/page";
 
-async function getTurnoAbierto(): Promise<TurnoCaja | null> {
+export async function getTurnoAbierto(): Promise<TurnoCaja | null> {
   const { data } = await supabase
     .from("turnos_caja")
     .select("id, numero, fecha_apertura, hora_apertura, fecha_cierre, hora_cierre, operador, efectivo_inicial, efectivo_real, diferencia, notas, estado, created_at")
@@ -115,7 +117,19 @@ async function abrirTurno(efectivoInicial: number, operador: string): Promise<Tu
       if (error.code === "23505" && attempt < maxRetries - 1) continue;
       throw new Error(error.message);
     }
-    return data as TurnoCaja;
+    // Race condition guard: check if another turno was opened simultaneously
+    const newTurno = data as TurnoCaja;
+    const { data: openTurnos } = await supabase
+      .from("turnos_caja")
+      .select("id")
+      .eq("estado", "abierto")
+      .order("created_at", { ascending: true });
+    if (openTurnos && openTurnos.length > 1) {
+      // Another turno was opened simultaneously — delete ours (the newer one)
+      await supabase.from("turnos_caja").delete().eq("id", newTurno.id);
+      throw new Error("Otro usuario acaba de abrir un turno. Recargá la página.");
+    }
+    return newTurno;
   }
   throw new Error("No se pudo crear el turno después de varios intentos");
 }
@@ -867,16 +881,19 @@ export default function CajaPage() {
     const totalVentas = Object.values(ventasDesglose).reduce((a, d) => a + d.total, 0);
 
     // Compute transfer surcharge total (portion of Transferencia that is recargo)
+    // NOTE: Ideally ventas should store `recargo_monto` directly so this doesn't
+    // depend on recalculation. For now we use the venta's own recargo_porcentaje
+    // (not the current global setting) which was frozen at sale time.
     let totalTransferSurcharge = 0;
     for (const v of ventas) {
       const sub = (v as any).subtotal;
-      if (!sub) continue;
+      const recPct = (v as any).recargo_porcentaje || 0;
+      if (!sub || !recPct) continue;
       const hasTransferMov = movements.some(m => m.referencia_id === v.id && m.tipo === "ingreso" && m.metodo_pago === "Transferencia");
       if (hasTransferMov) {
         const discAmt = Math.round(sub * ((v as any).descuento_porcentaje || 0) / 100);
-        const recAmt = Math.round((sub - discAmt) * ((v as any).recargo_porcentaje || 0) / 100);
-        const surcharge = Math.max(0, v.total - (sub - discAmt + recAmt));
-        totalTransferSurcharge += surcharge;
+        const recAmt = Math.round((sub - discAmt) * recPct / 100);
+        totalTransferSurcharge += recAmt;
       }
     }
 

@@ -282,11 +282,20 @@ export default function AjustesStockPage() {
         if (!prod) continue;
         const upp = row.unidades_por_presentacion || 1;
         const totalUnits = row.cantidad * upp;
-        const stockAntes = prod.stock;
-        const stockDespues = tipoAjuste === "ingreso"
-          ? stockAntes + totalUnits
-          : stockAntes - totalUnits;
         const motivo = motivoGlobal;
+
+        // Atomic stock update via RPC
+        const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
+          p_producto_id: row.producto_id,
+          p_change: tipoAjuste === "ingreso" ? totalUnits : -totalUnits,
+        });
+
+        const stockAntes = stockResult?.stock_antes ?? prod.stock;
+        const stockDespues = stockResult?.stock_despues ?? (tipoAjuste === "ingreso" ? prod.stock + totalUnits : Math.max(0, prod.stock - totalUnits));
+
+        if (tipoAjuste !== "ingreso" && stockAntes - totalUnits < 0) {
+          showAdminToast(`Stock insuficiente. Se ajustó a 0 (faltaban ${totalUnits - stockAntes} unidades)`, "info");
+        }
 
         await supabase.from("ajuste_stock_items").insert({
           ajuste_id: ajuste.id,
@@ -296,14 +305,12 @@ export default function AjustesStockPage() {
           stock_despues: stockDespues,
         });
 
-        await supabase.from("productos").update({ stock: stockDespues }).eq("id", row.producto_id);
-
         await supabase.from("stock_movimientos").insert({
           producto_id: row.producto_id,
           tipo: tipoAjuste === "ingreso" ? "ajuste_ingreso" : "ajuste_egreso",
           cantidad_antes: stockAntes,
           cantidad_despues: stockDespues,
-          cantidad: totalUnits,
+          cantidad: tipoAjuste === "ingreso" ? totalUnits : -totalUnits,
           referencia: `Ajuste de stock - ${motivo}`,
           descripcion: `${motivo}${row.presentacion && row.presentacion !== "Unidad" ? ` (${row.cantidad} ${row.presentacion})` : ""}${row.comentario ? ` — ${row.comentario}` : ""}`,
           usuario,

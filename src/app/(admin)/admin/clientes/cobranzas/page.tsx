@@ -1,30 +1,19 @@
 "use client";
 
-import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
-import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/formatters";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DollarSign,
   Users,
@@ -33,8 +22,8 @@ import {
   Eye,
   CreditCard,
   Download,
-  Building2,
 } from "lucide-react";
+import { CobroAllocationDialog } from "@/components/cobro-allocation-dialog";
 
 interface ClienteDeuda {
   id: string;
@@ -74,14 +63,6 @@ export default function CobranzasPage() {
   // Cobro dialog
   const [cobroOpen, setCobroOpen] = useState(false);
   const [cobroClient, setCobroClient] = useState<ClienteDeuda | null>(null);
-  const [cobroMonto, setCobroMonto] = useState(0);
-  const [cobroFormaPago, setCobroFormaPago] = useState("Efectivo");
-  const [cobroObs, setCobroObs] = useState("");
-  const [cobroCuentaBancariaId, setCobroCuentaBancariaId] = useState("");
-  const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [cobroMovimientos, setCobroMovimientos] = useState<CuentaMovimiento[]>([]);
-  const [loadingCobro, setLoadingCobro] = useState(false);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -104,7 +85,6 @@ export default function CobranzasPage() {
 
   useEffect(() => {
     fetchClients();
-    supabase.from("cuentas_bancarias").select("id, nombre, alias, tipo_cuenta").eq("activo", true).order("nombre").then(({ data }) => setCuentasBancarias(data || []));
   }, [fetchClients]);
 
   const totalPendiente = clients.reduce((a, c) => a + c.saldo, 0);
@@ -129,76 +109,9 @@ export default function CobranzasPage() {
     setLoadingDetail(false);
   };
 
-  const openCobro = async (client: ClienteDeuda) => {
+  const openCobro = (client: ClienteDeuda) => {
     setCobroClient(client);
-    setCobroMonto(client.saldo > 0 ? client.saldo : 0);
-    setCobroFormaPago("Efectivo");
-    setCobroCuentaBancariaId("");
-    setCobroObs("");
-    setCobroMovimientos([]);
     setCobroOpen(true);
-    setLoadingCobro(true);
-
-    const { data } = await supabase
-      .from("cuenta_corriente")
-      .select("*, ventas(tipo_comprobante, numero)")
-      .eq("cliente_id", client.id)
-      .order("fecha", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    setCobroMovimientos((data as CuentaMovimiento[]) || []);
-    setLoadingCobro(false);
-  };
-
-  const handleCobro = async () => {
-    if (!cobroClient || cobroMonto <= 0) return;
-    setSaving(true);
-
-    // Insert cobro
-    await supabase.from("cobros").insert({
-      cliente_id: cobroClient.id,
-      monto: cobroMonto,
-      forma_pago: cobroFormaPago,
-      observacion: cobroObs || null,
-    });
-
-    const hoy = todayARG();
-    let saldoActual = 0;
-    let currentSaldo = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
-      saldoActual = freshCli?.saldo ?? 0;
-      currentSaldo = saldoActual - cobroMonto;
-      const { data: updResult } = await supabase.from("clientes").update({ saldo: currentSaldo }).eq("id", cobroClient.id).eq("saldo", saldoActual).select("id");
-      if (updResult && updResult.length > 0) break;
-    }
-
-    await supabase.from("cuenta_corriente").insert({
-      cliente_id: cobroClient.id,
-      fecha: hoy,
-      comprobante: `RE ${hoy}`,
-      descripcion: `Cobro - ${cobroFormaPago}`,
-      debe: 0,
-      haber: cobroMonto,
-      saldo: currentSaldo,
-      forma_pago: cobroFormaPago,
-    });
-
-    // Register caja movement
-    const cuentaSeleccionada = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
-    await supabase.from("caja_movimientos").insert({
-      fecha: hoy,
-      hora: nowTimeARG(),
-      tipo: "ingreso",
-      descripcion: `Cobro CC — ${cobroClient.nombre}${cobroFormaPago === "Transferencia" && cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
-      metodo_pago: cobroFormaPago,
-      monto: cobroMonto,
-      ...(cobroFormaPago === "Transferencia" && cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
-    });
-
-    setSaving(false);
-    setCobroOpen(false);
-    fetchClients();
   };
 
   const filtered = search
@@ -374,103 +287,14 @@ export default function CobranzasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cobro Dialog */}
-      <Dialog open={cobroOpen} onOpenChange={setCobroOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg">Registrar cobro</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-1">
-            {/* Client + debt header */}
-            <div className="rounded-lg bg-muted/50 p-3 flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-sm">{cobroClient?.nombre}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {cobroClient && cobroClient.saldo > 0 ? "Deuda pendiente" : cobroClient && cobroClient.saldo < 0 ? "Saldo a favor" : "Sin deuda"}
-                </p>
-              </div>
-              <p className={`text-xl font-bold ${cobroClient && cobroClient.saldo > 0 ? "text-orange-500" : cobroClient && cobroClient.saldo < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
-                {cobroClient ? formatCurrency(Math.abs(cobroClient.saldo), true) : "$0"}
-              </p>
-            </div>
-
-            {/* Amount */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Monto a cobrar</Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                autoFocus
-                value={cobroMonto ? cobroMonto.toLocaleString("es-AR") : ""}
-                onChange={(e) => { const v = e.target.value.replace(/\./g, "").replace(/[^0-9]/g, ""); setCobroMonto(Number(v) || 0); }}
-                className="text-lg font-semibold h-11"
-              />
-              {cobroClient && cobroMonto > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Saldo después: <span className={`font-semibold ${cobroClient.saldo - cobroMonto <= 0 ? "text-emerald-600" : ""}`}>{formatCurrency(cobroClient.saldo - cobroMonto, true)}</span>
-                  {cobroClient.saldo - cobroMonto < 0 && <span className="text-emerald-600 ml-1">(a favor)</span>}
-                </p>
-              )}
-            </div>
-
-            {/* Payment method */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Método de pago</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {(["Efectivo", "Transferencia"] as const).map((m) => (
-                  <button key={m} type="button" onClick={() => { setCobroFormaPago(m); if (m === "Efectivo") setCobroCuentaBancariaId(""); }}
-                    className={`flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all ${cobroFormaPago === m ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/30 text-muted-foreground"}`}>
-                    {m === "Efectivo" ? <DollarSign className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Bank account selector */}
-            {cobroFormaPago === "Transferencia" && cuentasBancarias.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Cuenta destino</Label>
-                <div className="grid gap-1.5">
-                  {cuentasBancarias.map((cb) => (
-                    <button
-                      key={cb.id}
-                      type="button"
-                      onClick={() => setCobroCuentaBancariaId(cb.id)}
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-all text-left ${cobroCuentaBancariaId === cb.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary/30"}`}
-                    >
-                      <Building2 className={`w-4 h-4 shrink-0 ${cobroCuentaBancariaId === cb.id ? "text-primary" : "text-muted-foreground"}`} />
-                      <div>
-                        <p className="font-medium">{cb.nombre}</p>
-                        {cb.alias && <p className="text-xs text-muted-foreground">{cb.alias}</p>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Observation */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Observación <span className="text-muted-foreground font-normal">(opcional)</span></Label>
-              <Input value={cobroObs} onChange={(e) => setCobroObs(e.target.value)} placeholder="Detalle del cobro..." />
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => setCobroOpen(false)}>Cancelar</Button>
-              <Button
-                className="flex-1"
-                onClick={handleCobro}
-                disabled={saving || cobroMonto <= 0 || (cobroFormaPago === "Transferencia" && cuentasBancarias.length > 0 && !cobroCuentaBancariaId)}
-              >
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <DollarSign className="w-4 h-4 mr-2" />}
-                Cobrar {cobroMonto > 0 ? formatCurrency(cobroMonto, true) : ""}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CobroAllocationDialog
+        open={cobroOpen}
+        onOpenChange={setCobroOpen}
+        cliente={cobroClient}
+        onSuccess={() => {
+          fetchClients();
+        }}
+      />
     </div>
   );
 }

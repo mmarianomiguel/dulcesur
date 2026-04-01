@@ -165,21 +165,44 @@ export default function HojaDeRutaPage() {
     // Fetch payments per order from caja_movimientos + NC refunds
     if (rows.length > 0) {
       const ventaIds = rows.map((v) => v.id);
-      const [{ data: movs }, { data: ncVentas }] = await Promise.all([
+      const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
         supabase
           .from("caja_movimientos")
           .select("referencia_id, monto")
           .eq("tipo", "ingreso")
           .eq("referencia_tipo", "venta")
           .in("referencia_id", ventaIds),
-        // Find NCs linked to these sales (NC has remito_origen_id pointing to original)
+        // Find NCs linked directly to these sales
         supabase
           .from("ventas")
           .select("remito_origen_id, total")
           .in("remito_origen_id", ventaIds)
           .ilike("tipo_comprobante", "Nota de Crédito%")
           .neq("estado", "anulada"),
+        // Find facturas created from these remitos (to find NCs linked to those facturas)
+        supabase
+          .from("ventas")
+          .select("id, remito_origen_id")
+          .in("remito_origen_id", ventaIds)
+          .ilike("tipo_comprobante", "Factura%"),
       ]);
+
+      // Build map: factura_id -> original remito_id
+      const facturaToRemito: Record<string, string> = {};
+      (facturas || []).forEach((f: any) => { if (f.remito_origen_id) facturaToRemito[f.id] = f.remito_origen_id; });
+      const facturaIds = Object.keys(facturaToRemito);
+
+      // Find NCs linked to those facturas
+      let ncViaFactura: any[] = [];
+      if (facturaIds.length > 0) {
+        const { data: ncF } = await supabase
+          .from("ventas")
+          .select("remito_origen_id, total")
+          .in("remito_origen_id", facturaIds)
+          .ilike("tipo_comprobante", "Nota de Crédito%")
+          .neq("estado", "anulada");
+        ncViaFactura = ncF || [];
+      }
 
       const pagadoMap: Record<string, number> = {};
       (movs || []).forEach((m: { referencia_id: string; monto: number }) => {
@@ -187,10 +210,18 @@ export default function HojaDeRutaPage() {
       });
       // Add NC refund amounts as "paid" (they reduce what the client owes)
       const ncMap: Record<string, number> = {};
-      (ncVentas || []).forEach((nc: any) => {
+      (ncDirect || []).forEach((nc: any) => {
         if (nc.remito_origen_id) {
           pagadoMap[nc.remito_origen_id] = (pagadoMap[nc.remito_origen_id] || 0) + (nc.total || 0);
           ncMap[nc.remito_origen_id] = (ncMap[nc.remito_origen_id] || 0) + (nc.total || 0);
+        }
+      });
+      // Add NCs issued against facturas back to the original remito
+      ncViaFactura.forEach((nc: any) => {
+        const originalRemitoId = facturaToRemito[nc.remito_origen_id];
+        if (originalRemitoId) {
+          pagadoMap[originalRemitoId] = (pagadoMap[originalRemitoId] || 0) + (nc.total || 0);
+          ncMap[originalRemitoId] = (ncMap[originalRemitoId] || 0) + (nc.total || 0);
         }
       });
       setPagadoPorVenta(pagadoMap);
@@ -240,7 +271,7 @@ export default function HojaDeRutaPage() {
     // Fetch payments for these orders + NC refunds
     if (rows.length > 0) {
       const ventaIds = rows.map((v) => v.id);
-      const [{ data: movs }, { data: ncVentas }] = await Promise.all([
+      const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
         supabase
           .from("caja_movimientos")
           .select("referencia_id, monto, metodo_pago")
@@ -253,18 +284,49 @@ export default function HojaDeRutaPage() {
           .in("remito_origen_id", ventaIds)
           .ilike("tipo_comprobante", "Nota de Crédito%")
           .neq("estado", "anulada"),
+        // Find facturas created from these ventas
+        supabase
+          .from("ventas")
+          .select("id, remito_origen_id")
+          .in("remito_origen_id", ventaIds)
+          .ilike("tipo_comprobante", "Factura%"),
       ]);
+
+      // Build map: factura_id -> original venta_id
+      const facturaToVenta: Record<string, string> = {};
+      (facturas || []).forEach((f: any) => { if (f.remito_origen_id) facturaToVenta[f.id] = f.remito_origen_id; });
+      const facturaIds = Object.keys(facturaToVenta);
+
+      // Find NCs linked to those facturas
+      let ncViaFactura: any[] = [];
+      if (facturaIds.length > 0) {
+        const { data: ncF } = await supabase
+          .from("ventas")
+          .select("remito_origen_id, total")
+          .in("remito_origen_id", facturaIds)
+          .ilike("tipo_comprobante", "Nota de Crédito%")
+          .neq("estado", "anulada");
+        ncViaFactura = ncF || [];
+      }
 
       const pagosMap: Record<string, { monto: number; metodo: string }[]> = {};
       (movs || []).forEach((m: { referencia_id: string; monto: number; metodo_pago: string }) => {
         if (!pagosMap[m.referencia_id]) pagosMap[m.referencia_id] = [];
         pagosMap[m.referencia_id].push({ monto: m.monto, metodo: m.metodo_pago });
       });
-      // Add NC refunds as payments
-      (ncVentas || []).forEach((nc: any) => {
+      // Add NC refunds as payments (direct)
+      (ncDirect || []).forEach((nc: any) => {
         if (nc.remito_origen_id && nc.total > 0) {
           if (!pagosMap[nc.remito_origen_id]) pagosMap[nc.remito_origen_id] = [];
           pagosMap[nc.remito_origen_id].push({ monto: nc.total, metodo: "Nota de Crédito" });
+        }
+      });
+      // Add NCs issued against facturas back to the original venta
+      ncViaFactura.forEach((nc: any) => {
+        const originalVentaId = facturaToVenta[nc.remito_origen_id];
+        if (originalVentaId && nc.total > 0) {
+          if (!pagosMap[originalVentaId]) pagosMap[originalVentaId] = [];
+          pagosMap[originalVentaId].push({ monto: nc.total, metodo: "Nota de Crédito" });
         }
       });
       setHistorialPagos(pagosMap);
@@ -375,18 +437,26 @@ export default function HojaDeRutaPage() {
     setDetailVenta(venta);
     setDetailPagos([]);
     setDetailOpen(true);
-    const [{ data: movs }, { data: ncVentas }] = await Promise.all([
+    const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
       supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
       supabase.from("ventas").select("id, total").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+      supabase.from("ventas").select("id, remito_origen_id").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Factura%"),
     ]);
+    // Find NCs issued against facturas created from this venta
+    const facturaIds = (facturas || []).map((f: any) => f.id);
+    let ncViaFactura: any[] = [];
+    if (facturaIds.length > 0) {
+      const { data: ncF } = await supabase.from("ventas").select("id, total").in("remito_origen_id", facturaIds).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada");
+      ncViaFactura = ncF || [];
+    }
     const pagos: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
     if (movs && movs.length > 0) {
       pagos.push(...movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
     } else if (venta.forma_pago) {
       pagos.push({ metodo: venta.forma_pago, monto: venta.total });
     }
-    // Add NC refunds as settled amount
-    const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+    // Add NC refunds as settled amount (direct + via facturas)
+    const ncTotal = [...(ncDirect || []), ...ncViaFactura].reduce((s: number, nc: any) => s + (nc.total || 0), 0);
     if (ncTotal > 0) {
       pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
     }
@@ -519,20 +589,10 @@ export default function HojaDeRutaPage() {
           referencia_id: venta.id, referencia_tipo: "venta",
         });
       }
-      // Update forma_pago + cuenta_transferencia_alias + total (add surcharge)
+      // Update forma_pago + cuenta_transferencia_alias (surcharge is already tracked in caja_movimiento monto)
       const ventaUpdate: Record<string, any> = { forma_pago: payMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : payMetodo };
       if ((payMetodo === "Transferencia" || payMetodo === "Mixto") && cuentaSeleccionada) {
         ventaUpdate.cuenta_transferencia_alias = cuentaSeleccionada.alias || cuentaSeleccionada.nombre;
-      }
-      if (porcentajeTransferencia > 0) {
-        let trBase = 0;
-        if (payMetodo === "Transferencia") trBase = paid;
-        else if (payMetodo === "Mixto") {
-          const ratio = totalPagando > 0 ? paid / totalPagando : 0;
-          trBase = paid - Math.round(payEfectivo * ratio);
-        }
-        const ventaSurcharge = trBase > 0 ? Math.round(trBase * (porcentajeTransferencia / 100)) : 0;
-        if (ventaSurcharge > 0) ventaUpdate.total = venta.total + ventaSurcharge;
       }
       await supabase.from("ventas").update(ventaUpdate).eq("id", venta.id);
     }

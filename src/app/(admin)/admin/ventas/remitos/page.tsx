@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
-import { todayARG, formatCurrency, formatDatePDF } from "@/lib/formatters";
+import { todayARG, nowTimeARG, formatCurrency, formatDatePDF } from "@/lib/formatters";
+import { showAdminToast } from "@/components/admin-toast";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,8 @@ interface RemitoRow {
   cliente_id: string | null;
   vendedor_id: string | null;
   metodo_entrega: string | null;
+  cuenta_transferencia_id: string | null;
+  cuenta_transferencia_alias: string | null;
   clientes: ClienteInfo | null;
 }
 
@@ -111,6 +114,7 @@ export default function RemitosPage() {
       .from("ventas")
       .select("*, clientes(id, nombre, cuit, tipo_factura, domicilio, telefono, situacion_iva, localidad, provincia, codigo_postal, numero_documento)")
       .eq("tipo_comprobante", "Remito X")
+      .neq("estado", "anulada")
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -200,10 +204,43 @@ export default function RemitosPage() {
 
   const marcarEntregado = async (r: RemitoRow) => {
     setActionLoading(r.id);
-    await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", r.id);
-    // Sync to pedidos_tienda so client sees "entregado"
-    await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", r.numero);
-    await fetchRemitos();
+    try {
+      const hoy = todayARG();
+      const hora = nowTimeARG();
+
+      if (r.forma_pago === "Cuenta Corriente" && r.cliente_id) {
+        // Check if CC entry already exists for this venta
+        const { data: existingCC } = await supabase.from("cuenta_corriente").select("id").eq("venta_id", r.id).gt("debe", 0).limit(1);
+        if (!existingCC || existingCC.length === 0) {
+          const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", r.cliente_id).single();
+          const currentSaldo = freshCli?.saldo ?? 0;
+          const newSaldo = currentSaldo + r.total;
+          await supabase.from("cuenta_corriente").insert({
+            cliente_id: r.cliente_id, fecha: hoy,
+            comprobante: `Entrega #${r.numero}`,
+            descripcion: `Saldo pendiente de entrega`,
+            debe: r.total, haber: 0, saldo: newSaldo,
+            forma_pago: "Cuenta Corriente", venta_id: r.id,
+          });
+          await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", r.cliente_id);
+        }
+      } else if (r.forma_pago !== "Pendiente") {
+        // For cash/transfer: verify there's a corresponding caja_movimiento
+        const { data: movs } = await supabase.from("caja_movimientos").select("id").eq("referencia_id", r.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso").limit(1);
+        if (!movs || movs.length === 0) {
+          showAdminToast(`No se encontró pago registrado para el remito ${r.numero}. Registre el cobro antes de marcar como entregado.`, "error");
+          setActionLoading(null);
+          return;
+        }
+      }
+
+      await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", r.id);
+      // Sync to pedidos_tienda so client sees "entregado"
+      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", r.numero);
+      await fetchRemitos();
+    } catch (e) {
+      console.error("Error marcando entregado:", e);
+    }
     setActionLoading(null);
   };
 
@@ -214,6 +251,11 @@ export default function RemitosPage() {
       const tipoFactura = rawTipo.startsWith("Factura") ? rawTipo : `Factura ${rawTipo}`;
       const { data: numData } = await supabase.rpc("next_numero", { p_tipo: tipoFactura });
       const nuevoNumero = numData as string;
+      if (!nuevoNumero) {
+        showAdminToast("Error al generar número de comprobante", "error");
+        setActionLoading(null);
+        return;
+      }
 
       const { data: items } = await supabase
         .from("venta_items")
@@ -236,14 +278,16 @@ export default function RemitosPage() {
           estado: r.estado,
           observacion: r.observacion,
           entregado: r.entregado,
-          facturado: false,
+          facturado: true,
           remito_origen_id: r.id,
+          cuenta_transferencia_id: r.cuenta_transferencia_id || null,
+          cuenta_transferencia_alias: r.cuenta_transferencia_alias || null,
         })
         .select("id")
         .single();
 
       if (newVenta && items) {
-        const newItems = items.map((item: VentaItemRow) => ({
+        const newItems = items.map((item: any) => ({
           venta_id: newVenta.id,
           producto_id: item.producto_id,
           codigo: item.codigo,
@@ -253,6 +297,9 @@ export default function RemitosPage() {
           precio_unitario: item.precio_unitario,
           descuento: item.descuento,
           subtotal: item.subtotal,
+          costo_unitario: item.costo_unitario || 0,
+          presentacion: item.presentacion || null,
+          unidades_por_presentacion: item.unidades_por_presentacion || null,
         }));
         await supabase.from("venta_items").insert(newItems);
       }

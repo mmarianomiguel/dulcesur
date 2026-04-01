@@ -1494,6 +1494,16 @@ export default function VentasPage() {
     setSaving(true);
     setCashDialogOpen(false);
 
+    // Check turno (caja) is open before creating non-pending sales
+    if (formaPago !== "Pendiente") {
+      const { data: turnoData } = await supabase.from("turnos_caja").select("id").eq("estado", "abierto").limit(1);
+      if (!turnoData || turnoData.length === 0) {
+        setErrorModal({ open: true, message: "Debe abrir un turno de caja antes de registrar ventas" });
+        setSaving(false);
+        return;
+      }
+    }
+
     // Capture real client saldo from DB BEFORE any modification (for receipt)
     let saldoRealAntesDeTodo = 0;
     if (clientId) {
@@ -1524,6 +1534,8 @@ export default function VentasPage() {
           observacion: despacho,
           metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
           lista_precio_id: listaPrecioId || null,
+          // TODO: Store Mixto split amounts (monto_efectivo, monto_transferencia, monto_cuenta_corriente)
+          // when those columns are added to the ventas table. Currently Mixto breakdown is only in caja_movimientos.
           ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
             cuenta_transferencia_id: cuentaBancariaId,
             cuenta_transferencia_alias: cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.alias || cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.nombre || null,
@@ -1616,28 +1628,23 @@ export default function VentasPage() {
         });
 
         if (stockRpcError) {
-          // Fallback: RPC may not exist yet — decrement stock directly
+          // Fallback: RPC may not exist yet — decrement stock via atomic_update_stock
           const stockErrors: string[] = [];
           for (const item of stockItems) {
-            let updated = false;
-            for (let attempt = 0; attempt < 3 && !updated; attempt++) {
-              const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
-              if (!prod) break;
-              const stockAntes = prod.stock;
-              const stockDespues = stockAntes - item.cantidad;
-              // Atomic: only update if stock hasn't changed since read
-              const { data: updResult } = await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id).eq("stock", stockAntes).select("id");
-              if (updResult && updResult.length > 0) {
-                updated = true;
-                await supabase.from("stock_movimientos").insert({
-                  producto_id: item.producto_id, tipo: "Venta", cantidad: -item.cantidad,
-                  cantidad_antes: stockAntes, cantidad_despues: stockDespues,
-                  referencia: `Venta #${numero}`, descripcion: item.descripcion,
-                  usuario: currentUser?.nombre || "Admin Sistema", orden_id: venta.id,
-                });
-              }
+            const { data: stockResult, error: stockErr } = await supabase.rpc("atomic_update_stock", {
+              p_producto_id: item.producto_id,
+              p_change: -item.cantidad,
+            });
+            if (stockErr) {
+              stockErrors.push(`${item.descripcion}`);
+            } else {
+              await supabase.from("stock_movimientos").insert({
+                producto_id: item.producto_id, tipo: "Venta", cantidad: -item.cantidad,
+                cantidad_antes: stockResult?.stock_antes ?? 0, cantidad_despues: stockResult?.stock_despues ?? 0,
+                referencia: `Venta #${numero}`, descripcion: item.descripcion,
+                usuario: currentUser?.nombre || "Admin Sistema", orden_id: venta.id,
+              });
             }
-            if (!updated) stockErrors.push(`${item.descripcion}`);
           }
           if (stockErrors.length > 0) {
             console.error("Stock decrement errors:", stockErrors);
@@ -1652,15 +1659,12 @@ export default function VentasPage() {
           // No caja, no CC — payment happens at delivery
         } else if (formaPago === "Cuenta Corriente") {
           if (clientId) {
-            let saldoActual = 0;
-            let newSaldo = 0;
-            for (let attempt = 0; attempt < 5; attempt++) {
-              const { data: freshCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-              saldoActual = freshCC?.saldo ?? 0;
-              newSaldo = saldoActual + total;
-              const { data: updResult } = await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clientId).eq("saldo", saldoActual).select("id");
-              if (updResult && updResult.length > 0) break;
-            }
+            // Atomic saldo update via RPC (positive = increase debt)
+            const { data: newSaldo } = await supabase.rpc("atomic_update_client_saldo", {
+              p_client_id: clientId,
+              p_change: total,
+            });
+            const saldoActual = (newSaldo ?? 0) - total; // reconstruct pre-update saldo
             const saldoAFavorAplicado = saldoActual < 0 ? Math.min(Math.abs(saldoActual), total) : 0;
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
@@ -1694,19 +1698,17 @@ export default function VentasPage() {
             // The Mixto total includes saldo pendiente. The CC portion is the NET remaining debt.
             // We need to split it into: new sale debt (debe) and old debt collection (haber).
             const totalPaid = mixtoEfectivo + mixtoTransferencia; // actual cash+transfer received
-            const saleCCPortion = Math.max(0, Math.round((baseTotal - totalPaid) * 100) / 100); // unpaid portion of this sale
+            // Subtract transferSurcharge from baseTotal since totalPaid doesn't include it (surcharge is added on top)
+            const saleCCPortion = Math.max(0, Math.round((baseTotal - transferSurcharge - totalPaid) * 100) / 100); // unpaid portion of this sale
             const oldDebtCollected = Math.min(saldoRealAntesDeTodo, Math.max(0, Math.round((totalPaid - baseTotal) * 100) / 100)); // excess payment applied to old debt
 
-            let saldoActualMixto = 0;
-            let newSaldoMixto = 0;
-            for (let attempt = 0; attempt < 5; attempt++) {
-              const { data: freshCCMixto } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-              saldoActualMixto = freshCCMixto?.saldo ?? 0;
-              // Net saldo change: + new sale debt - old debt collected
-              newSaldoMixto = Math.round((saldoActualMixto + saleCCPortion - oldDebtCollected) * 100) / 100;
-              const { data: mixtoUpd } = await supabase.from("clientes").update({ saldo: newSaldoMixto }).eq("id", clientId).eq("saldo", saldoActualMixto).select("id");
-              if (mixtoUpd && mixtoUpd.length > 0) break;
-            }
+            // Atomic saldo update via RPC: net change = +saleCCPortion - oldDebtCollected
+            const netChange = Math.round((saleCCPortion - oldDebtCollected) * 100) / 100;
+            const { data: newSaldoMixto } = await supabase.rpc("atomic_update_client_saldo", {
+              p_client_id: clientId,
+              p_change: netChange,
+            });
+            const saldoActualMixto = (newSaldoMixto ?? 0) - netChange; // reconstruct pre-update saldo
 
             // CC entry for the sale portion (new debt)
             if (saleCCPortion > 0) {
@@ -1740,15 +1742,12 @@ export default function VentasPage() {
             setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoMixto } : c));
           } else if (ccEntry && clientId) {
             // ─── Standard flow: no cobrar saldo, just CC portion of the sale ───
-            let saldoActualMixto = 0;
-            let newSaldoMixto = 0;
-            for (let attempt = 0; attempt < 5; attempt++) {
-              const { data: freshCCMixto } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-              saldoActualMixto = freshCCMixto?.saldo ?? 0;
-              newSaldoMixto = saldoActualMixto + ccEntry.monto;
-              const { data: mixtoUpd } = await supabase.from("clientes").update({ saldo: newSaldoMixto }).eq("id", clientId).eq("saldo", saldoActualMixto).select("id");
-              if (mixtoUpd && mixtoUpd.length > 0) break;
-            }
+            // Atomic saldo update via RPC (positive = increase debt)
+            const { data: newSaldoMixto } = await supabase.rpc("atomic_update_client_saldo", {
+              p_client_id: clientId,
+              p_change: ccEntry.monto,
+            });
+            const saldoActualMixto = (newSaldoMixto ?? 0) - ccEntry.monto; // reconstruct pre-update saldo
             const favorAplicadoMixto = saldoActualMixto < 0 ? Math.min(Math.abs(saldoActualMixto), ccEntry.monto) : 0;
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
@@ -1807,67 +1806,33 @@ export default function VentasPage() {
           const saldoActualDB = saldoRealAntesDeTodo;
           if (saldoActualDB > 0) {
             const saldoPendiente = saldoActualDB;
-            if (formaPago === "Mixto") {
-              // Split cobro saldo across Efectivo and Transferencia portions proportionally
-              const mixtoTotal = mixtoEfectivo + mixtoTransferencia;
-              const efectivoPortion = mixtoTotal > 0 ? Math.round((mixtoEfectivo / mixtoTotal) * saldoPendiente * 100) / 100 : saldoPendiente;
-              const transferenciaPortion = Math.round((saldoPendiente - efectivoPortion) * 100) / 100;
-              if (efectivoPortion > 0) {
-                await supabase.from("caja_movimientos").insert({
-                  fecha: hoy,
-                  hora,
-                  tipo: "ingreso",
-                  descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero}) (Efectivo)`,
-                  metodo_pago: "Efectivo",
-                  monto: efectivoPortion,
-                  referencia_id: venta.id,
-                  referencia_tipo: "venta",
-                });
-              }
-              if (transferenciaPortion > 0) {
-                const cobroCuenta = cuentaBancariaId
-                  ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
-                  : null;
-                await supabase.from("caja_movimientos").insert({
-                  fecha: hoy,
-                  hora,
-                  tipo: "ingreso",
-                  descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero}) (Transferencia)${cobroCuenta ? ` → ${cobroCuenta.nombre}` : ""}`,
-                  metodo_pago: "Transferencia",
-                  monto: transferenciaPortion,
-                  referencia_id: venta.id,
-                  referencia_tipo: "venta",
-                  ...(cobroCuenta ? { cuenta_bancaria: cobroCuenta.nombre } : {}),
-                });
-              }
-            } else {
-              await supabase.from("caja_movimientos").insert({
-                fecha: hoy,
-                hora,
-                tipo: "ingreso",
-                descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
-                metodo_pago: formaPago,
-                monto: saldoPendiente,
-                referencia_id: venta.id,
-                referencia_tipo: "venta",
-              });
-            }
-            // Re-read current DB saldo (may include new CC from this sale)
-            const { data: freshAfterCC } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-            const saldoDBNow = freshAfterCC?.saldo ?? saldoActualDB;
-            const newSaldoAfterCobro = saldoDBNow - saldoPendiente;
+            // Note: Mixto cobro saldo is already handled above in the combined flow (formaPago === "Mixto" is excluded by the outer condition)
+            await supabase.from("caja_movimientos").insert({
+              fecha: hoy,
+              hora,
+              tipo: "ingreso",
+              descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
+              metodo_pago: formaPago,
+              monto: saldoPendiente,
+              referencia_id: venta.id,
+              referencia_tipo: "venta",
+            });
+            // Atomic saldo update via RPC (negative = reduce debt from cobro)
+            const { data: newSaldoAfterCobro } = await supabase.rpc("atomic_update_client_saldo", {
+              p_client_id: clientId,
+              p_change: -saldoPendiente,
+            });
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
               comprobante: `Cobro saldo - Venta #${numero}`,
-              descripcion: `Cobro saldo anterior (${formaPago === "Mixto" ? "Efectivo" : formaPago})`,
+              descripcion: `Cobro saldo anterior (${formaPago})`,
               debe: 0,
               haber: saldoPendiente,
               saldo: newSaldoAfterCobro,
-              forma_pago: formaPago === "Mixto" ? "Efectivo" : formaPago,
+              forma_pago: formaPago,
               venta_id: venta.id,
             });
-            await supabase.from("clientes").update({ saldo: newSaldoAfterCobro }).eq("id", clientId);
             if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoAfterCobro } : c));
           }
         }

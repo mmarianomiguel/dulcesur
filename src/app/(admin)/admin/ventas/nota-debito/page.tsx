@@ -52,6 +52,13 @@ interface NotaDebitoRow extends Venta {
   clientes?: { nombre: string } | null;
 }
 
+const FORMAS_PAGO = [
+  "Cuenta Corriente",
+  "Efectivo",
+  "Transferencia",
+  "Mixto",
+];
+
 function getTipoFactura(cliente: Cliente | undefined): string {
   if (!cliente || !cliente.tipo_factura) return "B";
   return cliente.tipo_factura;
@@ -71,6 +78,7 @@ export default function NotaDebitoPage() {
   const [clientVentas, setClientVentas] = useState<Venta[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
   const [observacion, setObservacion] = useState("");
+  const [formaPago, setFormaPago] = useState("Cuenta Corriente");
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [newDesc, setNewDesc] = useState("");
@@ -187,7 +195,7 @@ export default function NotaDebitoPage() {
         fecha: hoy,
         cliente_id: clientId,
         vendedor_id: null,
-        forma_pago: "Cuenta Corriente",
+        forma_pago: formaPago,
         subtotal: total,
         descuento_porcentaje: 0,
         recargo_porcentaje: 0,
@@ -213,27 +221,29 @@ export default function NotaDebitoPage() {
       }));
       await supabase.from("venta_items").insert(ventaItems);
 
-      // Register debe in cuenta_corriente (debit to client)
-      const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-      const saldoActual = freshCliente?.saldo ?? selectedClient?.saldo ?? 0;
-      const nuevoSaldo = saldoActual + total;
-      await supabase.from("cuenta_corriente").insert({
-        cliente_id: clientId,
-        fecha: hoy,
-        comprobante: `ND ${numero}`,
-        descripcion: `Nota de Débito ${numero}`,
-        debe: total,
-        haber: 0,
-        saldo: nuevoSaldo,
-        forma_pago: "Cuenta Corriente",
-        venta_id: venta.id,
-      });
+      // Register debe in cuenta_corriente (debit to client) only for CC payments
+      if (formaPago === "Cuenta Corriente" && clientId) {
+        const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+        const saldoActual = freshCliente?.saldo ?? selectedClient?.saldo ?? 0;
+        const nuevoSaldo = saldoActual + total;
+        await supabase.from("cuenta_corriente").insert({
+          cliente_id: clientId,
+          fecha: hoy,
+          comprobante: `ND ${numero}`,
+          descripcion: `Nota de Débito ${numero}`,
+          debe: total,
+          haber: 0,
+          saldo: nuevoSaldo,
+          forma_pago: formaPago,
+          venta_id: venta.id,
+        });
 
-      // Update client saldo
-      await supabase
-        .from("clientes")
-        .update({ saldo: nuevoSaldo })
-        .eq("id", clientId);
+        // Update client saldo
+        await supabase
+          .from("clientes")
+          .update({ saldo: nuevoSaldo })
+          .eq("id", clientId);
+      }
 
       setItems([]);
       setObservacion("");
@@ -379,6 +389,23 @@ export default function NotaDebitoPage() {
                           {clientVentas.map((v) => (
                             <SelectItem key={v.id} value={v.id}>
                               {v.tipo_comprobante} {v.numero} - {formatCurrency(v.total)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Forma de pago</Label>
+                      <Select value={formaPago} onValueChange={(v) => setFormaPago(v || "Cuenta Corriente")}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Forma de pago" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FORMAS_PAGO.map((f) => (
+                            <SelectItem key={f} value={f}>
+                              {f}
                             </SelectItem>
                           ))}
                         </SelectContent>

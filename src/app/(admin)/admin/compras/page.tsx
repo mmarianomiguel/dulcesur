@@ -47,13 +47,13 @@ import {
   MessageCircle,
   Pencil,
   CreditCard,
-  Check,
   RotateCcw,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logAudit } from "@/lib/audit";
+import { PagoProveedorAllocationDialog } from "@/components/pago-proveedor-allocation-dialog";
 
 /* ───────── types ───────── */
 
@@ -229,21 +229,23 @@ export default function ComprasPage() {
         }
         // Revert CC proveedor
         if (detailCompra.proveedor_id && (detailCompra as any).forma_pago === "Cuenta Corriente") {
-          const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).maybeSingle();
-          if (prov) {
-            const newSaldo = prov.saldo - detailCompra.total;
-            await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", detailCompra.proveedor_id);
-            await supabase.from("cuenta_corriente_proveedor").insert({
-              proveedor_id: detailCompra.proveedor_id,
-              fecha: todayString(),
-              tipo: "anulacion",
-              descripcion: `Anulación Compra #${detailCompra.numero}`,
-              monto: -detailCompra.total,
-              saldo_resultante: newSaldo,
-              referencia_id: detailCompra.id,
-              referencia_tipo: "anulacion",
-            });
-          }
+          // Atomic saldo update via RPC (negative = reduce debt)
+          const { data: finalSaldo } = await supabase.rpc("atomic_update_proveedor_saldo", {
+            p_proveedor_id: detailCompra.proveedor_id,
+            p_change: -detailCompra.total,
+          });
+
+          // FIX 7: CC entry with positive monto for consistency
+          await supabase.from("cuenta_corriente_proveedor").insert({
+            proveedor_id: detailCompra.proveedor_id,
+            fecha: todayString(),
+            tipo: "anulacion",
+            descripcion: `Anulación Compra #${detailCompra.numero}`,
+            monto: detailCompra.total,
+            saldo_resultante: finalSaldo,
+            referencia_id: detailCompra.id,
+            referencia_tipo: "anulacion",
+          });
         }
         // Mark as Anulada instead of deleting (audit trail)
         await supabase.from("compras").update({ estado: "Anulada" }).eq("id", detailCompra.id);
@@ -327,21 +329,23 @@ export default function ComprasPage() {
       }
 
       if (wasCC && detailCompra.proveedor_id) {
-        const { data: prov } = await supabase.from("proveedores").select("saldo").eq("id", detailCompra.proveedor_id).maybeSingle();
-        if (prov) {
-          const newSaldo = prov.saldo - returnTotal;
-          await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", detailCompra.proveedor_id);
-          await supabase.from("cuenta_corriente_proveedor").insert({
-            proveedor_id: detailCompra.proveedor_id,
-            fecha: todayARG(),
-            tipo: "devolucion",
-            descripcion: `Devolución Compra #${detailCompra.numero}${devolucionMotivo ? ` - ${devolucionMotivo}` : ""}`,
-            monto: -returnTotal,
-            saldo_resultante: newSaldo,
-            referencia_id: detailCompra.id,
-            referencia_tipo: "devolucion_compra",
-          });
-        }
+        // Atomic saldo update via RPC (negative = reduce debt from return)
+        const { data: finalSaldo } = await supabase.rpc("atomic_update_proveedor_saldo", {
+          p_proveedor_id: detailCompra.proveedor_id,
+          p_change: -returnTotal,
+        });
+
+        // FIX 7: CC entry with positive monto for consistency
+        await supabase.from("cuenta_corriente_proveedor").insert({
+          proveedor_id: detailCompra.proveedor_id,
+          fecha: todayARG(),
+          tipo: "devolucion",
+          descripcion: `Devolución Compra #${detailCompra.numero}${devolucionMotivo ? ` - ${devolucionMotivo}` : ""}`,
+          monto: returnTotal,
+          saldo_resultante: finalSaldo,
+          referencia_id: detailCompra.id,
+          referencia_tipo: "devolucion_compra",
+        });
       }
 
       // 3. Update compra total and append devolucion note to observacion
@@ -482,10 +486,6 @@ export default function ComprasPage() {
 
   // Partial payment dialog
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState("Efectivo");
-  const [paymentCuentaBancariaId, setPaymentCuentaBancariaId] = useState("");
-  const [savingPayment, setSavingPayment] = useState(false);
 
   /* ── fetch list ── */
 
@@ -863,34 +863,18 @@ export default function ComprasPage() {
           .select("stock")
           .eq("id", item.producto_id)
           .maybeSingle();
-        const stockAntes = prodData?.stock ?? 0;
-        const newStock = stockAntes + item.cantidad;
-
-        // Atomic update: only update if stock hasn't changed since we read it
-        const { data: updData, error: updErr } = await supabase
-          .from("productos")
-          .update({ stock: newStock })
-          .eq("id", item.producto_id)
-          .eq("stock", stockAntes)
-          .select("id");
-
-        if (updErr || !updData || updData.length === 0) {
-          // Retry once with fresh read if concurrent update detected
-          const { data: freshProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).maybeSingle();
-          const freshStock = freshProd?.stock ?? 0;
-          await supabase.from("productos").update({ stock: freshStock + item.cantidad }).eq("id", item.producto_id);
-        }
-
-        // Re-read for accurate log
-        const { data: afterProd } = await supabase.from("productos").select("stock").eq("id", item.producto_id).maybeSingle();
-        const stockDespues = afterProd?.stock ?? newStock;
+        // Atomic stock update via RPC (positive = add stock from purchase)
+        const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
+          p_producto_id: item.producto_id,
+          p_change: item.cantidad,
+        });
 
         // Log stock movement
         await supabase.from("stock_movimientos").insert({
           producto_id: item.producto_id,
           tipo: "compra",
-          cantidad_antes: stockAntes,
-          cantidad_despues: stockDespues,
+          cantidad_antes: stockResult?.stock_antes ?? 0,
+          cantidad_despues: stockResult?.stock_despues ?? 0,
           cantidad: item.cantidad,
           referencia: `Compra #${numero}`,
           descripcion: `Compra - ${item.nombre}`,
@@ -918,7 +902,9 @@ export default function ComprasPage() {
               for (const pres of prods || []) {
                 const newPresPrecio = roundPrice(pres.precio * priceRatio);
                 const newPresCosto = pres.costo > 0 ? Math.round(item.costo_unitario * pres.cantidad) : 0;
-                await supabase.from("presentaciones").update({ precio: newPresPrecio, costo: newPresCosto }).eq("id", pres.id);
+                // FIX 6: Error handling for presentation updates
+                const { error: presErr } = await supabase.from("presentaciones").update({ precio: newPresPrecio, costo: newPresCosto }).eq("id", pres.id);
+                if (presErr) console.error("Error updating presentation:", pres.id, presErr);
               }
             }
             preciosActualizados.push({
@@ -962,8 +948,11 @@ export default function ComprasPage() {
       if (formaPago === "Cuenta Corriente" && selectedProveedorId) {
         const prov = providers.find((p) => p.id === selectedProveedorId);
         if (prov) {
-          const newSaldo = (prov.saldo || 0) + totalCompra;
-          await supabase.from("proveedores").update({ saldo: newSaldo }).eq("id", selectedProveedorId);
+          // Atomic saldo update via RPC (positive = increase debt)
+          const { data: finalSaldo } = await supabase.rpc("atomic_update_proveedor_saldo", {
+            p_proveedor_id: selectedProveedorId,
+            p_change: totalCompra,
+          });
 
           // Register in cuenta_corriente_proveedor
           await supabase.from("cuenta_corriente_proveedor").insert({
@@ -972,7 +961,7 @@ export default function ComprasPage() {
             tipo: "compra",
             descripcion: `Compra ${numero} - ${prov.nombre}`,
             monto: totalCompra,
-            saldo_resultante: newSaldo,
+            saldo_resultante: finalSaldo,
             referencia_id: compra.id,
             referencia_tipo: "compra",
           });
@@ -1119,6 +1108,11 @@ export default function ComprasPage() {
 
   const handleSaveEditedPrices = async () => {
     if (!detailCompra || Object.keys(editedPrices).length === 0) return;
+    // FIX 5: Prevent editing prices on cancelled purchases
+    if (detailCompra.estado === "Anulada") {
+      showAdminToast("No se pueden editar precios de una compra anulada", "error");
+      return;
+    }
     setSavingPrices(true);
     try {
       // Update each changed item
@@ -1171,77 +1165,6 @@ export default function ComprasPage() {
       showAdminToast("Error al actualizar precios: " + (err.message || "Error"), "error");
     }
     setSavingPrices(false);
-  };
-
-  /* ── register partial payment ── */
-
-  const handleRegisterPayment = async () => {
-    if (!detailCompra || paymentAmount <= 0) return;
-    setSavingPayment(true);
-    try {
-      const montoPagadoActual = detailCompra.monto_pagado || 0;
-      const nuevoMontoPagado = montoPagadoActual + paymentAmount;
-      const nuevoEstadoPago = nuevoMontoPagado >= detailCompra.total ? "Pagada" : "Pago Parcial";
-
-      // Register caja movement if not CC
-      if (paymentMethod !== "Cuenta Corriente") {
-        const prov = providers.find((p) => p.id === detailCompra.proveedor_id);
-        await supabase.from("caja_movimientos").insert({
-          fecha: todayString(),
-          hora: nowTimeARG(),
-          tipo: "egreso",
-          descripcion: `Pago Compra ${detailCompra.numero} - ${prov?.nombre || "Proveedor"}`,
-          metodo_pago: paymentMethod,
-          monto: -paymentAmount,
-          referencia_id: detailCompra.id,
-          referencia_tipo: "compra",
-          ...(paymentMethod === "Transferencia" && paymentCuentaBancariaId ? { cuenta_bancaria: paymentCuentaBancariaId } : {}),
-        });
-      } else if (detailCompra.proveedor_id) {
-        // CC: update proveedor saldo and create CC entry
-        const { data: prov } = await supabase
-          .from("proveedores")
-          .select("saldo")
-          .eq("id", detailCompra.proveedor_id)
-          .maybeSingle();
-        if (prov) {
-          const newSaldo = (prov.saldo || 0) + paymentAmount;
-          await supabase
-            .from("proveedores")
-            .update({ saldo: newSaldo })
-            .eq("id", detailCompra.proveedor_id);
-          await supabase.from("cuenta_corriente_proveedor").insert({
-            proveedor_id: detailCompra.proveedor_id,
-            fecha: todayString(),
-            tipo: "pago",
-            descripcion: `Pago parcial Compra ${detailCompra.numero}`,
-            monto: paymentAmount,
-            saldo_resultante: newSaldo,
-            referencia_id: detailCompra.id,
-            referencia_tipo: "compra",
-          });
-        }
-      }
-
-      // Update compra
-      await supabase
-        .from("compras")
-        .update({ monto_pagado: nuevoMontoPagado, estado_pago: nuevoEstadoPago })
-        .eq("id", detailCompra.id);
-
-      setDetailCompra({ ...detailCompra, monto_pagado: nuevoMontoPagado, estado_pago: nuevoEstadoPago });
-      setShowPaymentDialog(false);
-      fetchData();
-      showAdminToast(
-        nuevoEstadoPago === "Pagada"
-          ? "Compra pagada en su totalidad"
-          : `Pago de ${formatCurrency(paymentAmount)} registrado`,
-        "success"
-      );
-    } catch (err: any) {
-      showAdminToast("Error al registrar pago: " + (err.message || "Error"), "error");
-    }
-    setSavingPayment(false);
   };
 
   /* ── stats ── */
@@ -2138,10 +2061,6 @@ export default function ComprasPage() {
             )}
             {detailCompra.estado === "Confirmada" && detailCompra.estado_pago !== "Pagada" && !editingPrices && (
               <Button variant="outline" size="sm" className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => {
-                const remaining = detailCompra.total - (detailCompra.monto_pagado || 0);
-                setPaymentAmount(Math.max(0, Math.round(remaining * 100) / 100));
-                setPaymentMethod("Efectivo");
-                setPaymentCuentaBancariaId("");
                 setShowPaymentDialog(true);
               }}>
                 <CreditCard className="w-3.5 h-3.5" />
@@ -2320,83 +2239,15 @@ export default function ComprasPage() {
         </Dialog>
 
         {/* Partial payment dialog */}
-        <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-emerald-600" />
-                Registrar Pago
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3 rounded-lg bg-muted/50 p-3">
-                <div>
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Total</span>
-                  <p className="font-bold text-sm">{formatCurrency(detailCompra.total)}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Pagado</span>
-                  <p className="font-bold text-sm text-green-600">{formatCurrency(detailCompra.monto_pagado || 0)}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Restante</span>
-                  <p className="font-bold text-sm text-red-600">{formatCurrency(Math.max(0, detailCompra.total - (detailCompra.monto_pagado || 0)))}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Monto a pagar</Label>
-                <MoneyInput
-                  min={0}
-                  value={paymentAmount}
-                  onValueChange={(val) => setPaymentAmount(val)}
-                  className="text-lg font-bold"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Metodo de pago</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {["Efectivo", "Transferencia", "Cuenta Corriente"].map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setPaymentMethod(m)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                        paymentMethod === m
-                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                          : "bg-background hover:bg-muted border-border"
-                      }`}
-                    >
-                      {m === "Cuenta Corriente" ? "Cta. Cte." : m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {paymentMethod === "Transferencia" && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Cuenta bancaria</Label>
-                  <Select value={paymentCuentaBancariaId || ""} onValueChange={(v) => setPaymentCuentaBancariaId(v || "")}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
-                    <SelectContent>
-                      {cuentasBancarias.map((c: any) => (
-                        <SelectItem key={c.id} value={c.id}>{c.nombre} {c.alias ? `(${c.alias})` : ""}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" onClick={() => setShowPaymentDialog(false)} disabled={savingPayment}>Cancelar</Button>
-                <Button onClick={handleRegisterPayment} disabled={savingPayment || paymentAmount <= 0} className="gap-1.5">
-                  {savingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  Registrar pago — {formatCurrency(paymentAmount)}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <PagoProveedorAllocationDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          proveedor={detailCompra ? providers.find((p) => p.id === detailCompra.proveedor_id) || null : null}
+          onSuccess={() => {
+            fetchData();
+            setShowPaymentDialog(false);
+          }}
+        />
 
         {/* Devolucion (partial return) dialog */}
         <Dialog open={devolucionDialog} onOpenChange={setDevolucionDialog}>

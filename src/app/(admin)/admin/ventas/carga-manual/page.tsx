@@ -49,6 +49,8 @@ interface LineItem {
   discount: number;
   subtotal: number;
   costo_unitario: number;
+  presentacion: string;
+  unidades_por_presentacion: number;
 }
 
 interface ManualRow extends Venta {
@@ -192,6 +194,8 @@ export default function CargaManualPage() {
           discount: 0,
           subtotal: product.precio,
           costo_unitario: product.costo || 0,
+          presentacion: product.unidad_medida || "Unidad",
+          unidades_por_presentacion: 1,
         },
       ];
       setItems(newItems);
@@ -217,6 +221,8 @@ export default function CargaManualPage() {
         discount: 0,
         subtotal: freePrice * freeQty,
         costo_unitario: 0,
+        presentacion: "Unidad",
+        unidades_por_presentacion: 1,
       },
     ];
     setItems(newItems);
@@ -267,7 +273,7 @@ export default function CargaManualPage() {
 
   const subtotal = items.reduce((acc, i) => acc + i.subtotal, 0);
   const descuentoAmount = subtotal * (descuento / 100);
-  const recargoAmount = subtotal * (recargo / 100);
+  const recargoAmount = (subtotal - descuentoAmount) * (recargo / 100);
   const total = subtotal - descuentoAmount + recargoAmount;
 
   const handleSave = async () => {
@@ -321,6 +327,8 @@ export default function CargaManualPage() {
         descuento: i.discount,
         subtotal: i.subtotal,
         costo_unitario: i.costo_unitario || 0,
+        presentacion: i.presentacion || "Unidad",
+        unidades_por_presentacion: i.unidades_por_presentacion || 1,
       }));
       await supabase.from("venta_items").insert(ventaItems);
 
@@ -330,7 +338,7 @@ export default function CargaManualPage() {
       await supabase.from("caja_movimientos").insert({
         fecha,
         hora: nowTimeARG(),
-        tipo: isIngreso ? "ingreso" : "egreso",
+        tipo: isIngreso ? "ingreso" : "cancelacion",
         descripcion: `${tipoComprobante} #${num} (Manual)`,
         metodo_pago: formaPago,
         monto: total,
@@ -355,9 +363,11 @@ export default function CargaManualPage() {
           saldoChange = total;
         }
 
-        // Fresh saldo read from DB to avoid stale data
-        const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-        const newSaldo = (freshCli?.saldo || 0) + saldoChange;
+        // Atomic saldo update via RPC
+        const { data: newSaldo } = await supabase.rpc("atomic_update_client_saldo", {
+          p_client_id: clientId,
+          p_change: saldoChange,
+        });
 
         await supabase.from("cuenta_corriente").insert({
           cliente_id: clientId,
@@ -370,11 +380,6 @@ export default function CargaManualPage() {
           forma_pago: formaPago,
           venta_id: venta.id,
         });
-
-        await supabase
-          .from("clientes")
-          .update({ saldo: newSaldo })
-          .eq("id", clientId);
       }
 
       // Update stock for product items (deduct for sales/remitos, add for NC)
@@ -388,7 +393,13 @@ export default function CargaManualPage() {
             let unitsMultiplier = 1;
             if (item.unit && item.unit !== "Unidad") {
               const { data: pres } = await supabase.from("presentaciones").select("cantidad").eq("producto_id", item.producto_id).eq("nombre", item.unit).limit(1).single();
-              if (pres?.cantidad) unitsMultiplier = pres.cantidad;
+              if (pres?.cantidad) {
+                unitsMultiplier = pres.cantidad;
+              } else {
+                // Fallback: presentation not found in DB, use multiplier=1 and warn
+                // This can happen if the presentation was deleted or renamed after the item was added
+                showAdminToast(`Presentación "${item.unit}" no encontrada para ${item.description}, usando multiplicador 1`, "info");
+              }
             }
             const totalUnits = item.qty * unitsMultiplier;
             const newStock = isNC

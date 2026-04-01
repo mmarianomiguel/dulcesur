@@ -58,6 +58,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { CobroAllocationDialog, CobroResult } from "@/components/cobro-allocation-dialog";
 
 const PROVINCIAS = [
   "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes",
@@ -181,16 +182,14 @@ export default function ClientesPage() {
     open: boolean; cliente: string; clienteCuit: string; clienteDomicilio: string;
     monto: number; formaPago: string; fecha: string; saldoAnterior: number; saldoNuevo: number;
     empresaNombre: string; empresaCuit: string; empresaDomicilio: string; empresaTelefono: string;
-    cuentaBancaria: string; cuentaAlias: string; observacion: string;
+    cuentaBancaria: string; cuentaAlias: string; observacion: string; numero: string;
     comprobantes: { comprobante: string; debe: number; haber: number }[];
   } | null>(null);
   const [cobroClient, setCobroClient] = useState<Cliente | null>(null);
   const [cobroMonto, setCobroMonto] = useState(0);
-  const [cobroFormaPago, setCobroFormaPago] = useState("Efectivo");
-  const [cobroCuentaBancariaId, setCobroCuentaBancariaId] = useState("");
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
-  const [cobroObs, setCobroObs] = useState("");
   const [saving, setSaving] = useState(false);
+  const [empresa, setEmpresa] = useState<any>(null);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -252,9 +251,11 @@ export default function ClientesPage() {
       fetchZonas(),
       supabase.from("categorias").select("id, nombre").eq("restringida", true),
       supabase.from("cuentas_bancarias").select("id, nombre, alias, tipo_cuenta").eq("activo", true).order("nombre"),
-    ]).then(([, , { data: cats }, { data: ctas }]) => {
+      supabase.from("empresa").select("nombre, cuit, domicilio, telefono").limit(1).single(),
+    ]).then(([, , { data: cats }, { data: ctas }, { data: emp }]) => {
       if (cats) setCategoriasRestringidas(cats);
       setCuentasBancarias(ctas || []);
+      setEmpresa(emp);
     });
   }, [fetchClients, fetchZonas]);
 
@@ -597,15 +598,17 @@ export default function ClientesPage() {
       ...(payMovMetodo === "Transferencia" && payMovCuentaSel ? { cuenta_bancaria: payMovCuentaSel.nombre } : {}),
     });
 
-    let saldoActual = 0;
-    let newSaldo = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", movClient?.id).single();
-      saldoActual = freshCli?.saldo ?? 0;
-      newSaldo = saldoActual - montoReal;
-      const { data: updResult } = await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", movClient?.id).eq("saldo", saldoActual).select("id");
-      if (updResult && updResult.length > 0) break;
+    // Atomic saldo update via RPC
+    const { data: newSaldo, error: saldoErr } = await supabase.rpc("atomic_update_client_saldo", {
+      p_client_id: movClient?.id,
+      p_change: -montoReal,
+    });
+    if (saldoErr) {
+      showAdminToast("Error al actualizar saldo: " + saldoErr.message, "error");
+      setPayMovSaving(false);
+      return;
     }
+
     const { error: ccError } = await supabase.from("cuenta_corriente").insert({
       cliente_id: movClient?.id,
       fecha: hoy,
@@ -618,9 +621,7 @@ export default function ClientesPage() {
       venta_id: payMovVenta.id,
     });
 
-    // If CC insert failed, revert saldo to prevent orphaned updates
     if (ccError) {
-      await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", movClient?.id);
       showAdminToast("Error al registrar en cuenta corriente", "error");
       setPayMovSaving(false);
       return;
@@ -665,114 +666,7 @@ export default function ClientesPage() {
   const openCobro = (client: Cliente) => {
     setCobroClient(client);
     setCobroMonto(client.saldo > 0 ? client.saldo : 0);
-    setCobroFormaPago("Efectivo");
-    setCobroCuentaBancariaId("");
-    setCobroObs("");
     setCobroOpen(true);
-  };
-
-  const handleCobro = () => {
-    if (saving) return;
-    if (!cobroClient || cobroMonto <= 0) return;
-    if (cobroMonto > cobroClient.saldo && cobroClient.saldo > 0) {
-      setConfirmDialog({
-        open: true,
-        title: "Confirmar cobro",
-        message: `El monto ($${cobroMonto.toLocaleString()}) supera la deuda ($${cobroClient.saldo.toLocaleString()}). ¿Continuar?`,
-        onConfirm: () => executeCobro(),
-      });
-      return;
-    }
-    executeCobro();
-  };
-
-  const executeCobro = async () => {
-    if (!cobroClient || cobroMonto <= 0) return;
-    setSaving(true);
-
-    await supabase.from("cobros").insert({
-      cliente_id: cobroClient.id,
-      monto: cobroMonto,
-      forma_pago: cobroFormaPago,
-      observacion: cobroObs || null,
-    });
-
-    const hoy = todayARG();
-    let saldoActual = 0;
-    let currentSaldo = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", cobroClient.id).single();
-      saldoActual = freshCli?.saldo ?? 0;
-      currentSaldo = saldoActual - cobroMonto;
-      const { data: updResult } = await supabase.from("clientes").update({ saldo: currentSaldo }).eq("id", cobroClient.id).eq("saldo", saldoActual).select("id");
-      if (updResult && updResult.length > 0) break;
-    }
-
-    // Insert CC entry AFTER saldo update so we have the correct running balance
-    const { error: ccError } = await supabase.from("cuenta_corriente").insert({
-      cliente_id: cobroClient.id,
-      fecha: hoy,
-      comprobante: `RE ${hoy}`,
-      descripcion: `Cobro - ${cobroFormaPago}${cobroObs ? ` — ${cobroObs}` : ""}`,
-      debe: 0,
-      haber: cobroMonto,
-      saldo: currentSaldo,
-      forma_pago: cobroFormaPago,
-    });
-
-    // If CC insert failed, revert saldo to prevent orphaned updates
-    if (ccError) {
-      await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", cobroClient.id);
-      showAdminToast("Error al registrar en cuenta corriente", "error");
-      setSaving(false);
-      return;
-    }
-
-    const cuentaSeleccionada = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
-    await supabase.from("caja_movimientos").insert({
-      fecha: hoy,
-      hora: nowTimeARG(),
-      tipo: "ingreso",
-      descripcion: `Cobro CC — ${cobroClient.nombre}${cobroFormaPago === "Transferencia" && cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
-      metodo_pago: cobroFormaPago,
-      monto: cobroMonto,
-      ...(cobroFormaPago === "Transferencia" && cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
-    });
-
-    // Fetch empresa data and pending comprobantes for the receipt
-    const { data: emp } = await supabase.from("empresa").select("nombre, cuit, domicilio, telefono").limit(1).single();
-    const { data: ccDeudas } = await supabase.from("cuenta_corriente").select("comprobante, debe, haber").eq("cliente_id", cobroClient.id).gt("debe", 0).order("fecha", { ascending: true });
-    const cuentaSel = cobroCuentaBancariaId ? cuentasBancarias.find((c) => c.id === cobroCuentaBancariaId) : null;
-
-    setCobroReceipt({
-      open: true,
-      cliente: cobroClient.nombre,
-      clienteCuit: cobroClient.cuit || "",
-      clienteDomicilio: [cobroClient.domicilio, cobroClient.localidad, cobroClient.provincia].filter(Boolean).join(", "),
-      monto: cobroMonto,
-      formaPago: cobroFormaPago,
-      fecha: hoy,
-      saldoAnterior: saldoActual,
-      saldoNuevo: currentSaldo,
-      empresaNombre: emp?.nombre || "DulceSur",
-      empresaCuit: emp?.cuit || "",
-      empresaDomicilio: emp?.domicilio || "",
-      empresaTelefono: emp?.telefono || "",
-      cuentaBancaria: cuentaSel?.nombre || "",
-      cuentaAlias: cuentaSel?.alias || "",
-      observacion: cobroObs || "",
-      comprobantes: (ccDeudas || []).map((d: any) => ({ comprobante: d.comprobante, debe: d.debe || 0, haber: d.haber || 0 })),
-    });
-
-    logAudit({ action: "CREATE", module: "clientes", entityId: cobroClient.id, userName: currentUser?.nombre || "Admin", after: { cobro: cobroMonto, formaPago: cobroFormaPago, cliente: cobroClient.nombre } });
-
-    setSaving(false);
-    setCobroOpen(false);
-    fetchClients();
-    // Refresh CC movements if client detail is open
-    if (movClient?.id === cobroClient.id) {
-      fetchMovimientos(cobroClient.id, movDesde, movHasta);
-    }
   };
 
   const exportCSV = () => {
@@ -1983,7 +1877,7 @@ export default function ClientesPage() {
                     </div>
                     <div className="text-right">
                       <div className="inline-block border-2 border-gray-800 rounded-lg px-4 py-2">
-                        <p className="text-xs font-bold text-gray-800 tracking-widest">RECIBO</p>
+                        <p className="text-xs font-bold text-gray-800 tracking-widest">RECIBO {cobroReceipt.numero}</p>
                         <p className="text-lg font-bold text-gray-800">X</p>
                       </div>
                       <p className="text-xs text-gray-500 mt-2">Fecha: {new Date(cobroReceipt.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
@@ -2169,103 +2063,45 @@ export default function ClientesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cobro Dialog */}
-      <Dialog open={cobroOpen} onOpenChange={setCobroOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg">Registrar cobro</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-1">
-            {/* Client + debt header */}
-            <div className="rounded-lg bg-muted/50 p-3 flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-sm">{cobroClient?.nombre}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {cobroClient && cobroClient.saldo > 0 ? "Deuda pendiente" : cobroClient && cobroClient.saldo < 0 ? "Saldo a favor" : "Sin deuda"}
-                </p>
-              </div>
-              <p className={`text-xl font-bold ${cobroClient && cobroClient.saldo > 0 ? "text-orange-500" : cobroClient && cobroClient.saldo < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
-                {cobroClient ? formatCurrency(Math.abs(cobroClient.saldo)) : "$0"}
-              </p>
-            </div>
-
-            {/* Amount */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Monto a cobrar</Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                autoFocus
-                value={cobroMonto ? cobroMonto.toLocaleString("es-AR") : ""}
-                onChange={(e) => { const v = e.target.value.replace(/\./g, "").replace(/[^0-9]/g, ""); setCobroMonto(Number(v) || 0); }}
-                className="text-lg font-semibold h-11"
-              />
-              {cobroClient && cobroMonto > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Saldo después: <span className={`font-semibold ${cobroClient.saldo - cobroMonto <= 0 ? "text-emerald-600" : ""}`}>{formatCurrency(cobroClient.saldo - cobroMonto)}</span>
-                  {cobroClient.saldo - cobroMonto < 0 && <span className="text-emerald-600 ml-1">(a favor)</span>}
-                </p>
-              )}
-            </div>
-
-            {/* Payment method */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Método de pago</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {(["Efectivo", "Transferencia"] as const).map((m) => (
-                  <button key={m} type="button" onClick={() => { setCobroFormaPago(m); if (m === "Efectivo") setCobroCuentaBancariaId(""); }}
-                    className={`flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all ${cobroFormaPago === m ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/30 text-muted-foreground"}`}>
-                    {m === "Efectivo" ? <DollarSign className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Bank account selector - only when Transferencia */}
-            {cobroFormaPago === "Transferencia" && cuentasBancarias.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Cuenta destino</Label>
-                <div className="grid gap-1.5">
-                  {cuentasBancarias.map((cb) => (
-                    <button
-                      key={cb.id}
-                      type="button"
-                      onClick={() => setCobroCuentaBancariaId(cb.id)}
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-all text-left ${cobroCuentaBancariaId === cb.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary/30"}`}
-                    >
-                      <Building2 className={`w-4 h-4 shrink-0 ${cobroCuentaBancariaId === cb.id ? "text-primary" : "text-muted-foreground"}`} />
-                      <div>
-                        <p className="font-medium">{cb.nombre}</p>
-                        {cb.alias && <p className="text-xs text-muted-foreground">{cb.alias}</p>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Observation */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Observación <span className="text-muted-foreground font-normal">(opcional)</span></Label>
-              <Input value={cobroObs} onChange={(e) => setCobroObs(e.target.value)} placeholder="Detalle del cobro..." />
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => setCobroOpen(false)}>Cancelar</Button>
-              <Button
-                className="flex-1"
-                onClick={handleCobro}
-                disabled={saving || cobroMonto <= 0 || (cobroFormaPago === "Transferencia" && cuentasBancarias.length > 0 && !cobroCuentaBancariaId)}
-              >
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <DollarSign className="w-4 h-4 mr-2" />}
-                Cobrar {cobroMonto > 0 ? formatCurrency(cobroMonto) : ""}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CobroAllocationDialog
+        open={cobroOpen}
+        onOpenChange={setCobroOpen}
+        cliente={cobroClient}
+        onSuccess={(result: CobroResult) => {
+          setCobroReceipt({
+            open: true,
+            cliente: cobroClient!.nombre,
+            clienteCuit: cobroClient!.cuit || "",
+            clienteDomicilio: [cobroClient!.domicilio, cobroClient!.localidad, cobroClient!.provincia].filter(Boolean).join(", "),
+            monto: result.monto,
+            formaPago: result.forma_pago,
+            fecha: result.fecha,
+            saldoAnterior: cobroClient!.saldo,
+            saldoNuevo: result.nuevo_saldo,
+            empresaNombre: empresa?.nombre || "Empresa",
+            empresaCuit: empresa?.cuit || "",
+            empresaDomicilio: empresa?.domicilio || "",
+            empresaTelefono: empresa?.telefono || "",
+            cuentaBancaria: result.cuenta_bancaria_nombre,
+            cuentaAlias: result.cuenta_bancaria_alias,
+            observacion: result.observacion,
+            numero: result.numero,
+            comprobantes: result.allocations.map((a) => ({
+              comprobante: a.numero,
+              debe: a.pendiente,
+              haber: a.monto_aplicado,
+            })),
+          });
+          logAudit({
+            action: "CREATE",
+            module: "clientes",
+            entityId: cobroClient!.id,
+            userName: currentUser?.nombre || "Admin",
+            after: { cobro: result.numero, monto: result.monto, formaPago: result.forma_pago },
+          });
+          fetchClients();
+        }}
+      />
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

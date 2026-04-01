@@ -44,3 +44,12 @@ export const SITUACIONES_IVA = [
 
 // ─── Units ───
 export const UNIDADES_MEDIDA = ["Unidad", "Kg", "Litro", "Metro", "Caja"] as const;
+
+// ─── Stock Movement Types ───
+export const STOCK_MOVIMIENTO_TIPOS = {
+  VENTA: "venta",
+  DEVOLUCION: "devolucion",
+  AJUSTE_INGRESO: "ajuste_ingreso",
+  AJUSTE_EGRESO: "ajuste_egreso",
+  COMPRA: "compra",
+} as const;

@@ -213,7 +213,7 @@ export default function ListadoVentasPage() {
   const [filterMonth, setFilterMonth] = useState(currentMonthPadded());
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
   const [filterFrom, setFilterFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
-  const [filterTo, setFilterTo] = useState(todayARG);
+  const [filterTo, setFilterTo] = useState(todayARG());
   const [searchClient, setSearchClient] = useState(() => {
     if (typeof window !== "undefined") {
       return new URLSearchParams(window.location.search).get("buscar") || "";
@@ -579,18 +579,27 @@ export default function ListadoVentasPage() {
         if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
       }
 
-      // 4. Reverse cuenta_corriente entries and update client saldo
+      // 4. Reverse cuenta_corriente entries and update client saldo via atomic RPC
       if (v.cliente_id) {
         const { data: ccRows } = await supabase
           .from("cuenta_corriente")
           .select("*")
           .eq("venta_id", v.id);
         if (ccRows && ccRows.length > 0) {
-          const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
-          let saldoActual = clienteData?.saldo || 0;
+          // Calculate total saldo change from reversing all CC entries
+          const totalChange = ccRows.reduce((acc, cc) => acc - (cc as any).debe + (cc as any).haber, 0);
 
-          for (const cc of ccRows) {
-            const nuevoSaldo = saldoActual - (cc as any).debe + (cc as any).haber;
+          // Atomic saldo update via RPC
+          const { data: nuevoSaldo, error: saldoErr } = await supabase.rpc("atomic_update_client_saldo", {
+            p_client_id: v.cliente_id,
+            p_change: totalChange,
+          });
+          if (saldoErr) { errores.push(`Error actualizando saldo: ${saldoErr.message}`); }
+
+          // Insert reversal CC entries with the new running saldo
+          let saldoRunning = nuevoSaldo ?? 0;
+          for (let i = ccRows.length - 1; i >= 0; i--) {
+            const cc = ccRows[i];
             await supabase.from("cuenta_corriente").insert({
               cliente_id: v.cliente_id,
               fecha: hoy,
@@ -598,13 +607,11 @@ export default function ListadoVentasPage() {
               descripcion: `Anulación de venta${motivoTexto}`,
               debe: (cc as any).haber,
               haber: (cc as any).debe,
-              saldo: nuevoSaldo,
+              saldo: saldoRunning,
               forma_pago: "Anulación",
               venta_id: v.id,
             });
-            saldoActual = nuevoSaldo;
           }
-          await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", v.cliente_id);
         }
       }
 
@@ -613,7 +620,7 @@ export default function ListadoVentasPage() {
         throw new Error(`No se pudo restaurar stock: ${errores.join(". ")}. Venta NO anulada.`);
       }
 
-      // 6. Mark venta as anulada (only if stock was fully restored)
+      // 6. Mark venta as anulada
       const { error: anularErr } = await supabase.from("ventas").update({
         estado: "anulada",
         observacion: v.observacion
@@ -622,8 +629,27 @@ export default function ListadoVentasPage() {
       }).eq("id", v.id);
       if (anularErr) throw new Error(`Error marcando como anulada: ${anularErr.message}`);
 
-      // 6. Sync to pedidos_tienda so client sees "cancelado"
+      // 7. Sync to pedidos_tienda so client sees "cancelado"
       await supabase.from("pedidos_tienda").update({ estado: "cancelado" }).eq("numero", v.numero);
+
+      // 8. Create cancelacion caja_movimiento if original sale was paid (not Pendiente/CC)
+      //    and no caja_movimientos existed to reverse in step 3
+      if (
+        v.forma_pago !== "Pendiente" &&
+        v.forma_pago !== "Cuenta Corriente" &&
+        (!cajaRows || cajaRows.length === 0)
+      ) {
+        await supabase.from("caja_movimientos").insert({
+          fecha: hoy,
+          hora,
+          tipo: "cancelacion",
+          descripcion: `Anulación Venta #${v.numero}${motivoTexto}`,
+          metodo_pago: v.forma_pago,
+          monto: v.total,
+          referencia_id: v.id,
+          referencia_tipo: "anulacion",
+        });
+      }
 
       logAudit({
         userName: currentUser?.nombre || "Admin Sistema",
@@ -762,6 +788,9 @@ export default function ListadoVentasPage() {
       pagoCuentaCorriente: pagoCC || undefined,
     });
     setPrintPreviewOpen(true);
+    // NOTE: Payment split (pagoEf/pagoTr/pagoCC) is reconstructed from caja_movimientos
+    // and may not sum exactly to v.total if movimientos were manually edited. This is an
+    // accepted assumption for receipt reprints — no sum validation is performed.
     // Mark as printed
     try {
       const printed = new Set(printedPedidos);

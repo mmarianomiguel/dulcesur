@@ -198,6 +198,7 @@ export interface Venta {
   origen?: string;
   remito_origen_id?: string | null;
   lista_precio_id?: string | null;
+  monto_pagado?: number;
   created_at: string;
 }
 
@@ -256,6 +257,7 @@ export interface CajaMovimiento {
   referencia_id: string | null;
   referencia_tipo: string | null;
   cuenta_bancaria: string | null;
+  sub_tipo?: string | null;
   created_at: string;
 }
 
@@ -268,14 +270,46 @@ export interface CajaMovimiento {
 //   WHERE tipo = 'egreso'
 //     AND referencia_tipo IN ('anulacion', 'nota_credito');
 
+export interface Cobro {
+  id: string;
+  numero: string;
+  cliente_id: string;
+  fecha: string;
+  hora: string;
+  monto: number;
+  forma_pago: string;
+  observacion: string | null;
+  cuenta_bancaria_id: string | null;
+  estado: "aplicado" | "anulado";
+  created_at: string;
+}
+
+export interface CobroItem {
+  id: string;
+  cobro_id: string;
+  venta_id: string;
+  monto_aplicado: number;
+  created_at: string;
+}
+
 export interface PagoProveedor {
   id: string;
+  numero: string;
   proveedor_id: string;
   fecha: string;
   monto: number;
   forma_pago: string;
   compra_id: string | null;
   observacion: string | null;
+  cuenta_bancaria_id: string | null;
+  created_at: string;
+}
+
+export interface PagoProveedorItem {
+  id: string;
+  pago_id: string;
+  compra_id: string;
+  monto_aplicado: number;
   created_at: string;
 }
 

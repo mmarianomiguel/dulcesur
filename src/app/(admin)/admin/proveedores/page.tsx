@@ -1,12 +1,12 @@
 "use client";
 
 import { showAdminToast } from "@/components/admin-toast";
+import { PagoProveedorAllocationDialog } from "@/components/pago-proveedor-allocation-dialog";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,12 +36,11 @@ import {
   FileText,
   AlertCircle,
   Download,
-  Loader2,
 } from "lucide-react";
 
 
 import { formatCurrency, formatDateARG, todayARG } from "@/lib/formatters";
-import type { Proveedor, Compra, PagoProveedor, CuentaCorrienteProveedor } from "@/types/database";
+import type { Proveedor, Compra, CuentaCorrienteProveedor } from "@/types/database";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { useDialog } from "@/hooks/use-dialog";
 import { PageHeader } from "@/components/page-header";
@@ -61,17 +60,13 @@ const emptyForm = {
   dias_entrega: "", plazo_pago: "", observacion: "",
 };
 
-const emptyPagoForm = { monto: 0, forma_pago: "Efectivo", compra_ids: [] as string[], observacion: "", registrar_caja: true, cuenta_bancaria_id: "" };
-
 export default function ProveedoresPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
-  const [pagoForm, setPagoForm] = useState(emptyPagoForm);
   const importRef = useRef<HTMLInputElement>(null);
   const [comprasPendientes, setComprasPendientes] = useState<(Compra & { proveedores?: { nombre: string } })[]>([]);
   const [ccMovimientos, setCcMovimientos] = useState<CuentaCorrienteProveedor[]>([]);
   const [provCuentas, setProvCuentas] = useState<{ id: string; nombre: string; alias: string; cbu_cvu: string; tipo_cuenta: string; titular: string }[]>([]);
-  const [saving, setSaving] = useState(false);
   const [historialCompras, setHistorialCompras] = useState<{ id: string; numero: string; fecha: string; total: number; estado: string; forma_pago: string }[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
@@ -297,123 +292,8 @@ export default function ProveedoresPage() {
   };
 
   // ─── Pago ───
-  const openPago = async (p: Proveedor) => {
-    setPagoForm({ ...emptyPagoForm, compra_ids: [] });
+  const openPago = (p: Proveedor) => {
     pagoDialog.onOpen(p);
-    // Fetch pending compras
-    const { data } = await supabase
-      .from("compras")
-      .select("*")
-      .eq("proveedor_id", p.id)
-      .eq("estado_pago", "Pendiente")
-      .order("fecha", { ascending: false });
-    setComprasPendientes((data || []) as any[]);
-    // Fetch bank accounts linked to this proveedor + all propia accounts
-    const { data: cuentas } = await supabase
-      .from("cuentas_bancarias")
-      .select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular")
-      .or(`proveedor_id.eq.${p.id},origen.eq.propia`)
-      .eq("activo", true);
-    setProvCuentas((cuentas || []) as any[]);
-  };
-
-  const toggleCompraSelection = (compraId: string) => {
-    setPagoForm((prev) => {
-      const ids = prev.compra_ids.includes(compraId)
-        ? prev.compra_ids.filter((id) => id !== compraId)
-        : [...prev.compra_ids, compraId];
-      // Auto-calculate total of selected boletas
-      const total = comprasPendientes
-        .filter((c) => ids.includes(c.id))
-        .reduce((a, c) => a + c.total, 0);
-      return { ...prev, compra_ids: ids, monto: total > 0 ? total : prev.monto };
-    });
-  };
-
-  const handlePago = () => {
-    if (saving) return;
-    if (!pagoDialog.data) return;
-    const monto = pagoForm.monto;
-    if (!monto || monto <= 0) return;
-    if (monto > pagoDialog.data.saldo && pagoDialog.data.saldo > 0) {
-      setConfirmDialog({
-        open: true,
-        title: "Confirmar pago",
-        message: `El monto ($${monto.toLocaleString()}) supera la deuda ($${pagoDialog.data.saldo.toLocaleString()}). ¿Continuar?`,
-        onConfirm: () => executePago(),
-      });
-      return;
-    }
-    executePago();
-  };
-
-  const executePago = async () => {
-    if (!pagoDialog.data) return;
-    const monto = pagoForm.monto;
-    setSaving(true);
-    try {
-      const provId = pagoDialog.data.id;
-      const provNombre = pagoDialog.data.nombre;
-
-      // 1. Insert pago
-      const cuentaId = pagoForm.cuenta_bancaria_id || null;
-      const cuentaInfo = cuentaId ? provCuentas.find((c) => c.id === cuentaId) : null;
-      const { error: pagoError } = await supabase.from("pagos_proveedores").insert({
-        proveedor_id: provId,
-        fecha: todayARG(),
-        monto,
-        forma_pago: pagoForm.forma_pago,
-        compra_id: pagoForm.compra_ids.length === 1 ? pagoForm.compra_ids[0] : null,
-        observacion: pagoForm.observacion || null,
-        cuenta_bancaria_id: cuentaId,
-      });
-      if (pagoError) throw new Error(pagoError.message);
-
-      // 2. Update proveedor saldo (fresh read to avoid stale data)
-      const { data: freshProv } = await supabase.from("proveedores").select("saldo").eq("id", provId).single();
-      const newSaldo = (freshProv?.saldo ?? pagoDialog.data.saldo) - monto;
-      await proveedorService.update(provId, { saldo: newSaldo } as Partial<Proveedor>);
-
-      // 3. Mark selected compras as paid
-      if (pagoForm.compra_ids.length > 0) {
-        for (const compraId of pagoForm.compra_ids) {
-          await supabase
-            .from("compras")
-            .update({ estado_pago: "Pagada" })
-            .eq("id", compraId);
-        }
-      }
-
-      // 4. Register CC movement
-      const cuentaDesc = cuentaInfo ? ` → ${cuentaInfo.alias || cuentaInfo.nombre}` : "";
-      await supabase.from("cuenta_corriente_proveedor").insert({
-        proveedor_id: provId,
-        fecha: todayARG(),
-        tipo: "pago",
-        descripcion: `Pago ${pagoForm.forma_pago}${cuentaDesc}${pagoForm.compra_ids.length > 0 ? ` (${pagoForm.compra_ids.length} boleta/s)` : ""}`,
-        monto,
-        saldo_resultante: newSaldo,
-        referencia_tipo: "pago",
-      });
-
-      // 5. Register caja movement (egreso) if selected
-      if (pagoForm.registrar_caja && pagoForm.forma_pago !== "Cuenta Corriente") {
-        await supabase.from("caja_movimientos").insert({
-          fecha: todayARG(),
-          hora: new Date().toLocaleTimeString("en-GB", { timeZone: "America/Argentina/Buenos_Aires" }),
-          tipo: "egreso",
-          descripcion: `Pago a proveedor: ${provNombre}`,
-          metodo_pago: pagoForm.forma_pago,
-          monto,
-          referencia_tipo: "pago_proveedor",
-        });
-      }
-
-      pagoDialog.onClose();
-      refetch();
-    } finally {
-      setSaving(false);
-    }
   };
 
   // ─── Derived ───
@@ -1016,117 +896,14 @@ export default function ProveedoresPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Pago Dialog */}
-      <Dialog open={pagoDialog.open} onOpenChange={pagoDialog.setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Registrar pago</DialogTitle></DialogHeader>
-          {pagoDialog.data && (
-            <div className="space-y-4 mt-2">
-              <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-                <p className="font-medium">{pagoDialog.data.nombre}</p>
-                <p className="text-sm text-muted-foreground">
-                  Deuda actual: <span className="font-semibold text-orange-500">{formatCurrency(pagoDialog.data.saldo)}</span>
-                </p>
-              </div>
-
-              {/* Select boletas to pay */}
-              {comprasPendientes.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Seleccionar boletas a pagar</Label>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                    {comprasPendientes.map((c) => (
-                      <label key={c.id} className="flex items-center gap-3 rounded-lg border p-2.5 cursor-pointer hover:bg-muted/50 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={pagoForm.compra_ids.includes(c.id)}
-                          onChange={() => toggleCompraSelection(c.id)}
-                          className="rounded"
-                        />
-                        <div className="flex-1 flex items-center justify-between">
-                          <div>
-                            <span className="text-sm font-medium">{c.numero}</span>
-                            <span className="text-xs text-muted-foreground ml-2">{formatDateARG(c.fecha)}</span>
-                          </div>
-                          <span className="text-sm font-semibold">{formatCurrency(c.total)}</span>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Monto</Label>
-                <MoneyInput
-                  value={pagoForm.monto}
-                  onValueChange={(v) => setPagoForm({ ...pagoForm, monto: v })}
-                  min={0}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Forma de pago</Label>
-                <Select value={pagoForm.forma_pago} onValueChange={(v) => setPagoForm({ ...pagoForm, forma_pago: v ?? "" })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar forma de pago" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Efectivo">Efectivo</SelectItem>
-                    <SelectItem value="Transferencia">Transferencia</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {pagoForm.forma_pago === "Transferencia" && provCuentas.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Cuenta destino</Label>
-                  <Select value={pagoForm.cuenta_bancaria_id} onValueChange={(v) => setPagoForm({ ...pagoForm, cuenta_bancaria_id: v ?? "" })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar cuenta">
-                        {(() => {
-                          const sel = provCuentas.find((c) => c.id === pagoForm.cuenta_bancaria_id);
-                          return sel ? `${sel.nombre}${sel.alias ? ` (${sel.alias})` : ""}${sel.titular ? ` — ${sel.titular}` : ""}` : "Seleccionar cuenta";
-                        })()}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {provCuentas.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nombre}{c.alias ? ` (${c.alias})` : ""}{c.titular ? ` — ${c.titular}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {(pagoForm.forma_pago === "Efectivo" || pagoForm.forma_pago === "Transferencia") && (
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={pagoForm.registrar_caja} onChange={(e) => setPagoForm({ ...pagoForm, registrar_caja: e.target.checked })} className="rounded" />
-                  <span className="text-sm">Registrar en caja diaria</span>
-                </label>
-              )}
-
-              <div className="space-y-2">
-                <Label>Observaciones</Label>
-                <Textarea
-                  placeholder="Opcional..."
-                  value={pagoForm.observacion}
-                  onChange={(e) => setPagoForm({ ...pagoForm, observacion: e.target.value })}
-                  rows={2}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={pagoDialog.onClose}>Cancelar</Button>
-                <Button onClick={handlePago} disabled={saving || !pagoForm.monto || pagoForm.monto <= 0}>
-                  {saving ? "Registrando..." : "Registrar Pago"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <PagoProveedorAllocationDialog
+        open={pagoDialog.open}
+        onOpenChange={(open) => pagoDialog.setOpen(open)}
+        proveedor={pagoDialog.data}
+        onSuccess={() => {
+          refetch();
+        }}
+      />
       {/* Products list dialog */}
       <Dialog open={prodListDialog.open} onOpenChange={(v) => !v && setProdListDialog({ open: false, nombre: "", productos: [] })}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
