@@ -45,7 +45,11 @@ import {
   AlertCircle,
   Info,
   ArrowRight,
+  Sun,
+  Trophy,
+  UserCheck,
 } from "lucide-react";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   Dialog,
   DialogContent,
@@ -172,6 +176,7 @@ function markPedidoPrinted(numero: string) {
 
 export default function DashboardPage() {
   const { config: wl } = useWhiteLabel();
+  const currentUser = useCurrentUser();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
 
@@ -248,7 +253,8 @@ export default function DashboardPage() {
   const [ncPorPedido, setNcPorPedido] = useState<Record<string, number>>({});
 
   // ─── New dashboard widgets state ───
-  const [turnoAbierto, setTurnoAbierto] = useState<{ id: string; fecha_apertura: string; hora_apertura: string; efectivo_inicial: number } | null>(null);
+  const [turnoAbierto, setTurnoAbierto] = useState<{ id: string; fecha_apertura: string; hora_apertura: string; efectivo_inicial: number; operador: string } | null>(null);
+  const [cajaTurnTotals, setCajaTurnTotals] = useState<{ efectivo: number; transferencia: number; total: number }>({ efectivo: 0, transferencia: 0, total: 0 });
   const [ultimasVentas, setUltimasVentas] = useState<{ id: string; numero: number; cliente: string; total: number; forma_pago: string; fecha: string }[]>([]);
   const [itemsSinCosto, setItemsSinCosto] = useState(0);
 
@@ -478,10 +484,25 @@ export default function DashboardPage() {
     // Start pedidos online fetch in parallel with processing below
     const pedidosOnlinePromise = fetchPedidosOnline();
 
-    // ─── Turno de caja abierto ───
-    supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
-      setTurnoAbierto(data && data.length > 0 ? data[0] as any : null);
-    });
+    // ─── Turno de caja abierto + totales del turno ───
+    const { data: turnoData } = await supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1);
+    const turnoActual = turnoData && turnoData.length > 0 ? turnoData[0] as any : null;
+    setTurnoAbierto(turnoActual);
+    if (turnoActual) {
+      supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").gte("fecha", turnoActual.fecha_apertura).then(({ data: cajaMov }) => {
+        let ef = 0, tr = 0, total = 0;
+        for (const m of cajaMov || []) {
+          if (m.tipo === "ingreso") {
+            if (m.metodo_pago === "Efectivo") ef += m.monto;
+            else if (m.metodo_pago === "Transferencia") tr += m.monto;
+            total += m.monto;
+          } else {
+            total -= Math.abs(m.monto);
+          }
+        }
+        setCajaTurnTotals({ efectivo: ef, transferencia: tr, total: ef + tr });
+      });
+    }
 
     // ─── Últimas ventas (últimas 8) ───
     supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").order("created_at", { ascending: false }).limit(8).then(({ data }) => {
@@ -915,19 +936,60 @@ export default function DashboardPage() {
   const ganancia = gananciaPeriodo;
   const periodLabel = filterMode === "diario" ? "del dia" : filterMode === "mensual" ? "del mes" : "del periodo";
 
+  // ─── Briefing computed values ───
+  const pedidosPorArmar = pedidosOnline.filter((p) => {
+    const estado = pedidoEstadoMap[p.numero] || "pendiente";
+    return estado !== "armado" && estado !== "entregado";
+  }).length;
+  const entregasPendientes = pedidosOnline.filter((p) => p.metodo_entrega === "envio").length;
+  const userName = currentUser?.nombre?.split(" ")[0] || turnoAbierto?.operador?.split(" ")[0] || "Admin";
+  const cajaTimeOpen = turnoAbierto ? (() => {
+    const [h, m] = (turnoAbierto.hora_apertura || "00:00").split(":").map(Number);
+    const now = new Date();
+    const argNow = new Date(now.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+    const openedAt = new Date(argNow);
+    openedAt.setHours(h, m, 0, 0);
+    const diffMs = Math.max(0, argNow.getTime() - openedAt.getTime());
+    const diffH = Math.floor(diffMs / 3600000);
+    const diffM = Math.floor((diffMs % 3600000) / 60000);
+    return diffH > 0 ? `${diffH}h ${diffM}m` : `${diffM}m`;
+  })() : null;
+  const greetingHour = new Date().getHours();
+  const greeting = greetingHour < 12 ? "Buenos días" : greetingHour < 19 ? "Buenas tardes" : "Buenas noches";
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header with inline filters */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">Resumen de actividad — {getFilterLabel()}</p>
+          <p className="text-muted-foreground text-sm">Resumen de actividad de tu negocio</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setShowWidgetSettings(!showWidgetSettings)} className="gap-1.5 text-muted-foreground">
-            <SlidersHorizontal className="w-4 h-4" /> Personalizar
+        <div className="flex flex-wrap items-center gap-2">
+          <Calendar className="w-4 h-4 text-muted-foreground hidden sm:block" />
+          <div className="flex border rounded-lg overflow-hidden">
+            {(["diario", "mensual", "rango"] as FilterMode[]).map((mode) => (
+              <button key={mode} onClick={() => setFilterMode(mode)}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${filterMode === mode ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"}`}>
+                {mode === "diario" ? "Diario" : mode === "mensual" ? "Mensual" : "Rango"}
+              </button>
+            ))}
+          </div>
+          {filterMode === "diario" && (
+            <Input type="date" value={filterDate} onChange={(ev) => setFilterDate(ev.target.value)} className="h-8 w-[140px]" />
+          )}
+          {filterMode === "mensual" && (
+            <Input type="month" value={filterMonth} onChange={(ev) => setFilterMonth(ev.target.value)} className="h-8 w-[140px]" />
+          )}
+          {filterMode === "rango" && (
+            <>
+              <Input type="date" value={filterFrom} onChange={(ev) => setFilterFrom(ev.target.value)} className="h-8 w-[130px]" />
+              <Input type="date" value={filterTo} onChange={(ev) => setFilterTo(ev.target.value)} className="h-8 w-[130px]" />
+            </>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setShowWidgetSettings(!showWidgetSettings)} className="gap-1.5 h-8">
+            <SlidersHorizontal className="w-4 h-4" /> Widgets
           </Button>
-          <Badge variant="outline" className="text-xs w-fit">{wl.system_name || "DulceSur"}</Badge>
         </div>
       </div>
 
@@ -947,442 +1009,190 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* ─── Date filter (moved up — controls all KPIs and charts) ─── */}
-      <Card>
-        <CardContent className="pt-5 pb-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Periodo</span>
-            </div>
-            <div className="flex border rounded-lg overflow-hidden">
-              {(["diario", "mensual", "rango"] as FilterMode[]).map((mode) => (
-                <button key={mode} onClick={() => setFilterMode(mode)}
-                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${filterMode === mode ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"}`}>
-                  {mode === "diario" ? "Diario" : mode === "mensual" ? "Mensual" : "Entre Fechas"}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2 flex-1">
-              {filterMode === "diario" && (
-                <Input type="date" value={filterDate} onChange={(ev) => setFilterDate(ev.target.value)} className="h-9 w-44" />
-              )}
-              {filterMode === "mensual" && (
-                <Input type="month" value={filterMonth} onChange={(ev) => setFilterMonth(ev.target.value)} className="h-9 w-44" />
-              )}
-              {filterMode === "rango" && (
-                <div className="flex items-center gap-2">
-                  <Input type="date" value={filterFrom} onChange={(ev) => setFilterFrom(ev.target.value)} className="h-9 w-40" />
-                  <span className="text-sm text-muted-foreground">—</span>
-                  <Input type="date" value={filterTo} onChange={(ev) => setFilterTo(ev.target.value)} className="h-9 w-40" />
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ─── Accesos Rápidos ─── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Link href="/admin/ventas" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-emerald-300">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="relative flex flex-col gap-2">
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-              <ShoppingCart className="w-5 h-5 text-emerald-600 group-hover:text-white transition-colors" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm">Nueva Venta</p>
-              <p className="text-[11px] text-muted-foreground">Abrir POS</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/admin/clientes" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-blue-300">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="relative flex flex-col gap-2">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
-              <CreditCard className="w-5 h-5 text-blue-600 group-hover:text-white transition-colors" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm">Cobrar Deuda</p>
-              <p className="text-[11px] text-muted-foreground">Cuenta corriente</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/admin/compras" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-violet-300">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-violet-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="relative flex flex-col gap-2">
-            <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center group-hover:bg-violet-500 group-hover:text-white transition-colors">
-              <Truck className="w-5 h-5 text-violet-600 group-hover:text-white transition-colors" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm">Cargar Compra</p>
-              <p className="text-[11px] text-muted-foreground">Proveedor</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/admin/productos" className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all hover:border-orange-300">
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-orange-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="relative flex flex-col gap-2">
-            <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
-              <PackageIcon className="w-5 h-5 text-orange-600 group-hover:text-white transition-colors" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm">Productos</p>
-              <p className="text-[11px] text-muted-foreground">Gestionar catálogo</p>
-            </div>
-          </div>
-        </Link>
-      </div>
-
-      {/* ─── Caja Status Banner ─── */}
-      {isWidgetVisible("caja") && (
-        <div className={`rounded-lg border p-3 flex items-center justify-between ${turnoAbierto ? "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20" : "border-amber-200 bg-amber-50 dark:bg-amber-950/20"}`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${turnoAbierto ? "bg-emerald-100 dark:bg-emerald-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
-              <Wallet className={`w-4 h-4 ${turnoAbierto ? "text-emerald-600" : "text-amber-600"}`} />
-            </div>
-            <div>
-              <p className={`text-sm font-semibold ${turnoAbierto ? "text-emerald-800 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300"}`}>
-                Caja {turnoAbierto ? "abierta" : "cerrada"}
-              </p>
-              {turnoAbierto && (
-                <p className="text-xs text-muted-foreground">
-                  Desde {turnoAbierto.hora_apertura?.slice(0, 5) || "—"} — Inicio: {formatCurrency(turnoAbierto.efectivo_inicial)}
-                </p>
-              )}
-            </div>
-          </div>
-          <Link href="/admin/caja">
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-              <ArrowRight className="w-3 h-3" /> Ir a Caja
-            </Button>
-          </Link>
-        </div>
-      )}
-
       {/* ─── Morning Briefing ─── */}
       {isWidgetVisible("briefing") && (
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Info className="w-4 h-4 text-primary" />
-            <span className="text-sm font-semibold">Resumen operativo</span>
+        <div className="rounded-xl border border-primary/12 bg-gradient-to-r from-primary/5 to-emerald-500/5 p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+            <Sun className="w-5 h-5" />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="text-center p-2 rounded-lg bg-muted/50">
-              <p className="text-lg font-bold">{pedidosOnline.length}</p>
-              <p className="text-[11px] text-muted-foreground">Pedidos por armar</p>
-            </div>
-            <div className="text-center p-2 rounded-lg bg-muted/50">
-              <p className="text-lg font-bold">{pedidosOnline.filter(p => p.metodo_entrega === "envio").length}</p>
-              <p className="text-[11px] text-muted-foreground">Entregas pendientes</p>
-            </div>
-            <div className="text-center p-2 rounded-lg bg-muted/50">
-              <p className="text-lg font-bold">{lowStockProducts.length}</p>
-              <p className="text-[11px] text-muted-foreground">Productos stock bajo</p>
-            </div>
-            <div className="text-center p-2 rounded-lg bg-muted/50">
-              <p className="text-lg font-bold">{saldoMismatches.length}</p>
-              <p className="text-[11px] text-muted-foreground">Saldos descuadrados</p>
-            </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[15px] font-semibold">{greeting}, {userName}</p>
+            <p className="text-[13px] text-muted-foreground mt-0.5">
+              Tenés <strong className="text-foreground">{pedidosPorArmar} pedido{pedidosPorArmar !== 1 ? "s" : ""} online</strong> por armar
+              {entregasPendientes > 0 && <>, <strong className="text-foreground">{entregasPendientes} entrega{entregasPendientes !== 1 ? "s" : ""} pendiente{entregasPendientes !== 1 ? "s" : ""}</strong></>}
+              {cajaTimeOpen && <> y la caja lleva <strong className="text-foreground">{cajaTimeOpen}</strong> abierta</>}
+              .
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* ─── Warning: Items sin costo ─── */}
-      {itemsSinCosto > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-center gap-3">
-          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-          <p className="text-xs text-amber-800 dark:text-amber-300">
-            <strong>{itemsSinCosto} item{itemsSinCosto !== 1 ? "s" : ""}</strong> vendido{itemsSinCosto !== 1 ? "s" : ""} en este periodo no tienen costo unitario registrado. El dato de ganancia puede estar inflado.
-          </p>
-        </div>
-      )}
-
-      {/* ─── Saldos Descuadrados ─── */}
-      {isWidgetVisible("saldos") && saldoMismatches.length > 0 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-600" />
-              <span className="text-sm font-semibold text-red-800">Saldos descuadrados ({saldoMismatches.length} cliente{saldoMismatches.length !== 1 ? "s" : ""})</span>
-            </div>
-            <Button variant="outline" size="sm" className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-100" onClick={fixAllSaldos}>
-              Corregir todos
-            </Button>
-          </div>
-          <p className="text-xs text-red-600 mb-2">El saldo del cliente no coincide con la suma de su cuenta corriente. &quot;Corregir&quot; ajusta el saldo al valor real de la CC.</p>
-          <div className="flex flex-wrap gap-2">
-            {saldoMismatches.slice(0, 8).map((c) => (
-              <div key={c.id} className="flex items-center gap-1.5 bg-white rounded-md border border-red-200 px-2.5 py-1.5 text-xs">
-                <span className="font-medium text-red-900 truncate max-w-[150px]">{c.nombre}</span>
-                <span className="text-red-500">{formatCurrency(c.saldo)}</span>
-                <span className="text-muted-foreground">→ {formatCurrency(c.calculado)}</span>
-                <button onClick={() => fixSaldo(c.id, c.calculado)} className="ml-1 px-1.5 py-0.5 rounded bg-red-100 text-red-700 hover:bg-red-200 font-medium">Corregir</button>
-              </div>
-            ))}
-            {saldoMismatches.length > 8 && (
-              <span className="text-xs text-red-600 self-center">+{saldoMismatches.length - 8} más</span>
+          <div className="flex gap-2 shrink-0">
+            {pedidosPorArmar > 0 && (
+              <Link href="/admin/ventas" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
+                <PackageIcon className="w-3.5 h-3.5 text-amber-500" />
+                <span className="font-bold text-primary">{pedidosPorArmar}</span> pedidos
+              </Link>
+            )}
+            {entregasPendientes > 0 && (
+              <Link href="/admin/ventas/entregas-pendientes" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
+                <Truck className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="font-bold text-primary">{entregasPendientes}</span> entregas
+              </Link>
             )}
           </div>
         </div>
       )}
 
-      {/* ─── Pedidos Online ─── */}
-      {isWidgetVisible("pedidos") && <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-primary" />
-              Pedidos Online
-              {pedidosOnline.length > 0 && (
-                <Badge variant="secondary" className="text-xs">{pedidosOnline.length} pendiente{pedidosOnline.length !== 1 ? "s" : ""}</Badge>
-              )}
-            </CardTitle>
-            <Link href="/admin/ventas/hoja-ruta">
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                <Truck className="w-3.5 h-3.5" />
-                Hoja de Ruta
-              </Button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Day tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-            {dayTabs.map((tab) => {
-              const count = countByTab[tab.key] || 0;
-              const isActive = effectiveTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setSelectedDayTab(tab.key === today ? "_today" : tab.key)}
-                  className={`flex flex-col items-center min-w-[72px] px-3 py-2 rounded-xl border-2 transition-all text-center shrink-0 ${
-                    isActive
-                      ? tab.isPending
-                        ? "border-red-500 bg-red-50 dark:bg-red-950/20"
-                        : "border-primary bg-primary/5"
-                      : count > 0
-                        ? "border-muted bg-muted/50 hover:border-muted-foreground/30"
-                        : "border-transparent bg-muted/30 hover:bg-muted/50"
-                  }`}
-                >
-                  <span className={`text-xs font-semibold ${
-                    isActive ? tab.isPending ? "text-red-700 dark:text-red-400" : "text-primary" : "text-muted-foreground"
-                  }`}>{tab.label}</span>
-                  <span className={`text-[10px] ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
-                    {tab.isPending ? (count > 0 ? <AlertTriangle className="w-3 h-3 text-red-500 inline" /> : "—") : tab.sublabel}
-                  </span>
-                  {count > 0 && (
-                    <span className={`mt-0.5 text-[10px] font-bold rounded-full px-1.5 ${
-                      isActive ? tab.isPending ? "bg-red-500 text-white" : "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground"
-                    }`}>{count}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Entrega filter */}
-          <div className="flex items-center gap-3">
-            <div className="flex border rounded-lg overflow-hidden">
-              {([
-                { key: "todos" as const, label: "Todos" },
-                { key: "envio" as const, label: "Envio", icon: Truck },
-                { key: "retiro" as const, label: "Retiro", icon: Store },
-              ]).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setPedidoFilter(tab.key)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                    pedidoFilter === tab.key
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {tab.icon && <tab.icon className="w-3 h-3" />}
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Pedidos list */}
-          {tabPedidos.length === 0 ? (
-            <div className="text-center py-10">
-              <ShoppingCart className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
-              <p className="text-sm text-muted-foreground">
-                {pedidosOnline.length === 0 ? "No hay pedidos online pendientes" : "No hay pedidos con los filtros seleccionados"}
+      {/* ─── Caja Status Banner ─── */}
+      {isWidgetVisible("caja") && (
+        <div className={`rounded-xl border p-3 sm:px-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 ${turnoAbierto ? "border-emerald-200/60 bg-emerald-50/50 dark:bg-emerald-950/20" : "border-amber-200 bg-amber-50 dark:bg-amber-950/20"}`}>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {turnoAbierto && <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
+            <div>
+              <p className={`text-[13px] font-semibold ${turnoAbierto ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                Caja {turnoAbierto ? "abierta" : "cerrada"}
               </p>
+              {turnoAbierto && (
+                <p className="text-[11px] text-muted-foreground">
+                  Desde {turnoAbierto.hora_apertura?.slice(0, 5) || "—"} — Turno de {turnoAbierto.operador || "—"}
+                </p>
+              )}
             </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between text-sm px-1">
-                <span className="text-muted-foreground">{tabPedidos.length} pedido{tabPedidos.length !== 1 ? "s" : ""}</span>
-                <span className="font-bold">{formatCurrency(totalPedidos)}</span>
+          </div>
+          {turnoAbierto && (
+            <div className="flex items-center gap-5 shrink-0">
+              <div className="text-center">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Efectivo</p>
+                <p className="text-sm font-bold text-emerald-600">{formatCurrency(cajaTurnTotals.efectivo)}</p>
               </div>
-
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30">
-                      <TableHead className="w-[50px]"></TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead className="hidden sm:table-cell">Pago</TableHead>
-                      <TableHead className="hidden md:table-cell">Pedido</TableHead>
-                      <TableHead className="hidden md:table-cell">Estado</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right w-[160px]">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tabPedidos.map((p) => {
-                      const createdDate = new Date(p.created_at);
-                      const dateStr = createdDate.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
-                      const timeStr = createdDate.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
-                      const isOverdue = effectiveTab === "_pending";
-                      const isLoading = actionLoading === p.id;
-                      const pedidoEstado = pedidoEstadoMap[p.numero] || "pendiente";
-                      const isArmado = pedidoEstado === "armado";
-                      const isRetiro = p.metodo_entrega === "retiro";
-
-                      return (
-                        <TableRow key={p.id} className={isOverdue ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
-                          <TableCell>
-                            <div className={`w-8 h-8 rounded-md flex items-center justify-center ${
-                              p.metodo_entrega === "envio" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-emerald-100 dark:bg-emerald-900/30"
-                            }`}>
-                              {p.metodo_entrega === "envio" ? <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> : <Store className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <span className="font-medium text-sm">{p.clientes?.nombre || "Sin cliente"}</span>
-                              <span className="text-xs text-muted-foreground ml-2">#{p.numero}</span>
-                            </div>
-                            {p.clientes?.domicilio && p.metodo_entrega === "envio" && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                                <MapPin className="w-3 h-3 shrink-0" />
-                                <span className="truncate max-w-[200px]">{[p.clientes.domicilio, p.clientes.localidad].filter(Boolean).join(", ")}</span>
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell">
-                            <Badge variant="outline" className="text-[10px] font-normal">{p.forma_pago}</Badge>
-                            {(() => {
-                              const fp = (p.forma_pago || "").toLowerCase();
-                              const hasTransfer = fp.includes("transferencia") || fp.includes("mixto");
-                              if (hasTransfer && !(p as any).cuenta_transferencia_alias) {
-                                return <Badge variant="outline" className="text-[10px] font-normal ml-1 border-amber-300 bg-amber-50 text-amber-700">Sin cuenta</Badge>;
-                              }
-                              return null;
-                            })()}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              {dateStr} {timeStr}
-                            </div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            {isArmado ? (
-                              <Badge className="text-[10px] px-1.5 py-0 bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400">Armado</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Pendiente</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="font-bold text-sm">{formatCurrency(p.total - (ncPorPedido[p.id] || 0))}</span>
-                            {(ncPorPedido[p.id] || 0) > 0 && <span className="block text-[10px] text-amber-600">NC -{formatCurrency(ncPorPedido[p.id])}</span>}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Ver detalle"
-                                onClick={async () => {
-                                  setPedidoDetail(p);
-                                  setPedidoDetailPagos([]);
-                                  setPedidoDetailOpen(true);
-                                  // Load payment breakdown from caja_movimientos
-                                  const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", p.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
-                                  if (movs && movs.length > 0) {
-                                    setPedidoDetailPagos(movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
-                                  } else {
-                                    // Fallback from stored amounts
-                                    const pagos: { metodo: string; monto: number }[] = [];
-                                    if ((p as any).monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: (p as any).monto_efectivo });
-                                    if ((p as any).monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: (p as any).monto_transferencia });
-                                    if (pagos.length === 0 && p.forma_pago) pagos.push({ metodo: p.forma_pago, monto: p.total });
-                                    setPedidoDetailPagos(pagos);
-                                  }
-                                }}>
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className={`h-7 w-7 p-0 ${printedPedidos.has(p.numero) ? "text-emerald-600" : ""}`}
-                                title={printedPedidos.has(p.numero) ? "Ya impreso — reimprimir" : "Imprimir remito"}
-                                onClick={() => handlePrintRemito(p)}>
-                                {printedPedidos.has(p.numero) ? <PrinterCheck className="w-3.5 h-3.5" /> : <Printer className="w-3.5 h-3.5" />}
-                              </Button>
-                              {isRetiro && !isArmado && (
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
-                                  title="Marcar como armado" disabled={isLoading}
-                                  onClick={() => handleMarkArmado(p)}>
-                                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackageCheck className="w-3.5 h-3.5" />}
-                                </Button>
-                              )}
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                title="Marcar entregado" disabled={isLoading}
-                                onClick={() => handleMarkDelivered(p)}>
-                                {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              <div className="text-center">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Transfer.</p>
+                <p className="text-sm font-bold text-blue-600">{formatCurrency(cajaTurnTotals.transferencia)}</p>
               </div>
-            </>
+              <div className="text-center">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total</p>
+                <p className="text-sm font-bold">{formatCurrency(cajaTurnTotals.efectivo + cajaTurnTotals.transferencia)}</p>
+              </div>
+            </div>
           )}
-        </CardContent>
-      </Card>}
+          <Link href="/admin/caja">
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+              <Wallet className="w-3 h-3" /> Ver caja
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
       ) : (
         <>
-          {/* Stats */}
+          {/* ─── Stats (4 cards) ─── */}
           {isWidgetVisible("stats") && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Ventas {periodLabel}</p><p className="text-2xl font-bold mt-1">{formatCurrency(ventasPeriodo)}</p></div><div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-primary" /></div></div></CardContent></Card>
-            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Ganancia</p><div className="flex items-baseline gap-2 mt-1"><p className="text-2xl font-bold">{formatCurrency(ganancia)}</p><span className={`text-sm font-semibold ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{ventasPeriodo > 0 ? `${((ganancia / ventasPeriodo) * 100).toFixed(1)}%` : "—"}</span></div></div><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ganancia >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}`}>{ganancia >= 0 ? <TrendingUp className="w-5 h-5 text-emerald-500" /> : <TrendingDown className="w-5 h-5 text-red-500" />}</div></div></CardContent></Card>
-            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Gastos</p><p className="text-2xl font-bold mt-1">{formatCurrency(gastosPeriodo)}</p></div><div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><TrendingDown className="w-5 h-5 text-orange-500" /></div></div></CardContent></Card>
-            <Card><CardContent className="pt-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Tickets</p><p className="text-2xl font-bold mt-1">{ticketsPeriodo}</p></div><div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-violet-500" /></div></div></CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Ventas {periodLabel}</p>
+                  <p className="text-[22px] font-bold leading-none">{formatCurrency(ventasPeriodo)}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><DollarSign className="w-5 h-5 text-primary" /></div>
+              </div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Ganancia</p>
+                  <p className="text-[22px] font-bold leading-none">{formatCurrency(ganancia)}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-medium ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{ventasPeriodo > 0 ? `${((ganancia / ventasPeriodo) * 100).toFixed(1)}%` : "—"}</span>
+                    <span className="text-xs text-muted-foreground">Margen</span>
+                  </div>
+                </div>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ganancia >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}`}>{ganancia >= 0 ? <TrendingUp className="w-5 h-5 text-emerald-500" /> : <TrendingDown className="w-5 h-5 text-red-500" />}</div>
+              </div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Gastos</p>
+                  <p className="text-[22px] font-bold leading-none">{formatCurrency(gastosPeriodo)}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><TrendingDown className="w-5 h-5 text-orange-500" /></div>
+              </div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Tickets</p>
+                  <p className="text-[22px] font-bold leading-none">{ticketsPeriodo}</p>
+                  {ticketsPeriodo > 0 && <p className="text-xs text-muted-foreground">Prom: {formatCurrency(Math.round(ventasPeriodo / ticketsPeriodo))}</p>}
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-violet-500" /></div>
+              </div>
+            </CardContent></Card>
           </div>
           )}
 
-          {/* Balance cards */}
+          {/* ─── Balance cards ─── */}
           {isWidgetVisible("balance") && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="bg-primary/5 border-primary/10"><CardContent className="pt-6 flex items-center gap-4"><PackageIcon className="w-8 h-8 text-primary/60" /><div><p className="text-xs text-muted-foreground">Capital en mercaderia</p><p className="text-lg font-semibold">{formatCurrency(capitalMercaderia)}</p></div></CardContent></Card>
-            <Card className="bg-emerald-500/5 border-emerald-500/10"><CardContent className="pt-6 flex items-center gap-4"><Users className="w-8 h-8 text-emerald-500/60" /><div><p className="text-xs text-muted-foreground">Cuentas a cobrar</p><p className="text-lg font-semibold">{formatCurrency(cuentasCobrar)}</p></div></CardContent></Card>
-            <Card className="bg-orange-500/5 border-orange-500/10"><CardContent className="pt-6 flex items-center gap-4"><CreditCard className="w-8 h-8 text-orange-500/60" /><div><p className="text-xs text-muted-foreground">Cuentas a pagar</p><p className="text-lg font-semibold">{formatCurrency(cuentasPagar)}</p></div></CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Capital en mercadería</p>
+                  <p className="text-[22px] font-bold leading-none">{formatCurrency(capitalMercaderia)}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><PackageIcon className="w-5 h-5 text-primary" /></div>
+              </div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Cuentas a cobrar</p>
+                  <p className="text-[22px] font-bold leading-none">{formatCurrency(cuentasCobrar)}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Users className="w-5 h-5 text-emerald-500" /></div>
+              </div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Cuentas a pagar</p>
+                  <p className="text-[22px] font-bold leading-none">{formatCurrency(cuentasPagar)}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><CreditCard className="w-5 h-5 text-orange-500" /></div>
+              </div>
+            </CardContent></Card>
           </div>
           )}
 
-          {/* Charts */}
+          {/* ─── Warning: Items sin costo ─── */}
+          {itemsSinCosto > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 dark:bg-amber-950/20 p-3 flex items-center gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <p className="text-[13px] text-amber-800 dark:text-amber-300">
+                <strong>{itemsSinCosto} item{itemsSinCosto !== 1 ? "s" : ""}</strong> vendido{itemsSinCosto !== 1 ? "s" : ""} en este periodo no tienen costo unitario registrado. La ganancia mostrada puede estar inflada.{" "}
+                <Link href="/admin/ventas/listado" className="underline font-semibold">Revisar ventas</Link>
+              </p>
+            </div>
+          )}
+
+          {/* ─── Charts ─── */}
           {isWidgetVisible("charts") && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-2">
-              <CardHeader><CardTitle className="text-base">Ventas y egresos — ultimos 6 meses</CardTitle></CardHeader>
-              <CardContent><div className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.7 0.15 50)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></CardContent>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-[15px]">Ventas vs Gastos</CardTitle>
+                <span className="text-xs text-muted-foreground">Últimos 6 meses</span>
+              </CardHeader>
+              <CardContent><div className="h-[250px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.65 0.18 160)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="text-base">Formas de pago ({periodLabel})</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-[15px]">Formas de Pago</CardTitle></CardHeader>
               <CardContent>
                 {paymentBreakdown.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p> : (
                   <>
-                    <div className="h-[200px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={paymentBreakdown} innerRadius={55} outerRadius={80} dataKey="value" stroke="none">{paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /></PieChart></ResponsiveContainer></div>
-                    <div className="space-y-2 mt-2">{paymentBreakdown.map((m, i) => (<div key={m.name} className="flex items-center justify-between text-sm"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span className="text-muted-foreground">{m.name}</span></div><span className="font-medium">{formatCurrency(m.value)}</span></div>))}</div>
+                    <div className="h-[180px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={paymentBreakdown} innerRadius={50} outerRadius={75} dataKey="value" stroke="none">{paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /></PieChart></ResponsiveContainer></div>
+                    <div className="space-y-2 mt-2">{paymentBreakdown.map((m, i) => (<div key={m.name} className="flex items-center justify-between text-[13px]"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span className="text-muted-foreground">{m.name}</span></div><span className="font-medium">{formatCurrency(m.value)}</span></div>))}</div>
                   </>
                 )}
               </CardContent>
@@ -1390,41 +1200,217 @@ export default function DashboardPage() {
           </div>
           )}
 
-          {/* Stock bajo + Últimas ventas */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* ─── Pedidos Online ─── */}
+          {isWidgetVisible("pedidos") && <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <CardTitle className="text-[15px] flex items-center gap-2">
+                  Pedidos Online
+                  {pedidosOnline.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">{pedidosOnline.length} pendiente{pedidosOnline.length !== 1 ? "s" : ""}</Badge>
+                  )}
+                </CardTitle>
+                <div className="flex gap-2">
+                  <div className="flex border rounded-lg overflow-hidden">
+                    {([
+                      { key: "todos" as const, label: "Todos" },
+                      { key: "envio" as const, label: "Envío", icon: Truck },
+                      { key: "retiro" as const, label: "Retiro", icon: Store },
+                    ]).map((tab) => (
+                      <button key={tab.key} onClick={() => setPedidoFilter(tab.key)}
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors flex items-center gap-1 ${
+                          pedidoFilter === tab.key ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"
+                        }`}>
+                        {tab.icon && <tab.icon className="w-3 h-3" />}
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            {/* Day tabs */}
+            <div className="flex gap-0 overflow-x-auto border-b px-4" style={{ scrollbarWidth: "none" }}>
+              {dayTabs.map((tab) => {
+                const count = countByTab[tab.key] || 0;
+                const isActive = effectiveTab === tab.key;
+                return (
+                  <button key={tab.key}
+                    onClick={() => setSelectedDayTab(tab.key === today ? "_today" : tab.key)}
+                    className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[13px] font-medium border-b-2 transition-all shrink-0 ${
+                      isActive
+                        ? tab.isPending ? "text-red-600 border-red-500" : "text-primary border-primary"
+                        : "text-muted-foreground border-transparent hover:text-foreground"
+                    }`}>
+                    {tab.isPending && <AlertTriangle className="w-3.5 h-3.5" />}
+                    {tab.label}
+                    {!tab.isPending && tab.sublabel && <span className="text-[11px] text-muted-foreground ml-0.5">({tab.sublabel})</span>}
+                    {count > 0 && (
+                      <span className={`text-[11px] font-bold rounded-full px-1.5 min-w-[18px] h-[18px] flex items-center justify-center ${
+                        isActive
+                          ? tab.isPending ? "bg-red-500 text-white" : "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                      }`}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <CardContent className="pt-4 space-y-3">
+              {tabPedidos.length === 0 ? (
+                <div className="text-center py-10">
+                  <ShoppingCart className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {pedidosOnline.length === 0 ? "No hay pedidos online pendientes" : "No hay pedidos con los filtros seleccionados"}
+                  </p>
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="w-[28px]"></TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead className="hidden sm:table-cell">Pago</TableHead>
+                        <TableHead className="hidden md:table-cell">Pedido</TableHead>
+                        <TableHead className="hidden md:table-cell">Estado</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right w-[120px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tabPedidos.map((p) => {
+                        const createdDate = new Date(p.created_at);
+                        const dateStr = createdDate.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
+                        const timeStr = createdDate.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+                        const isOverdue = effectiveTab === "_pending";
+                        const isLoading = actionLoading === p.id;
+                        const pedidoEstado = pedidoEstadoMap[p.numero] || "pendiente";
+                        const isArmado = pedidoEstado === "armado";
+                        const isRetiro = p.metodo_entrega === "retiro";
+
+                        return (
+                          <TableRow key={p.id} className={isOverdue ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
+                            <TableCell className="px-2">
+                              {p.metodo_entrega === "envio" ? <Truck className="w-3.5 h-3.5 text-emerald-500" /> : <Store className="w-3.5 h-3.5 text-blue-500" />}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <span className="font-medium text-sm">{p.clientes?.nombre || "Sin cliente"}</span>
+                                <span className="text-xs text-muted-foreground ml-1.5">#{p.numero}</span>
+                              </div>
+                              {p.clientes?.domicilio && p.metodo_entrega === "envio" && (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                                  <MapPin className="w-3 h-3 shrink-0" />
+                                  <span className="truncate max-w-[200px]">{[p.clientes.domicilio, p.clientes.localidad].filter(Boolean).join(", ")}</span>
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell">
+                              <Badge variant="outline" className="text-[10px] font-normal">{p.forma_pago}</Badge>
+                              {(() => {
+                                const fp = (p.forma_pago || "").toLowerCase();
+                                const hasTransfer = fp.includes("transferencia") || fp.includes("mixto");
+                                if (hasTransfer && !(p as any).cuenta_transferencia_alias) {
+                                  return <Badge variant="outline" className="text-[10px] font-normal ml-1 border-amber-300 bg-amber-50 text-amber-700">Sin cuenta</Badge>;
+                                }
+                                return null;
+                              })()}
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Clock className="w-3 h-3" />
+                                {dateStr} {timeStr}
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              {isArmado ? (
+                                <Badge className="text-[10px] px-1.5 py-0 bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400">Armado</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Pendiente</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className="font-bold text-sm">{formatCurrency(p.total - (ncPorPedido[p.id] || 0))}</span>
+                              {(ncPorPedido[p.id] || 0) > 0 && <span className="block text-[10px] text-amber-600">NC -{formatCurrency(ncPorPedido[p.id])}</span>}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-0.5">
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Ver detalle"
+                                  onClick={async () => {
+                                    setPedidoDetail(p);
+                                    setPedidoDetailPagos([]);
+                                    setPedidoDetailOpen(true);
+                                    const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", p.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+                                    if (movs && movs.length > 0) {
+                                      setPedidoDetailPagos(movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
+                                    } else {
+                                      const pagos: { metodo: string; monto: number }[] = [];
+                                      if ((p as any).monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: (p as any).monto_efectivo });
+                                      if ((p as any).monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: (p as any).monto_transferencia });
+                                      if (pagos.length === 0 && p.forma_pago) pagos.push({ metodo: p.forma_pago, monto: p.total });
+                                      setPedidoDetailPagos(pagos);
+                                    }
+                                  }}>
+                                  <Eye className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className={`h-7 w-7 p-0 ${printedPedidos.has(p.numero) ? "text-emerald-600" : ""}`}
+                                  title={printedPedidos.has(p.numero) ? "Ya impreso — reimprimir" : "Imprimir remito"}
+                                  onClick={() => handlePrintRemito(p)}>
+                                  {printedPedidos.has(p.numero) ? <PrinterCheck className="w-3.5 h-3.5" /> : <Printer className="w-3.5 h-3.5" />}
+                                </Button>
+                                {isRetiro && !isArmado && (
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                    title="Marcar como armado" disabled={isLoading}
+                                    onClick={() => handleMarkArmado(p)}>
+                                    {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackageCheck className="w-3.5 h-3.5" />}
+                                  </Button>
+                                )}
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  title="Marcar entregado" disabled={isLoading}
+                                  onClick={() => handleMarkDelivered(p)}>
+                                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>}
+
+          {/* ─── 3-col grid: Stock bajo + Últimas ventas + Ventas por categoría ─── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Stock Bajo */}
             {isWidgetVisible("stockbajo") && lowStockProducts.length > 0 && (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  Stock bajo
-                  <Badge variant="secondary" className="text-xs">{lowStockProducts.length}</Badge>
-                </CardTitle>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardTitle className="text-[15px]">Stock Bajo</CardTitle>
+                <Badge variant="destructive" className="text-xs">{lowStockProducts.length} productos</Badge>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
-                  {lowStockProducts.slice(0, 10).map((p) => {
+                <div className="space-y-0 max-h-[260px] overflow-y-auto">
+                  {lowStockProducts.slice(0, 8).map((p) => {
                     const pct = p.stock_minimo > 0 ? Math.min((p.stock / p.stock_minimo) * 100, 100) : 0;
                     return (
-                      <div key={p.id} className="flex items-center gap-3 py-1.5 text-sm">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate text-xs">{p.nombre}</p>
-                          <p className="text-[10px] text-muted-foreground">{p.codigo}</p>
+                      <div key={p.id} className="flex items-center gap-2.5 py-2 text-[13px] border-b last:border-0">
+                        <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden shrink-0">
+                          <div className={`h-full rounded-full ${pct < 40 ? "bg-red-500" : "bg-amber-500"}`} style={{ width: `${pct}%` }} />
                         </div>
-                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${pct < 30 ? "bg-red-500" : pct < 60 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className={`text-xs font-semibold w-12 text-right ${p.stock <= 0 ? "text-red-600" : "text-amber-600"}`}>
-                          {p.stock} / {p.stock_minimo}
-                        </span>
+                        <span className="flex-1 truncate font-medium">{p.nombre}</span>
+                        <span className={`text-xs font-bold ${p.stock <= p.stock_minimo * 0.4 ? "text-red-600" : "text-amber-600"}`}>{p.stock} u.</span>
+                        <span className="text-xs text-muted-foreground">mín. {p.stock_minimo}</span>
                       </div>
                     );
                   })}
                 </div>
-                {lowStockProducts.length > 10 && (
-                  <Link href="/admin/stock" className="text-xs text-primary hover:underline mt-2 inline-block">
-                    Ver todos ({lowStockProducts.length}) →
+                {lowStockProducts.length > 8 && (
+                  <Link href="/admin/stock" className="flex items-center justify-center gap-1.5 text-xs text-primary hover:underline mt-3 pt-3 border-t">
+                    <PackageIcon className="w-3.5 h-3.5" /> Ver todos los productos con stock bajo
                   </Link>
                 )}
               </CardContent>
@@ -1434,98 +1420,140 @@ export default function DashboardPage() {
             {/* Últimas Ventas */}
             {isWidgetVisible("ultimasventas") && ultimasVentas.length > 0 && (
             <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-primary" />
-                    Últimas ventas
-                  </CardTitle>
-                  <Link href="/admin/ventas/listado">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground">
-                      Ver todas <ArrowRight className="w-3 h-3" />
-                    </Button>
-                  </Link>
-                </div>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardTitle className="text-[15px]">Últimas Ventas</CardTitle>
+                <Link href="/admin/ventas/listado">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground">Ver todas</Button>
+                </Link>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1 max-h-[280px] overflow-y-auto">
+                <div className="space-y-0 max-h-[260px] overflow-y-auto">
                   {ultimasVentas.map((v) => (
-                    <div key={v.id} className="flex items-center justify-between py-1.5 text-sm border-b last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">#{v.numero}</span>
-                          <span className="font-medium text-xs truncate">{v.cliente}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span>{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}</span>
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">{v.forma_pago}</Badge>
-                        </div>
-                      </div>
-                      <span className="font-bold text-xs">{formatCurrency(v.total)}</span>
+                    <div key={v.id} className="flex items-center gap-2.5 py-2 text-[13px] border-b last:border-0">
+                      <span className="text-xs text-muted-foreground w-10 shrink-0">{new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}</span>
+                      <span className="flex-1 truncate font-medium">{v.cliente}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 shrink-0">{v.forma_pago}</Badge>
+                      <span className="font-medium shrink-0 min-w-[70px] text-right">{formatCurrency(v.total)}</span>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
             )}
+
+            {/* Ventas por categoría */}
+            {isWidgetVisible("categories") && ventasPorCategoria.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardTitle className="text-[15px]">Ventas por Categoría</CardTitle>
+                <span className="text-xs text-muted-foreground">{filterMode === "diario" ? "Hoy" : periodLabel}</span>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3.5">
+                  {ventasPorCategoria.slice(0, 5).map((cat, i) => {
+                    const totalCat = ventasPorCategoria.reduce((a, c) => a + c.value, 0);
+                    const pct = totalCat > 0 ? (cat.value / totalCat) * 100 : 0;
+                    return (
+                      <div key={cat.name}>
+                        <div className="flex justify-between text-[13px] mb-1">
+                          <span className="font-medium">{cat.name}</span>
+                          <span className="font-medium">{formatCurrency(cat.value)} <span className="text-xs text-muted-foreground">({pct.toFixed(0)}%)</span></span>
+                        </div>
+                        <div className="h-2 bg-muted rounded overflow-hidden">
+                          <div className="h-full rounded transition-all duration-500" style={{ width: `${pct}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Link href="/admin/reportes" className="flex items-center justify-center gap-1.5 text-xs text-primary hover:underline mt-3 pt-3 border-t">
+                  <BarChart3 className="w-3.5 h-3.5" /> Ver resumen mensual completo
+                </Link>
+              </CardContent>
+            </Card>
+            )}
           </div>
 
-          {/* Ventas por categoria */}
-          {isWidgetVisible("categories") && (
-          <Card>
-            <CardHeader><CardTitle className="text-base">Ventas por categoria — {periodLabel}</CardTitle></CardHeader>
-            <CardContent>
-              {ventasPorCategoria.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin datos en este periodo</p> : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="h-[280px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={ventasPorCategoria} layout="vertical" barSize={20}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={120} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="value" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[0, 6, 6, 0]} /></BarChart></ResponsiveContainer></div>
-                  <div className="space-y-2">{ventasPorCategoria.map((cat, i) => { const totalCat = ventasPorCategoria.reduce((a, c) => a + c.value, 0); const pct = totalCat > 0 ? ((cat.value / totalCat) * 100).toFixed(1) : "0"; return (<div key={cat.name} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span>{cat.name}</span></div><div className="flex items-center gap-3"><span className="text-muted-foreground text-xs">{pct}%</span><span className="font-medium">{formatCurrency(cat.value)}</span></div></div>); })}</div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          )}
-
-          {/* ─── Reportes Quick Access ─── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-primary" />
-                Reportes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <Link href="/admin/reportes" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium">Resumen mensual</p>
-                    <p className="text-[10px] text-muted-foreground">Ventas y gastos</p>
-                  </div>
+          {/* ─── 2-col grid: Accesos Rápidos + Reportes ─── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-[15px] font-semibold mb-3">Accesos Rápidos</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <Link href="/admin/ventas" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center"><ShoppingCart className="w-5 h-5 text-emerald-500" /></div>
+                  <div><p className="text-sm font-semibold">Nueva Venta</p><p className="text-xs text-muted-foreground">Ir al punto de venta</p></div>
                 </Link>
-                <Link href="/admin/ventas/listado" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
-                  <Receipt className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium">Historial ventas</p>
-                    <p className="text-[10px] text-muted-foreground">Listado completo</p>
-                  </div>
+                <Link href="/admin/clientes" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center"><CreditCard className="w-5 h-5 text-blue-500" /></div>
+                  <div><p className="text-sm font-semibold">Cobrar Deuda</p><p className="text-xs text-muted-foreground">Registrar cobranza</p></div>
                 </Link>
-                <Link href="/admin/caja" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
-                  <Wallet className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium">Movimientos caja</p>
-                    <p className="text-[10px] text-muted-foreground">Ingresos y egresos</p>
-                  </div>
+                <Link href="/admin/compras" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center"><Truck className="w-5 h-5 text-violet-500" /></div>
+                  <div><p className="text-sm font-semibold">Cargar Compra</p><p className="text-xs text-muted-foreground">Registrar compra a proveedor</p></div>
                 </Link>
-                <Link href="/admin/clientes" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
-                  <Users className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium">Cuenta corriente</p>
-                    <p className="text-[10px] text-muted-foreground">Saldos de clientes</p>
-                  </div>
+                <Link href="/admin/productos" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center"><PackageIcon className="w-5 h-5 text-amber-500" /></div>
+                  <div><p className="text-sm font-semibold">Productos</p><p className="text-xs text-muted-foreground">Gestionar catálogo</p></div>
                 </Link>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <div>
+              <h2 className="text-[15px] font-semibold mb-3">Reportes</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <Link href="/admin/reportes" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center"><BarChart3 className="w-5 h-5 text-primary-foreground" /></div>
+                  <div><p className="text-sm font-semibold">Resumen Mensual</p><p className="text-xs text-muted-foreground">Ventas, gastos, ganancia</p></div>
+                </Link>
+                <Link href="/admin/clientes" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center"><Trophy className="w-5 h-5 text-white" /></div>
+                  <div><p className="text-sm font-semibold">Ranking Clientes</p><p className="text-xs text-muted-foreground">Top clientes por compras</p></div>
+                </Link>
+                <Link href="/admin/ventas/listado" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center"><UserCheck className="w-5 h-5 text-white" /></div>
+                  <div><p className="text-sm font-semibold">Por Vendedor</p><p className="text-xs text-muted-foreground">Performance y comisiones</p></div>
+                </Link>
+                <Link href="/admin/reportes" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-violet-500 flex items-center justify-center"><FileText className="w-5 h-5 text-white" /></div>
+                  <div><p className="text-sm font-semibold">Todos los Reportes</p><p className="text-xs text-muted-foreground">Ver reportes completos</p></div>
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Saldos Descuadrados ─── */}
+          {isWidgetVisible("saldos") && saldoMismatches.length > 0 && (
+            <div className="rounded-xl border border-red-200 bg-red-50/50 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600" />
+                  <span className="text-sm font-semibold text-red-800">Saldos Descuadrados</span>
+                  <Badge variant="destructive" className="text-xs">{saldoMismatches.length}</Badge>
+                </div>
+                <Button variant="outline" size="sm" className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-100" onClick={fixAllSaldos}>
+                  Corregir todos
+                </Button>
+              </div>
+              <div className="border rounded-lg overflow-hidden bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>Cliente</TableHead><TableHead>Saldo actual</TableHead><TableHead>Saldo calculado</TableHead><TableHead className="text-right"></TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {saldoMismatches.slice(0, 8).map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium text-sm">{c.nombre}</TableCell>
+                        <TableCell className="text-sm">{formatCurrency(c.saldo)}</TableCell>
+                        <TableCell className="text-sm text-red-600">{formatCurrency(c.calculado)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => fixSaldo(c.id, c.calculado)}>Corregir</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
         </>
       )}
 
