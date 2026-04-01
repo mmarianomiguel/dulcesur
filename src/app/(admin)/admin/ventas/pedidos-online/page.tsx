@@ -260,6 +260,7 @@ export default function PedidosOnlinePage() {
 
     setPedidos(data.map((p: any) => ({
       ...p,
+      estado: (p.estado || "pendiente").toLowerCase(),
       items: itemsByPedido[p.id] || [],
       ventaId: ventaMap[p.numero]?.id || undefined,
       clienteId: ventaMap[p.numero]?.cliente_id || undefined,
@@ -1022,7 +1023,7 @@ export default function PedidosOnlinePage() {
                                     className="h-7 w-16 text-center mx-auto"
                                   />
                                 ) : (
-                                  <span>{item.cantidad}</span>
+                                  <span>{item.unidades_por_presentacion < 1 ? item.cantidad * item.unidades_por_presentacion : item.cantidad}</span>
                                 )}
                               </td>
                               <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
