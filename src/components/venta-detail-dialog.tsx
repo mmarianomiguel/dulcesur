@@ -85,6 +85,9 @@ export interface VentaDetailData {
   vendedor?: string;
   // Transfer account
   cuenta_transferencia_alias?: string | null;
+  // Payment amounts (from checkout / cobro)
+  monto_efectivo?: number;
+  monto_transferencia?: number;
   // Source
   origen?: "historial" | "pedidos" | "pos";
   // Combo product IDs
@@ -208,25 +211,23 @@ export function VentaDetailDialog({
     }
   }, [open]);
 
-  // Pre-fill cobro with client's chosen payment method when opening a pending pedido
+  // Pre-fill cobro with client's chosen payment method and amounts
   useEffect(() => {
     if (open && data) {
       const metodo = data.metodo_pago || data.forma_pago || "Efectivo";
-      const hasCobro = (pagos || []).some(p => !p.metodo.includes("Pendiente") && p.metodo !== (data.metodo_pago || ""));
-      if (!hasCobro) {
-        const normalizedMetodo = metodo.toLowerCase().includes("transferencia") ? "Transferencia"
-          : metodo.toLowerCase().includes("efectivo") ? "Efectivo"
-          : metodo.toLowerCase().includes("mixto") ? "Mixto"
-          : metodo.toLowerCase().includes("cuenta") ? "Cuenta Corriente"
-          : "Efectivo";
-        setCobroMetodo(normalizedMetodo);
-        setCobroMonto(String(data.total || 0));
-        setCobroEfectivo("");
-        setCobroTransferencia("");
-        setCobroCuenta("");
-      }
+      const normalizedMetodo = metodo.toLowerCase().includes("transferencia") ? "Transferencia"
+        : metodo.toLowerCase().includes("efectivo") ? "Efectivo"
+        : metodo.toLowerCase().includes("mixto") ? "Mixto"
+        : metodo.toLowerCase().includes("cuenta") ? "Cuenta Corriente"
+        : "Efectivo";
+      setCobroMetodo(normalizedMetodo);
+      setCobroMonto(String(data.total || 0));
+      // Pre-fill mixto split amounts from saved data
+      setCobroEfectivo(normalizedMetodo === "Mixto" && data.monto_efectivo ? String(data.monto_efectivo) : "");
+      setCobroTransferencia(normalizedMetodo === "Mixto" && data.monto_transferencia ? String(data.monto_transferencia) : "");
+      setCobroCuenta(data.cuenta_transferencia_alias || "");
     }
-  }, [open, data, pagos]);
+  }, [open, data]);
 
   if (!data) return null;
 
@@ -250,6 +251,13 @@ export function VentaDetailDialog({
     : data.total - ncTotal;
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr"));
+  // Calculate real payments total (excluding NCs and "Pendiente de cobro")
+  const totalPagado = (pagos || []).reduce((s, p) => {
+    if (p.metodo === "Pendiente de cobro") return s;
+    if (p.metodo.includes("Nota de Cr")) return s - p.monto;
+    return s + p.monto;
+  }, 0);
+  const saldoPendiente = displayTotal - totalPagado;
   const nextStates = onEstadoChange ? (estadoFlow[estado] || []) : [];
 
   // Edit helpers
@@ -274,7 +282,7 @@ export function VentaDetailDialog({
       onEditItemsChange([...editItems, {
         producto_id: product.id,
         nombre: product.nombre,
-        presentacion: product.unidad_medida || "Unidad",
+        presentacion: "Unidad",
         cantidad: 1,
         precio_unitario: product.precio,
         subtotal: product.precio,
@@ -386,8 +394,8 @@ export function VentaDetailDialog({
                     {new Date(data.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
                   </p>
                 )}
-                {/* Payment breakdown */}
-                {pagos && pagos.length > 0 ? (
+                {/* Payment breakdown — show for entregado/read-only, hide when cobro section handles it */}
+                {!(cobroConfig && isEditable) && pagos && pagos.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-muted-foreground">Detalle de pago:</p>
                     {pagos.map((p, i) => {
@@ -415,15 +423,15 @@ export function VentaDetailDialog({
                     {pagos.length > 1 && (
                       <div className="flex items-center justify-between text-xs border-t pt-1">
                         <span className="font-bold">Total cobrado</span>
-                        <span className="font-bold">{formatCurrency(pagos.reduce((s, p) => s + (p.metodo.includes("Nota de Cr") ? -p.monto : p.monto), 0))}</span>
+                        <span className="font-bold">{formatCurrency(totalPagado)}</span>
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : !(cobroConfig && isEditable) ? (
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Banknote className="w-3 h-3" /> Pago: {pago}
                   </p>
-                )}
+                ) : null}
                 {(() => {
                   const fp = ((data.forma_pago || "") + " " + (data.metodo_pago || "")).toLowerCase();
                   const hasTransferPayment = fp.includes("transferencia") || (fp.includes("mixto") && ((data as any).monto_transferencia > 0 || (pagos || []).some((p: any) => (p.metodo_pago || p.metodo) === "Transferencia")));
@@ -451,14 +459,12 @@ export function VentaDetailDialog({
           )}
 
           {/* ═══ COBRO INLINE ═══ */}
-          {cobroConfig && isEditable && !hasCobro && (() => {
-            const montoTotal = editable && editItems
-              ? editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0) + (data.costo_envio || 0)
-              : data.total;
+          {cobroConfig && isEditable && (() => {
+            const montoCobrar = displayTotal;
             const handleConfirmarCobro = async () => {
               setCobroSaving(true);
               try {
-                const monto = Number(cobroMonto) || montoTotal;
+                const monto = Number(cobroMonto) || montoCobrar;
                 await cobroConfig.onRegistrarCobro(cobroMetodo, monto, {
                   efectivo: cobroMetodo === "Mixto" ? Number(cobroEfectivo) || 0 : undefined,
                   transferencia: cobroMetodo === "Mixto" ? Number(cobroTransferencia) || 0 : undefined,
@@ -469,12 +475,12 @@ export function VentaDetailDialog({
               }
             };
             return (
-              <div className="border-2 border-emerald-200 bg-emerald-50/30 rounded-xl p-4 space-y-4">
+              <div className="border-2 border-blue-200 bg-blue-50/30 rounded-xl p-4 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold flex items-center gap-2 text-emerald-700">
-                    <Banknote className="w-4 h-4" /> Registrar cobro
+                  <h3 className="text-sm font-semibold flex items-center gap-2 text-blue-700">
+                    <Banknote className="w-4 h-4" /> Método de pago
                   </h3>
-                  <span className="text-sm font-bold text-amber-600">Pendiente: {formatCurrency(montoTotal)}</span>
+                  <span className="text-sm font-bold text-foreground">Total: {formatCurrency(montoCobrar)}</span>
                 </div>
 
                 {/* Method selection as visual buttons */}
@@ -487,10 +493,10 @@ export function VentaDetailDialog({
                   ].map(({ value, label, icon: Icon }) => (
                     <button
                       key={value}
-                      onClick={() => { setCobroMetodo(value); setCobroMonto(String(montoTotal)); }}
+                      onClick={() => { setCobroMetodo(value); setCobroMonto(String(montoCobrar)); }}
                       className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg border-2 text-xs font-medium transition-all ${
                         cobroMetodo === value
-                          ? "border-emerald-500 bg-emerald-100 text-emerald-700"
+                          ? "border-blue-500 bg-blue-100 text-blue-700"
                           : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/30"
                       }`}
                     >
@@ -549,9 +555,9 @@ export function VentaDetailDialog({
                   </div>
                 )}
 
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleConfirmarCobro} disabled={cobroSaving}>
+                <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleConfirmarCobro} disabled={cobroSaving}>
                   {cobroSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Banknote className="w-4 h-4 mr-2" />}
-                  Confirmar cobro — {formatCurrency(Number(cobroMonto) || montoTotal)}
+                  Guardar método de pago — {formatCurrency(Number(cobroMonto) || montoCobrar)}
                 </Button>
               </div>
             );
@@ -712,7 +718,7 @@ export function VentaDetailDialog({
 
             {/* Totals */}
             <div className="mt-3 space-y-1 text-sm text-right">
-              {(descPct > 0 || recPct > 0 || envio > 0 || ncTotal > 0) && (
+              {(descPct > 0 || recPct > 0 || envio > 0 || ncTotal > 0 || (isPedidoWeb && itemsSubtotal !== displayTotal)) && (
                 <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
               )}
               {descPct > 0 && (
