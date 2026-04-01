@@ -65,6 +65,7 @@ const navigation: NavItem[] = [
     icon: ShoppingCart,
     children: [
       { name: "Punto de venta", href: "/admin/ventas" },
+      { name: "Pedidos Online", href: "/admin/ventas/pedidos-online" },
       { name: "Historial y Pedidos", href: "/admin/ventas/listado" },
       { name: "Entregas y Ruta", href: "/admin/ventas/hoja-ruta" },
       { name: "Nota de Crédito", href: "/admin/ventas/nota-credito" },
