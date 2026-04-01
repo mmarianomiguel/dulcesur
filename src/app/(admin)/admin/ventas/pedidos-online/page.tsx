@@ -51,6 +51,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { VentaDetailDialog, type NCDetail } from "@/components/venta-detail-dialog";
 import { defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
 
@@ -91,24 +92,10 @@ interface Pedido {
   clienteId?: string;
 }
 
-interface ProductoSearch {
-  id: string;
-  codigo: string;
-  nombre: string;
-  precio: number;
-  unidad_medida?: string;
-}
-
 interface PaymentEntry {
   metodo: string;
   monto: number;
   cuenta_bancaria?: string | null;
-}
-
-interface NCDetail {
-  numero: number;
-  total: number;
-  items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[];
 }
 
 const estadoBadge: Record<string, { bg: string; text: string; label: string; icon: typeof Package }> = {
@@ -162,12 +149,6 @@ export default function PedidosOnlinePage() {
   const [printOpen, setPrintOpen] = useState(false);
   const [printSale, setPrintSale] = useState<ReceiptSale | null>(null);
   const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
-
-  // Add product
-  const [addProductOpen, setAddProductOpen] = useState(false);
-  const [productSearch, setProductSearch] = useState("");
-  const [productResults, setProductResults] = useState<ProductoSearch[]>([]);
-  const [searchingProducts, setSearchingProducts] = useState(false);
 
   // Compute unidades_por_presentacion from presentation name
   const getUPP = (presentacion: string): number => {
@@ -334,59 +315,6 @@ export default function PedidosOnlinePage() {
     setDetailNCs([]);
     setDetailOpen(true);
     loadPaymentInfo(pedido);
-  };
-
-  // Update item quantity
-  const updateItemQty = (index: number, qty: number) => {
-    if (qty <= 0) return;
-    setEditItems((prev) => prev.map((item, i) =>
-      i === index ? { ...item, cantidad: qty, subtotal: qty * item.precio_unitario } : item
-    ));
-    setHasChanges(true);
-  };
-
-  // Remove item
-  const removeItem = (index: number) => {
-    if (editItems.length <= 1) return;
-    setEditItems((prev) => prev.filter((_, i) => i !== index));
-    setHasChanges(true);
-  };
-
-  // Search products to add
-  const searchProducts = async (query: string) => {
-    setProductSearch(query);
-    if (query.length < 2) { setProductResults([]); return; }
-    setSearchingProducts(true);
-    const { data } = await supabase
-      .from("productos")
-      .select("id, codigo, nombre, precio, unidad_medida")
-      .eq("activo", true)
-      .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
-      .limit(10);
-    setProductResults((data || []) as ProductoSearch[]);
-    setSearchingProducts(false);
-  };
-
-  // Add product to pedido
-  const addProduct = (product: ProductoSearch) => {
-    const existing = editItems.findIndex((i) => i.producto_id === product.id);
-    if (existing >= 0) {
-      updateItemQty(existing, editItems[existing].cantidad + 1);
-    } else {
-      setEditItems((prev) => [...prev, {
-        producto_id: product.id,
-        nombre: product.nombre,
-        presentacion: product.unidad_medida || "Unidad",
-        cantidad: 1,
-        precio_unitario: product.precio,
-        subtotal: product.precio,
-        unidades_por_presentacion: 1,
-      }]);
-      setHasChanges(true);
-    }
-    setAddProductOpen(false);
-    setProductSearch("");
-    setProductResults([]);
   };
 
   // Save changes
@@ -863,295 +791,85 @@ export default function PedidosOnlinePage() {
         </CardContent>
       </Card>
 
-      {/* ═══ DETAIL DIALOG ═══ */}
-      <Dialog open={detailOpen} onOpenChange={(open) => {
-        if (!open && hasChanges) {
-          setConfirmDialog({ open: true, title: "Cambios sin guardar", message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?", onConfirm: () => setDetailOpen(false) });
-          return;
+      {/* ═══ DETAIL DIALOG (Universal) ═══ */}
+      <VentaDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        data={selectedPedido ? {
+          numero: selectedPedido.numero,
+          created_at: selectedPedido.created_at,
+          estado: selectedPedido.estado,
+          metodo_pago: selectedPedido.metodo_pago,
+          metodo_entrega: selectedPedido.metodo_entrega,
+          subtotal: selectedPedido.subtotal,
+          total: selectedPedido.total,
+          costo_envio: selectedPedido.costo_envio,
+          observacion: selectedPedido.observacion,
+          nombre_cliente: selectedPedido.nombre_cliente,
+          email: selectedPedido.email,
+          telefono: selectedPedido.telefono,
+          direccion_texto: selectedPedido.direccion_texto,
+          fecha_entrega: selectedPedido.fecha_entrega,
+          origen: "pedidos",
+        } : null}
+        items={selectedPedido?.items.map(i => ({
+          producto_id: i.producto_id,
+          descripcion: i.nombre,
+          nombre: i.nombre,
+          presentacion: i.presentacion,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario,
+          subtotal: i.precio_unitario * i.cantidad,
+          unidades_por_presentacion: i.unidades_por_presentacion,
+        })) || []}
+        pagos={detailPayments}
+        ncs={detailNCs}
+        editable
+        editItems={editItems.map(i => ({
+          producto_id: i.producto_id,
+          nombre: i.nombre,
+          presentacion: i.presentacion,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario,
+          subtotal: i.precio_unitario * i.cantidad,
+          unidades_por_presentacion: i.unidades_por_presentacion,
+        }))}
+        onEditItemsChange={(newItems) => {
+          setEditItems(newItems.map(i => ({
+            ...i,
+            subtotal: i.precio_unitario * i.cantidad,
+          })));
+          setHasChanges(true);
+        }}
+        hasChanges={hasChanges}
+        onSave={handleSave}
+        saving={saving}
+        onEstadoChange={(ns) => {
+          if (!selectedPedido) return;
+          handleEstadoChange(selectedPedido, ns);
+          setSelectedPedido({ ...selectedPedido, estado: ns });
+        }}
+        onPrint={() => selectedPedido && handlePrint(selectedPedido)}
+        onSearchProducts={async (query) => {
+          const { data } = await supabase
+            .from("productos")
+            .select("id, codigo, nombre, precio, unidad_medida")
+            .eq("activo", true)
+            .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
+            .limit(10);
+          return (data || []) as { id: string; codigo: string; nombre: string; precio: number; unidad_medida?: string }[];
+        }}
+        onConfirmAction={(title, message, action) => {
+          setConfirmDialog({ open: true, title, message, onConfirm: action });
+        }}
+        footerExtra={
+          selectedPedido && !detailPayments.some(p => p.metodo !== "Pendiente de cobro") && selectedPedido.estado !== "entregado" && selectedPedido.estado !== "cancelado" ? (
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setCobroMetodo("Efectivo"); setCobroEfectivo(""); setCobroTransferencia(""); setCobroCuenta(""); setCobroOpen(true); }}>
+              <Banknote className="w-3 h-3" /> Registrar cobro
+            </Button>
+          ) : undefined
         }
-        setDetailOpen(open);
-      }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-          {selectedPedido && (() => {
-            const est = estadoBadge[selectedPedido.estado] || estadoBadge.pendiente;
-            const EstIcon = est.icon;
-            const nextStates = estadoFlow[selectedPedido.estado] || [];
-            const isEditable = selectedPedido.estado !== "entregado" && selectedPedido.estado !== "cancelado";
-            const hasPagos = detailPayments.some(p => p.metodo !== "Pendiente de cobro");
-
-            return (
-              <>
-                {/* Header */}
-                <div className="px-6 py-4 border-b bg-muted/30">
-                  <DialogHeader className="p-0 space-y-0">
-                    <div className="flex items-center justify-between">
-                      <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                        <Globe className="w-5 h-5 text-primary" />
-                        Pedido #{selectedPedido.numero}
-                      </DialogTitle>
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${est.bg} ${est.text}`}>
-                        <EstIcon className="w-3.5 h-3.5" />
-                        {est.label}
-                      </span>
-                    </div>
-                  </DialogHeader>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {new Date(selectedPedido.created_at).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                  {/* Client + Delivery info */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5" /> Cliente
-                      </h3>
-                      <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                        <p className="font-medium">{selectedPedido.nombre_cliente}</p>
-                        {selectedPedido.email && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="w-3 h-3" />{selectedPedido.email}</p>}
-                        {selectedPedido.telefono && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{selectedPedido.telefono}</p>}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Truck className="w-3.5 h-3.5" /> Entrega
-                      </h3>
-                      <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                        <p className="flex items-center gap-1.5 font-medium">
-                          {selectedPedido.metodo_entrega === "envio" ? (
-                            <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
-                          ) : (
-                            <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
-                          )}
-                        </p>
-                        {selectedPedido.direccion_texto && (
-                          <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3 mt-0.5 shrink-0" />{selectedPedido.direccion_texto}</p>
-                        )}
-                        {selectedPedido.fecha_entrega && (
-                          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(selectedPedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
-                          </p>
-                        )}
-                        {selectedPedido.metodo_pago && (
-                          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Banknote className="w-3 h-3" /> Pago: <span className="font-medium text-foreground">{selectedPedido.metodo_pago}</span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectedPedido.observacion && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                      <p className="font-medium text-amber-800 text-xs mb-1">Observacion del cliente:</p>
-                      <p className="text-amber-700">{selectedPedido.observacion}</p>
-                    </div>
-                  )}
-
-                  {/* Status actions */}
-                  {nextStates.length > 0 && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium text-muted-foreground">Cambiar estado:</span>
-                      {nextStates.map((ns) => {
-                        const nsInfo = estadoBadge[ns];
-                        const NsIcon = nsInfo?.icon || Package;
-                        const isCancel = ns === "cancelado";
-                        return (
-                          <Button
-                            key={ns}
-                            variant={isCancel ? "outline" : "default"}
-                            size="sm"
-                            className={`h-8 text-xs gap-1.5 ${isCancel ? "text-destructive border-destructive/30 hover:bg-destructive/10" : ""}`}
-                            onClick={() => {
-                              if (isCancel) {
-                                setConfirmDialog({
-                                  open: true, title: "Cancelar pedido",
-                                  message: `¿Cancelar el pedido #${selectedPedido.numero}? Se devolverá el stock.`,
-                                  onConfirm: () => {
-                                    handleEstadoChange(selectedPedido, ns);
-                                    setSelectedPedido({ ...selectedPedido, estado: ns });
-                                  },
-                                });
-                              } else {
-                                handleEstadoChange(selectedPedido, ns);
-                                setSelectedPedido({ ...selectedPedido, estado: ns });
-                              }
-                            }}
-                          >
-                            <NsIcon className="w-3.5 h-3.5" />
-                            Marcar como {nsInfo?.label}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Items table */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Package className="w-3.5 h-3.5" /> Productos ({editItems.length})
-                      </h3>
-                      {isEditable && (
-                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setAddProductOpen(true)}>
-                          <Plus className="w-3 h-3" /> Agregar
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/30">
-                            <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Producto</th>
-                            <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-28">Presentacion</th>
-                            <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-20">Cant.</th>
-                            <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
-                            <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
-                            {isEditable && <th className="w-10"></th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {editItems.map((item, idx) => (
-                            <tr key={idx} className="border-b last:border-0">
-                              <td className="px-3 py-2 font-medium">{item.nombre}</td>
-                              <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
-                              <td className="px-3 py-2 text-center">
-                                {isEditable ? (
-                                  <Input
-                                    type="number"
-                                    min={0.5}
-                                    step={0.5}
-                                    value={item.cantidad}
-                                    onChange={(e) => updateItemQty(idx, Number(e.target.value))}
-                                    className="h-7 w-16 text-center mx-auto"
-                                  />
-                                ) : (
-                                  <span>{item.unidades_por_presentacion < 1 ? item.cantidad * item.unidades_por_presentacion : item.cantidad}</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
-                              <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad)}</td>
-                              {isEditable && (
-                                <td className="px-2 py-2">
-                                  <button onClick={() => removeItem(idx)} className="text-muted-foreground hover:text-destructive disabled:opacity-30" disabled={editItems.length <= 1} title="Quitar producto">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Totals */}
-                    <div className="mt-3 space-y-1 text-sm text-right">
-                      <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0))}</span></p>
-                      {(selectedPedido.costo_envio || 0) > 0 && (
-                        <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(selectedPedido.costo_envio)}</span></p>
-                      )}
-                      <p className="text-base font-bold">Total: {formatCurrency(editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0) + (selectedPedido.costo_envio || 0))}</p>
-                    </div>
-                  </div>
-
-                  {/* Payment detail */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5" /> Detalle de pago
-                      </h3>
-                      {!hasPagos && isEditable && (
-                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setCobroMetodo("Efectivo"); setCobroEfectivo(""); setCobroTransferencia(""); setCobroCuenta(""); setCobroOpen(true); }}>
-                          <Banknote className="w-3 h-3" /> Registrar cobro
-                        </Button>
-                      )}
-                    </div>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-                      {detailPayments.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">Sin información de pago</p>
-                      ) : (
-                        detailPayments.map((p, i) => {
-                          const isPending = p.metodo === "Pendiente de cobro" || (!selectedPedido.ventaId && detailPayments.length === 1);
-                          return (
-                            <div key={i} className="flex items-center justify-between text-sm">
-                              <div className="flex items-center gap-2">
-                                {p.metodo === "Efectivo" && <Banknote className="w-3.5 h-3.5 text-green-600" />}
-                                {p.metodo === "Transferencia" && <Landmark className="w-3.5 h-3.5 text-blue-600" />}
-                                {p.metodo === "Cuenta Corriente" && <FileText className="w-3.5 h-3.5 text-orange-600" />}
-                                {p.metodo === "Pendiente de cobro" && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
-                                {!["Efectivo", "Transferencia", "Cuenta Corriente", "Pendiente de cobro"].includes(p.metodo) && <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />}
-                                <span className={isPending ? "text-amber-600" : ""}>{p.metodo}</span>
-                                {p.cuenta_bancaria && <span className="text-[10px] text-muted-foreground">({p.cuenta_bancaria})</span>}
-                              </div>
-                              <span className={`font-semibold ${isPending ? "text-amber-600" : ""}`}>{formatCurrency(p.monto)}</span>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Notas de Crédito */}
-                  {detailNCs.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-red-600 flex items-center gap-1.5 mb-3">
-                        <FileText className="w-3.5 h-3.5" /> Notas de Crédito
-                      </h3>
-                      <div className="space-y-2">
-                        {detailNCs.map((nc, i) => (
-                          <div key={i} className="border border-red-200 bg-red-50/50 rounded-lg p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-semibold text-red-700">NC #{nc.numero}</span>
-                              <span className="text-sm font-bold text-red-700">-{formatCurrency(nc.total)}</span>
-                            </div>
-                            {nc.items.map((item, j) => (
-                              <div key={j} className="flex justify-between text-xs text-red-600 pl-2">
-                                <span>{item.cantidad} × {item.descripcion}</span>
-                                <span>-{formatCurrency(item.subtotal)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    {hasChanges && (
-                      <p className="text-xs text-amber-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Cambios sin guardar</p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handlePrint(selectedPedido)}>
-                      <Printer className="w-3.5 h-3.5" /> Imprimir
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => {
-                      if (hasChanges) {
-                        setConfirmDialog({ open: true, title: "Cambios sin guardar", message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?", onConfirm: () => setDetailOpen(false) });
-                        return;
-                      }
-                      setDetailOpen(false);
-                    }}>Cerrar</Button>
-                    {hasChanges && (
-                      <Button size="sm" onClick={handleSave} disabled={saving}>
-                        {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-                        Guardar
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      />
 
       {/* ═══ COBRO DIALOG ═══ */}
       <Dialog open={cobroOpen} onOpenChange={setCobroOpen}>
@@ -1223,38 +941,6 @@ export default function PedidosOnlinePage() {
               </Button>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ═══ ADD PRODUCT DIALOG ═══ */}
-      <Dialog open={addProductOpen} onOpenChange={setAddProductOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> Agregar producto</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Buscar por nombre o codigo..." value={productSearch} onChange={(e) => searchProducts(e.target.value)} className="pl-9" autoFocus />
-            </div>
-            {searchingProducts && <div className="text-center py-4"><Loader2 className="w-4 h-4 animate-spin mx-auto" /></div>}
-            {productResults.length > 0 && (
-              <div className="border rounded-lg max-h-60 overflow-y-auto">
-                {productResults.map((p) => (
-                  <button key={p.id} onClick={() => addProduct(p)} className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b last:border-0 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{p.nombre}</p>
-                      <p className="text-xs text-muted-foreground">{p.codigo}</p>
-                    </div>
-                    <span className="text-sm font-semibold">{formatCurrency(p.precio)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {productSearch.length >= 2 && !searchingProducts && productResults.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">No se encontraron productos</p>
-            )}
-          </div>
         </DialogContent>
       </Dialog>
 
