@@ -734,13 +734,16 @@ export default function ListadoVentasPage() {
     setPrintLineItems(lineItems);
     // Build sale object and show preview
     const vendedorName = getVendedorNombre(v.vendedor_id) === "—" && (v.origen === "tienda" || v.tipo_comprobante?.toLowerCase().includes("web")) ? "Tienda Online" : getVendedorNombre(v.vendedor_id);
+    const descAmt = Math.round(v.subtotal * (v.descuento_porcentaje || 0) / 100);
+    const recAmt = Math.round((v.subtotal - descAmt) * (v.recargo_porcentaje || 0) / 100);
+    const surchargeCalc = Math.max(0, v.total - (v.subtotal - descAmt + recAmt));
     setPrintSaleObj({
       numero: v.numero,
       total: v.total,
       subtotal: v.subtotal,
-      descuento: Math.round(v.subtotal * (v.descuento_porcentaje || 0) / 100),
-      recargo: Math.round((v.subtotal - Math.round(v.subtotal * (v.descuento_porcentaje || 0) / 100)) * (v.recargo_porcentaje || 0) / 100),
-      transferSurcharge: 0,
+      descuento: descAmt,
+      recargo: recAmt,
+      transferSurcharge: surchargeCalc,
       tipoComprobante: v.tipo_comprobante,
       formaPago: v.forma_pago,
       moneda: v.moneda || "ARS",
@@ -1551,6 +1554,7 @@ export default function ListadoVentasPage() {
           telefono: pt.telefono || h.telefono,
           metodo_entrega: pt.metodo_entrega || h.metodo_entrega,
           direccion_texto: pt.direccion_texto || h.direccion_texto,
+          fecha_entrega: pt.fecha_entrega || h.fecha_entrega,
           isOnline: true,
           _source: "historial" as const,
         };
@@ -1845,8 +1849,12 @@ export default function ListadoVentasPage() {
                             {order.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{order.telefono}</span>}
                             <span className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
-                              {new Date(order.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}{" "}
-                              {order.created_at.includes("T") && new Date(order.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
+                              {order.fecha_entrega ? (
+                                <>Entrega: {new Date(order.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit" })}</>
+                              ) : (
+                                <>{new Date(order.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}{" "}
+                                {order.created_at.includes("T") && new Date(order.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}</>
+                              )}
                             </span>
                           </div>
                         </div>
@@ -2050,6 +2058,7 @@ export default function ListadoVentasPage() {
           {poSelectedPedido && (() => {
             const isHistorial = poSelectedPedido._source === "historial";
             const isCancelled = poSelectedPedido.estado === "cancelado";
+            const isDelivered = poSelectedPedido.estado === "entregado";
             const isNCType = poSelectedPedido._tipo_comprobante?.includes("Nota de Crédito");
             const estBadge = estadoBadge[poSelectedPedido.estado] || estadoBadge.pendiente;
             const itemsSubtotal = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
@@ -2556,7 +2565,7 @@ export default function ListadoVentasPage() {
                             <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>
                           )}
                           <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
-                          {!isCancelled && !isNCType && <th className="w-10"></th>}
+                          {!isCancelled && !isNCType && !isDelivered && <th className="w-10"></th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -2575,7 +2584,7 @@ export default function ListadoVentasPage() {
                             </td>
                             <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
                             <td className="px-3 py-2 text-center">
-                              {isCancelled || isNCType ? (
+                              {isCancelled || isNCType || isDelivered ? (
                                 <span>{item.cantidad}</span>
                               ) : (
                                 <Input
@@ -2597,7 +2606,7 @@ export default function ListadoVentasPage() {
                               <td className="px-3 py-2 text-right text-xs">{(item.descuento || 0) > 0 ? `-${item.descuento}%` : ""}</td>
                             )}
                             <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad * (1 - (item.descuento || 0) / 100))}</td>
-                            {!isCancelled && !isNCType && (
+                            {!isCancelled && !isNCType && !isDelivered && (
                               <td className="px-2 py-2">
                                 <button
                                   onClick={() => poRemoveItem(idx)}
@@ -2688,7 +2697,7 @@ export default function ListadoVentasPage() {
                   }}>
                     Cerrar
                   </Button>
-                  {poHasChanges && (
+                  {poHasChanges && !isDelivered && (
                     <Button onClick={poHandleSave} disabled={poSaving}>
                       {poSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                       Guardar cambios
