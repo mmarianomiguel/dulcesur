@@ -285,7 +285,7 @@ export default function PedidosOnlinePage() {
   // Load payment info and NCs for a pedido
   const loadPaymentInfo = async (pedido: Pedido) => {
     if (!pedido.ventaId) {
-      setDetailPayments([]);
+      setDetailPayments([{ metodo: pedido.metodo_pago || "Pendiente de cobro", monto: pedido.total }]);
       setDetailNCs([]);
       return;
     }
@@ -791,6 +791,7 @@ export default function PedidosOnlinePage() {
                     <th className="text-left px-4 py-3 font-medium text-xs text-muted-foreground">Fecha entrega</th>
                     <th className="text-center px-4 py-3 font-medium text-xs text-muted-foreground">Items</th>
                     <th className="text-right px-4 py-3 font-medium text-xs text-muted-foreground">Total</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-muted-foreground">Pago</th>
                     <th className="text-center px-4 py-3 font-medium text-xs text-muted-foreground">Estado</th>
                     <th className="text-center px-4 py-3 font-medium text-xs text-muted-foreground">Acciones</th>
                   </tr>
@@ -827,6 +828,7 @@ export default function PedidosOnlinePage() {
                           <Badge variant="secondary" className="text-xs">{pedido.items.length}</Badge>
                         </td>
                         <td className="px-4 py-3 text-right font-semibold">{formatCurrency(pedido.total)}</td>
+                        <td className="px-4 py-3 text-xs">{pedido.metodo_pago || "—"}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.bg} ${est.text}`}>
                             {est.label}
@@ -931,6 +933,11 @@ export default function PedidosOnlinePage() {
                           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                             <Calendar className="w-3 h-3" />
                             {new Date(selectedPedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
+                          </p>
+                        )}
+                        {selectedPedido.metodo_pago && (
+                          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Banknote className="w-3 h-3" /> Pago: <span className="font-medium text-foreground">{selectedPedido.metodo_pago}</span>
                           </p>
                         )}
                       </div>
@@ -1065,21 +1072,25 @@ export default function PedidosOnlinePage() {
                     </div>
                     <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                       {detailPayments.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">Cargando...</p>
+                        <p className="text-xs text-muted-foreground">Sin información de pago</p>
                       ) : (
-                        detailPayments.map((p, i) => (
-                          <div key={i} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              {p.metodo === "Efectivo" && <Banknote className="w-3.5 h-3.5 text-green-600" />}
-                              {p.metodo === "Transferencia" && <Landmark className="w-3.5 h-3.5 text-blue-600" />}
-                              {p.metodo === "Cuenta Corriente" && <FileText className="w-3.5 h-3.5 text-orange-600" />}
-                              {!["Efectivo", "Transferencia", "Cuenta Corriente"].includes(p.metodo) && <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />}
-                              <span>{p.metodo}</span>
-                              {p.cuenta_bancaria && <span className="text-[10px] text-muted-foreground">({p.cuenta_bancaria})</span>}
+                        detailPayments.map((p, i) => {
+                          const isPending = p.metodo === "Pendiente de cobro" || (!selectedPedido.ventaId && detailPayments.length === 1);
+                          return (
+                            <div key={i} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                {p.metodo === "Efectivo" && <Banknote className="w-3.5 h-3.5 text-green-600" />}
+                                {p.metodo === "Transferencia" && <Landmark className="w-3.5 h-3.5 text-blue-600" />}
+                                {p.metodo === "Cuenta Corriente" && <FileText className="w-3.5 h-3.5 text-orange-600" />}
+                                {p.metodo === "Pendiente de cobro" && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                                {!["Efectivo", "Transferencia", "Cuenta Corriente", "Pendiente de cobro"].includes(p.metodo) && <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />}
+                                <span className={isPending ? "text-amber-600" : ""}>{p.metodo}</span>
+                                {p.cuenta_bancaria && <span className="text-[10px] text-muted-foreground">({p.cuenta_bancaria})</span>}
+                              </div>
+                              <span className={`font-semibold ${isPending ? "text-amber-600" : ""}`}>{formatCurrency(p.monto)}</span>
                             </div>
-                            <span className="font-semibold">{formatCurrency(p.monto)}</span>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
