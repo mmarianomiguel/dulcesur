@@ -457,7 +457,7 @@ export default function DashboardPage() {
       );
     }
 
-    // ─── Group 1: All independent queries in parallel ───
+    // ─── All independent queries in parallel (including turno + últimas ventas) ───
     const [
       { data: tiendaConfig },
       { data: periodSalesRaw },
@@ -468,7 +468,9 @@ export default function DashboardPage() {
       { data: ccSums },
       { data: ventasCat },
       monthlyDataResult,
-      // fetchPedidosOnline runs in parallel too (fire-and-forget resolved below)
+      { data: turnoData },
+      { data: ultimasVentasRaw },
+      // fetchPedidosOnline runs in parallel too
     ] = await Promise.all([
       supabase.from("tienda_config").select("dias_entrega, recargo_transferencia").single(),
       supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
@@ -479,35 +481,31 @@ export default function DashboardPage() {
       supabase.from("cuenta_corriente").select("cliente_id, debe, haber"),
       supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada"),
       Promise.all(monthQueries),
+      supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1),
+      supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").order("created_at", { ascending: false }).limit(8),
     ]);
 
     // Start pedidos online fetch in parallel with processing below
     const pedidosOnlinePromise = fetchPedidosOnline();
 
     // ─── Turno de caja abierto + totales del turno ───
-    const { data: turnoData } = await supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1);
     const turnoActual = turnoData && turnoData.length > 0 ? turnoData[0] as any : null;
     setTurnoAbierto(turnoActual);
     if (turnoActual) {
       supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").gte("fecha", turnoActual.fecha_apertura).then(({ data: cajaMov }) => {
-        let ef = 0, tr = 0, total = 0;
+        let ef = 0, tr = 0;
         for (const m of cajaMov || []) {
           if (m.tipo === "ingreso") {
             if (m.metodo_pago === "Efectivo") ef += m.monto;
             else if (m.metodo_pago === "Transferencia") tr += m.monto;
-            total += m.monto;
-          } else {
-            total -= Math.abs(m.monto);
           }
         }
         setCajaTurnTotals({ efectivo: ef, transferencia: tr, total: ef + tr });
       });
     }
 
-    // ─── Últimas ventas (últimas 8) ───
-    supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").order("created_at", { ascending: false }).limit(8).then(({ data }) => {
-      setUltimasVentas((data || []).map((v: any) => ({ id: v.id, numero: v.numero, cliente: v.clientes?.nombre || "Cons. Final", total: v.total, forma_pago: v.forma_pago, fecha: v.fecha })));
-    });
+    // ─── Últimas ventas ───
+    setUltimasVentas((ultimasVentasRaw || []).map((v: any) => ({ id: v.id, numero: v.numero, cliente: v.clientes?.nombre || "Cons. Final", total: v.total, forma_pago: v.forma_pago, fecha: v.fecha })));
 
     // ─── Tienda config ───
     if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
@@ -553,20 +551,33 @@ export default function DashboardPage() {
     (ventasCat || []).forEach((vi: any) => { catMap[vi.productos?.categorias?.nombre || "Sin categoria"] = (catMap[vi.productos?.categorias?.nombre || "Sin categoria"] || 0) + (vi.subtotal || 0); });
     setVentasPorCategoria(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
 
-    // ─── Group 2: Queries that depend on periodSalesRaw ───
-
-    // Mixto payment breakdown — fetch caja_movimientos + cuenta_corriente only for mixto sales
+    // ─── Group 2: All queries that depend on periodSalesRaw — run in parallel ───
+    const regularVentaIds = periodSales.map((v) => v.id);
     const mixtoIds = periodSales.filter((v) => v.forma_pago === "Mixto").map((v) => v.id);
-    let mixtoMovs: { referencia_id: string; metodo_pago: string; monto: number }[] = [];
-    let mixtoCCData: { venta_id: string; debe: number }[] = [];
-    if (mixtoIds.length > 0) {
-      const [{ data: movs }, { data: ccRows }] = await Promise.all([
-        supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds),
-        supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds),
-      ]);
-      mixtoMovs = (movs || []) as any[];
-      mixtoCCData = (ccRows || []) as any[];
-    }
+
+    const [mixtoResult, marginResult, sinCostoResult] = await Promise.all([
+      // Mixto payment breakdown
+      mixtoIds.length > 0
+        ? Promise.all([
+            supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds),
+            supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds),
+          ])
+        : Promise.resolve([{ data: [] }, { data: [] }] as any),
+      // Margin calculation
+      regularVentaIds.length > 0
+        ? supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", regularVentaIds)
+        : Promise.resolve({ data: [] }),
+      // Items sin costo count
+      regularVentaIds.length > 0
+        ? supabase.from("venta_items").select("id", { count: "exact", head: true }).in("venta_id", regularVentaIds).or("costo_unitario.is.null,costo_unitario.eq.0")
+        : Promise.resolve({ count: 0 }),
+      // Pedidos online (already running)
+      pedidosOnlinePromise,
+    ]);
+
+    // Process mixto breakdown
+    const mixtoMovs = ((mixtoResult[0] as any)?.data || []) as { referencia_id: string; metodo_pago: string; monto: number }[];
+    const mixtoCCData = ((mixtoResult[1] as any)?.data || []) as { venta_id: string; debe: number }[];
     const paymentMap: Record<string, number> = {};
     periodSales.forEach((v) => {
       if (v.forma_pago === "Mixto") {
@@ -582,33 +593,20 @@ export default function DashboardPage() {
     });
     setPaymentBreakdown(Object.entries(paymentMap).map(([name, value]) => ({ name, value })));
 
-    // Margin calculation — reuse periodSales IDs (no duplicate ventas query)
-    const regularVentaIds = periodSales.map((v) => v.id);
-    let gananciaTotal = 0;
-    if (regularVentaIds.length > 0) {
-      const { data: items } = await supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", regularVentaIds);
-      gananciaTotal = (items || []).reduce((acc, item: any) => {
-        const cantidad = Number(item.cantidad) || 0;
-        const precioUnitario = Number(item.precio_unitario) || 0;
-        const descPct = Number(item.descuento) || 0;
-        const precioConDesc = precioUnitario * (1 - descPct / 100);
-        // Use frozen costo_unitario only — never fall back to live product cost
-        const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
-        return acc + (precioConDesc - costoReal) * cantidad;
-      }, 0);
-    }
+    // Process margin
+    const marginItems = (marginResult as any)?.data || [];
+    const gananciaTotal = marginItems.reduce((acc: number, item: any) => {
+      const cantidad = Number(item.cantidad) || 0;
+      const precioUnitario = Number(item.precio_unitario) || 0;
+      const descPct = Number(item.descuento) || 0;
+      const precioConDesc = precioUnitario * (1 - descPct / 100);
+      const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
+      return acc + (precioConDesc - costoReal) * cantidad;
+    }, 0);
     setGananciaPeriodo(gananciaTotal);
 
-    // ─── Items sin costo (warning) ───
-    if (regularVentaIds.length > 0) {
-      const { count: sinCostoCount } = await supabase.from("venta_items").select("id", { count: "exact", head: true }).in("venta_id", regularVentaIds).or("costo_unitario.is.null,costo_unitario.eq.0");
-      setItemsSinCosto(sinCostoCount || 0);
-    } else {
-      setItemsSinCosto(0);
-    }
-
-    // Wait for pedidos online to finish
-    await pedidosOnlinePromise;
+    // Process items sin costo
+    setItemsSinCosto((sinCostoResult as any)?.count || 0);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     } finally {

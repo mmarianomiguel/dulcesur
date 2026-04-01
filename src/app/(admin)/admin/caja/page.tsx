@@ -309,14 +309,24 @@ export default function CajaPage() {
   const [ventaDetailMovs, setVentaDetailMovs] = useState<any[]>([]);
 
   const openVentaDetail = async (v: Venta) => {
+    // Clear previous data immediately so stale items/movs don't flash
+    setVentaDetailItems([]);
+    setVentaDetailMovs([]);
     setVentaDetail(v);
     setVentaDetailOpen(true);
-    const [{ data: items }, { data: movs }] = await Promise.all([
+    const [{ data: items }, { data: movs }, { data: ccRows }] = await Promise.all([
       supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
       supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("referencia_id", v.id).order("created_at"),
+      supabase.from("cuenta_corriente").select("debe").eq("venta_id", v.id).gt("debe", 0),
     ]);
     setVentaDetailItems(items || []);
-    setVentaDetailMovs(movs || []);
+    // Append CC amount as a synthetic "pago" entry so it shows in the detail
+    const ccTotal = (ccRows || []).reduce((a: number, r: any) => a + (r.debe || 0), 0);
+    const movsWithCC = [...(movs || [])];
+    if (ccTotal > 0) {
+      movsWithCC.push({ id: "cc-synthetic", tipo: "ingreso", descripcion: "Cuenta Corriente", metodo_pago: "Cuenta Corriente", monto: ccTotal, referencia_id: v.id, referencia_tipo: "venta", created_at: v.created_at || "", cuenta_bancaria: null } as any);
+    }
+    setVentaDetailMovs(movsWithCC);
   };
 
   // History
@@ -452,7 +462,7 @@ export default function CajaPage() {
 
     const [{ data: movs }, { data: vts }] = await Promise.all([
       supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").gte("fecha", fecha).lte("fecha", fechaCierre).order("hora", { ascending: false }),
-      supabase.from("ventas").select("id, numero, fecha, total, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
+      supabase.from("ventas").select("id, numero, fecha, total, subtotal, descuento_porcentaje, recargo_porcentaje, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
     ]);
 
     // Filter by turno time range using Date comparison
@@ -669,6 +679,7 @@ export default function CajaPage() {
     egresosDetalle,
     ingresosDetalle,
     ventasDesglose,
+    totalTransferSurcharge,
   } = useMemo(() => {
     const ventasPorMetodo = (metodo: string) =>
       ventas.filter((v) => v.forma_pago === metodo).reduce((a, v) => a + v.total, 0);
@@ -855,6 +866,20 @@ export default function CajaPage() {
     // totalVentas = sum of all desglose entries (actual money flow, not venta.total)
     const totalVentas = Object.values(ventasDesglose).reduce((a, d) => a + d.total, 0);
 
+    // Compute transfer surcharge total (portion of Transferencia that is recargo)
+    let totalTransferSurcharge = 0;
+    for (const v of ventas) {
+      const sub = (v as any).subtotal;
+      if (!sub) continue;
+      const hasTransferMov = movements.some(m => m.referencia_id === v.id && m.tipo === "ingreso" && m.metodo_pago === "Transferencia");
+      if (hasTransferMov) {
+        const discAmt = Math.round(sub * ((v as any).descuento_porcentaje || 0) / 100);
+        const recAmt = Math.round((sub - discAmt) * ((v as any).recargo_porcentaje || 0) / 100);
+        const surcharge = Math.max(0, v.total - (sub - discAmt + recAmt));
+        totalTransferSurcharge += surcharge;
+      }
+    }
+
     return {
       ventasEfectivo,
       ventasTransferencia,
@@ -873,6 +898,7 @@ export default function CajaPage() {
       egresosDetalle,
       ingresosDetalle,
       ventasDesglose,
+      totalTransferSurcharge,
     };
   }, [ventas, movements, turno, ccEntries, ncEntries]);
 
@@ -1178,7 +1204,9 @@ export default function CajaPage() {
                 iconBg: "bg-primary/10",
                 hasDetail: Object.keys(ventasDesglose).length > 0,
                 detail: Object.entries(ventasDesglose).sort((a, b) => b[1].total - a[1].total).map(([fp, d]) => ({
-                  label: `${fp} (${d.count})`,
+                  label: fp === "Transferencia" && totalTransferSurcharge > 0
+                    ? `${fp} (${d.count}) — inc. rec. ${formatCurrency(totalTransferSurcharge)}`
+                    : `${fp} (${d.count})`,
                   value: formatCurrency(d.total),
                   color: "",
                 })),
@@ -1278,6 +1306,10 @@ export default function CajaPage() {
                       <p className="text-base font-semibold">{formatCurrency(item.value)}</p>
                     </div>
                   </div>
+                  {/* Recargo transferencia */}
+                  {item.label === "Transferencia" && totalTransferSurcharge > 0 && (
+                    <p className="text-[11px] text-muted-foreground mt-1">inc. rec. {formatCurrency(totalTransferSurcharge)}</p>
+                  )}
                   {/* Desglose de transferencias por cuenta bancaria */}
                   {item.label === "Transferencia" && ventasTransferencia > 0 && Object.keys(transferenciaPorCuenta).length > 0 && (
                     <div className="mt-2 pt-2 border-t space-y-1">
@@ -1867,7 +1899,7 @@ export default function CajaPage() {
                   {ventasTransferencia > 0 && (
                     <>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Transferencia</span>
+                        <span className="text-muted-foreground">Transferencia{totalTransferSurcharge > 0 ? ` (inc. rec. ${formatCurrency(totalTransferSurcharge)})` : ""}</span>
                         <span>{formatCurrency(ventasTransferencia)}</span>
                       </div>
                       {/* Desglose por cuenta bancaria */}
@@ -2080,6 +2112,9 @@ export default function CajaPage() {
           const pagos: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
           if ((ventaDetail as any).monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: (ventaDetail as any).monto_efectivo });
           if ((ventaDetail as any).monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: (ventaDetail as any).monto_transferencia });
+          if ((ventaDetail as any).monto_cuenta_corriente > 0) pagos.push({ metodo: "Cuenta Corriente", monto: (ventaDetail as any).monto_cuenta_corriente });
+          // If still nothing, check if it's a full CC sale
+          if (pagos.length === 0 && ventaDetail.forma_pago === "Cuenta Corriente") pagos.push({ metodo: "Cuenta Corriente", monto: ventaDetail.total });
           if (pagos.length === 0 && ventaDetail.forma_pago) pagos.push({ metodo: ventaDetail.forma_pago, monto: ventaDetail.total });
           return pagos;
         })()}
