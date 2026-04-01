@@ -64,42 +64,15 @@ interface Presentacion {
 
 export default function ProductoDetallePage() {
   const { slug } = useParams<{ slug: string }>();
-  const [resolvedId, setResolvedId] = useState<string | null>(null);
 
-  // Resolve slug to product ID
-  useEffect(() => {
-    if (!slug) return;
-    // Check if the slug is a raw UUID (backwards compatibility)
+  // Resolve slug to product ID synchronously (no extra DB round-trip for UUIDs)
+  const resolvedId = (() => {
+    if (!slug) return null;
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (uuidRegex.test(slug)) {
-      setResolvedId(slug);
-      return;
-    }
-    // Extract the short ID (last 8 hex chars = first segment of UUID)
-    const parts = slug.split("-");
-    const shortId = parts[parts.length - 1];
-    if (/^[0-9a-f]{8}$/i.test(shortId)) {
-      // Build UUID range: shortId-0000-0000-0000-000000000000 to shortId-ffff-ffff-ffff-ffffffffffff
-      const lower = `${shortId}-0000-0000-0000-000000000000`;
-      const upper = `${shortId}-ffff-ffff-ffff-ffffffffffff`;
-      supabase
-        .from("productos")
-        .select("id")
-        .gte("id", lower)
-        .lte("id", upper)
-        .limit(1)
-        .single()
-        .then(({ data }) => {
-          if (data) setResolvedId(data.id);
-          else setResolvedId(slug); // fallback
-        });
-    } else {
-      // Fallback: try as UUID anyway
-      setResolvedId(slug);
-    }
-  }, [slug]);
+    if (uuidRegex.test(slug)) return slug;
+    return null; // slug-based — will resolve in fetchData
+  })();
 
-  // Use resolvedId as "id" throughout the component
   const id = resolvedId;
 
   const [producto, setProducto] = useState<Producto | null>(null);
@@ -183,26 +156,50 @@ export default function ProductoDetallePage() {
   }
 
   useEffect(() => {
-    if (!id) return;
+    if (!slug) return;
     async function fetchData() {
       setLoading(true);
 
-      // Fetch product + discounts in parallel
+      // Round 1: Resolve slug (if needed) + fetch product + discounts — all in parallel
+      let productId = id;
+      if (!productId) {
+        // Slug-based URL — resolve short ID to UUID
+        const parts = slug.split("-");
+        const shortId = parts[parts.length - 1];
+        if (/^[0-9a-f]{8}$/i.test(shortId)) {
+          const lower = `${shortId}-0000-0000-0000-000000000000`;
+          const upper = `${shortId}-ffff-ffff-ffff-ffffffffffff`;
+          const { data } = await supabase.from("productos").select("id").gte("id", lower).lte("id", upper).limit(1).single();
+          productId = data?.id || slug;
+        } else {
+          productId = slug;
+        }
+      }
+
       const today = new Date().toISOString().split("T")[0];
       const [{ data: prod }, { data: discountsRaw }] = await Promise.all([
-        supabase.from("productos").select("id, nombre, descripcion_detallada, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", id).single(),
+        supabase.from("productos").select("id, nombre, descripcion_detallada, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", productId).single(),
         supabase.from("descuentos").select("id, aplica_a, porcentaje, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo").eq("activo", true).lte("fecha_inicio", today),
       ]);
       setActiveDiscounts((discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
 
       if (prod) {
-        // Parallel: category restriction check + presentaciones + combo items
-        const [{ data: cat }, { data: pres }, comboResult] = await Promise.all([
+        // Round 2: category check + presentaciones + combo + related products — ALL in one Promise.all
+        const MAX_RELATED = 8;
+        const relSelect = "id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)";
+        const [{ data: cat }, { data: pres }, comboResult, relByBrand, relBySub, relByCat] = await Promise.all([
           supabase.from("categorias").select("restringida").eq("id", prod.categoria_id).single(),
-          supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku").eq("producto_id", id).order("cantidad"),
+          supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku").eq("producto_id", productId).order("cantidad"),
           prod.es_combo
-            ? supabase.from("combo_items").select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, precio, imagen_url)").eq("combo_id", id)
+            ? supabase.from("combo_items").select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, precio, imagen_url)").eq("combo_id", productId)
             : Promise.resolve({ data: null }),
+          prod.marca_id
+            ? supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).gt("stock", 0).neq("id", productId).limit(MAX_RELATED)
+            : Promise.resolve({ data: [] as any[] }),
+          prod.subcategoria_id
+            ? supabase.from("productos").select(relSelect).eq("subcategoria_id", prod.subcategoria_id).eq("activo", true).gt("stock", 0).neq("id", productId).limit(MAX_RELATED)
+            : Promise.resolve({ data: [] as any[] }),
+          supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("activo", true).gt("stock", 0).neq("id", productId).limit(MAX_RELATED),
         ]);
 
         // Check restricted category access
@@ -255,22 +252,10 @@ export default function ProductoDetallePage() {
           setSelectedPresIdx(0);
         }
 
-        // Fetch related products in parallel (all 3 queries at once, filter client-side)
-        const MAX_RELATED = 8;
-        const relatedQueries = await Promise.all([
-          prod.marca_id
-            ? supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
-            : Promise.resolve({ data: [] }),
-          prod.subcategoria_id
-            ? supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("subcategoria_id", prod.subcategoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED)
-            : Promise.resolve({ data: [] }),
-          supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("categoria_id", prod.categoria_id).eq("activo", true).gt("stock", 0).neq("id", id).limit(MAX_RELATED),
-        ]);
-
+        // Build related products from already-fetched data
         const related: Producto[] = [];
-        const usedIds = new Set<string>([id as string]);
-        // Priority: brand+category > subcategory > category
-        for (const { data: batch } of relatedQueries) {
+        const usedIds = new Set<string>([productId as string]);
+        for (const { data: batch } of [relByBrand, relBySub, relByCat]) {
           for (const p of batch || []) {
             if (related.length >= MAX_RELATED) break;
             if (!usedIds.has(p.id)) { related.push(p as unknown as Producto); usedIds.add(p.id); }
@@ -294,7 +279,7 @@ export default function ProductoDetallePage() {
       setLoading(false);
     }
     fetchData();
-  }, [id]);
+  }, [slug]);
 
   const currentPres = presentaciones[selectedPresIdx];
   const currentPrice = (() => {
