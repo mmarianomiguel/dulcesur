@@ -1015,13 +1015,13 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-2 shrink-0">
             {pedidosPorArmar > 0 && (
-              <Link href="/admin/ventas" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
+              <Link href="/admin/ventas/pedidos-online" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
                 <PackageIcon className="w-3.5 h-3.5 text-amber-500" />
                 <span className="font-bold text-primary">{pedidosPorArmar}</span> pedidos
               </Link>
             )}
             {entregasPendientes > 0 && (
-              <Link href="/admin/ventas/entregas-pendientes" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
+              <Link href="/admin/ventas/hoja-ruta" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
                 <Truck className="w-3.5 h-3.5 text-emerald-500" />
                 <span className="font-bold text-primary">{entregasPendientes}</span> entregas
               </Link>
