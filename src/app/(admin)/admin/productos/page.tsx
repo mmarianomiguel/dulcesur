@@ -782,11 +782,13 @@ export default function ProductosPage() {
       for (const p of toKeep) {
         // Skip presentations with invalid cantidad
         if (!p.cantidad || p.cantidad <= 0) continue;
+        // Always sync Unidad SKU with the product code
+        const sku = (p.cantidad === 1 && p.nombre === "Unidad") ? codigo : p.sku;
         const presPayload = {
           producto_id: productId,
           nombre: p.nombre,
           cantidad: p.cantidad,
-          sku: p.sku,
+          sku,
           costo: p.costo,
           precio: p.precio,
           precio_oferta: p.precio_oferta,
