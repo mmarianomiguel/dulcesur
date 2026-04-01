@@ -83,6 +83,7 @@ interface Presentacion {
   nombre: string;
   cantidad: number;
   precio: number;
+  costo: number;
 }
 
 interface ProductoRow {
@@ -354,7 +355,7 @@ export default function EditarPreciosPage() {
         supabase.from("marcas").select("*").order("nombre"),
         supabase.from("categorias").select("*").order("nombre"),
         supabase.from("subcategorias").select("*").order("nombre"),
-        fetchAll("presentaciones", "id, producto_id, nombre, cantidad, precio"),
+        fetchAll("presentaciones", "id, producto_id, nombre, cantidad, precio, costo"),
         supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
       ]);
       setProductos(prods);
@@ -535,24 +536,77 @@ export default function EditarPreciosPage() {
         updateData.fecha_actualizacion = new Date().toISOString();
         updates.push(supabase.from("productos").update(updateData).eq("id", id).then());
 
-        // Update presentation prices proportionally when precio changes
-        if (priceChanges[id] !== undefined) {
+        // Update presentation prices and costs proportionally
+        {
           const prod = productos.find((p) => p.id === id);
+          const prodPres = presentaciones.filter((p) => p.producto_id === id);
           const oldPrecio = prod?.precio || 0;
-          const newPrecio = priceChanges[id];
-          if (newPrecio !== oldPrecio) {
-            const prodPres = presentaciones.filter((p) => p.producto_id === id);
-            for (const pres of prodPres) {
-              const newPresPrecio = oldPrecio > 0
+          const newPrecio = priceChanges[id] ?? oldPrecio;
+          const oldCosto = prod?.costo || 0;
+          const newCosto = costoChanges[id] ?? oldCosto;
+          for (const pres of prodPres) {
+            const presUpdate: Record<string, unknown> = {};
+            if (newPrecio !== oldPrecio) {
+              presUpdate.precio = oldPrecio > 0
                 ? Math.round(pres.precio * (newPrecio / oldPrecio))
                 : (pres.cantidad > 0 ? Math.round(newPrecio * pres.cantidad) : newPrecio);
-              updates.push(supabase.from("presentaciones").update({ precio: newPresPrecio }).eq("id", pres.id).then());
+            }
+            if (newCosto !== oldCosto) {
+              presUpdate.costo = oldCosto > 0
+                ? Math.round(pres.costo * (newCosto / oldCosto))
+                : (pres.cantidad > 0 ? Math.round(newCosto * pres.cantidad) : newCosto);
+            }
+            if (Object.keys(presUpdate).length > 0) {
+              updates.push(supabase.from("presentaciones").update(presUpdate).eq("id", pres.id).then());
             }
           }
         }
       }
 
       await Promise.all(updates);
+
+      // Update combos that contain edited products
+      const editedIds = [...allIds];
+      if (editedIds.length > 0) {
+        const { data: affectedComboItems } = await supabase
+          .from("combo_items")
+          .select("combo_id, producto_id, cantidad")
+          .in("producto_id", editedIds);
+        if (affectedComboItems && affectedComboItems.length > 0) {
+          const comboIds = [...new Set(affectedComboItems.map((ci) => ci.combo_id))];
+          for (const comboId of comboIds) {
+            const combo = productos.find((p) => p.id === comboId);
+            const { data: allItems } = await supabase
+              .from("combo_items")
+              .select("producto_id, cantidad")
+              .eq("combo_id", comboId);
+            if (allItems && combo) {
+              const newComboCosto = allItems.reduce((sum, ci) => {
+                const editedCosto = costoChanges[ci.producto_id];
+                const prod = productos.find((p) => p.id === ci.producto_id);
+                const compCosto = editedCosto ?? prod?.costo ?? 0;
+                return sum + compCosto * ci.cantidad;
+              }, 0);
+              const newComboPrecio = allItems.reduce((sum, ci) => {
+                const editedPrecio = priceChanges[ci.producto_id];
+                const prod = productos.find((p) => p.id === ci.producto_id);
+                const compPrecio = editedPrecio ?? prod?.precio ?? 0;
+                return sum + compPrecio * ci.cantidad;
+              }, 0);
+              await supabase.from("productos").update({
+                costo: Math.round(newComboCosto),
+                precio: Math.round(newComboPrecio),
+                precio_anterior: combo.precio,
+                fecha_actualizacion: new Date().toISOString(),
+              }).eq("id", comboId);
+              // Update local state for combo
+              setProductos((prev) => prev.map((p) =>
+                p.id === comboId ? { ...p, costo: Math.round(newComboCosto), precio: Math.round(newComboPrecio) } : p
+              ));
+            }
+          }
+        }
+      }
 
       // Log to precio_historial
       const historyInserts = [];
@@ -589,14 +643,23 @@ export default function EditarPreciosPage() {
       setPresentaciones((prev) =>
         prev.map((pres) => {
           const prod = productos.find((p) => p.id === pres.producto_id);
-          if (prod && priceChanges[prod.id] !== undefined) {
+          if (!prod) return pres;
+          let updated = { ...pres };
+          if (priceChanges[prod.id] !== undefined) {
             const oldPrecio = prod.precio || 0;
             const newPrecio = priceChanges[prod.id];
             if (oldPrecio > 0 && newPrecio !== oldPrecio) {
-              return { ...pres, precio: Math.round(pres.precio * (newPrecio / oldPrecio)) };
+              updated.precio = Math.round(pres.precio * (newPrecio / oldPrecio));
             }
           }
-          return pres;
+          if (costoChanges[prod.id] !== undefined) {
+            const oldCosto = prod.costo || 0;
+            const newCosto = costoChanges[prod.id];
+            if (oldCosto > 0 && newCosto !== oldCosto) {
+              updated.costo = Math.round(pres.costo * (newCosto / oldCosto));
+            }
+          }
+          return updated;
         })
       );
       // Collect saved product info for post-save dialog
@@ -757,15 +820,66 @@ export default function EditarPreciosPage() {
           await supabase.from("productos").update(updateData).eq("id", item.id);
         }
 
-        // Update presentation prices proportionally
+        // Update presentation prices and costs proportionally
         const oldPrecio = prod?.precio ?? 0;
-        if (item.newPrecio !== oldPrecio) {
-          const prodPres = presentaciones.filter((pr) => pr.producto_id === item.id);
-          for (const pres of prodPres) {
-            const newPresPrecio = oldPrecio > 0
+        const oldCosto = prod?.costo ?? 0;
+        const prodPres = presentaciones.filter((pr) => pr.producto_id === item.id);
+        for (const pres of prodPres) {
+          const presUpdate: Record<string, unknown> = {};
+          if (item.newPrecio !== oldPrecio) {
+            presUpdate.precio = oldPrecio > 0
               ? Math.round(pres.precio * (item.newPrecio / oldPrecio))
               : (pres.cantidad > 0 ? Math.round(item.newPrecio * pres.cantidad) : item.newPrecio);
-            await supabase.from("presentaciones").update({ precio: newPresPrecio }).eq("id", pres.id);
+          }
+          if (item.newCosto !== oldCosto) {
+            presUpdate.costo = oldCosto > 0
+              ? Math.round(pres.costo * (item.newCosto / oldCosto))
+              : (pres.cantidad > 0 ? Math.round(item.newCosto * pres.cantidad) : item.newCosto);
+          }
+          if (Object.keys(presUpdate).length > 0) {
+            await supabase.from("presentaciones").update(presUpdate).eq("id", pres.id);
+          }
+        }
+      }
+
+      // Update combos that contain edited products
+      const editedProductIds = massEditPreview.map((item) => item.id);
+      if (editedProductIds.length > 0) {
+        const { data: affectedComboItems } = await supabase
+          .from("combo_items")
+          .select("combo_id, producto_id, cantidad")
+          .in("producto_id", editedProductIds);
+        if (affectedComboItems && affectedComboItems.length > 0) {
+          const comboIds = [...new Set(affectedComboItems.map((ci) => ci.combo_id))];
+          // Build a map of new prices/costs from the mass edit
+          const newPriceMap: Record<string, number> = {};
+          const newCostoMap: Record<string, number> = {};
+          for (const item of massEditPreview) {
+            newPriceMap[item.id] = item.newPrecio;
+            newCostoMap[item.id] = item.newCosto;
+          }
+          for (const comboId of comboIds) {
+            const combo = productos.find((p) => p.id === comboId);
+            const { data: allItems } = await supabase
+              .from("combo_items")
+              .select("producto_id, cantidad")
+              .eq("combo_id", comboId);
+            if (allItems && combo) {
+              const newComboCosto = allItems.reduce((sum, ci) => {
+                const compCosto = newCostoMap[ci.producto_id] ?? productos.find((p) => p.id === ci.producto_id)?.costo ?? 0;
+                return sum + compCosto * ci.cantidad;
+              }, 0);
+              const newComboPrecio = allItems.reduce((sum, ci) => {
+                const compPrecio = newPriceMap[ci.producto_id] ?? productos.find((p) => p.id === ci.producto_id)?.precio ?? 0;
+                return sum + compPrecio * ci.cantidad;
+              }, 0);
+              await supabase.from("productos").update({
+                costo: Math.round(newComboCosto),
+                precio: Math.round(newComboPrecio),
+                precio_anterior: combo.precio,
+                fecha_actualizacion: new Date().toISOString(),
+              }).eq("id", comboId);
+            }
           }
         }
       }
@@ -807,10 +921,15 @@ export default function EditarPreciosPage() {
         prev.map((pres) => {
           const prod = productos.find((p) => p.id === pres.producto_id);
           const preview = massEditPreview.find((i) => i.id === pres.producto_id);
-          if (prod && preview && prod.precio > 0 && preview.newPrecio !== prod.precio) {
-            return { ...pres, precio: Math.round(pres.precio * (preview.newPrecio / prod.precio)) };
+          if (!prod || !preview) return pres;
+          let updated = { ...pres };
+          if (prod.precio > 0 && preview.newPrecio !== prod.precio) {
+            updated.precio = Math.round(pres.precio * (preview.newPrecio / prod.precio));
           }
-          return pres;
+          if (prod.costo > 0 && preview.newCosto !== prod.costo) {
+            updated.costo = Math.round(pres.costo * (preview.newCosto / prod.costo));
+          }
+          return updated;
         })
       );
 
