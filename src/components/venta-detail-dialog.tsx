@@ -206,18 +206,21 @@ export function VentaDetailDialog({ open, onOpenChange, data, items, pagos, onPr
                 {pagos && pagos.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-muted-foreground">Detalle de pago:</p>
-                    {pagos.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          {p.metodo}
-                          {p.cuenta_bancaria && <span className="text-[10px] ml-1">→ {p.cuenta_bancaria}</span>}
-                        </span>
-                        <span className="font-semibold">{formatCurrency(p.monto)}</span>
-                      </div>
-                    ))}
+                    {pagos.map((p, i) => {
+                      const isNC = p.metodo.includes("Nota de Cr");
+                      return (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className={isNC ? "text-amber-600" : "text-muted-foreground"}>
+                            {p.metodo}
+                            {p.cuenta_bancaria && <span className="text-[10px] ml-1">→ {p.cuenta_bancaria}</span>}
+                          </span>
+                          <span className={`font-semibold ${isNC ? "text-amber-600" : ""}`}>{isNC ? `-${formatCurrency(p.monto)}` : formatCurrency(p.monto)}</span>
+                        </div>
+                      );
+                    })}
                     <div className="flex items-center justify-between text-xs border-t pt-1">
                       <span className="font-bold">Total</span>
-                      <span className="font-bold">{formatCurrency(pagos.reduce((s, p) => s + p.monto, 0))}</span>
+                      <span className="font-bold">{formatCurrency(pagos.reduce((s, p) => s + (p.metodo.includes("Nota de Cr") ? -p.monto : p.monto), 0))}</span>
                     </div>
                   </div>
                 ) : (

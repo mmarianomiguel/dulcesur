@@ -809,7 +809,10 @@ export default function HojaDeRutaPage() {
                   <DollarSign className="w-4 h-4" />
                   Total Ventas
                 </div>
-                <div className="text-2xl font-bold">{formatCurrency(historialTotalVentas)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(historialTotalVentas - historialTotalNC)}</div>
+                {historialTotalNC > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">NC devoluciones: -{formatCurrency(historialTotalNC)}</p>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -819,9 +822,6 @@ export default function HojaDeRutaPage() {
                   Total Cobrado
                 </div>
                 <div className="text-2xl font-bold text-green-600">{formatCurrency(historialTotalCobrado)}</div>
-                {historialTotalNC > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">NC devoluciones: -{formatCurrency(historialTotalNC)}</p>
-                )}
               </CardContent>
             </Card>
           </div>
@@ -848,7 +848,12 @@ export default function HojaDeRutaPage() {
           ) : (
             <div className="space-y-4">
               {historialByDay.map(([day, dayVentas]) => {
-                const dayTotal = dayVentas.reduce((s, v) => s + v.total, 0);
+                const dayTotalBruto = dayVentas.reduce((s, v) => s + v.total, 0);
+                const dayNC = dayVentas.reduce((s, v) => {
+                  const pagos = historialPagos[v.id] || [];
+                  return s + pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                }, 0);
+                const dayTotal = dayTotalBruto - dayNC;
                 const dayCobrado = dayVentas.reduce((s, v) => {
                   const pagos = historialPagos[v.id] || [];
                   return s + pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
@@ -861,9 +866,10 @@ export default function HojaDeRutaPage() {
                 });
                 const clientesDeudores = dayVentas.filter((v) => {
                   const pagos = historialPagos[v.id] || [];
-                  const cobrado = pagos.reduce((a, p) => a + p.monto, 0);
+                  const cobradoSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
                   const ncAmount = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
-                  return v.total - cobrado > 0 && (v.total - cobrado - ncAmount) !== 0;
+                  const debe = (v.total - ncAmount) - cobradoSinNC;
+                  return debe > 0;
                 });
 
                 return (
@@ -929,9 +935,9 @@ export default function HojaDeRutaPage() {
                               const pagos = historialPagos[venta.id] || [];
                               const cobradoReal = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
                               const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
-                              const totalCobrado = cobradoReal + ncMonto;
+                              const totalNeto = venta.total - ncMonto;
                               const metodos = [...new Set(pagos.filter(p => !p.metodo.includes("Nota de Cr")).map((p) => p.metodo))].join(", ") || venta.forma_pago;
-                              const debe = venta.total - totalCobrado;
+                              const debe = totalNeto - cobradoReal;
 
                               return (
                                 <tr key={venta.id} className="border-b last:border-b-0 hover:bg-muted/50 transition-colors">
