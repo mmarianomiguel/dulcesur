@@ -418,8 +418,23 @@ export default function DashboardPage() {
     const { start, end } = getDateRange();
 
     // Load receipt config and printed pedidos from localStorage
-    setReceiptConfig(loadReceiptConfig());
+    const localConfig = loadReceiptConfig();
+    setReceiptConfig(localConfig);
     setPrintedPedidos(getPrintedPedidos());
+
+    // Enrich receipt config with empresa data from Supabase (company name/address for print)
+    supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single().then(({ data: emp }) => {
+      if (emp) {
+        setReceiptConfig((prev) => ({
+          ...prev,
+          empresaNombre: prev.empresaNombre || emp.nombre || "",
+          empresaDomicilio: prev.empresaDomicilio || emp.domicilio || "",
+          empresaTelefono: prev.empresaTelefono || emp.telefono || "",
+          empresaCuit: prev.empresaCuit || emp.cuit || "",
+          empresaIva: prev.empresaIva || emp.situacion_iva || "",
+        }));
+      }
+    });
 
     // ─── Build month chart queries (6 months, each fires 2 parallel requests) ───
     const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];

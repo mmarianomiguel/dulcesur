@@ -1062,17 +1062,20 @@ export default function ListadoVentasPage() {
       if (existing) existing.monto += m.monto;
       else pagos.push({ metodo: label, monto: m.monto });
     }
-    const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
-    if (ccTotal > 0) pagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
-    const ncTotalAmt = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
-    if (ncTotalAmt > 0) pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotalAmt });
     // Add payments made via cobros (hoja de ruta saldo allocation) — not in caja_movimientos for this venta
+    const cobroTotalAmt = (cobroItemsData || []).reduce((s: number, ci: any) => s + (ci.monto_aplicado || 0), 0);
     for (const ci of cobroItemsData || []) {
       const fp = (ci as any).cobros?.forma_pago || "Cobro";
       const existing = pagos.find((p) => p.metodo === fp);
       if (existing) existing.monto += (ci as any).monto_aplicado;
       else pagos.push({ metodo: fp, monto: (ci as any).monto_aplicado });
     }
+    // CC charge: show only the portion NOT covered by cobros (avoids double-counting)
+    const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
+    const ccRemainder = Math.max(0, ccTotal - cobroTotalAmt);
+    if (ccRemainder > 0) pagos.push({ metodo: "Cuenta Corriente", monto: ccRemainder });
+    const ncTotalAmt = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+    if (ncTotalAmt > 0) pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotalAmt });
     setDetailNCs((ncVentas || []).map((nc: any) => ({
       numero: nc.numero,
       total: nc.total,
@@ -1773,11 +1776,14 @@ export default function ListadoVentasPage() {
   }, [ventas, poPedidos, vendedores, loading, poLoading]);
 
   const filteredOrders = useMemo(() => {
+    const todayStr = todayARG();
     return allOrders.filter((o) => {
       // Source filter
       const isOnlineOrder = o._source === "pedidos" || o.isOnline || (o as any)._tipo_comprobante === "Pedido Web";
       if (filterSource === "pos" && isOnlineOrder) return false;
       if (filterSource === "online" && !isOnlineOrder) return false;
+      // When viewing "Hoy", hide online orders whose delivery date is in the future
+      if (quickPeriod === "today" && isOnlineOrder && o.fecha_entrega && o.fecha_entrega > todayStr) return false;
       // Estado filter
       if (poFilterEstado !== "todos") {
         if (poFilterEstado === "entregado" ? (o.estado !== "entregado" && o.estado !== "cerrada") : o.estado !== poFilterEstado) return false;
@@ -1798,7 +1804,17 @@ export default function ListadoVentasPage() {
       }
       return true;
     });
-  }, [allOrders, filterSource, poFilterEstado, filterPayment, searchClient]);
+  }, [allOrders, filterSource, poFilterEstado, filterPayment, searchClient, quickPeriod]);
+
+  // Count online orders hidden because delivery is in the future (only relevant in "today" view)
+  const hiddenFutureOrders = useMemo(() => {
+    if (quickPeriod !== "today") return 0;
+    const todayStr = todayARG();
+    return allOrders.filter((o) => {
+      const isOnlineOrder = o._source === "pedidos" || o.isOnline || (o as any)._tipo_comprobante === "Pedido Web";
+      return isOnlineOrder && o.fecha_entrega && o.fecha_entrega > todayStr;
+    }).length;
+  }, [allOrders, quickPeriod]);
 
   // Unified stats
   const unifiedTotal = filteredOrders.filter((o) => o.estado !== "cancelado").reduce((s, o) => {
@@ -2237,6 +2253,13 @@ export default function ListadoVentasPage() {
               <Button variant="outline" onClick={() => setVisiblePage((p) => p + 1)}>
                 Cargar más ({filteredOrders.length - PAGE_SIZE * visiblePage} restantes)
               </Button>
+            </div>
+          )}
+          {/* Hidden future orders notice */}
+          {hiddenFutureOrders > 0 && (
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg py-2 px-4">
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+              {hiddenFutureOrders} pedido{hiddenFutureOrders > 1 ? "s" : ""} online con entrega futura no {hiddenFutureOrders > 1 ? "se muestran" : "se muestra"} en "Hoy". Usá "Esta semana" o "Personalizado" para verlo{hiddenFutureOrders > 1 ? "s" : ""}.
             </div>
           )}
           {/* Total bar */}

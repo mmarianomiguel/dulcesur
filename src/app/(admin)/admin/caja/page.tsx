@@ -874,8 +874,7 @@ export default function CajaPage() {
       if (remaining > 1) {
         // Check if already fully paid via monto_pagado (e.g. saldo allocation from hoja de ruta)
         const montoPagado = (v as any).monto_pagado || 0;
-        const ncAmount2 = ncByVenta[v.id] || 0;
-        if (montoPagado + ncAmount2 >= v.total - 1) {
+        if (montoPagado + ncAmount >= v.total - 1) {
           addDesglose("Cuenta Corriente", remaining, v.id);
         } else {
           // Use stored amounts for online orders, or forma_pago as hint
