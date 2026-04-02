@@ -182,6 +182,10 @@ interface ProductoSearch {
   nombre: string;
   precio: number;
   unidad_medida?: string;
+  es_combo?: boolean;
+  imagen_url?: string;
+  stock?: number;
+  presentaciones?: { nombre: string; precio: number; unidades_por_presentacion: number }[];
 }
 
 // ─── Helpers ───
@@ -281,6 +285,7 @@ export default function ListadoVentasPage() {
   const [poProductSearch, setPoProductSearch] = useState("");
   const [poProductResults, setPoProductResults] = useState<ProductoSearch[]>([]);
   const [poSearchingProducts, setPoSearchingProducts] = useState(false);
+  const [poSearchHighlight, setPoSearchHighlight] = useState(0);
 
   // ══════════════════════════════════════════════════════════════
   // HISTORIAL LOGIC
@@ -1118,33 +1123,43 @@ export default function ListadoVentasPage() {
   // Search products to add
   const poSearchProducts = async (query: string) => {
     setPoProductSearch(query);
+    setPoSearchHighlight(0);
     if (query.length < 2) { setPoProductResults([]); return; }
     setPoSearchingProducts(true);
     const { data } = await supabase
       .from("productos")
-      .select("id, codigo, nombre, precio, unidad_medida")
+      .select("id, codigo, nombre, precio, unidad_medida, es_combo, imagen_url, stock, presentaciones(nombre, precio, cantidad)")
       .eq("activo", true)
       .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
       .limit(10);
-    setPoProductResults((data || []) as ProductoSearch[]);
+    setPoProductResults((data || []).map((p: any) => ({
+      id: p.id, codigo: p.codigo, nombre: p.nombre, precio: p.precio,
+      unidad_medida: p.unidad_medida, es_combo: p.es_combo || false,
+      imagen_url: p.imagen_url || undefined, stock: p.stock ?? undefined,
+      presentaciones: p.es_combo ? [] : (p.presentaciones || []).map((pr: any) => ({
+        nombre: pr.nombre, precio: pr.precio, unidades_por_presentacion: pr.cantidad,
+      })),
+    })));
     setPoSearchingProducts(false);
   };
 
   // Add product to pedido
-  const poAddProduct = (product: ProductoSearch) => {
-    // Check if already exists
-    const existing = poEditItems.findIndex((i) => i.producto_id === product.id);
+  const poAddProduct = (product: ProductoSearch, pres?: { nombre: string; precio: number; unidades_por_presentacion: number }) => {
+    const presNombre = pres?.nombre || "Unidad";
+    const presPrecio = pres?.precio ?? product.precio;
+    const presUpp = pres?.unidades_por_presentacion ?? 1;
+    const existing = poEditItems.findIndex((i) => i.producto_id === product.id && i.presentacion === presNombre);
     if (existing >= 0) {
       poUpdateItemQty(existing, poEditItems[existing].cantidad + 1);
     } else {
       setPoEditItems((prev) => [...prev, {
         producto_id: product.id,
         nombre: product.nombre,
-        presentacion: product.unidad_medida || "Unidad",
+        presentacion: presNombre,
         cantidad: 1,
-        precio_unitario: product.precio,
-        subtotal: product.precio,
-        unidades_por_presentacion: 1,
+        precio_unitario: presPrecio,
+        subtotal: presPrecio,
+        unidades_por_presentacion: presUpp,
       }]);
       setPoHasChanges(true);
     }
@@ -2788,8 +2803,8 @@ export default function ListadoVentasPage() {
       {/* ══════════════════════════════════════════════════════════ */}
       {/* PO ADD PRODUCT DIALOG */}
       {/* ══════════════════════════════════════════════════════════ */}
-      <Dialog open={poAddProductOpen} onOpenChange={setPoAddProductOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog open={poAddProductOpen} onOpenChange={(o) => { setPoAddProductOpen(o); if (!o) { setPoProductSearch(""); setPoProductResults([]); setPoSearchHighlight(0); } }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-base flex items-center gap-2">
               <Plus className="w-4 h-4" /> Agregar producto al pedido
@@ -2799,29 +2814,63 @@ export default function ListadoVentasPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nombre o codigo..."
+                placeholder="Buscar por nombre o código..."
                 value={poProductSearch}
                 onChange={(e) => poSearchProducts(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") { e.preventDefault(); setPoSearchHighlight((h) => Math.min(h + 1, poProductResults.length - 1)); }
+                  else if (e.key === "ArrowUp") { e.preventDefault(); setPoSearchHighlight((h) => Math.max(h - 1, 0)); }
+                  else if (e.key === "Enter" && poProductResults.length > 0) { e.preventDefault(); poAddProduct(poProductResults[poSearchHighlight]); }
+                  else if (e.key === "Escape") { setPoAddProductOpen(false); }
+                }}
                 className="pl-9"
                 autoFocus
               />
             </div>
             {poSearchingProducts && <div className="text-center py-4"><Loader2 className="w-4 h-4 animate-spin mx-auto" /></div>}
             {poProductResults.length > 0 && (
-              <div className="border rounded-lg max-h-60 overflow-y-auto">
-                {poProductResults.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => poAddProduct(p)}
-                    className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b last:border-0 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{p.nombre}</p>
-                      <p className="text-xs text-muted-foreground">{p.codigo}</p>
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {poProductResults.map((p, idx) => {
+                  const highlighted = idx === poSearchHighlight;
+                  const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
+                  const stockVal = p.stock ?? null;
+                  return (
+                    <div
+                      key={p.id}
+                      ref={highlighted ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+                      className={`rounded-xl border p-3 transition-colors ${highlighted ? "ring-2 ring-primary border-primary bg-muted/50" : "hover:border-primary/30 hover:bg-primary/5"}`}
+                      onMouseEnter={() => setPoSearchHighlight(idx)}
+                    >
+                      <button onClick={() => poAddProduct(p)} className="w-full flex items-center gap-3 text-left">
+                        <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {p.imagen_url ? <img src={p.imagen_url} alt="" className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-muted-foreground/30" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-sm truncate">{p.nombre}</span>
+                            {p.es_combo && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700 shrink-0">COMBO</span>}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                            <span className="font-mono">{p.codigo}</span>
+                            <span>·</span>
+                            {stockVal !== null && <><span>Stock: <strong className={stockVal <= 0 ? "text-red-500" : ""}>{stockVal}</strong></span><span>·</span></>}
+                            <span className="font-semibold text-foreground">{formatCurrency(p.precio)}</span>
+                          </div>
+                        </div>
+                      </button>
+                      {boxVariants.length > 0 && (
+                        <div className="flex gap-2 mt-2.5 pl-14">
+                          <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => poAddProduct(p)}>+ Unidad</Button>
+                          {boxVariants.map((pr, i) => (
+                            <Button key={i} size="sm" className="h-8 text-xs flex-1" onClick={() => poAddProduct(p, pr)}>
+                              + {pr.nombre} ({pr.unidades_por_presentacion} un.)
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <span className="text-sm font-semibold">{formatCurrency(p.precio)}</span>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             )}
             {poProductSearch.length >= 2 && !poSearchingProducts && poProductResults.length === 0 && (
