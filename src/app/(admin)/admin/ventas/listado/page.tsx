@@ -1371,7 +1371,7 @@ export default function ListadoVentasPage() {
           poEditItems.map((item) => ({
             venta_id: ventaId,
             producto_id: item.producto_id,
-            descripcion: `${item.nombre} (${item.presentacion})`,
+            descripcion: (item.presentacion && item.presentacion !== "Unidad" && item.presentacion !== "Un") ? `${item.nombre} (${item.presentacion})` : item.nombre,
             cantidad: item.cantidad,
             precio_unitario: item.precio_unitario,
             subtotal: item.precio_unitario * item.cantidad,

@@ -321,7 +321,7 @@ export default function PedidosPage() {
         const sourceItems = (venta?.items && venta.items.length > 0)
           ? venta.items.map((item: any) => ({
               id: 0,
-              nombre: item.descripcion?.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)\s*$/, "") || "",
+              nombre: item.descripcion?.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/i, "").replace(/\s*\((?:Unidad|Un)\)\s*$/i, "") || "",
               presentacion: item.presentacion || "Unidad",
               unidades_por_presentacion: item.unidades_por_presentacion || 1,
               cantidad: item.cantidad,
