@@ -56,6 +56,7 @@ import {
   FileSpreadsheet,
   Printer,
   RefreshCw,
+  MessageSquare,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CobroAllocationDialog, CobroResult } from "@/components/cobro-allocation-dialog";
@@ -161,7 +162,7 @@ export default function ClientesPage() {
   const [cobranzasSearch, setCobranzasSearch] = useState("");
   const [cobroOpen, setCobroOpen] = useState(false);
   const [cobroReceipt, setCobroReceipt] = useState<{
-    open: boolean; cliente: string; clienteCuit: string; clienteDomicilio: string;
+    open: boolean; cliente: string; clienteCuit: string; clienteDomicilio: string; clienteTelefono: string;
     monto: number; formaPago: string; fecha: string; saldoAnterior: number; saldoNuevo: number;
     empresaNombre: string; empresaCuit: string; empresaDomicilio: string; empresaTelefono: string;
     cuentaBancaria: string; cuentaAlias: string; observacion: string; numero: string;
@@ -2083,9 +2084,95 @@ export default function ClientesPage() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setCobroReceipt(null)}>Cerrar</Button>
-                <Button className="flex-1" onClick={() => {
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" className="flex-1 min-w-[80px]" onClick={() => setCobroReceipt(null)}>Cerrar</Button>
+                {cobroReceipt.clienteTelefono && (() => {
+                  const digits = cobroReceipt.clienteTelefono.replace(/\D/g, "");
+                  const wa = digits.startsWith("54") ? digits : `54${digits.startsWith("0") ? digits.slice(1) : digits}`;
+                  const fechaFmt = new Date(cobroReceipt.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+                  const msg = encodeURIComponent(`Hola ${cobroReceipt.cliente}! Te enviamos el recibo de cobro N° ${cobroReceipt.numero} del ${fechaFmt}.\nMonto cobrado: ${formatCurrency(cobroReceipt.monto)}\nSaldo actual: ${formatCurrency(Math.max(0, cobroReceipt.saldoNuevo))}\n\nGracias por tu pago!`);
+                  return (
+                    <Button variant="outline" className="flex-1 min-w-[80px] border-green-500 text-green-600 hover:bg-green-50" asChild>
+                      <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noopener noreferrer">
+                        <MessageSquare className="w-4 h-4 mr-2" />WhatsApp
+                      </a>
+                    </Button>
+                  );
+                })()}
+                <Button variant="outline" className="flex-1 min-w-[80px]" onClick={async () => {
+                  const r = cobroReceipt;
+                  const { jsPDF } = await import("jspdf");
+                  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                  const w = pdf.internal.pageSize.getWidth();
+                  const m = 18;
+                  let y = 20;
+                  const fmtC = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+                  const fechaFmt = new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+                  // Header
+                  pdf.setFontSize(16); pdf.setFont("helvetica", "bold");
+                  pdf.text(r.empresaNombre, m, y); y += 6;
+                  pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
+                  if (r.empresaCuit) { pdf.text(`CUIT: ${r.empresaCuit}`, m, y); y += 4; }
+                  if (r.empresaDomicilio) { pdf.text(r.empresaDomicilio, m, y); y += 4; }
+                  if (r.empresaTelefono) { pdf.text(`Tel: ${r.empresaTelefono}`, m, y); }
+                  // Receipt number box
+                  pdf.setFontSize(10); pdf.setFont("helvetica", "bold");
+                  pdf.rect(w - m - 52, 18, 52, 18);
+                  pdf.text(`RECIBO ${r.numero}`, w - m - 26, 25, { align: "center" });
+                  pdf.setFontSize(14); pdf.text("X", w - m - 26, 31, { align: "center" });
+                  pdf.setFontSize(8); pdf.setFont("helvetica", "normal");
+                  pdf.text(`Fecha: ${fechaFmt}`, w - m - 26, 40, { align: "center" });
+                  y = 46;
+                  pdf.setDrawColor(200, 200, 200); pdf.line(m, y, w - m, y); y += 6;
+                  // Client
+                  pdf.setFontSize(8); pdf.setTextColor(150); pdf.text("DATOS DEL CLIENTE", m, y); y += 5;
+                  pdf.setTextColor(0); pdf.setFontSize(10); pdf.setFont("helvetica", "bold");
+                  pdf.text(r.cliente, m, y); y += 5;
+                  pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
+                  if (r.clienteCuit) { pdf.text(`CUIT: ${r.clienteCuit}`, m, y); y += 4; }
+                  if (r.clienteDomicilio) { pdf.text(r.clienteDomicilio, m, y); y += 4; }
+                  y += 2; pdf.line(m, y, w - m, y); y += 6;
+                  // Payment detail
+                  pdf.setFontSize(8); pdf.setTextColor(150); pdf.text("DETALLE DEL COBRO", m, y); y += 5;
+                  pdf.setTextColor(0); pdf.setFontSize(10); pdf.setFont("helvetica", "normal");
+                  pdf.text("Forma de pago:", m, y); pdf.setFont("helvetica", "bold"); pdf.text(r.formaPago, m + 32, y); y += 5;
+                  if (r.formaPago === "Transferencia" && r.cuentaBancaria) {
+                    pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
+                    pdf.text(`Cuenta: ${r.cuentaBancaria}`, m, y); y += 4;
+                    if (r.cuentaAlias) { pdf.text(`Alias: ${r.cuentaAlias}`, m, y); y += 4; }
+                  }
+                  pdf.setFont("helvetica", "bold"); pdf.setFontSize(13); pdf.setTextColor(5, 150, 105);
+                  pdf.text(`Monto recibido: ${fmtC(r.monto)}`, m, y); y += 6;
+                  pdf.setTextColor(0);
+                  if (r.observacion) { pdf.setFont("helvetica", "italic"); pdf.setFontSize(9); pdf.text(`Obs: ${r.observacion}`, m, y); y += 5; }
+                  y += 1; pdf.setFont("helvetica", "normal"); pdf.line(m, y, w - m, y); y += 6;
+                  // Comprobantes
+                  if (r.comprobantes.length > 0) {
+                    pdf.setFontSize(8); pdf.setTextColor(150); pdf.text("COMPROBANTES ASOCIADOS", m, y); y += 5;
+                    pdf.setTextColor(0); pdf.setFontSize(9);
+                    pdf.text("Comprobante", m, y); pdf.text("Debe", w - m - 24, y); pdf.text("Haber", w - m, y, { align: "right" }); y += 3;
+                    pdf.line(m, y, w - m, y); y += 4;
+                    for (const c of r.comprobantes) {
+                      pdf.setFont("helvetica", "normal"); pdf.text(c.comprobante, m, y);
+                      pdf.setTextColor(220, 38, 38); pdf.text(fmtC(c.debe), w - m - 24, y);
+                      pdf.setTextColor(5, 150, 105); pdf.text(c.haber > 0 ? fmtC(c.haber) : "—", w - m, y, { align: "right" });
+                      pdf.setTextColor(0); y += 5;
+                    }
+                    y += 1; pdf.line(m, y, w - m, y); y += 6;
+                  }
+                  // Balance
+                  pdf.setFontSize(8); pdf.setTextColor(150); pdf.text("RESUMEN DE CUENTA", m, y); y += 5;
+                  pdf.setTextColor(0); pdf.setFontSize(10); pdf.setFont("helvetica", "normal");
+                  pdf.text("Saldo anterior", m, y); pdf.text(fmtC(r.saldoAnterior), w - m, y, { align: "right" }); y += 5;
+                  pdf.setTextColor(5, 150, 105); pdf.text("Cobro aplicado", m, y); pdf.text(`-${fmtC(r.monto)}`, w - m, y, { align: "right" }); y += 5;
+                  pdf.setTextColor(0); pdf.setDrawColor(0); pdf.line(m, y, w - m, y); y += 5;
+                  pdf.setFont("helvetica", "bold"); pdf.setFontSize(12);
+                  pdf.text("Saldo actual", m, y); pdf.text(fmtC(Math.max(0, r.saldoNuevo)), w - m, y, { align: "right" });
+                  pdf.save(`Recibo-${r.numero}-${r.cliente.replace(/\s+/g, "_")}.pdf`);
+                }}>
+                  <Download className="w-4 h-4 mr-2" />PDF
+                </Button>
+                <Button className="flex-1 min-w-[80px]" onClick={() => {
                   const el = document.getElementById("cobro-receipt-print");
                   if (!el) return;
                   const win = window.open("", "_blank", "width=800,height=1100");
@@ -2133,6 +2220,7 @@ export default function ClientesPage() {
             cliente: cobroClient!.nombre,
             clienteCuit: cobroClient!.cuit || "",
             clienteDomicilio: [cobroClient!.domicilio, cobroClient!.localidad, cobroClient!.provincia].filter(Boolean).join(", "),
+            clienteTelefono: cobroClient!.telefono || "",
             monto: result.monto,
             formaPago: result.forma_pago,
             fecha: result.fecha,
