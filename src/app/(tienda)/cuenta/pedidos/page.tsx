@@ -127,7 +127,7 @@ export default function PedidosPage() {
       if (clienteId) {
         const { data: ventas } = await supabase
           .from("ventas")
-          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
+          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, monto_pagado, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
           .eq("cliente_id", clienteId)
           .not("tipo_comprobante", "ilike", "Nota de Crédito%")
           .not("tipo_comprobante", "ilike", "Nota de Débito%")
@@ -196,16 +196,11 @@ export default function PedidosPage() {
         }
       }
 
-      // Fetch pending balances from cuenta_corriente
+      // Compute pending balance per venta using monto_pagado (more reliable than cuenta_corriente aggregation)
       const saldoMap: Record<string, number> = {};
-      if (ventaIds.length > 0) {
-        const { data: ccSaldos } = await supabase
-          .from("cuenta_corriente")
-          .select("venta_id, debe, haber")
-          .in("venta_id", ventaIds);
-        for (const cc of ccSaldos || []) {
-          saldoMap[cc.venta_id] = (saldoMap[cc.venta_id] || 0) + (cc.debe || 0) - (cc.haber || 0);
-        }
+      for (const v of allVentas) {
+        const pagado = v.monto_pagado || 0;
+        saldoMap[v.id] = Math.max(0, (v.total || 0) - pagado);
       }
 
       // Build venta records with NCs and payment info
