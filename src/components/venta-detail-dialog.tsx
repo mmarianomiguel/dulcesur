@@ -450,7 +450,7 @@ export function VentaDetailDialog({
                 clienteId={cobroConfig.clienteId}
                 clienteNombre={data.nombre_cliente || ""}
                 clienteSaldo={cobroConfig.clienteSaldo}
-                montoVenta={displayTotal}
+                montoVenta={recPct > 0 ? Math.round(displayTotal / (1 + recPct / 100) * 100) / 100 : displayTotal}
                 subtotalItems={itemsSubtotal}
                 costoEnvio={envio}
                 recargoTransferencia={cobroConfig.recargoTransferencia}

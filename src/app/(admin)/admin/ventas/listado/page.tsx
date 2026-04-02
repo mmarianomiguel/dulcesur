@@ -955,148 +955,143 @@ export default function ListadoVentasPage() {
   const poOpenDetail = async (pedido: Pedido) => {
     let ventaId = pedido._ventaId;
     let items = pedido.items;
+    const cId = (pedido as any)._clienteId || (pedido as any).cliente_id;
 
-    // Find linked venta
+    // Find linked venta if not already known (serial — unavoidable when missing)
     if (!ventaId && pedido.numero) {
-      const { data: linkedVenta } = await supabase.from("ventas").select("id, cliente_id, clientes(nombre, cuit, domicilio, telefono)").eq("numero", pedido.numero).single();
+      const { data: linkedVenta } = await supabase.from("ventas").select("id").eq("numero", pedido.numero).single();
       if (linkedVenta) ventaId = linkedVenta.id;
     }
 
-    // Load items if empty (historial orders have empty items in allOrders)
-    if (items.length === 0 && ventaId) {
-      const { data: vitems } = await supabase.from("venta_items").select("*").eq("venta_id", ventaId).order("created_at");
-      if (vitems) {
-        items = vitems.map((item: any) => ({
-          producto_id: item.producto_id || "",
-          nombre: item.descripcion?.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)$/, "") || "",
-          presentacion: item.presentacion || "Unidad",
-          cantidad: item.cantidad,
-          precio_unitario: item.precio_unitario,
-          subtotal: item.subtotal,
-          unidades_por_presentacion: item.unidades_por_presentacion || 1,
-          codigo: item.codigo,
-          descuento: item.descuento,
-        }));
-      }
+    // Batch ALL remaining queries in parallel to avoid serial round-trips
+    const [
+      { data: vitems },
+      { data: movs },
+      { data: ccMovs },
+      { data: ncVentas },
+      { data: ventaData },
+      { data: ptData },
+      { data: clienteData },
+    ] = await Promise.all([
+      items.length === 0 && ventaId
+        ? supabase.from("venta_items").select("*").eq("venta_id", ventaId).order("created_at")
+        : Promise.resolve({ data: null, error: null }),
+      ventaId
+        ? supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso")
+        : Promise.resolve({ data: [], error: null }),
+      ventaId
+        ? supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId)
+        : Promise.resolve({ data: [], error: null }),
+      ventaId
+        ? supabase.from("ventas").select("id, numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada")
+        : Promise.resolve({ data: [], error: null }),
+      ventaId
+        ? supabase.from("ventas").select("monto_efectivo, monto_transferencia, forma_pago, total").eq("id", ventaId).single()
+        : Promise.resolve({ data: null, error: null }),
+      pedido.numero
+        ? supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia, metodo_pago, total").eq("numero", pedido.numero).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      cId
+        ? supabase.from("clientes").select("saldo").eq("id", cId).single()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    // Process items
+    if (items.length === 0 && vitems) {
+      items = vitems.map((item: any) => ({
+        producto_id: item.producto_id || "",
+        nombre: item.descripcion?.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)$/, "") || "",
+        presentacion: item.presentacion || "Unidad",
+        cantidad: item.cantidad,
+        precio_unitario: item.precio_unitario,
+        subtotal: item.subtotal,
+        unidades_por_presentacion: item.unidades_por_presentacion || 1,
+        codigo: item.codigo,
+        descuento: item.descuento,
+      }));
     }
 
-    // Load payment breakdown - caja_movimientos + cuenta_corriente + NC refunds
+    // Build pagos from caja_movimientos + cuenta_corriente + NC refunds
     const pagos: { metodo: string; monto: number }[] = [];
-    if (ventaId) {
-      const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
-        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
-        supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
-        // Find NCs linked to this original sale (NC has remito_origen_id pointing to original)
-        supabase.from("ventas").select("id, numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
-      ]);
-      for (const m of movs || []) {
-        // Detect surcharge from description (e.g. "Transferencia +2%")
-        let label = m.metodo_pago;
-        if (m.metodo_pago === "Transferencia" && m.descripcion) {
-          const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
-          if (match) label = `Transferencia (${match[1]}%)`;
-        }
-        const existing = pagos.find((p) => p.metodo === label);
-        if (existing) existing.monto += m.monto;
-        else pagos.push({ metodo: label, monto: m.monto });
+    for (const m of movs || []) {
+      let label = m.metodo_pago;
+      if (m.metodo_pago === "Transferencia" && m.descripcion) {
+        const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
+        if (match) label = `Transferencia (${match[1]}%)`;
       }
-      const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
-      if (ccTotal > 0) {
-        pagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
-      }
-      // Add NC refunds as settled amount (NC = money returned/credited to client)
-      const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
-      if (ncTotal > 0) {
-        pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
-      }
-      // Save NC details for display
-      setDetailNCs((ncVentas || []).map((nc: any) => ({
-        numero: nc.numero,
-        total: nc.total,
-        items: (nc.venta_items || []).map((i: any) => ({
-          descripcion: i.descripcion,
-          cantidad: i.cantidad,
-          precio_unitario: i.precio_unitario,
-          subtotal: i.subtotal,
-        })),
-      })));
+      const existing = pagos.find((p) => p.metodo === label);
+      if (existing) existing.monto += m.monto;
+      else pagos.push({ metodo: label, monto: m.monto });
     }
+    const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
+    if (ccTotal > 0) pagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
+    const ncTotalAmt = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+    if (ncTotalAmt > 0) pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotalAmt });
+    setDetailNCs((ncVentas || []).map((nc: any) => ({
+      numero: nc.numero,
+      total: nc.total,
+      items: (nc.venta_items || []).map((i: any) => ({
+        descripcion: i.descripcion,
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+        subtotal: i.subtotal,
+      })),
+    })));
+
     // For Mixto online orders: enrich with pedidos_tienda to show original payment split
     const fpLower = ((pedido as any).forma_pago || pedido.metodo_pago || "").toLowerCase();
-    if (fpLower === "mixto" && pedido.numero) {
-      const { data: ptMixto } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia").eq("numero", pedido.numero).maybeSingle();
-      if (ptMixto) {
-        if (ptMixto.monto_efectivo > 0 && !pagos.some((p) => p.metodo === "Efectivo")) {
-          pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptMixto.monto_efectivo });
-        }
-        if (ptMixto.monto_transferencia > 0 && !pagos.some((p) => p.metodo === "Transferencia")) {
-          pagos.push({ metodo: "Transferencia", monto: ptMixto.monto_transferencia });
-        }
-      }
-    }
-    // Fallback: if no caja_movimientos (online orders), read from ventas/pedidos_tienda
-    // For online orders: only count Transferencia as paid. Efectivo is collected at delivery.
     const isOnlineOrder = pedido._source === "pedidos" || (pedido as any).isOnline || (pedido as any).origen === "tienda" || (pedido as any).tipo_comprobante === "Pedido Web" || (pedido as any)._tipo_comprobante === "Pedido Web";
+    if (fpLower === "mixto" && ptData) {
+      if (ptData.monto_efectivo > 0 && !pagos.some((p) => p.metodo === "Efectivo")) {
+        pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptData.monto_efectivo });
+      }
+      if (ptData.monto_transferencia > 0 && !pagos.some((p) => p.metodo === "Transferencia")) {
+        pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+      }
+    }
+
+    // Fallback: if no caja_movimientos (online orders not yet paid)
     if (pagos.length === 0) {
-      // Try ventas first
-      if (ventaId) {
-        const { data: ventaData } = await supabase.from("ventas").select("monto_efectivo, monto_transferencia, forma_pago, total").eq("id", ventaId).single();
-        if (ventaData) {
-          // For online orders, nothing is confirmed paid until caja_movimientos exists
-          if (isOnlineOrder) {
-            if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia (a cobrar)", monto: ventaData.monto_transferencia });
-            if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ventaData.monto_efectivo });
+      if (ventaData) {
+        if (isOnlineOrder) {
+          if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia (a cobrar)", monto: ventaData.monto_transferencia });
+          if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ventaData.monto_efectivo });
+        } else {
+          if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ventaData.monto_efectivo });
+          if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
+        }
+        if (pagos.length === 0) {
+          const fpLabel = ventaData.forma_pago || pedido.metodo_pago || "Efectivo";
+          const isPending = fpLabel.toLowerCase() === "pendiente";
+          if (isOnlineOrder || isPending) {
+            pagos.push({ metodo: `${fpLabel} (a cobrar)`, monto: ventaData.total || pedido.total });
           } else {
-            if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ventaData.monto_efectivo });
-            if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
-          }
-          if (pagos.length === 0) {
-            const fpLabel = ventaData.forma_pago || pedido.metodo_pago || "Efectivo";
-            const isPending = fpLabel.toLowerCase() === "pendiente";
-            if (isOnlineOrder || isPending) {
-              // Online or Pendiente — nothing is paid yet, show as pending
-              pagos.push({ metodo: `${fpLabel} (a cobrar)`, monto: ventaData.total || pedido.total });
-            } else {
-              pagos.push({ metodo: fpLabel, monto: ventaData.total || pedido.total });
-            }
+            pagos.push({ metodo: fpLabel, monto: ventaData.total || pedido.total });
           }
         }
-      }
-      // Also try pedidos_tienda
-      if (pagos.length === 0 && pedido.numero) {
-        const { data: ptData } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia, metodo_pago, total").eq("numero", pedido.numero).maybeSingle();
-        if (ptData) {
-          if (isOnlineOrder) {
-            if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
-            if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptData.monto_efectivo });
+      } else if (ptData) {
+        if (isOnlineOrder) {
+          if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+          if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptData.monto_efectivo });
+        } else {
+          if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ptData.monto_efectivo });
+          if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+        }
+        if (pagos.length === 0) {
+          const fpLabel2 = ptData.metodo_pago || "Efectivo";
+          const isPending2 = fpLabel2.toLowerCase() === "pendiente";
+          if (isOnlineOrder || isPending2) {
+            pagos.push({ metodo: `${fpLabel2} (a cobrar)`, monto: ptData.total || pedido.total });
           } else {
-            if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ptData.monto_efectivo });
-            if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
-          }
-          if (pagos.length === 0) {
-            const fpLabel2 = ptData.metodo_pago || "Efectivo";
-            const isPending2 = fpLabel2.toLowerCase() === "pendiente";
-            if (isOnlineOrder || isPending2) {
-              pagos.push({ metodo: `${fpLabel2} (a cobrar)`, monto: ptData.total || pedido.total });
-            } else {
-              pagos.push({ metodo: fpLabel2, monto: ptData.total || pedido.total });
-            }
+            pagos.push({ metodo: fpLabel2, monto: ptData.total || pedido.total });
           }
         }
       }
     }
+
     setDetailPagos(pagos);
     if (!ventaId) setDetailNCs([]);
-
-    // Fetch client saldo
-    const cId = (pedido as any)._clienteId || (pedido as any).cliente_id;
-    if (cId) {
-      supabase.from("clientes").select("saldo").eq("id", cId).single()
-        .then(({ data: c }) => setClienteSaldo(c?.saldo || 0));
-    } else {
-      setClienteSaldo(0);
-    }
-
+    setClienteSaldo(clienteData?.saldo || 0);
     setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId } as any);
     setPoEditItems(items.map((i) => ({ ...i })));
     setPoHasChanges(false);
@@ -2429,9 +2424,9 @@ export default function ListadoVentasPage() {
                       clienteId={clienteId || ""}
                       clienteNombre={poSelectedPedido.nombre_cliente || ""}
                       clienteSaldo={clienteSaldo}
-                      montoVenta={pendiente}
-                      subtotalItems={pendiente}
-                      costoEnvio={0}
+                      montoVenta={poSelectedPedido.subtotal + poSelectedPedido.costo_envio || pendiente}
+                      subtotalItems={poSelectedPedido.subtotal || pendiente}
+                      costoEnvio={poSelectedPedido.costo_envio || 0}
                       recargoTransferencia={recargoTransferencia}
                       cuentasBancarias={cuentasBancarias}
                       defaultMetodo={(poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago}
@@ -2487,8 +2482,7 @@ export default function ListadoVentasPage() {
                         const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pendiente };
                         if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
                         if (result.surcharge > 0) {
-                          const { data: ventaRow } = await supabase.from("ventas").select("total").eq("id", ventaId).single();
-                          if (ventaRow) ventaUpd.total = (ventaRow as any).total + result.surcharge;
+                          ventaUpd.total = result.monto + result.surcharge;
                         }
                         await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
 
@@ -2971,10 +2965,13 @@ export default function ListadoVentasPage() {
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Cuenta Corriente)`, metodo_pago: "Cuenta Corriente", monto: order.total, referencia_id: ventaId, referencia_tipo: "venta" });
                         } else {
                           // Efectivo or Transferencia: caja entry
-                          const surchargeAmt = metodo === "Transferencia" && recargoTransferencia > 0 ? Math.round(order.total * recargoTransferencia / 100) : 0;
-                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}${surchargeAmt > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: metodo, monto: order.total + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta" });
+                          // Use pre-surcharge base (subtotal + envio) to avoid double-charging
+                          // online orders whose total already includes the transfer surcharge
+                          const orderBase = ((order as any).subtotal || 0) + ((order as any).costo_envio || 0) || order.total;
+                          const surchargeAmt = metodo === "Transferencia" && recargoTransferencia > 0 ? Math.round(orderBase * recargoTransferencia / 100) : 0;
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}${surchargeAmt > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: metodo, monto: orderBase + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta" });
                           if (surchargeAmt > 0) {
-                            await supabase.from("ventas").update({ total: order.total + surchargeAmt }).eq("id", ventaId);
+                            await supabase.from("ventas").update({ total: orderBase + surchargeAmt }).eq("id", ventaId);
                           }
                         }
                         await supabase.from("ventas").update({ forma_pago: metodo, monto_pagado: order.total, entregado: true, estado: "entregado" }).eq("id", ventaId);

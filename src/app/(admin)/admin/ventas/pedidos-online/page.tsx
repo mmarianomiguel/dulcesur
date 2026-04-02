@@ -1047,7 +1047,7 @@ export default function PedidosOnlinePage() {
                 monto_transferencia: montoTransferencia,
                 total: montoEfectivo + montoTransferencia + montoCuentaCorriente,
                 cuenta_transferencia_alias: cuentaAlias,
-                monto_pagado: result.monto,
+                monto_pagado: montoEfectivo + montoTransferencia + montoCuentaCorriente,
               }).eq("id", ventaId);
             }
 
