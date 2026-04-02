@@ -2427,7 +2427,7 @@ export default function ListadoVentasPage() {
                 {/* Registrar cobro — any order with pending amount */}
                 {!isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
                   const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
-                  const pendiente = Math.round((poSelectedPedido.total - pagado) * 100) / 100;
+                  const pendiente = Math.round((computedTotal - pagado) * 100) / 100;
                   if (pendiente < 1) return null;
                   const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
                   if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
@@ -2439,8 +2439,8 @@ export default function ListadoVentasPage() {
                       clienteId={clienteId || ""}
                       clienteNombre={poSelectedPedido.nombre_cliente || ""}
                       clienteSaldo={clienteSaldo}
-                      montoVenta={poSelectedPedido.subtotal + poSelectedPedido.costo_envio || pendiente}
-                      subtotalItems={poSelectedPedido.subtotal || pendiente}
+                      montoVenta={computedTotal}
+                      subtotalItems={itemsSubtotal}
                       costoEnvio={poSelectedPedido.costo_envio || 0}
                       recargoTransferencia={recargoTransferencia}
                       cuentasBancarias={cuentasBancarias}
