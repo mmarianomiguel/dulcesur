@@ -416,8 +416,33 @@ export default function ListadoVentasPage() {
   }, []);
 
   const openDetail = async (v: VentaRow) => {
-    const { data } = await supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at");
+    const [{ data }, { data: movData }, { data: clienteData }] = await Promise.all([
+      supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
+      supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion").eq("referencia_id", v.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+      v.cliente_id ? supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single() : Promise.resolve({ data: null }),
+    ]);
     const vitems = (data as VentaItemRow[]) || [];
+
+    // Build detailPagos from caja_movimientos
+    const pagosFromCaja: { metodo: string; monto: number }[] = [];
+    for (const m of movData || []) {
+      let label = m.metodo_pago;
+      if (m.metodo_pago === "Transferencia" && m.descripcion) {
+        const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
+        if (match) label = `Transferencia (${match[1]}%)`;
+      }
+      const existing = pagosFromCaja.find((p) => p.metodo === label);
+      if (existing) existing.monto += m.monto;
+      else pagosFromCaja.push({ metodo: label, monto: m.monto });
+    }
+    if (pagosFromCaja.length === 0 && v.forma_pago && v.forma_pago !== "Pendiente" && v.forma_pago !== "Cuenta Corriente") {
+      // Fallback: venta was paid but no caja entry (old data) — use monto_pagado
+      const montoPagado = (v as any).monto_pagado || 0;
+      if (montoPagado > 0) pagosFromCaja.push({ metodo: v.forma_pago, monto: montoPagado });
+      else if (v.entregado) pagosFromCaja.push({ metodo: v.forma_pago, monto: v.total });
+    }
+    setDetailPagos(pagosFromCaja);
+    setClienteSaldo((clienteData as any)?.saldo || 0);
 
     // Check for combos
     const productIds = vitems.map((i) => i.producto_id).filter(Boolean) as string[];
