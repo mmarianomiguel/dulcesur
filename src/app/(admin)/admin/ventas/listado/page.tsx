@@ -2500,7 +2500,7 @@ export default function ListadoVentasPage() {
                         }
 
                         // Update venta
-                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pendiente };
+                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + result.monto };
                         if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
                         if (result.surcharge > 0) {
                           ventaUpd.total = result.monto + result.surcharge;
@@ -2748,13 +2748,17 @@ export default function ListadoVentasPage() {
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={async () => {
                     try {
-                      let v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
-                      if (!v) v = ventas.find((vr) => vr.numero === poSelectedPedido.numero);
-                      if (!v && (poSelectedPedido._ventaId || poSelectedPedido.numero)) {
+                      // Always fetch from DB to get fresh total/forma_pago (may have changed after cobro)
+                      let v: VentaRow | undefined;
+                      if (poSelectedPedido._ventaId || poSelectedPedido.numero) {
                         const { data: rows } = poSelectedPedido._ventaId
                           ? await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).limit(1)
                           : await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).order("created_at", { ascending: false }).limit(1);
                         if (rows && rows.length > 0) v = rows[0] as VentaRow;
+                      }
+                      if (!v) {
+                        v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
+                        if (!v) v = ventas.find((vr) => vr.numero === poSelectedPedido.numero);
                       }
                       if (v) {
                         if (poSelectedPedido.nombre_cliente && (poSelectedPedido._source === "pedidos" || poSelectedPedido.isOnline)) {
