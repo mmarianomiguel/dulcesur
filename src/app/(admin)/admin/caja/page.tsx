@@ -476,7 +476,7 @@ export default function CajaPage() {
 
     const [{ data: movs }, { data: vts }] = await Promise.all([
       supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").gte("fecha", fecha).lte("fecha", fechaCierre).order("hora", { ascending: false }),
-      supabase.from("ventas").select("id, numero, fecha, total, subtotal, descuento_porcentaje, recargo_porcentaje, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
+      supabase.from("ventas").select("id, numero, fecha, total, subtotal, descuento_porcentaje, recargo_porcentaje, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, monto_pagado, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
     ]);
 
     // Filter by turno time range using Date comparison
@@ -736,10 +736,13 @@ export default function CajaPage() {
 
     // Group transfers by bank account
     const transferenciaPorCuenta: Record<string, number> = {};
+    const normalizarCuenta = (raw: string | null | undefined) =>
+      (raw || "Sin asignar").split(" — ")[0].split(" - ")[0].trim();
+
     movements
       .filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
       .forEach((m) => {
-        const cuenta = (m as any).cuenta_bancaria || "Sin asignar";
+        const cuenta = normalizarCuenta((m as any).cuenta_bancaria);
         transferenciaPorCuenta[cuenta] = (transferenciaPorCuenta[cuenta] || 0) + m.monto;
       });
     // Also include ventas sin movimientos in bank account grouping
@@ -751,7 +754,7 @@ export default function CajaPage() {
       if (v.forma_pago === "Transferencia") montoTransf = v.total;
       else if (v.forma_pago === "Mixto") montoTransf = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
       if (montoTransf > 0) {
-        const cuenta = (v as any).cuenta_transferencia_alias || "Sin asignar";
+        const cuenta = normalizarCuenta((v as any).cuenta_transferencia_alias);
         transferenciaPorCuenta[cuenta] = (transferenciaPorCuenta[cuenta] || 0) + montoTransf;
       }
     }
@@ -869,17 +872,24 @@ export default function CajaPage() {
       const ncAmount = ncByVenta[v.id] || 0;
       const remaining = v.total - accounted - ncAmount;
       if (remaining > 1) {
-        // Use stored amounts for online orders, or forma_pago as hint
-        const ef = (v as any).monto_efectivo || 0;
-        const tr = (v as any).monto_transferencia || 0;
-        if (ef > 0 && tr > 0 && v.forma_pago === "Mixto") {
-          // Online mixto without caja entries yet
-          addDesglose("Efectivo (pendiente)", ef, v.id);
-          addDesglose("Transferencia", Math.max(0, remaining - ef), v.id);
-        } else if (v.forma_pago === "Transferencia" || tr > 0) {
-          addDesglose("Transferencia", remaining, v.id);
+        // Check if already fully paid via monto_pagado (e.g. saldo allocation from hoja de ruta)
+        const montoPagado = (v as any).monto_pagado || 0;
+        const ncAmount2 = ncByVenta[v.id] || 0;
+        if (montoPagado + ncAmount2 >= v.total - 1) {
+          addDesglose("Cuenta Corriente", remaining, v.id);
         } else {
-          addDesglose("Pendiente de cobro", remaining, v.id);
+          // Use stored amounts for online orders, or forma_pago as hint
+          const ef = (v as any).monto_efectivo || 0;
+          const tr = (v as any).monto_transferencia || 0;
+          if (ef > 0 && tr > 0 && v.forma_pago === "Mixto") {
+            // Online mixto without caja entries yet
+            addDesglose("Efectivo (pendiente)", ef, v.id);
+            addDesglose("Transferencia", Math.max(0, remaining - ef), v.id);
+          } else if (v.forma_pago === "Transferencia" || tr > 0) {
+            addDesglose("Transferencia", remaining, v.id);
+          } else {
+            addDesglose("Pendiente de cobro", remaining, v.id);
+          }
         }
       }
     }

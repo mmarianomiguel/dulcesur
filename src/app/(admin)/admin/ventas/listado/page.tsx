@@ -1006,6 +1006,7 @@ export default function ListadoVentasPage() {
       { data: ventaData },
       { data: ptData },
       { data: clienteData },
+      { data: cobroItemsData },
     ] = await Promise.all([
       items.length === 0 && ventaId
         ? supabase.from("venta_items").select("*").eq("venta_id", ventaId).order("created_at")
@@ -1020,7 +1021,7 @@ export default function ListadoVentasPage() {
         ? supabase.from("ventas").select("id, numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada")
         : Promise.resolve({ data: [], error: null }),
       ventaId
-        ? supabase.from("ventas").select("monto_efectivo, monto_transferencia, forma_pago, total").eq("id", ventaId).single()
+        ? supabase.from("ventas").select("monto_efectivo, monto_transferencia, monto_pagado, forma_pago, total").eq("id", ventaId).single()
         : Promise.resolve({ data: null, error: null }),
       pedido.numero
         ? supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia, metodo_pago, total").eq("numero", pedido.numero).maybeSingle()
@@ -1028,6 +1029,9 @@ export default function ListadoVentasPage() {
       cId
         ? supabase.from("clientes").select("saldo").eq("id", cId).single()
         : Promise.resolve({ data: null, error: null }),
+      ventaId
+        ? supabase.from("cobro_items").select("monto_aplicado, cobros(forma_pago)").eq("venta_id", ventaId)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     // Process items
@@ -1062,6 +1066,13 @@ export default function ListadoVentasPage() {
     if (ccTotal > 0) pagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
     const ncTotalAmt = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
     if (ncTotalAmt > 0) pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotalAmt });
+    // Add payments made via cobros (hoja de ruta saldo allocation) — not in caja_movimientos for this venta
+    for (const ci of cobroItemsData || []) {
+      const fp = (ci as any).cobros?.forma_pago || "Cobro";
+      const existing = pagos.find((p) => p.metodo === fp);
+      if (existing) existing.monto += (ci as any).monto_aplicado;
+      else pagos.push({ metodo: fp, monto: (ci as any).monto_aplicado });
+    }
     setDetailNCs((ncVentas || []).map((nc: any) => ({
       numero: nc.numero,
       total: nc.total,
@@ -2901,7 +2912,7 @@ export default function ListadoVentasPage() {
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {poProductResults.map((p, idx) => {
                   const highlighted = idx === poSearchHighlight;
-                  const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
+                  const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones.filter((pr: any) => pr.unidades_por_presentacion > 1) : [];
                   const stockVal = p.stock ?? null;
                   return (
                     <div
