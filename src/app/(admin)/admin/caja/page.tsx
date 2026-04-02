@@ -604,7 +604,8 @@ export default function CajaPage() {
     const pdfVentasConMov = new Set(
       tmovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id)
     );
-    const pdfVentasSinMov = tvts.filter((v) => !pdfVentasConMov.has(v.id));
+    const pdfUnpaidEstados = new Set(["pendiente", "armado", "confirmado"]);
+    const pdfVentasSinMov = tvts.filter((v) => !pdfVentasConMov.has(v.id) && !pdfUnpaidEstados.has((v.estado || "").toLowerCase()));
     const pdfMovEfectivo = tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
       + pdfVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
       + pdfVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
@@ -708,8 +709,11 @@ export default function CajaPage() {
     const ventasConMovimientos = new Set(
       movements.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id)
     );
-    // Ventas without caja_movimientos (typically online orders)
-    const ventasSinMov = ventas.filter((v) => !ventasConMovimientos.has(v.id));
+    // Ventas without caja_movimientos — exclude orders pending payment confirmation
+    const UNPAID_ESTADOS = new Set(["pendiente", "armado", "confirmado"]);
+    const ventasSinMov = ventas.filter((v) =>
+      !ventasConMovimientos.has(v.id) && !UNPAID_ESTADOS.has((v.estado || "").toLowerCase())
+    );
 
     // Efectivo: from caja_movimientos + ventas sin movimientos
     const ventasEfectivo = movPorMetodo("Efectivo")
