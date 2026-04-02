@@ -751,21 +751,23 @@ export default function ListadoVentasPage() {
         else if (m.metodo_pago === "Cuenta Corriente") pagoCC += m.monto;
       }
     }
-    // For Mixto orders: get original payment split from pedidos_tienda
-    if (v.forma_pago === "Mixto") {
-      const { data: pedido } = await supabase.from("pedidos_tienda")
-        .select("monto_efectivo, monto_transferencia, recargo_transferencia")
-        .eq("numero", v.numero)
-        .maybeSingle();
-      if (pedido) {
-        pagoEf = pedido.monto_efectivo || pagoEf;
-        pagoTr = pedido.monto_transferencia || pagoTr;
-      }
-    } else if ((movs || []).length === 0) {
-      // If no movimientos found, estimate from forma_pago
+    if ((movs || []).length === 0) {
+      // No movimientos: estimate from forma_pago
       if (v.forma_pago === "Efectivo") pagoEf = v.total;
       else if (v.forma_pago === "Transferencia") pagoTr = v.total;
       else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
+      else if (v.forma_pago === "Mixto") { pagoEf = (v as any).monto_efectivo || 0; pagoTr = (v as any).monto_transferencia || 0; }
+    }
+    // Derive formaPago from actual payments (v.forma_pago may be stale if cobro was just registered)
+    let derivedFormaPago: string;
+    if ((movs || []).length > 0) {
+      if (pagoTr > 0 && pagoEf === 0 && pagoCC === 0) derivedFormaPago = "Transferencia";
+      else if (pagoEf > 0 && pagoTr === 0 && pagoCC === 0) derivedFormaPago = "Efectivo";
+      else if (pagoCC > 0 && pagoEf === 0 && pagoTr === 0) derivedFormaPago = "Cuenta Corriente";
+      else if (pagoTr > 0 || pagoEf > 0) derivedFormaPago = "Mixto";
+      else derivedFormaPago = v.forma_pago;
+    } else {
+      derivedFormaPago = v.forma_pago;
     }
     setPrintPagos({ efectivo: pagoEf, transferencia: pagoTr, cuentaCorriente: pagoCC, recibido: 0, vuelto: 0 });
     setPrintClienteSaldo(saldo);
@@ -786,7 +788,7 @@ export default function ListadoVentasPage() {
       recargo: recAmt,
       transferSurcharge: surchargeCalc,
       tipoComprobante: v.tipo_comprobante,
-      formaPago: v.forma_pago,
+      formaPago: derivedFormaPago,
       moneda: v.moneda || "ARS",
       cliente: v.clientes?.nombre || "Consumidor Final",
       clienteDireccion: v.clientes?.domicilio || null,
