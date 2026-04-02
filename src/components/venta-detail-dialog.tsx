@@ -8,9 +8,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/formatters";
+import { CobroVentaSection, type CobroVentaResult } from "@/components/cobro-venta-section";
 import {
   Receipt,
   ShoppingCart,
@@ -178,9 +177,12 @@ interface VentaDetailDialogProps {
   onConfirmAction?: (title: string, message: string, action: () => void) => void;
   // ─── Cobro inline (optional) ───
   cobroConfig?: {
+    ventaId: string;
+    clienteId: string;
+    clienteSaldo: number;
     cuentasBancarias: { id: string; nombre: string; alias: string }[];
     recargoTransferencia: number;
-    onRegistrarCobro: (metodo: string, monto: number, opts: { efectivo?: number; transferencia?: number; cuenta?: string }) => Promise<void>;
+    onRegistrarCobro: (result: CobroVentaResult) => Promise<void>;
   };
 }
 
@@ -194,12 +196,6 @@ export function VentaDetailDialog({
   const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
 
-  // Cobro inline state
-  const [cobroMetodo, setCobroMetodo] = useState("Efectivo");
-  const [cobroEfectivo, setCobroEfectivo] = useState("");
-  const [cobroTransferencia, setCobroTransferencia] = useState("");
-  const [cobroCuenta, setCobroCuenta] = useState("");
-  const [cobroSaving, setCobroSaving] = useState(false);
 
   // Reset state when dialog opens/closes
   useEffect(() => {
@@ -210,22 +206,6 @@ export function VentaDetailDialog({
     }
   }, [open]);
 
-  // Pre-fill cobro with client's chosen payment method and amounts
-  useEffect(() => {
-    if (open && data) {
-      const metodo = data.metodo_pago || data.forma_pago || "Efectivo";
-      const normalizedMetodo = metodo.toLowerCase().includes("transferencia") ? "Transferencia"
-        : metodo.toLowerCase().includes("efectivo") ? "Efectivo"
-        : metodo.toLowerCase().includes("mixto") ? "Mixto"
-        : metodo.toLowerCase().includes("cuenta") ? "Cuenta Corriente"
-        : "Efectivo";
-      setCobroMetodo(normalizedMetodo);
-      // Pre-fill mixto split amounts from saved data
-      setCobroEfectivo(normalizedMetodo === "Mixto" && data.monto_efectivo ? String(data.monto_efectivo) : "");
-      setCobroTransferencia(normalizedMetodo === "Mixto" && data.monto_transferencia ? String(data.monto_transferencia) : "");
-      setCobroCuenta(data.cuenta_transferencia_alias || "");
-    }
-  }, [open, data]);
 
   if (!data) return null;
 
@@ -456,123 +436,27 @@ export function VentaDetailDialog({
             </div>
           )}
 
-          {/* ═══ COBRO INLINE ═══ */}
-          {cobroConfig && isEditable && (() => {
-            const montoCobrar = displayTotal;
-            // Calculate surcharge preview — always use montoCobrar (current items total)
-            const recPctTransf = cobroConfig.recargoTransferencia || 0;
-            let surchargePreview = 0;
-            if (recPctTransf > 0) {
-              if (cobroMetodo === "Transferencia") {
-                surchargePreview = Math.round(montoCobrar * recPctTransf / 100);
-              } else if (cobroMetodo === "Mixto") {
-                const transfPart = Number(cobroTransferencia) || 0;
-                surchargePreview = Math.round(transfPart * recPctTransf / 100);
-              }
-            }
-            const totalConRecargo = montoCobrar + surchargePreview;
-
-            const handleConfirmarCobro = async () => {
-              setCobroSaving(true);
-              try {
-                await cobroConfig.onRegistrarCobro(cobroMetodo, montoCobrar, {
-                  efectivo: cobroMetodo === "Mixto" ? Number(cobroEfectivo) || 0 : undefined,
-                  transferencia: cobroMetodo === "Mixto" ? Number(cobroTransferencia) || 0 : undefined,
-                  cuenta: cobroCuenta || undefined,
-                });
-              } finally {
-                setCobroSaving(false);
-              }
-            };
-            return (
-              <div className="border-2 border-blue-200 bg-blue-50/30 rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold flex items-center gap-2 text-blue-700">
-                    <Banknote className="w-4 h-4" /> Método de pago
-                  </h3>
-                  <div className="text-right text-sm">
-                    <p className="text-xs text-muted-foreground">Subtotal: {formatCurrency(itemsSubtotal)}</p>
-                    {envio > 0 && <p className="text-xs text-muted-foreground">Envío: {formatCurrency(envio)}</p>}
-                    {surchargePreview > 0 && <p className="text-xs text-amber-600">Recargo {recPctTransf}%: +{formatCurrency(surchargePreview)}</p>}
-                    <p className="font-bold">Total: {formatCurrency(totalConRecargo)}</p>
-                  </div>
-                </div>
-
-                {/* Method selection as visual buttons */}
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { value: "Efectivo", label: "Efect.", icon: Banknote },
-                    { value: "Transferencia", label: "Transf.", icon: ArrowRight },
-                    { value: "Mixto", label: "Mixto", icon: CreditCard },
-                    { value: "Cuenta Corriente", label: "Cta Cte", icon: FileText },
-                  ].map(({ value, label, icon: Icon }) => (
-                    <button
-                      key={value}
-                      onClick={() => setCobroMetodo(value)}
-                      className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg border-2 text-xs font-medium transition-all ${
-                        cobroMetodo === value
-                          ? "border-blue-500 bg-blue-100 text-blue-700"
-                          : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/30"
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Mixto: split fields */}
-                {cobroMetodo === "Mixto" && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Efectivo</Label>
-                      <Input type="number" placeholder="0" value={cobroEfectivo} onChange={(e) => setCobroEfectivo(e.target.value)} className="h-8" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Transferencia</Label>
-                      <Input type="number" placeholder="0" value={cobroTransferencia} onChange={(e) => setCobroTransferencia(e.target.value)} className="h-8" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Transfer options + surcharge detail */}
-                {(cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && (
-                  <div className="space-y-2">
-                    {recPctTransf > 0 && surchargePreview > 0 && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1">
-                        <p className="text-xs text-amber-700 flex items-center gap-1 font-medium">
-                          <AlertTriangle className="w-3 h-3" /> Recargo {recPctTransf}% por transferencia
-                        </p>
-                        <div className="text-xs space-y-0.5">
-                          <p className="text-muted-foreground">Base: {formatCurrency(cobroMetodo === "Mixto" ? Number(cobroTransferencia) || 0 : montoCobrar)}</p>
-                          <p className="text-amber-700">+ Recargo: {formatCurrency(surchargePreview)}</p>
-                          <p className="font-bold text-foreground">Total con recargo: {formatCurrency(totalConRecargo)}</p>
-                        </div>
-                      </div>
-                    )}
-                    {cobroConfig.cuentasBancarias.length > 0 && (
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Cuenta bancaria</Label>
-                        <Select value={cobroCuenta} onValueChange={(v) => v && setCobroCuenta(v)}>
-                          <SelectTrigger className="h-8"><SelectValue placeholder="Seleccionar cuenta..." /></SelectTrigger>
-                          <SelectContent>
-                            {cobroConfig.cuentasBancarias.map((c) => (
-                              <SelectItem key={c.id} value={c.alias || c.nombre}>{c.nombre}{c.alias ? ` (${c.alias})` : ""}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={handleConfirmarCobro} disabled={cobroSaving}>
-                  {cobroSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Banknote className="w-4 h-4 mr-2" />}
-                  Guardar método de pago — {formatCurrency(totalConRecargo)}
-                </Button>
-              </div>
-            );
-          })()}
+          {/* ═══ COBRO SECTION ═══ */}
+          {cobroConfig && isEditable && !hasCobro && (
+            <div className="border-2 border-emerald-200 bg-emerald-50/30 rounded-xl p-4">
+              <CobroVentaSection
+                ventaId={cobroConfig.ventaId}
+                clienteId={cobroConfig.clienteId}
+                clienteNombre={data.nombre_cliente || ""}
+                clienteSaldo={cobroConfig.clienteSaldo}
+                montoVenta={displayTotal}
+                subtotalItems={itemsSubtotal}
+                costoEnvio={envio}
+                recargoTransferencia={cobroConfig.recargoTransferencia}
+                cuentasBancarias={cobroConfig.cuentasBancarias}
+                defaultMetodo={data.metodo_pago || data.forma_pago}
+                defaultEfectivo={data.monto_efectivo}
+                defaultTransferencia={data.monto_transferencia}
+                defaultCuentaAlias={data.cuenta_transferencia_alias || undefined}
+                onConfirmar={cobroConfig.onRegistrarCobro}
+              />
+            </div>
+          )}
 
           {/* Status actions */}
           {nextStates.length > 0 && onEstadoChange && (

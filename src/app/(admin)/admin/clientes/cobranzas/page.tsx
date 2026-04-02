@@ -42,7 +42,7 @@ interface CuentaMovimiento {
   saldo: number;
   forma_pago: string | null;
   venta_id: string | null;
-  ventas?: { tipo_comprobante: string; numero: string } | null;
+  created_at?: string;
 }
 
 
@@ -56,6 +56,7 @@ export default function CobranzasPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<ClienteDeuda | null>(null);
   const [movimientos, setMovimientos] = useState<CuentaMovimiento[]>([]);
+  const [saldoInicial, setSaldoInicial] = useState(0);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
@@ -89,23 +90,41 @@ export default function CobranzasPage() {
 
   const totalPendiente = clients.reduce((a, c) => a + c.saldo, 0);
 
-  const openDetail = async (client: ClienteDeuda) => {
+  const openDetail = async (client: ClienteDeuda, desde?: string, hasta?: string) => {
     setSelectedClient(client);
     setDetailOpen(true);
     setLoadingDetail(true);
 
-    let query = supabase
+    const from = desde || filterFrom;
+    const to = hasta || filterTo;
+
+    // Build movements query
+    let q = supabase
       .from("cuenta_corriente")
       .select("*")
       .eq("cliente_id", client.id)
       .order("fecha", { ascending: true })
       .order("created_at", { ascending: true });
+    if (from) q = q.gte("fecha", from);
+    if (to) q = q.lte("fecha", to);
 
-    if (filterFrom) query = query.gte("fecha", filterFrom);
-    if (filterTo) query = query.lte("fecha", filterTo);
+    const { data: movData } = await q;
+    setMovimientos((movData as CuentaMovimiento[]) || []);
 
-    const { data } = await query;
-    setMovimientos((data as CuentaMovimiento[]) || []);
+    // If date filter, get saldo before period
+    if (from) {
+      const { data: prevData } = await supabase
+        .from("cuenta_corriente")
+        .select("saldo")
+        .eq("cliente_id", client.id)
+        .lt("fecha", from)
+        .order("fecha", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1);
+      setSaldoInicial(prevData?.[0]?.saldo || 0);
+    } else {
+      setSaldoInicial(0);
+    }
     setLoadingDetail(false);
   };
 
@@ -225,13 +244,15 @@ export default function CobranzasPage() {
         </CardContent>
       </Card>
 
-      {/* Resumen de Cuenta Dialog */}
+      {/* Resumen de Cuenta Dialog — Libro Diario */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Resumen de Cuenta — {selectedClient?.nombre}</DialogTitle>
+            <DialogTitle>Cuenta Corriente — {selectedClient?.nombre}</DialogTitle>
           </DialogHeader>
-          <div className="flex gap-2 items-end mb-4">
+
+          {/* Date filters */}
+          <div className="flex gap-2 items-end mb-3">
             <div className="space-y-1">
               <Label className="text-xs">Desde</Label>
               <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-36 h-8 text-xs" />
@@ -240,50 +261,119 @@ export default function CobranzasPage() {
               <Label className="text-xs">Hasta</Label>
               <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-36 h-8 text-xs" />
             </div>
-            <Button variant="outline" size="sm" onClick={() => selectedClient && openDetail(selectedClient)}>Filtrar</Button>
+            <Button variant="outline" size="sm" onClick={() => selectedClient && openDetail(selectedClient, filterFrom, filterTo)}>Filtrar</Button>
           </div>
+
+          {/* KPI cards */}
+          {!loadingDetail && movimientos.length > 0 && (() => {
+            const totalDebe = movimientos.reduce((s, m) => s + (m.debe || 0), 0);
+            const totalHaber = movimientos.reduce((s, m) => s + (m.haber || 0), 0);
+            const saldoFinal = movimientos.length > 0 ? movimientos[movimientos.length - 1].saldo : 0;
+            return (
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="rounded-lg border p-2.5 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Compras</p>
+                  <p className="text-sm font-bold">{formatCurrency(Math.round(totalDebe))}</p>
+                </div>
+                <div className="rounded-lg border p-2.5 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pagos</p>
+                  <p className="text-sm font-bold text-emerald-600">{formatCurrency(Math.round(totalHaber))}</p>
+                </div>
+                <div className="rounded-lg border p-2.5 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Movimientos</p>
+                  <p className="text-sm font-bold">{movimientos.length}</p>
+                </div>
+                <div className={`rounded-lg border p-2.5 text-center ${saldoFinal > 0 ? "bg-orange-50 border-orange-200" : saldoFinal < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo</p>
+                  <p className={`text-sm font-bold ${saldoFinal > 0 ? "text-orange-600" : saldoFinal < 0 ? "text-emerald-600" : ""}`}>
+                    {saldoFinal > 0 ? formatCurrency(saldoFinal) : saldoFinal < 0 ? `${formatCurrency(Math.abs(saldoFinal))} a favor` : "$0"}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
           {loadingDetail ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : movimientos.length === 0 ? (
             <p className="text-center text-muted-foreground py-8 text-sm">No hay movimientos registrados</p>
-          ) : (
-            <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50 text-muted-foreground">
-                    <th className="text-left py-2 px-3 font-medium">Fecha</th>
-                    <th className="text-left py-2 px-3 font-medium">Comprobante</th>
-                    <th className="text-right py-2 px-3 font-medium">Debe</th>
-                    <th className="text-right py-2 px-3 font-medium">Haber</th>
-                    <th className="text-right py-2 px-3 font-medium">Saldo</th>
-                    <th className="text-left py-2 px-3 font-medium">Cond. Pago</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movimientos.map((m) => (
-                    <tr key={m.id} className="border-b last:border-0">
-                      <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                      <td className="py-2 px-3 font-mono text-xs">{m.comprobante || "—"}</td>
-                      <td className="py-2 px-3 text-right">{m.debe > 0 ? formatCurrency(m.debe, true) : ""}</td>
-                      <td className="py-2 px-3 text-right">{m.haber > 0 ? formatCurrency(m.haber, true) : ""}</td>
-                      <td className={`py-2 px-3 text-right font-semibold ${m.saldo < 0 ? "text-red-500" : ""}`}>
-                        {formatCurrency(m.saldo, true)}
-                      </td>
-                      <td className="py-2 px-3 text-xs text-muted-foreground">{m.forma_pago || ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : (() => {
+            const cleanComp = (c: string) => c
+              .replace(/Venta\s+#?/i, "FC ")
+              .replace(/Edición Venta\s+#?/i, "AJ ")
+              .replace(/Cobro (saldo|deuda)\s*[-–]\s*/i, "RE ")
+              .replace(/^RE\s+\d{4}-\d{2}-\d{2}$/, "RE")
+              .replace(/(\d{5})-(\d{8})/, (_: string, _a: string, b: string) => parseInt(b).toString().padStart(4, "0"));
+            const cleanDesc = (d: string) => d
+              .replace(/\s*—\s*desde\s*(Punto de Venta|Clientes)/gi, "")
+              .replace(/\s*\(Cuenta Corriente\)/gi, "")
+              .replace(/Cobro saldo pendiente\s*/i, "Cobro saldo")
+              .replace(/Venta\s*-\s*Cuenta Corriente\s*(\(parcial\))?/i, (_: string, p: string) => p ? "Cta.Cte. (parcial)" : "Cta.Cte.")
+              .replace(/Ajuste por edición\s*\((aumento|reducción)\)/i, (_: string, t: string) => t === "aumento" ? "Ajuste débito" : "Ajuste crédito")
+              .replace(/\(saldo a favor aplicado:.*?\)/i, "");
+            const totalDebe = movimientos.reduce((s, m) => s + (m.debe || 0), 0);
+            const totalHaber = movimientos.reduce((s, m) => s + (m.haber || 0), 0);
+            const saldoFinal = movimientos[movimientos.length - 1].saldo;
 
-          {selectedClient && (
-            <div className="flex justify-between items-center pt-4 border-t">
-              <span className="text-sm font-semibold">Saldo deudor actual</span>
-              <span className="text-lg font-bold text-orange-500">{formatCurrency(selectedClient.saldo, true)}</span>
-            </div>
-          )}
+            return (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 border-b">
+                      <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
+                      <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Comp.</th>
+                      <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
+                      <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
+                      <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
+                      <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Saldo inicial */}
+                    {saldoInicial !== 0 && (
+                      <tr className="border-b bg-muted/20">
+                        <td className="py-2 px-3 text-xs text-muted-foreground italic" colSpan={5}>
+                          Saldo al inicio del período
+                        </td>
+                        <td className={`py-2 px-3 text-right font-bold text-xs tabular-nums ${saldoInicial > 0 ? "text-orange-600" : "text-emerald-600"}`}>
+                          {saldoInicial > 0 ? formatCurrency(saldoInicial) : `${formatCurrency(Math.abs(saldoInicial))} a favor`}
+                        </td>
+                      </tr>
+                    )}
+                    {movimientos.map((m, i) => {
+                      const prevDate = i > 0 ? movimientos[i - 1].fecha : null;
+                      const isNewDate = m.fecha !== prevDate;
+                      const sr = Math.round(m.saldo);
+                      return (
+                        <tr key={m.id} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
+                          <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
+                            {isNewDate ? new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
+                          </td>
+                          <td className="py-2 px-3 text-xs font-mono whitespace-nowrap">{m.comprobante ? cleanComp(m.comprobante) : "—"}</td>
+                          <td className="py-2 px-3 text-xs text-muted-foreground">{m.descripcion ? cleanDesc(m.descripcion) : ""}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{m.debe > 0 ? formatCurrency(Math.round(m.debe)) : ""}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">{m.haber > 0 ? formatCurrency(Math.round(m.haber)) : ""}</td>
+                          <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${sr > 0 ? "text-orange-600" : sr < 0 ? "text-emerald-600" : ""}`}>
+                            {sr > 0 ? formatCurrency(sr) : sr < 0 ? `${formatCurrency(Math.abs(sr))} a favor` : "$0"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-muted/50 border-t font-bold text-xs">
+                      <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales del período</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(totalDebe))}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(totalHaber))}</td>
+                      <td className={`py-2.5 px-3 text-right tabular-nums ${saldoFinal > 0 ? "text-orange-600" : saldoFinal < 0 ? "text-emerald-600" : ""}`}>
+                        {saldoFinal > 0 ? formatCurrency(Math.round(saldoFinal)) : saldoFinal < 0 ? `${formatCurrency(Math.round(Math.abs(saldoFinal)))} a favor` : "$0"}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import Link from "next/link";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
+import { CobroVentaSection } from "@/components/cobro-venta-section";
+import type { CobroVentaResult } from "@/components/cobro-venta-section";
 import {
   Truck,
   Package,
@@ -473,7 +475,7 @@ export default function HojaDeRutaPage() {
   const [payCuentaBancariaId, setPayCuentaBancariaId] = useState("");
   const [paySaving, setPaySaving] = useState(false);
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([]);
-  const [porcentajeTransferencia, setPorcentajeTransferencia] = useState(0);
+  const [porcentajeTransferencia, setPorcentajeTransferencia] = useState(2);
 
   // Load bank accounts and transfer surcharge from DB
   useEffect(() => {
@@ -1627,7 +1629,7 @@ export default function HojaDeRutaPage() {
 
       {/* Payment Dialog */}
       <Dialog open={payDialogOpen} onOpenChange={(v) => { if (!v) setPayDialogOpen(false); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader className="pr-8">
             <DialogTitle>Registrar Pago</DialogTitle>
           </DialogHeader>
@@ -1636,167 +1638,130 @@ export default function HojaDeRutaPage() {
             const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
             const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
-            const totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMonto;
-            const saldoPendiente = totalDebeGrupo - Math.min(totalPagando, totalDebeGrupo);
-            const montoTransfDialog = payMetodo === "Transferencia" ? payMonto : payMetodo === "Mixto" ? payTransferencia : 0;
-            const surchargeDialog = porcentajeTransferencia > 0 && montoTransfDialog > 0 ? Math.round(montoTransfDialog * (porcentajeTransferencia / 100)) : 0;
             return (
               <div className="space-y-4">
-                {/* Summary */}
-                <div className="text-sm space-y-1 bg-muted/50 rounded-lg p-3">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{payVenta.clientes?.nombre || "—"}</span></div>
+                {/* Summary header */}
+                <div className="text-sm space-y-1 bg-gray-50 rounded-lg p-3">
+                  <div className="flex justify-between"><span className="text-gray-500">Cliente</span><span className="font-medium">{payVenta.clientes?.nombre || "—"}</span></div>
                   {allVentas.length === 1 ? (
                     <>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatCurrency(payVenta.total)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(payVenta.total)}</span></div>
                     </>
                   ) : (
                     <>
                       {allVentas.map((v) => (
                         <div key={v.id} className="flex justify-between">
-                          <span className="text-muted-foreground">#{v.numero}</span>
+                          <span className="text-gray-500">#{v.numero}</span>
                           <span className="font-medium">{formatCurrency(v.total)}</span>
                         </div>
                       ))}
-                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
+                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
                     </>
                   )}
                   {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
-                  {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
-                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(totalDebeGrupo)}</span></div>
+                  {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-gray-500">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
+                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500 font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(totalDebeGrupo)}</span></div>
                 </div>
 
-                {/* Payment method */}
-                <div className="space-y-2">
-                  <Label>Método de pago</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {(["Efectivo", "Transferencia", "Mixto", ...(payVenta.cliente_id ? ["Cuenta Corriente"] : [])] as const).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => {
-                          setPayMetodo(m as any);
-                          if (m === "Mixto") { setPayEfectivo(Math.floor(totalDebeGrupo / 2)); setPayTransferencia(totalDebeGrupo - Math.floor(totalDebeGrupo / 2)); }
-                          else if (m !== "Cuenta Corriente") { setPayMonto(totalDebeGrupo); }
-                        }}
-                        className={`flex-1 min-w-[80px] py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                          payMetodo === m ? "bg-foreground text-white border-foreground" : "bg-white text-muted-foreground border-border hover:border-foreground/30"
-                        }`}
-                      >
-                        {m === "Cuenta Corriente" ? "Cta Cte" : m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                {/* CobroVentaSection — same as listado detail */}
+                <CobroVentaSection
+                  ventaId={payVenta.id}
+                  clienteId={payVenta.cliente_id || ""}
+                  clienteNombre={payVenta.clientes?.nombre || ""}
+                  clienteSaldo={payVenta.clientes?.saldo || 0}
+                  montoVenta={totalDebeGrupo}
+                  subtotalItems={totalDebeGrupo}
+                  costoEnvio={0}
+                  recargoTransferencia={porcentajeTransferencia}
+                  cuentasBancarias={cuentasBancarias.map(c => ({ id: c.id, nombre: c.nombre, alias: (c as any).alias || "" }))}
+                  defaultMetodo={payVenta.forma_pago}
+                  defaultCuentaAlias={(payVenta as any).cuenta_transferencia_alias}
+                  onConfirmar={async (result: CobroVentaResult) => {
+                    const hoy = getArgentinaToday();
+                    const hora = nowTimeARG();
+                    const clienteNombre = payVenta.clientes?.nombre || "";
+                    const cuentaNombre = result.cuentaBancaria;
 
-                {/* Amount inputs */}
-                {payMetodo === "Cuenta Corriente" ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                    Se cargará <strong>{formatCurrency(totalDebeGrupo)}</strong> a la cuenta corriente del cliente.
-                  </div>
-                ) : payMetodo === "Mixto" ? (
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Efectivo</Label>
-                      <Input type="number" value={payEfectivo} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setPayEfectivo(v); setPayTransferencia(Math.max(0, totalDebeGrupo - v)); }} min={0} max={totalDebeGrupo} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Transferencia</Label>
-                      <Input type="number" value={payTransferencia} onChange={(e) => { const v = Math.max(0, Number(e.target.value)); setPayTransferencia(v); setPayEfectivo(Math.max(0, totalDebeGrupo - v)); }} min={0} max={totalDebeGrupo} />
-                    </div>
-                    {payTransferencia > 0 && cuentasBancarias.length > 0 && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Cuenta bancaria</Label>
-                        <Select value={payCuentaBancariaId} onValueChange={(v) => setPayCuentaBancariaId(v || "")}>
-                          <SelectTrigger className="h-9">
-                            {payCuentaBancariaId ? ((cuentasBancarias.find((c) => c.id === payCuentaBancariaId) as any)?.alias || cuentasBancarias.find((c) => c.id === payCuentaBancariaId)?.nombre || "Seleccionar cuenta") : "Seleccionar cuenta"}
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{(c as any).alias || c.nombre}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label>Monto a cobrar</Label>
-                    <Input type="number" value={payMonto} onChange={(e) => setPayMonto(Math.max(0, Math.min(totalDebeGrupo, Number(e.target.value))))} min={0} max={totalDebeGrupo} />
-                    {payMetodo === "Transferencia" && cuentasBancarias.length > 0 && (
-                      <div className="space-y-1.5 mt-2">
-                        <Label className="text-xs">Cuenta bancaria</Label>
-                        <Select value={payCuentaBancariaId} onValueChange={(v) => setPayCuentaBancariaId(v || "")}>
-                          <SelectTrigger className="h-9">
-                            {payCuentaBancariaId ? ((cuentasBancarias.find((c) => c.id === payCuentaBancariaId) as any)?.alias || cuentasBancarias.find((c) => c.id === payCuentaBancariaId)?.nombre || "Seleccionar cuenta") : "Seleccionar cuenta"}
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cuentasBancarias.map((c) => <SelectItem key={c.id} value={c.id}>{(c as any).alias || c.nombre}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                )}
+                    // Distribute payment across ventas FIFO
+                    let remaining = result.monto;
+                    const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
+                    for (const v of allVentas) {
+                      const deuda = Math.max(0, v.total - (pagadoPorVenta[v.id] || 0));
+                      const pays = Math.min(remaining, deuda);
+                      perVenta.push({ venta: v, paid: pays, debtLeft: deuda - pays });
+                      remaining = Math.round((remaining - pays) * 100) / 100;
+                    }
 
-                {/* ── Payment breakdown summary ── */}
-                {payMetodo !== "Cuenta Corriente" && (() => {
-                  const efectivoFinal = payMetodo === "Mixto" ? payEfectivo : payMetodo === "Efectivo" ? payMonto : 0;
-                  const transfBase = payMetodo === "Mixto" ? payTransferencia : payMetodo === "Transferencia" ? payMonto : 0;
-                  const recargo = surchargeDialog;
-                  const transfConRecargo = transfBase + recargo;
-                  const totalEntraCaja = efectivoFinal + transfConRecargo;
-                  const cobradoBase = Math.min(totalPagando, totalDebeGrupo);
-                  return (
-                    <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5 text-sm">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Resumen del cobro</p>
-                      {efectivoFinal > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Efectivo</span>
-                          <span className="font-medium">{formatCurrency(efectivoFinal)}</span>
-                        </div>
-                      )}
-                      {transfBase > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Transferencia</span>
-                          <span className="font-medium">{formatCurrency(transfBase)}</span>
-                        </div>
-                      )}
-                      {recargo > 0 && (
-                        <div className="flex justify-between text-blue-700">
-                          <span>Recargo transferencia ({porcentajeTransferencia}%)</span>
-                          <span className="font-medium">+{formatCurrency(recargo)}</span>
-                        </div>
-                      )}
-                      {saldoPendiente > 0 && payVenta.cliente_id && (
-                        <div className="flex justify-between text-amber-700">
-                          <span>Saldo a Cuenta Corriente</span>
-                          <span className="font-medium">{formatCurrency(saldoPendiente)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between border-t pt-1.5 mt-1">
-                        <span className="font-semibold">Total ingresa a caja</span>
-                        <span className="font-bold text-base">{formatCurrency(totalEntraCaja)}</span>
-                      </div>
-                      {recargo > 0 && (
-                        <p className="text-xs text-blue-600 text-right">El cliente debe transferir {formatCurrency(transfConRecargo)}</p>
-                      )}
-                    </div>
-                  );
-                })()}
+                    // Register caja entries per venta
+                    for (const { venta, paid } of perVenta) {
+                      if (paid <= 0 && result.metodo !== "Cuenta Corriente") continue;
+                      if (result.metodo === "Mixto") {
+                        const ratio = result.monto > 0 ? paid / result.monto : 0;
+                        const efPart = Math.round(result.efectivo * ratio);
+                        const trPart = paid - efPart - Math.round((result.cuentaCorriente || 0) * ratio);
+                        if (efPart > 0) {
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`, metodo_pago: "Efectivo", monto: efPart, referencia_id: venta.id, referencia_tipo: "venta" });
+                        }
+                        if (trPart > 0) {
+                          const trSurcharge = result.surcharge > 0 ? Math.round(trPart * (porcentajeTransferencia / 100)) : 0;
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: trPart + trSurcharge, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
+                        }
+                      } else if (result.metodo === "Transferencia") {
+                        const trSurcharge = result.surcharge > 0 ? Math.round(paid * (porcentajeTransferencia / 100)) : 0;
+                        await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: paid + trSurcharge, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
+                      } else if (result.metodo === "Cuenta Corriente") {
+                        await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Cuenta Corriente) — ${clienteNombre}`, metodo_pago: "Cuenta Corriente", monto: venta.total - (pagadoPorVenta[venta.id] || 0), referencia_id: venta.id, referencia_tipo: "venta" });
+                      } else {
+                        await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (${result.metodo}) — ${clienteNombre}`, metodo_pago: result.metodo, monto: paid, referencia_id: venta.id, referencia_tipo: "venta" });
+                      }
+                      // Update venta
+                      const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: (pagadoPorVenta[venta.id] || 0) + paid };
+                      if (cuentaNombre) ventaUpd.cuenta_transferencia_alias = cuentaNombre;
+                      await supabase.from("ventas").update(ventaUpd).eq("id", venta.id);
+                    }
 
-                {/* Pending balance warning — only if no client for CC */}
-                {saldoPendiente > 0 && !payVenta.cliente_id && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                    Esta venta no tiene cliente asignado. No se puede dejar saldo pendiente en cuenta corriente.
-                  </div>
-                )}
+                    // CC portion (Mixto remainder or full CC) — atomic saldo
+                    const ccAmount = result.metodo === "Cuenta Corriente" ? totalDebeGrupo : result.cuentaCorriente;
+                    if (ccAmount > 0 && payVenta.cliente_id) {
+                      // Atomic increment
+                      const { data: newSaldoCC } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: ccAmount });
+                      let runningSaldo = newSaldoCC ?? 0;
+                      // Per-venta CC entries (saldo snapshots)
+                      let ccUsed = 0;
+                      for (const { venta, debtLeft } of perVenta) {
+                        const ccForVenta = result.metodo === "Cuenta Corriente" ? (venta.total - (pagadoPorVenta[venta.id] || 0)) : debtLeft;
+                        if (ccForVenta <= 0) continue;
+                        ccUsed += ccForVenta;
+                        await supabase.from("cuenta_corriente").insert({ cliente_id: payVenta.cliente_id, fecha: hoy, comprobante: `Cobro entrega #${venta.numero}`, descripcion: result.metodo === "Cuenta Corriente" ? "A cuenta corriente" : "Saldo pendiente a cuenta corriente", debe: ccForVenta, haber: 0, saldo: runningSaldo - (ccAmount - ccUsed), forma_pago: result.metodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: venta.id });
+                      }
+                    }
 
-                <div className="flex justify-end gap-2 pt-1">
-                  <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancelar</Button>
-                  <Button onClick={handleRegistrarPago} disabled={paySaving || (payMetodo !== "Cuenta Corriente" && totalPagando <= 0) || (payMetodo === "Cuenta Corriente" && !payVenta.cliente_id) || (saldoPendiente > 0 && !payVenta.cliente_id)}>
-                    {paySaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    {payMetodo === "Cuenta Corriente" ? `Cargar a Cta Cte — ${formatCurrency(totalDebeGrupo)}` : `Confirmar Cobro — ${formatCurrency(Math.min(totalPagando, totalDebeGrupo) + surchargeDialog)}`}
-                  </Button>
-                </div>
+                    // FIFO saldo allocation (pay old debts) — atomic saldo
+                    if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
+                      for (const alloc of result.saldoAllocations) {
+                        if (alloc.aplicar <= 0) continue;
+                        const { data: old } = await supabase.from("ventas").select("monto_pagado").eq("id", alloc.venta_id).single();
+                        await supabase.from("ventas").update({ monto_pagado: ((old as any)?.monto_pagado || 0) + alloc.aplicar }).eq("id", alloc.venta_id);
+                      }
+                      const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
+                      if (totalAllocated > 0 && payVenta.cliente_id) {
+                        const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: -totalAllocated });
+                        const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
+                        await supabase.from("cuenta_corriente").insert({ cliente_id: payVenta.cliente_id, fecha: hoy, comprobante: `Cobro saldo entrega`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: payVenta.id });
+                      }
+                    }
+
+                    // Mark all as delivered
+                    for (const v of allVentas) {
+                      await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
+                      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
+                    }
+
+                    setPayDialogOpen(false);
+                    fetchVentas();
+                  }}
+                />
               </div>
             );
           })()}

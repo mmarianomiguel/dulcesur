@@ -66,6 +66,12 @@ export default function ProveedoresPage() {
   const importRef = useRef<HTMLInputElement>(null);
   const [comprasPendientes, setComprasPendientes] = useState<(Compra & { proveedores?: { nombre: string } })[]>([]);
   const [ccMovimientos, setCcMovimientos] = useState<CuentaCorrienteProveedor[]>([]);
+  // Historial unified dialog
+  const [histTab, setHistTab] = useState<"resumen" | "compras">("resumen");
+  const [histCompras, setHistCompras] = useState<any[]>([]);
+  const [histComprasLoading, setHistComprasLoading] = useState(false);
+  const [histExpanded, setHistExpanded] = useState<string | null>(null);
+  const [histComprasTotals, setHistComprasTotals] = useState({ total: 0, pagado: 0, pendiente: 0 });
   const [provCuentas, setProvCuentas] = useState<{ id: string; nombre: string; alias: string; cbu_cvu: string; tipo_cuenta: string; titular: string }[]>([]);
   const [historialCompras, setHistorialCompras] = useState<{ id: string; numero: string; fecha: string; total: number; estado: string; forma_pago: string }[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
@@ -235,10 +241,17 @@ export default function ProveedoresPage() {
       const movements: CuentaCorrienteProveedor[] = [];
 
       for (const c of (compras || []) as any[]) {
-        if (c.forma_pago === "Cuenta Corriente" || c.estado_pago === "Pendiente") {
+        if (c.estado === "Anulada") continue;
+        movements.push({
+          id: c.id, proveedor_id: provId, fecha: c.fecha, tipo: "compra",
+          descripcion: `Compra ${c.numero} (${c.forma_pago || "—"})`, monto: c.total, saldo_resultante: 0,
+          referencia_id: c.id, referencia_tipo: "compra", created_at: c.created_at,
+        });
+        // If paid immediately (Efectivo/Transferencia), also add a "pago" entry
+        if (c.forma_pago !== "Cuenta Corriente" && c.estado_pago === "Pagada") {
           movements.push({
-            id: c.id, proveedor_id: provId, fecha: c.fecha, tipo: "compra",
-            descripcion: `Compra ${c.numero}`, monto: c.total, saldo_resultante: 0,
+            id: c.id + "-pago", proveedor_id: provId, fecha: c.fecha, tipo: "pago" as const,
+            descripcion: `Pago compra ${c.numero} (${c.forma_pago})`, monto: c.total, saldo_resultante: 0,
             referencia_id: c.id, referencia_tipo: "compra", created_at: c.created_at,
           });
         }
@@ -272,11 +285,35 @@ export default function ProveedoresPage() {
 
   const openCuentaCorriente = async (p: Proveedor) => {
     ccDialog.onOpen(p);
-    const hoy = todayARG();
-    const hace90 = new Date(Date.now() - 90 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-    setCcDesde(hace90);
-    setCcHasta(hoy);
-    await fetchCuentaCorriente(p.id, hace90, hoy);
+    setHistTab("resumen");
+    setCcDesde("");
+    setCcHasta("");
+    setHistExpanded(null);
+    // Fetch CC and compras in parallel
+    const fetchAll = async () => {
+      setHistComprasLoading(true);
+      const [, comprasRes] = await Promise.all([
+        fetchCuentaCorriente(p.id),
+        supabase.from("compras")
+          .select("id, numero, fecha, total, estado, forma_pago, estado_pago, monto_pagado, compra_items(descripcion, cantidad, precio_unitario, subtotal)")
+          .eq("proveedor_id", p.id)
+          .neq("estado", "Anulada")
+          .order("fecha", { ascending: false })
+          .order("created_at", { ascending: false }),
+      ]);
+      const compras = (comprasRes.data || []) as any[];
+      setHistCompras(compras);
+      const totalCompras = compras.reduce((s: number, c: any) => s + (c.total || 0), 0);
+      // Use monto_pagado if set, otherwise infer from estado_pago (older records may not have monto_pagado)
+      const totalPagado = compras.reduce((s: number, c: any) => {
+        if (c.monto_pagado > 0) return s + c.monto_pagado;
+        if (c.estado_pago === "Pagada") return s + (c.total || 0);
+        return s;
+      }, 0);
+      setHistComprasTotals({ total: totalCompras, pagado: totalPagado, pendiente: Math.max(0, totalCompras - totalPagado) });
+      setHistComprasLoading(false);
+    };
+    fetchAll();
   };
 
   // ─── Boletas Pendientes ───
@@ -508,10 +545,7 @@ export default function ProveedoresPage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Cuenta corriente" onClick={() => openCuentaCorriente(p)}><History className="w-3.5 h-3.5" /></Button>
-                          {p.saldo > 0 && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Boletas pendientes" onClick={() => openBoletas(p)}><FileText className="w-3.5 h-3.5" /></Button>
-                          )}
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Historial" onClick={() => openCuentaCorriente(p)}><History className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="Registrar pago" onClick={() => openPago(p)}><DollarSign className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -708,10 +742,13 @@ export default function ProveedoresPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cuenta Corriente Dialog */}
+      {/* Historial Proveedor — Unified Dialog (Resumen + Compras) */}
       <Dialog open={ccDialog.open} onOpenChange={ccDialog.setOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Cuenta Corriente - {ccDialog.data?.nombre}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Historial — {ccDialog.data?.nombre}</DialogTitle>
+            {ccDialog.data?.cuit && <p className="text-xs text-gray-500">CUIT: {ccDialog.data.cuit}</p>}
+          </DialogHeader>
           {ccDialog.data && (() => {
             const fmtSaldo = (v: number) => v > 0 ? formatCurrency(v) : v < 0 ? `${formatCurrency(Math.abs(v))} a favor` : "$0";
             const saldoColor = (v: number) => v > 0 ? "text-orange-600" : v < 0 ? "text-emerald-600" : "";
@@ -720,6 +757,9 @@ export default function ProveedoresPage() {
               .replace(/Compra\s+(\d{5})-(\d{8})/i, (_, _a, b) => `Compra #${parseInt(b)}`)
               .replace(/Pago\s+(Efectivo|Transferencia)/i, (_, m) => `Pago ${m}`);
             const saldoAct = Math.round(ccTotals.saldo);
+            const totalDebe = ccMovimientos.filter((m) => m.tipo === "compra").reduce((s, m) => s + m.monto, 0);
+            const totalHaber = ccMovimientos.filter((m) => m.tipo === "pago").reduce((s, m) => s + m.monto, 0);
+
             const exportExcel = async () => {
               if (!ccDialog.data || ccMovimientos.length === 0) return;
               const XLSX = await import("xlsx");
@@ -737,162 +777,190 @@ export default function ProveedoresPage() {
               XLSX.utils.book_append_sheet(wb, ws, "Cuenta Corriente");
               XLSX.writeFile(wb, `CC_${ccDialog.data!.nombre.replace(/\s/g, "_")}_${todayARG()}.xlsx`);
             };
-            const totalDebe = ccMovimientos.filter((m) => m.tipo === "compra").reduce((s, m) => s + m.monto, 0);
-            const totalHaber = ccMovimientos.filter((m) => m.tipo === "pago").reduce((s, m) => s + m.monto, 0);
 
             return (
-              <div className="space-y-3 mt-2">
-                <div className="flex items-end gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Desde</Label>
-                    <Input type="date" value={ccDesde} onChange={(e) => setCcDesde(e.target.value)} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Hasta</Label>
-                    <Input type="date" value={ccHasta} onChange={(e) => setCcHasta(e.target.value)} className="h-8 text-sm" />
-                  </div>
-                  <Button size="sm" className="h-8" onClick={() => ccDialog.data && fetchCuentaCorriente(ccDialog.data.id, ccDesde, ccHasta)}>
-                    <Search className="w-3.5 h-3.5 mr-1" />Filtrar
-                  </Button>
+              <div className="space-y-3 mt-1">
+                {/* Tabs */}
+                <div className="flex gap-1 border-b">
+                  {([["resumen", "Resumen"], ["compras", "Compras"]] as const).map(([key, label]) => (
+                    <button key={key} onClick={() => setHistTab(key)}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                        histTab === key ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+                      }`}>{label}</button>
+                  ))}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Débitos</p>
-                    <p className="text-base font-bold">{formatCurrency(Math.round(totalDebe))}</p>
-                  </div>
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Créditos</p>
-                    <p className="text-base font-bold text-emerald-600">{formatCurrency(Math.round(totalHaber))}</p>
-                  </div>
-                  <div className={`rounded-lg border p-2.5 ${saldoAct > 0 ? "bg-orange-50 border-orange-200" : saldoAct < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo actual</p>
-                    <p className={`text-base font-bold ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</p>
-                  </div>
-                </div>
+                {/* ─── Tab: Resumen (CC Libro Diario) ─── */}
+                {histTab === "resumen" && (
+                  <div className="space-y-3">
+                    {/* Date filters */}
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-gray-500">Desde</Label>
+                        <Input type="date" value={ccDesde} onChange={(e) => setCcDesde(e.target.value)} className="h-8 text-sm w-36" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-gray-500">Hasta</Label>
+                        <Input type="date" value={ccHasta} onChange={(e) => setCcHasta(e.target.value)} className="h-8 text-sm w-36" />
+                      </div>
+                      <Button size="sm" className="h-8" onClick={() => ccDialog.data && fetchCuentaCorriente(ccDialog.data.id, ccDesde, ccHasta)}>
+                        <Search className="w-3.5 h-3.5 mr-1" />Filtrar
+                      </Button>
+                      <div className="ml-auto flex gap-2">
+                        {ccMovimientos.length > 0 && (
+                          <Button size="sm" variant="outline" className="h-8" onClick={exportExcel}>
+                            <Download className="w-3.5 h-3.5 mr-1" />Excel
+                          </Button>
+                        )}
+                        {saldoAct > 0 && (
+                          <Button size="sm" className="h-8" onClick={() => { ccDialog.onClose(); openPago(ccDialog.data!); }}>
+                            <DollarSign className="w-3.5 h-3.5 mr-1" />Registrar pago
+                          </Button>
+                        )}
+                      </div>
+                    </div>
 
-                <div className="flex justify-end gap-2">
-                  {ccMovimientos.length > 0 && (
-                    <Button size="sm" variant="outline" onClick={exportExcel}>
-                      <Download className="w-3.5 h-3.5 mr-1" />Excel
-                    </Button>
-                  )}
-                  {saldoAct > 0 && (
-                    <Button size="sm" onClick={() => { ccDialog.onClose(); openPago(ccDialog.data!); }}>
-                      <DollarSign className="w-3.5 h-3.5 mr-1" />Registrar pago
-                    </Button>
-                  )}
-                </div>
+                    {/* KPI cards */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-lg border p-2.5">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Compras</p>
+                        <p className="text-base font-bold">{formatCurrency(Math.round(totalDebe))}</p>
+                      </div>
+                      <div className="rounded-lg border p-2.5">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Pagos</p>
+                        <p className="text-base font-bold text-emerald-600">{formatCurrency(Math.round(totalHaber))}</p>
+                      </div>
+                      <div className={`rounded-lg border p-2.5 ${saldoAct > 0 ? "bg-orange-50 border-orange-200" : saldoAct < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Saldo</p>
+                        <p className={`text-base font-bold ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</p>
+                      </div>
+                    </div>
 
-                {ccMovimientos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">Sin movimientos en cuenta corriente</p>
-                ) : (
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-muted/50 border-b">
-                          <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
-                          <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-16">Tipo</th>
-                          <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
-                          <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
-                          <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
-                          <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ccMovimientos.map((mov, i) => {
-                          const prevDate = i > 0 ? ccMovimientos[i - 1].fecha : null;
-                          const isNewDate = mov.fecha !== prevDate;
-                          const sr = Math.round(mov.saldo_resultante);
-                          return (
-                            <tr key={mov.id} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
-                              <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
-                                {isNewDate ? new Date(mov.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
-                              </td>
-                              <td className="py-2 px-3">
-                                <Badge variant={mov.tipo === "compra" ? "destructive" : mov.tipo === "pago" ? "default" : "secondary"} className="text-[10px] font-normal px-1.5 py-0">
-                                  {mov.tipo === "compra" ? "FC" : mov.tipo === "pago" ? "RE" : "AJ"}
-                                </Badge>
-                              </td>
-                              <td className="py-2 px-3 text-xs text-muted-foreground">{cleanDesc(mov.descripcion)}</td>
-                              <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
-                                {mov.tipo === "compra" ? formatCurrency(Math.round(mov.monto)) : ""}
-                              </td>
-                              <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">
-                                {mov.tipo === "pago" ? formatCurrency(Math.round(mov.monto)) : ""}
-                              </td>
-                              <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${saldoColor(sr)}`}>{fmtSaldo(sr)}</td>
+                    {/* CC Table */}
+                    {ccMovimientos.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">Sin movimientos en el período</p>
+                    ) : (
+                      <div className="overflow-x-auto border rounded-lg">
+                        <table className="w-full text-sm min-w-[500px]">
+                          <thead>
+                            <tr className="bg-gray-50 border-b">
+                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
+                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-16">Tipo</th>
+                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
+                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
+                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
+                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="bg-muted/50 border-t font-bold text-xs">
-                          <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales</td>
-                          <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(totalDebe))}</td>
-                          <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(totalHaber))}</td>
-                          <td className={`py-2.5 px-3 text-right tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                          </thead>
+                          <tbody>
+                            {ccMovimientos.map((mov, i) => {
+                              const prevDate = i > 0 ? ccMovimientos[i - 1].fecha : null;
+                              const isNewDate = mov.fecha !== prevDate;
+                              const sr = Math.round(mov.saldo_resultante);
+                              return (
+                                <tr key={mov.id} className={`border-b last:border-0 hover:bg-gray-50/50 ${isNewDate && i > 0 ? "border-t border-t-gray-200" : ""}`}>
+                                  <td className="py-2 px-3 text-gray-500 text-xs tabular-nums whitespace-nowrap">
+                                    {isNewDate ? new Date(mov.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge variant={mov.tipo === "compra" ? "destructive" : mov.tipo === "pago" ? "default" : "secondary"} className="text-[10px] font-normal px-1.5 py-0">
+                                      {mov.tipo === "compra" ? "FC" : mov.tipo === "pago" ? "RE" : "AJ"}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 px-3 text-xs text-gray-500">{cleanDesc(mov.descripcion)}</td>
+                                  <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
+                                    {mov.tipo === "compra" ? formatCurrency(Math.round(mov.monto)) : ""}
+                                  </td>
+                                  <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">
+                                    {mov.tipo === "pago" ? formatCurrency(Math.round(mov.monto)) : ""}
+                                  </td>
+                                  <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${saldoColor(sr)}`}>{fmtSaldo(sr)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-gray-50 border-t font-bold text-xs">
+                              <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales</td>
+                              <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(totalDebe))}</td>
+                              <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(totalHaber))}</td>
+                              <td className={`py-2.5 px-3 text-right tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                <div className="flex justify-end pt-1">
-                  <Button variant="outline" size="sm" onClick={ccDialog.onClose}>Cerrar</Button>
-                </div>
+                {/* ─── Tab: Compras ─── */}
+                {histTab === "compras" && (
+                  <div className="space-y-3">
+                    {/* KPI cards */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-lg border p-2.5">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Total compras</p>
+                        <p className="text-base font-bold">{formatCurrency(Math.round(histComprasTotals.total))}</p>
+                      </div>
+                      <div className="rounded-lg border p-2.5">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Pagado</p>
+                        <p className="text-base font-bold text-emerald-600">{formatCurrency(Math.round(histComprasTotals.pagado))}</p>
+                      </div>
+                      <div className={`rounded-lg border p-2.5 ${histComprasTotals.pendiente > 0 ? "bg-orange-50 border-orange-200" : ""}`}>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Pendiente</p>
+                        <p className={`text-base font-bold ${histComprasTotals.pendiente > 0 ? "text-orange-600" : ""}`}>{formatCurrency(Math.round(histComprasTotals.pendiente))}</p>
+                      </div>
+                    </div>
+
+                    {histComprasLoading ? (
+                      <div className="flex justify-center py-8"><LoadingSpinner /></div>
+                    ) : histCompras.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">Sin compras registradas</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+                        {histCompras.map((c: any) => {
+                          const isExpanded = histExpanded === c.id;
+                          const items = c.compra_items || [];
+                          const isPendiente = c.estado_pago === "Pendiente";
+                          return (
+                            <div key={c.id} className="border rounded-lg overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setHistExpanded(isExpanded ? null : c.id)}
+                                className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gray-50 transition"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="font-mono text-xs text-gray-500">{c.numero}</span>
+                                  <span className="text-xs text-gray-400">
+                                    {new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                                  </span>
+                                  <Badge variant={isPendiente ? "secondary" : "default"} className="text-[10px] px-1.5 py-0">
+                                    {isPendiente ? "Pendiente" : "Pagada"}
+                                  </Badge>
+                                  <span className="text-[10px] text-gray-400">{c.forma_pago}</span>
+                                </div>
+                                <span className="font-semibold">{formatCurrency(c.total)}</span>
+                              </button>
+                              {isExpanded && items.length > 0 && (
+                                <div className="border-t bg-gray-50/50 px-3 py-2 space-y-1">
+                                  {items.map((item: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between text-xs">
+                                      <span className="text-gray-600">{item.cantidad}x {item.descripcion}</span>
+                                      <span className="text-gray-700 font-medium">{formatCurrency(item.subtotal)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })()}
-        </DialogContent>
-      </Dialog>
-
-      {/* Boletas Pendientes Dialog */}
-      <Dialog open={boletasDialog.open} onOpenChange={boletasDialog.setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Boletas Pendientes</DialogTitle></DialogHeader>
-          {boletasDialog.data && (
-            <div className="space-y-4 mt-2">
-              <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-                <p className="font-medium">{boletasDialog.data.nombre}</p>
-                <p className="text-sm text-muted-foreground">
-                  Deuda total: <span className="font-semibold text-orange-500">{formatCurrency(boletasDialog.data.saldo)}</span>
-                </p>
-              </div>
-
-              {comprasPendientes.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">No hay boletas pendientes de pago</p>
-              ) : (
-                <div className="overflow-y-auto max-h-80 space-y-2">
-                  {comprasPendientes.map((c) => (
-                    <div key={c.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div>
-                        <p className="font-medium text-sm">{c.numero}</p>
-                        <p className="text-xs text-muted-foreground">{formatDateARG(c.fecha)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-orange-500">{formatCurrency(c.total)}</p>
-                        <Badge variant="secondary" className="text-[10px]">Pendiente</Badge>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex justify-between border-t pt-3 text-sm">
-                    <span className="text-muted-foreground">Total pendiente:</span>
-                    <span className="font-bold">{formatCurrency(comprasPendientes.reduce((a, c) => a + c.total, 0))}</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={boletasDialog.onClose}>Cerrar</Button>
-                {comprasPendientes.length > 0 && (
-                  <Button onClick={() => { boletasDialog.onClose(); if (boletasDialog.data) openPago(boletasDialog.data); }}>
-                    <DollarSign className="w-4 h-4 mr-2" />Registrar Pago
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 

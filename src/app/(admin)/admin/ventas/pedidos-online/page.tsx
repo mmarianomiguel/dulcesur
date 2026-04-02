@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { VentaDetailDialog, type NCDetail } from "@/components/venta-detail-dialog";
+import type { CobroVentaResult } from "@/components/cobro-venta-section";
 import { defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
 
@@ -144,6 +145,7 @@ export default function PedidosOnlinePage() {
   // Payment config
   const [cuentasBancarias, setCuentasBancarias] = useState<{ id: string; nombre: string; alias: string }[]>([]);
   const [recargoTransferencia, setRecargoTransferencia] = useState(0);
+  const [clienteSaldo, setClienteSaldo] = useState(0);
 
   // Print
   const [printOpen, setPrintOpen] = useState(false);
@@ -342,6 +344,14 @@ export default function PedidosOnlinePage() {
 
     // Instantly show payment from pedido fields
     setDetailPayments(buildPaymentsFromPedido(pedido));
+
+    // Fetch client saldo
+    if (pedido.clienteId) {
+      supabase.from("clientes").select("saldo").eq("id", pedido.clienteId).single()
+        .then(({ data: c }) => setClienteSaldo(c?.saldo || 0));
+    } else {
+      setClienteSaldo(0);
+    }
 
     setDetailOpen(true);
 
@@ -546,6 +556,45 @@ export default function PedidosOnlinePage() {
 
         if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
       }
+    }
+
+    // Reverse caja + CC + saldo when cancelling (cobro may have been confirmed before entregado)
+    if (nuevoEstado === "cancelado" && estadoAnterior !== "cancelado" && pedido.ventaId) {
+      const ventaId = pedido.ventaId;
+      const clienteId = pedido.clienteId;
+
+      // Reverse caja entries
+      const { data: cajaEntries } = await supabase
+        .from("caja_movimientos")
+        .select("id, monto")
+        .eq("referencia_id", ventaId)
+        .eq("referencia_tipo", "venta");
+      if (cajaEntries && cajaEntries.length > 0) {
+        await supabase.from("caja_movimientos").delete().eq("referencia_id", ventaId).eq("referencia_tipo", "venta");
+      }
+
+      // Reverse CC entries + recalculate saldo
+      if (clienteId) {
+        const { data: ccEntries } = await supabase
+          .from("cuenta_corriente")
+          .select("id, debe, haber")
+          .eq("venta_id", ventaId);
+        if (ccEntries && ccEntries.length > 0) {
+          const netDebt = ccEntries.reduce((s, e) => s + (e.debe || 0) - (e.haber || 0), 0);
+          await supabase.from("cuenta_corriente").delete().eq("venta_id", ventaId);
+          // Reverse the saldo change (subtract what was added as debt, add back what was collected)
+          if (netDebt !== 0) {
+            const { data: newSaldo } = await supabase.rpc("atomic_update_client_saldo", {
+              p_client_id: clienteId,
+              p_change: -netDebt,
+            });
+            setClienteSaldo(newSaldo ?? 0);
+          }
+        }
+      }
+
+      // Reset monto_pagado
+      await supabase.from("ventas").update({ monto_pagado: 0 }).eq("id", ventaId);
     }
 
     // Return stock when cancelling
@@ -905,71 +954,155 @@ export default function PedidosOnlinePage() {
           setConfirmDialog({ open: true, title, message, onConfirm: action });
         }}
         cobroConfig={{
+          ventaId: selectedPedido?.ventaId || "",
+          clienteId: selectedPedido?.clienteId || "",
+          clienteSaldo,
           cuentasBancarias,
           recargoTransferencia,
-          onRegistrarCobro: async (metodo, monto, opts) => {
+          onRegistrarCobro: async (result: CobroVentaResult) => {
             if (!selectedPedido) return;
-            // Save payment info to pedido + venta — NO caja entries yet.
-            // Caja entries are created only when marking "Entregado".
-            let formaPago = metodo;
-            let montoEfectivo = 0;
-            let montoTransferencia = 0;
-            let recargoTransf = 0;
-            const cuentaAlias = opts.cuenta || null;
+            const ventaId = selectedPedido.ventaId;
+            const clienteId = selectedPedido.clienteId;
+            const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+            const hora = nowTimeARG();
+            const cuentaAlias = result.cuentaBancaria || null;
 
-            if (metodo === "Mixto") {
-              const efvo = opts.efectivo || 0;
-              const transf = opts.transferencia || 0;
-              const surcharge = recargoTransferencia > 0 ? Math.round(transf * recargoTransferencia / 100) : 0;
-              montoEfectivo = efvo;
-              montoTransferencia = transf + surcharge;
-              recargoTransf = surcharge;
-            } else if (metodo === "Transferencia") {
-              const surcharge = recargoTransferencia > 0 ? Math.round(monto * recargoTransferencia / 100) : 0;
-              montoTransferencia = monto + surcharge;
-              recargoTransf = surcharge;
-            } else if (metodo === "Cuenta Corriente") {
-              formaPago = "Cuenta Corriente";
-            } else {
-              montoEfectivo = monto;
-            }
+            // 1. Calculate payment amounts
+            const montoEfectivo = result.efectivo;
+            const montoTransferencia = result.transferencia + result.surcharge;
+            const montoCuentaCorriente = result.cuentaCorriente;
 
-            const nuevoTotal = metodo === "Cuenta Corriente" ? monto : montoEfectivo + montoTransferencia;
-
-            // Update pedidos_tienda with payment data
+            // 2. Save payment info to pedido + venta
             await supabase.from("pedidos_tienda").update({
-              metodo_pago: metodo.toLowerCase(),
+              metodo_pago: result.metodo.toLowerCase(),
               monto_efectivo: montoEfectivo,
               monto_transferencia: montoTransferencia,
-              recargo_transferencia: recargoTransf,
-              total: nuevoTotal,
+              recargo_transferencia: result.surcharge,
+              total: montoEfectivo + montoTransferencia + montoCuentaCorriente,
             }).eq("id", selectedPedido.id);
 
-            // Update venta
-            if (selectedPedido.ventaId) {
+            if (ventaId) {
               await supabase.from("ventas").update({
-                forma_pago: formaPago,
+                forma_pago: result.metodo,
                 monto_efectivo: montoEfectivo,
                 monto_transferencia: montoTransferencia,
-                total: nuevoTotal,
+                total: montoEfectivo + montoTransferencia + montoCuentaCorriente,
                 cuenta_transferencia_alias: cuentaAlias,
-              }).eq("id", selectedPedido.ventaId);
+                monto_pagado: result.monto,
+              }).eq("id", ventaId);
             }
 
-            // Update local state
+            // 3. Create caja entries (for non-CC portions)
+            if (ventaId) {
+              const cajaEntries: any[] = [];
+              if (montoEfectivo > 0) {
+                cajaEntries.push({
+                  fecha: hoy, hora, tipo: "ingreso",
+                  descripcion: `Cobro Pedido Web #${selectedPedido.numero} (Efectivo)`,
+                  metodo_pago: "Efectivo", monto: montoEfectivo,
+                  referencia_id: ventaId, referencia_tipo: "venta",
+                });
+              }
+              if (montoTransferencia > 0) {
+                cajaEntries.push({
+                  fecha: hoy, hora, tipo: "ingreso",
+                  descripcion: `Cobro Pedido Web #${selectedPedido.numero} (Transferencia)`,
+                  metodo_pago: "Transferencia", monto: montoTransferencia,
+                  referencia_id: ventaId, referencia_tipo: "venta",
+                  ...(cuentaAlias ? { cuenta_bancaria: cuentaAlias } : {}),
+                });
+              }
+              if (cajaEntries.length > 0) {
+                await supabase.from("caja_movimientos").insert(cajaEntries);
+              }
+            }
+
+            // 4. Handle CC portion — create cuenta_corriente entry + update saldo
+            if (montoCuentaCorriente > 0 && clienteId && ventaId) {
+              const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+              const saldoActual = clienteData?.saldo || 0;
+              const nuevoSaldo = saldoActual + montoCuentaCorriente;
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: clienteId, fecha: hoy,
+                comprobante: `Pedido Web #${selectedPedido.numero}`,
+                descripcion: result.metodo === "Cuenta Corriente" ? "Pedido online a cuenta corriente" : "Resto a cuenta corriente (pago mixto)",
+                debe: montoCuentaCorriente, haber: 0, saldo: nuevoSaldo,
+                forma_pago: "Cuenta Corriente", venta_id: ventaId,
+              });
+              await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clienteId);
+              setClienteSaldo(nuevoSaldo);
+            }
+
+            // 5. Cobrar saldo adeudado — FIFO allocations
+            if (result.cobrarSaldo && result.saldoAllocations.length > 0 && clienteId) {
+              let saldoActual = clienteSaldo;
+              // If we just added CC above, re-fetch
+              if (montoCuentaCorriente > 0) {
+                const { data: freshCliente } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+                saldoActual = freshCliente?.saldo || 0;
+              }
+
+              for (const alloc of result.saldoAllocations) {
+                if (alloc.aplicar <= 0) continue;
+
+                // Create caja entry for saldo payment
+                const saldoCajaEntries: any[] = [];
+                if (result.metodo === "Efectivo" || (result.metodo === "Mixto" && montoEfectivo > 0)) {
+                  saldoCajaEntries.push({
+                    fecha: hoy, hora, tipo: "ingreso",
+                    descripcion: `Cobro saldo - Pedido #${alloc.numero} (Efectivo)`,
+                    metodo_pago: "Efectivo", monto: alloc.aplicar,
+                    referencia_id: alloc.venta_id, referencia_tipo: "venta",
+                  });
+                } else if (result.metodo === "Transferencia" || (result.metodo === "Mixto" && montoTransferencia > 0)) {
+                  saldoCajaEntries.push({
+                    fecha: hoy, hora, tipo: "ingreso",
+                    descripcion: `Cobro saldo - Pedido #${alloc.numero} (Transferencia)`,
+                    metodo_pago: "Transferencia", monto: alloc.aplicar,
+                    referencia_id: alloc.venta_id, referencia_tipo: "venta",
+                    ...(cuentaAlias ? { cuenta_bancaria: cuentaAlias } : {}),
+                  });
+                }
+                if (saldoCajaEntries.length > 0) {
+                  await supabase.from("caja_movimientos").insert(saldoCajaEntries);
+                }
+
+                // Update monto_pagado on the old venta
+                const { data: oldVenta } = await supabase.from("ventas").select("monto_pagado").eq("id", alloc.venta_id).single();
+                await supabase.from("ventas").update({
+                  monto_pagado: (oldVenta?.monto_pagado || 0) + alloc.aplicar,
+                }).eq("id", alloc.venta_id);
+
+                // CC haber entry (reducing saldo)
+                saldoActual = Math.max(0, Math.round((saldoActual - alloc.aplicar) * 100) / 100);
+                await supabase.from("cuenta_corriente").insert({
+                  cliente_id: clienteId, fecha: hoy,
+                  comprobante: `Cobro saldo - Pedido #${alloc.numero}`,
+                  descripcion: `Cobro parcial/total de deuda anterior`,
+                  debe: 0, haber: alloc.aplicar, saldo: saldoActual,
+                  forma_pago: result.metodo, venta_id: alloc.venta_id,
+                });
+              }
+
+              // Update client saldo
+              await supabase.from("clientes").update({ saldo: saldoActual }).eq("id", clienteId);
+              setClienteSaldo(saldoActual);
+            }
+
+            // 6. Update local state
             const updatedPedido = {
               ...selectedPedido,
-              metodo_pago: metodo.toLowerCase(),
+              metodo_pago: result.metodo.toLowerCase(),
               monto_efectivo: montoEfectivo,
               monto_transferencia: montoTransferencia,
-              recargo_transferencia: recargoTransf,
+              recargo_transferencia: result.surcharge,
               cuenta_bancaria_alias: cuentaAlias,
-              total: nuevoTotal,
+              total: montoEfectivo + montoTransferencia + montoCuentaCorriente,
             };
             setSelectedPedido(updatedPedido);
             setDetailPayments(buildPaymentsFromPedido(updatedPedido));
 
-            showAdminToast("Método de pago guardado", "success");
+            showAdminToast("Cobro registrado correctamente", "success");
             fetchPedidos();
           },
         }}

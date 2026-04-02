@@ -179,8 +179,8 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
       return;
     }
 
-    if (formaPago === "Transferencia" && cuentas.length > 0 && !cuentaBancariaId) {
-      showAdminToast("Seleccione una cuenta bancaria", "error");
+    if (formaPago === "Transferencia" && !cuentaBancariaId) {
+      showAdminToast(cuentas.length === 0 ? "No hay cuentas bancarias configuradas" : "Seleccione una cuenta bancaria", "error");
       return;
     }
 
@@ -311,21 +311,25 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
                 ))}
               </div>
             </div>
-            {formaPago === "Transferencia" && cuentas.length > 0 && (
+            {formaPago === "Transferencia" && (
               <div>
                 <Label>Cuenta origen</Label>
-                <Select value={cuentaBancariaId} onValueChange={(v) => setCuentaBancariaId(v || "")}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Seleccionar..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cuentas.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.nombre} — {c.alias}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {cuentas.length > 0 ? (
+                  <Select value={cuentaBancariaId} onValueChange={(v) => setCuentaBancariaId(v || "")}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Seleccionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cuentas.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nombre} — {c.alias}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-xs text-red-600 mt-1">No hay cuentas bancarias configuradas</p>
+                )}
               </div>
             )}
           </div>

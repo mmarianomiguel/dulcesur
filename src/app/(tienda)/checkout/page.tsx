@@ -788,41 +788,7 @@ export default function CheckoutPage() {
         }
       }
 
-      // Create caja_movimientos for the payment
-      // Only register in caja for ENVÍO orders where transfer was already made
-      // For RETIRO orders, payment happens at the store — admin registers it when collecting
-      if (metodoEntrega !== "retiro") {
-        const cajaFecha = hoy;
-        const cajaHora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
-        const cajaEntries: any[] = [];
-        if (metodoPago === "transferencia") {
-          const cuentaNombre = cuentasBancarias.find(c => c.id === selectedCuentaId)?.nombre || null;
-          cajaEntries.push({
-            fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-            descripcion: `Pedido Web #${numero}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`,
-            metodo_pago: "Transferencia", monto: vTotal,
-            referencia_id: venta.id, referencia_tipo: "venta",
-            cuenta_bancaria: cuentaNombre,
-          });
-        } else if (metodoPago === "mixto") {
-          const montoTransf = mixtoTransferencia + vRecargoTransf;
-          const cuentaNombre = cuentasBancarias.find(c => c.id === selectedCuentaId)?.nombre || null;
-          if (montoTransf > 0) {
-            cajaEntries.push({
-              fecha: cajaFecha, hora: cajaHora, tipo: "ingreso",
-              descripcion: `Pedido Web #${numero} (Transferencia)${cuentaNombre ? ` → ${cuentaNombre}` : ""}`,
-              metodo_pago: "Transferencia", monto: montoTransf,
-              referencia_id: venta.id, referencia_tipo: "venta",
-              cuenta_bancaria: cuentaNombre,
-            });
-          }
-          // Efectivo portion: NO caja entry — cash is collected at delivery, admin registers it then
-        }
-        if (cajaEntries.length > 0) {
-          await supabase.from("caja_movimientos").insert(cajaEntries);
-        }
-      }
-      // Retiro en local + Efectivo puro: no caja entry — admin registra al cobrar
+      // NO caja entries at checkout — admin confirms cobro from venta detail dialog
 
       localStorage.removeItem("carrito");
       window.dispatchEvent(new Event("cart-updated"));

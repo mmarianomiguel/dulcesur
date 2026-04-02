@@ -95,19 +95,6 @@ const emptyForm = {
   maps_url: "",
 };
 
-interface CuentaMovimiento {
-  id: string;
-  fecha: string;
-  comprobante: string | null;
-  descripcion: string | null;
-  debe: number;
-  haber: number;
-  saldo: number;
-  forma_pago: string | null;
-  venta_id: string | null;
-  ventas?: { tipo_comprobante: string; numero: string } | null;
-}
-
 export default function ClientesPage() {
   const router = useRouter();
   const currentUser = useCurrentUser();
@@ -156,7 +143,8 @@ export default function ClientesPage() {
   const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, totalComprado: 0 });
   const [movCCTotals, setMovCCTotals] = useState({ debe: 0, haber: 0, saldo: 0, saldoInicial: 0 });
   const [movExpanded, setMovExpanded] = useState<string | null>(null);
-  const [movTab, setMovTab] = useState<"compras" | "cc" | "resumen">("compras");
+  const [movTab, setMovTab] = useState<"resumen" | "compras">("resumen");
+  const [movCCFilter, setMovCCFilter] = useState("all");
   // Payment from movimientos
   const [payMovOpen, setPayMovOpen] = useState(false);
   const [payMovVenta, setPayMovVenta] = useState<any>(null);
@@ -171,12 +159,6 @@ export default function ClientesPage() {
 
   // Cobranzas state
   const [cobranzasSearch, setCobranzasSearch] = useState("");
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedCobranzaClient, setSelectedCobranzaClient] = useState<Cliente | null>(null);
-  const [cobranzaMovimientos, setCobranzaMovimientos] = useState<CuentaMovimiento[]>([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [cobranzaFilterFrom, setCobranzaFilterFrom] = useState("");
-  const [cobranzaFilterTo, setCobranzaFilterTo] = useState("");
   const [cobroOpen, setCobroOpen] = useState(false);
   const [cobroReceipt, setCobroReceipt] = useState<{
     open: boolean; cliente: string; clienteCuit: string; clienteDomicilio: string;
@@ -186,7 +168,6 @@ export default function ClientesPage() {
     comprobantes: { comprobante: string; debe: number; haber: number }[];
   } | null>(null);
   const [cobroClient, setCobroClient] = useState<Cliente | null>(null);
-  const [cobroMonto, setCobroMonto] = useState(0);
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [empresa, setEmpresa] = useState<any>(null);
@@ -423,49 +404,31 @@ export default function ClientesPage() {
   const openMovimientos = async (client: Cliente) => {
     setMovClient(client);
     setMovOpen(true);
-    const hoy = todayARG();
-    const hace30 = new Date(Date.now() - 30 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-    setMovDesde(hace30);
-    setMovHasta(hoy);
-    await fetchMovimientos(client.id, hace30, hoy);
+    setMovDesde("");
+    setMovHasta("");
+    setMovCCFilter("all");
+    await fetchMovimientos(client.id, "", "");
   };
 
   const fetchMovimientos = async (clienteId: string, desde: string, hasta: string) => {
     setMovLoading(true);
 
-    // Run all queries in parallel
-    const [{ data: ventas }, { data: prevData }, { data: ccData }, { data: freshCli }] = await Promise.all([
-      // Tab Compras: all sales
-      supabase
-        .from("ventas")
-        .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
-        .eq("cliente_id", clienteId)
-        .gte("fecha", desde)
-        .lte("fecha", hasta)
-        .neq("estado", "anulada")
-        .order("created_at", { ascending: false }),
-      // Saldo inicial: last movement BEFORE the period
-      supabase
-        .from("cuenta_corriente")
-        .select("saldo")
-        .eq("cliente_id", clienteId)
-        .lt("fecha", desde)
-        .order("fecha", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1),
-      // Movements in period
-      supabase
-        .from("cuenta_corriente")
-        .select("*")
-        .eq("cliente_id", clienteId)
-        .gte("fecha", desde)
-        .lte("fecha", hasta)
-        .order("fecha", { ascending: true })
-        .order("created_at", { ascending: true }),
-      // Fresh client saldo
+    // Build queries
+    let ventasQuery = supabase
+      .from("ventas")
+      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, monto_pagado, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
+      .eq("cliente_id", clienteId)
+      .neq("estado", "anulada")
+      .order("created_at", { ascending: false });
+    if (desde) ventasQuery = ventasQuery.gte("fecha", desde);
+    if (hasta) ventasQuery = ventasQuery.lte("fecha", hasta);
+
+    const [{ data: ventas }, { data: freshCli }] = await Promise.all([
+      ventasQuery,
       supabase.from("clientes").select("saldo").eq("id", clienteId).single(),
     ]);
 
+    // === Tab Compras ===
     const compras: any[] = [];
     for (const v of ventas || []) {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
@@ -487,24 +450,141 @@ export default function ClientesPage() {
     const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
     setMovTotals({ ventas: totalVentas, nc: totalNC, totalComprado: totalVentas - totalNC });
 
-    const saldoInicial = prevData && prevData.length > 0 ? (prevData[0].saldo || 0) : 0;
+    // === Tab Resumen (Libro Diario) — ALL ventas + CC payments ===
+    // Fetch ALL cuenta_corriente entries (need haber for payments, debe for Mixto CC portion)
+    let ccQuery = supabase
+      .from("cuenta_corriente")
+      .select("id, fecha, created_at, comprobante, descripcion, debe, haber, forma_pago, venta_id")
+      .eq("cliente_id", clienteId)
+      .order("fecha", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (desde) ccQuery = ccQuery.gte("fecha", desde);
+    if (hasta) ccQuery = ccQuery.lte("fecha", hasta);
+    const { data: ccAllData } = await ccQuery;
 
-    const ccRows = (ccData || []).map((row: any) => ({
-      id: row.id,
-      fecha: row.fecha,
-      comprobante: row.comprobante || "—",
-      descripcion: row.descripcion || "",
-      debe: row.debe || 0,
-      haber: row.haber || 0,
-      saldo: row.saldo || 0,
-      forma_pago: row.forma_pago,
-      venta_id: row.venta_id,
-    }));
+    // Build a map: venta_id → CC debe amount (used to find CC portion of Mixto sales)
+    const ccDebeByVenta = new Map<string, number>();
+    for (const cc of ccAllData || []) {
+      if (cc.venta_id && cc.debe > 0) {
+        ccDebeByVenta.set(cc.venta_id, (ccDebeByVenta.get(cc.venta_id) || 0) + cc.debe);
+      }
+    }
+
+    // Haber entries from CC = payments (cobros, old and new)
+    const ccHaberData = (ccAllData || []).filter((cc: any) => cc.haber > 0);
+
+    // Fetch caja_movimientos for ALL ventas (payment desglose)
+    const allVentaIds = (ventas || []).map((v: any) => v.id);
+    let cajaByVenta = new Map<string, { metodo_pago: string; monto: number }[]>();
+    if (allVentaIds.length > 0) {
+      // Batch in groups of 100 to avoid URL length limits
+      for (let i = 0; i < allVentaIds.length; i += 100) {
+        const batch = allVentaIds.slice(i, i + 100);
+        const { data: cajaData } = await supabase
+          .from("caja_movimientos")
+          .select("referencia_id, metodo_pago, monto")
+          .in("referencia_id", batch)
+          .eq("referencia_tipo", "venta")
+          .eq("tipo", "ingreso");
+        for (const cm of cajaData || []) {
+          if (!cm.referencia_id) continue;
+          const arr = cajaByVenta.get(cm.referencia_id) || [];
+          arr.push({ metodo_pago: cm.metodo_pago, monto: cm.monto });
+          cajaByVenta.set(cm.referencia_id, arr);
+        }
+      }
+    }
+
+    // Build libro diario entries
+    const entries: { id: string; fecha: string; created_at: string; comprobante: string; debe: number; haber: number; forma_pago: string; descripcion: string; venta_id?: string }[] = [];
+
+    const shortCompType = (tipo: string) => {
+      if (tipo?.includes("Nota de Crédito")) return tipo.replace(/Nota de Crédito\s*/i, "NC ");
+      if (tipo?.includes("Nota de Débito")) return tipo.replace(/Nota de Débito\s*/i, "ND ");
+      return tipo?.replace(/Factura\s*/i, "FC ").replace(/Remito\s*/i, "RM ") || "";
+    };
+
+    for (const v of ventas || []) {
+      const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
+      const isND = v.tipo_comprobante?.includes("Nota de Débito");
+      const comp = `${shortCompType(v.tipo_comprobante)} ${v.numero}`.replace(/\s+/g, " ").trim();
+      const fp = v.forma_pago || "";
+
+      if (isNC) {
+        // NC reduces debt → Haber
+        entries.push({
+          id: `v-${v.id}-haber`, fecha: v.fecha, created_at: v.created_at || v.fecha,
+          comprobante: comp, debe: 0, haber: v.total, forma_pago: fp, descripcion: "", venta_id: v.id,
+        });
+      } else {
+        // Regular sale or ND → Debe (full amount)
+        entries.push({
+          id: `v-${v.id}-debe`, fecha: v.fecha, created_at: v.created_at || v.fecha,
+          comprobante: comp, debe: v.total, haber: 0, forma_pago: fp, descripcion: "", venta_id: v.id,
+        });
+
+        // Add Haber entries for payments on this sale
+        // Use caja_movimientos as primary source (covers POS, web, cobros from POS)
+        // Then CC haber as fallback for CC-only payments
+        if (!isND) {
+          const cajaEntries = cajaByVenta.get(v.id);
+          if (cajaEntries && cajaEntries.length > 0) {
+            // Detailed breakdown from caja (works for Efectivo, Transferencia, Mixto, cobro saldo)
+            for (let ci = 0; ci < cajaEntries.length; ci++) {
+              const ce = cajaEntries[ci];
+              entries.push({
+                id: `v-${v.id}-pago-${ci}`, fecha: v.fecha, created_at: v.created_at || v.fecha + `T00:00:0${ci + 1}`,
+                comprobante: comp, debe: 0, haber: ce.monto, forma_pago: ce.metodo_pago, descripcion: "", venta_id: v.id,
+              });
+            }
+          } else if (fp !== "Cuenta Corriente" && fp !== "Pendiente") {
+            // No caja entries but not CC — use monto_pagado as fallback (old data)
+            const montoPagado = v.monto_pagado || 0;
+            if (montoPagado > 0) {
+              entries.push({
+                id: `v-${v.id}-pago`, fecha: v.fecha, created_at: v.created_at || v.fecha + "T00:00:01",
+                comprobante: comp, debe: 0, haber: montoPagado, forma_pago: fp, descripcion: "", venta_id: v.id,
+              });
+            }
+          }
+          // CC and Pendiente → Haber comes from CC haber entries below
+        }
+      }
+    }
+
+    // Add cuenta_corriente haber entries (CC payments — old cobros + new cobros)
+    // Skip CC habers that reference a venta already covered by caja_movimientos
+    // (POS cobrar saldo creates BOTH a caja entry AND a CC entry — avoid double-counting)
+    const ventasWithCaja = new Set(
+      [...cajaByVenta.keys()].filter((vid) => cajaByVenta.get(vid)!.length > 0)
+    );
+    for (const cc of ccHaberData || []) {
+      // Skip if this CC haber references a venta that already has caja desglose
+      if (cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
+      entries.push({
+        id: `cc-${cc.id}`, fecha: cc.fecha, created_at: cc.created_at || cc.fecha,
+        comprobante: cc.comprobante || "Pago", debe: 0, haber: cc.haber,
+        forma_pago: cc.forma_pago || "", descripcion: cc.descripcion || "",
+      });
+    }
+
+    // Sort chronologically
+    entries.sort((a, b) => {
+      if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha);
+      return (a.created_at || "").localeCompare(b.created_at || "");
+    });
+
+    // Calculate running saldo (debe increases, haber decreases)
+    let runSaldo = 0;
+    const ccRows = entries.map((e) => {
+      runSaldo = Math.round((runSaldo + e.debe - e.haber) * 100) / 100;
+      return { ...e, saldo: runSaldo };
+    });
     setMovCCRows(ccRows);
 
-    const totalDebe = ccRows.reduce((s: number, r: any) => s + r.debe, 0);
-    const totalHaber = ccRows.reduce((s: number, r: any) => s + r.haber, 0);
-    setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0, saldoInicial });
+    const totalDebe = ccRows.reduce((s: number, r) => s + r.debe, 0);
+    const totalHaber = ccRows.reduce((s: number, r) => s + r.haber, 0);
+    setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0, saldoInicial: 0 });
 
     setMovLoading(false);
   };
@@ -643,29 +723,8 @@ export default function ClientesPage() {
     return clientsConDeuda.filter((c) => norm(c.nombre).includes(s));
   }, [clientsConDeuda, cobranzasSearch]);
 
-  const openCobranzaDetail = async (client: Cliente) => {
-    setSelectedCobranzaClient(client);
-    setDetailOpen(true);
-    setLoadingDetail(true);
-
-    let query = supabase
-      .from("cuenta_corriente")
-      .select("*")
-      .eq("cliente_id", client.id)
-      .order("fecha", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    if (cobranzaFilterFrom) query = query.gte("fecha", cobranzaFilterFrom);
-    if (cobranzaFilterTo) query = query.lte("fecha", cobranzaFilterTo);
-
-    const { data } = await query;
-    setCobranzaMovimientos((data as CuentaMovimiento[]) || []);
-    setLoadingDetail(false);
-  };
-
   const openCobro = (client: Cliente) => {
     setCobroClient(client);
-    setCobroMonto(client.saldo > 0 ? client.saldo : 0);
     setCobroOpen(true);
   };
 
@@ -1317,10 +1376,10 @@ export default function ClientesPage() {
                           <td className="py-3 px-4 text-right font-semibold text-orange-500">{formatCurrency(c.saldo)}</td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex justify-end gap-2">
-                              <Button variant="outline" size="sm" onClick={() => openCobranzaDetail(c)}>
+                              <Button variant="outline" size="sm" onClick={() => openMovimientos(c)}>
                                 <Eye className="w-3.5 h-3.5 mr-1" />Resumen
                               </Button>
-                              <Button size="sm" onClick={() => openCobro(c)}>
+                              <Button size="sm" onClick={() => { setCobroClient(c); setCobroOpen(true); }}>
                                 <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar
                               </Button>
                             </div>
@@ -1437,37 +1496,74 @@ export default function ClientesPage() {
 
       {/* Movements Dialog */}
       <Dialog open={movOpen} onOpenChange={setMovOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="w-5 h-5" />
-              Movimientos - {movClient?.nombre}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex items-end gap-3 mt-2">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Desde</Label>
-              <Input type="date" value={movDesde} onChange={(e) => setMovDesde(e.target.value)} className="h-8 text-sm" />
+        <DialogContent className="max-w-[880px] max-h-[90vh] overflow-y-auto p-0" showCloseButton={false}>
+          {/* Header */}
+          <div className="px-6 pt-5 pb-0">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-foreground flex items-center justify-center">
+                  <History className="w-4 h-4 text-background" />
+                </div>
+                <div>
+                  <h2 className="text-[15px] font-bold">Resumen de Cuenta</h2>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {movClient?.nombre}
+                    {movClient?.cuit && <><span className="mx-1 text-muted-foreground/40">|</span>CUIT {movClient.cuit}</>}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setMovOpen(false)} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Hasta</Label>
-              <Input type="date" value={movHasta} onChange={(e) => setMovHasta(e.target.value)} className="h-8 text-sm" />
-            </div>
-            <Button size="sm" className="h-8" onClick={() => movClient && fetchMovimientos(movClient.id, movDesde, movHasta)}>
-              <Search className="w-3.5 h-3.5 mr-1" />Filtrar
-            </Button>
-          </div>
 
-          <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "compras" | "cc" | "resumen")} className="mt-3">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="compras">Compras</TabsTrigger>
-              <TabsTrigger value="cc">Cuenta Corriente</TabsTrigger>
-              <TabsTrigger value="resumen">Resumen</TabsTrigger>
-            </TabsList>
+            {/* Filters row */}
+            <div className="flex items-end gap-2 mb-4">
+              <div>
+                <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Filtrar</label>
+                <select
+                  value={movCCFilter}
+                  onChange={(e) => setMovCCFilter(e.target.value)}
+                  className="border rounded-lg px-3 py-1.5 h-8 text-xs bg-background focus:outline-none focus:ring-2 focus:ring-ring w-48"
+                >
+                  <option value="all">Ver todos los movimientos</option>
+                  <option value="debe">Solo compras (debe)</option>
+                  <option value="haber">Solo pagos (haber)</option>
+                  <option value="pendiente">Solo con saldo pendiente</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Desde</label>
+                <Input type="date" value={movDesde} onChange={(e) => setMovDesde(e.target.value)} className="h-8 text-xs w-36" />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Hasta</label>
+                <Input type="date" value={movHasta} onChange={(e) => setMovHasta(e.target.value)} className="h-8 text-xs w-36" />
+              </div>
+              <Button size="sm" className="h-8" onClick={() => movClient && fetchMovimientos(movClient.id, movDesde, movHasta)}>
+                Filtrar
+              </Button>
+            </div>
+
+            {/* Tabs */}
+            <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "resumen" | "compras")} className="">
+            <div className="flex gap-6 border-b">
+              <button
+                onClick={() => setMovTab("resumen")}
+                className={`pb-2.5 text-[13px] px-0.5 border-b-2 transition-colors ${movTab === "resumen" ? "text-foreground border-foreground font-semibold" : "text-muted-foreground border-transparent hover:text-foreground/70"}`}
+              >
+                Resumen
+              </button>
+              <button
+                onClick={() => setMovTab("compras")}
+                className={`pb-2.5 text-[13px] px-0.5 border-b-2 transition-colors ${movTab === "compras" ? "text-foreground border-foreground font-semibold" : "text-muted-foreground border-transparent hover:text-foreground/70"}`}
+              >
+                Compras
+              </button>
+            </div>
 
             {/* ══════ TAB COMPRAS ══════ */}
-            <TabsContent value="compras" className="mt-3">
+            <TabsContent value="compras" className="mt-0 px-6 pt-4 pb-6">
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Ventas</p>
@@ -1583,213 +1679,191 @@ export default function ClientesPage() {
               )}
             </TabsContent>
 
-            {/* ══════ TAB CUENTA CORRIENTE ══════ */}
-            <TabsContent value="cc" className="mt-3">
+            {/* ══════ TAB RESUMEN (Libro Diario) ══════ */}
+            <TabsContent value="resumen" className="mt-0 px-6 pt-4 pb-6">
               {(() => {
                 // Helpers
                 const fmtSaldo = (v: number) => v > 0 ? formatCurrency(v) : v < 0 ? `${formatCurrency(Math.abs(v))} a favor` : "$0";
                 const saldoColor = (v: number) => v > 0 ? "text-orange-600" : v < 0 ? "text-emerald-600" : "";
-                const cleanComprobante = (c: string) => {
-                  return c
-                    .replace(/Venta\s+#?/i, "FC ")
-                    .replace(/Edición Venta\s+#?/i, "AJ ")
-                    .replace(/Cobro (saldo|deuda)\s*[-–]\s*/i, "RE ")
-                    .replace(/^RE\s+\d{4}-\d{2}-\d{2}$/, "RE")
-                    .replace(/(\d{5})-(\d{8})/, (_, _a, b) => parseInt(b).toString().padStart(4, "0"));
-                };
-                const cleanDescripcion = (d: string) => {
-                  return d
-                    .replace(/\s*—\s*desde\s*(Punto de Venta|Clientes)/gi, "")
-                    .replace(/\s*\(Cuenta Corriente\)/gi, "")
-                    .replace(/Cobro saldo pendiente\s*/i, "Cobro saldo")
-                    .replace(/Venta\s*-\s*Cuenta Corriente\s*(\(parcial\))?/i, (_, p) => p ? "Cta.Cte. (parcial)" : "Cta.Cte.")
-                    .replace(/Ajuste por edición\s*\((aumento|reducción)\)/i, (_, t) => t === "aumento" ? "Ajuste débito" : "Ajuste crédito")
-                    .replace(/\(saldo a favor aplicado:.*?\)/i, "");
-                };
+                const isNCComp = (comp: string) => /^NC\s/i.test(comp);
                 const exportCCExcel = async () => {
                   if (!movClient || movCCRows.length === 0) return;
                   const XLSX = await import("xlsx");
                   const rows = movCCRows.map((r) => ({
                     Fecha: new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR"),
-                    Comprobante: cleanComprobante(r.comprobante),
-                    Descripcion: cleanDescripcion(r.descripcion),
+                    Comprobante: r.comprobante,
                     Debe: r.debe > 0 ? Math.round(r.debe) : "",
                     Haber: r.haber > 0 ? Math.round(r.haber) : "",
                     Saldo: Math.round(r.saldo),
+                    "Cond. Pago": r.forma_pago || "",
+                    Obs: r.descripcion || "",
                   }));
                   const ws = XLSX.utils.json_to_sheet(rows);
-                  ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+                  ws["!cols"] = [{ wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 20 }];
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, "Cuenta Corriente");
                   XLSX.writeFile(wb, `CC_${movClient.nombre.replace(/\s/g, "_")}_${todayARG()}.xlsx`);
                 };
 
-                const saldoIni = Math.round(movCCTotals.saldoInicial);
                 const saldoAct = Math.round(movCCTotals.saldo);
+
+                // Apply filter
+                const filteredCCRows = movCCRows.filter((row) => {
+                  if (movCCFilter === "debe") return row.debe > 0;
+                  if (movCCFilter === "haber") return row.haber > 0;
+                  if (movCCFilter === "pendiente") return row.saldo > 0;
+                  return true;
+                });
 
                 return (
                   <>
-                    {/* Summary */}
-                    <div className="grid grid-cols-4 gap-2 mb-3">
-                      <div className="rounded-lg border p-2.5">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo inicial</p>
-                        <p className={`text-base font-bold ${saldoColor(saldoIni)}`}>{fmtSaldo(saldoIni)}</p>
-                      </div>
-                      <div className="rounded-lg border p-2.5">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Débitos</p>
-                        <p className="text-base font-bold">{formatCurrency(Math.round(movCCTotals.debe))}</p>
-                      </div>
-                      <div className="rounded-lg border p-2.5">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Créditos</p>
-                        <p className="text-base font-bold text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</p>
-                      </div>
-                      <div className={`rounded-lg border p-2.5 ${saldoAct > 0 ? "bg-orange-50 border-orange-200" : saldoAct < 0 ? "bg-emerald-50 border-emerald-200" : ""}`}>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo actual</p>
-                        <p className={`text-base font-bold ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</p>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-2 mb-2">
-                      <Button size="sm" variant="outline" onClick={recalcularSaldo} title="Recalcular saldo desde cuenta corriente">
-                        <RefreshCw className="w-3.5 h-3.5 mr-1" />Recalcular
-                      </Button>
-                      {movCCRows.length > 0 && (
-                        <Button size="sm" variant="outline" onClick={exportCCExcel}>
-                          <Download className="w-3.5 h-3.5 mr-1" />Excel
-                        </Button>
-                      )}
-                      {movCCTotals.saldo > 0 && movClient && (
-                        <Button size="sm" onClick={() => openPayMov({ id: movClient.id, descripcion: "Saldo total", saldo_pendiente: movCCTotals.saldo, total: movCCTotals.saldo, pagado: 0 })}>
-                          <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar {formatCurrency(Math.round(movCCTotals.saldo))}
-                        </Button>
-                      )}
-                    </div>
-
                     {/* Table */}
                     {movLoading ? (
                       <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
                     ) : movCCRows.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">Sin movimientos en cuenta corriente</p>
+                        <p className="text-sm">Sin movimientos</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto border rounded-lg">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-muted/50 border-b">
-                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
-                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Comp.</th>
-                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
-                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
-                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
-                              <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {/* Saldo inicial row */}
-                            {saldoIni !== 0 && (
-                              <tr className="border-b bg-muted/20">
-                                <td className="py-2 px-3 text-xs text-muted-foreground" colSpan={5}>
-                                  <span className="italic">Saldo al inicio del período</span>
-                                </td>
-                                <td className={`py-2 px-3 text-right font-bold text-xs tabular-nums ${saldoColor(saldoIni)}`}>
-                                  {fmtSaldo(saldoIni)}
-                                </td>
+                      <div className="border rounded-xl overflow-hidden">
+                        <div className="max-h-[400px] overflow-y-auto">
+                          <table className="w-full text-[13px]">
+                            <thead className="sticky top-0 z-10">
+                              <tr className="bg-muted/50 border-b">
+                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[72px]">Fecha</th>
+                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Comprobante</th>
+                                <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">Debe</th>
+                                <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">Haber</th>
+                                <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[110px]">Saldo</th>
+                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[110px]">Cond. Pago</th>
+                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[60px]">Obs.</th>
                               </tr>
-                            )}
-                            {movCCRows.map((row, i) => {
-                              const prevDate = i > 0 ? movCCRows[i - 1].fecha : null;
-                              const isNewDate = row.fecha !== prevDate;
-                              const sr = Math.round(row.saldo);
-                              return (
-                                <tr key={row.id || i} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
-                                  <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
-                                    {isNewDate ? new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
-                                  </td>
-                                  <td className="py-2 px-3 text-xs font-mono whitespace-nowrap">{cleanComprobante(row.comprobante)}</td>
-                                  <td className="py-2 px-3 text-xs text-muted-foreground">{cleanDescripcion(row.descripcion)}</td>
-                                  <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{row.debe > 0 ? formatCurrency(Math.round(row.debe)) : ""}</td>
-                                  <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(Math.round(row.haber)) : ""}</td>
-                                  <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${saldoColor(sr)}`}>{fmtSaldo(sr)}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-muted/50 border-t font-bold text-xs">
-                              <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales del período</td>
-                              <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(movCCTotals.debe))}</td>
-                              <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</td>
-                              <td className={`py-2.5 px-3 text-right tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {filteredCCRows.map((row, i) => {
+                                const prevDate = i > 0 ? filteredCCRows[i - 1].fecha : null;
+                                const isNewDate = row.fecha !== prevDate;
+                                const sr = Math.round(row.saldo);
+                                const compIsNC = isNCComp(row.comprobante);
+                                const condPago = row.forma_pago || "";
+                                const isTransfer = condPago === "Transferencia";
+                                return (
+                                  <tr key={row.id || i} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
+                                    <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
+                                      {isNewDate ? new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}
+                                    </td>
+                                    <td className="py-2 px-3 text-xs font-mono whitespace-nowrap">
+                                      {compIsNC ? (
+                                        <span className="inline-flex items-center gap-1.5">
+                                          {row.comprobante}
+                                          <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-100 text-red-600">NC</span>
+                                        </span>
+                                      ) : row.comprobante}
+                                    </td>
+                                    <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{row.debe > 0 ? formatCurrency(Math.round(row.debe)) : ""}</td>
+                                    <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(Math.round(row.haber)) : ""}</td>
+                                    <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${saldoColor(sr)}`}>{fmtSaldo(sr)}</td>
+                                    <td className="py-2 px-3 text-xs text-muted-foreground">
+                                      {isTransfer ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400">Transferencia</span>
+                                      ) : condPago === "Cuenta Corriente" ? "Cuenta Corriente" : condPago}
+                                    </td>
+                                    <td className="py-2 px-3 text-xs text-muted-foreground truncate max-w-[60px]" title={row.descripcion || ""}>
+                                      {row.descripcion || ""}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Totals footer — Pendiente / Cobrado / Saldo Deudor */}
+                        <div className="bg-muted/50 border-t px-4 py-3">
+                          <div className="flex items-center justify-end gap-6">
+                            <div className="text-right">
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Pendiente</p>
+                              <p className="text-sm font-bold tabular-nums">{formatCurrency(Math.round(movCCTotals.debe))}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Cobrado</p>
+                              <p className="text-sm font-bold text-emerald-600 tabular-nums">{formatCurrency(Math.round(movCCTotals.haber))}</p>
+                            </div>
+                            <div className="text-right pl-4 border-l-2">
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Saldo deudor</p>
+                              <p className={`text-lg font-extrabold tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
+
+                    {/* Action buttons — below table like the mockup */}
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="flex gap-2">
+                        {movCCTotals.saldo > 0 && movClient && (
+                          <Button size="sm" className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" onClick={() => { setCobroClient(movClient); setCobroOpen(true); }}>
+                            <DollarSign className="w-4 h-4 mr-1.5" />Ingresar Pago
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="h-9" onClick={() => {
+                          if (!movClient || movCCRows.length === 0) return;
+                          const win = window.open("", "_blank", "width=800,height=1100");
+                          if (!win) return;
+                          const rows = filteredCCRows.map((r, i) => {
+                            const prev = i > 0 ? filteredCCRows[i - 1].fecha : null;
+                            const showDate = r.fecha !== prev;
+                            return `<tr style="border-bottom:1px solid #f1f5f9;${showDate && i > 0 ? "border-top:1px solid #e2e8f0;" : ""}">
+                              <td style="padding:6px 10px;font-size:12px;color:#94a3b8;font-variant-numeric:tabular-nums;">${showDate ? new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}</td>
+                              <td style="padding:6px 10px;font-size:12px;font-family:monospace;">${r.comprobante}</td>
+                              <td style="padding:6px 10px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;">${r.debe > 0 ? formatCurrency(Math.round(r.debe)) : ""}</td>
+                              <td style="padding:6px 10px;text-align:right;font-size:12px;color:#059669;font-variant-numeric:tabular-nums;">${r.haber > 0 ? formatCurrency(Math.round(r.haber)) : ""}</td>
+                              <td style="padding:6px 10px;text-align:right;font-size:12px;font-weight:bold;color:${Math.round(r.saldo) > 0 ? "#ea580c" : "#059669"};font-variant-numeric:tabular-nums;">${fmtSaldo(Math.round(r.saldo))}</td>
+                              <td style="padding:6px 10px;font-size:12px;color:#64748b;">${r.forma_pago || ""}</td>
+                              <td style="padding:6px 10px;font-size:12px;color:#94a3b8;">${r.descripcion || ""}</td>
+                            </tr>`;
+                          }).join("");
+                          win.document.write(`<!DOCTYPE html><html><head><title>Resumen — ${movClient.nombre}</title><style>@page{size:A4 landscape;margin:15mm;}body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#0f172a;}table{width:100%;border-collapse:collapse;}</style></head><body>
+                            <h2 style="font-size:16px;margin-bottom:4px;">Resumen de Cuenta</h2>
+                            <p style="font-size:12px;color:#94a3b8;margin-bottom:16px;">${movClient.nombre}${movClient.cuit ? " | CUIT " + movClient.cuit : ""}${movDesde ? ` | ${movDesde} a ${movHasta}` : " | Todas las operaciones"}</p>
+                            <table><thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Fecha</th>
+                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Comprobante</th>
+                              <th style="text-align:right;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Debe</th>
+                              <th style="text-align:right;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Haber</th>
+                              <th style="text-align:right;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Saldo</th>
+                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Cond. Pago</th>
+                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Obs.</th>
+                            </tr></thead><tbody>${rows}</tbody>
+                            <tfoot><tr style="background:#f8fafc;border-top:2px solid #e2e8f0;">
+                              <td colspan="4" style="padding:10px;font-size:11px;font-weight:bold;">Saldo deudor</td>
+                              <td style="padding:10px;text-align:right;font-size:16px;font-weight:800;color:${saldoAct > 0 ? "#ea580c" : "#059669"};">${fmtSaldo(saldoAct)}</td>
+                              <td colspan="2"></td>
+                            </tr></tfoot></table></body></html>`);
+                          win.document.close();
+                          win.print();
+                        }}>
+                          <Printer className="w-3.5 h-3.5 mr-1.5" />Imprimir resumen
+                        </Button>
+                        {movCCRows.length > 0 && (
+                          <Button size="sm" variant="outline" className="h-9" onClick={exportCCExcel}>
+                            <Download className="w-3.5 h-3.5 mr-1.5" />Exportar
+                          </Button>
+                        )}
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-9 text-xs text-muted-foreground" onClick={recalcularSaldo} title="Recalcular saldo desde cuenta corriente">
+                        <RefreshCw className="w-3 h-3 mr-1" />Recalcular
+                      </Button>
+                    </div>
                   </>
                 );
               })()}
             </TabsContent>
 
-            {/* ══════ TAB RESUMEN ══════ */}
-            <TabsContent value="resumen" className="mt-3">
-              {movLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-              ) : (
-                <div className="space-y-3">
-                  {/* KPIs */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="rounded-lg border p-2.5 text-center">
-                      <p className="text-[10px] text-muted-foreground uppercase">Compras</p>
-                      <p className="text-sm font-bold">{formatCurrency(Math.round(movCCTotals.debe))}</p>
-                    </div>
-                    <div className="rounded-lg border p-2.5 text-center">
-                      <p className="text-[10px] text-muted-foreground uppercase">Pagos</p>
-                      <p className="text-sm font-bold text-emerald-600">{formatCurrency(Math.round(movCCTotals.haber))}</p>
-                    </div>
-                    <div className="rounded-lg border p-2.5 text-center">
-                      <p className="text-[10px] text-muted-foreground uppercase">Operaciones</p>
-                      <p className="text-sm font-bold">{movCCRows.length}</p>
-                    </div>
-                    <div className="rounded-lg border p-2.5 text-center bg-primary/5">
-                      <p className="text-[10px] text-muted-foreground uppercase">Saldo</p>
-                      <p className={`text-sm font-bold ${movCCTotals.saldo > 0 ? "text-orange-500" : movCCTotals.saldo < 0 ? "text-emerald-600" : ""}`}>
-                        {formatCurrency(Math.round(Math.abs(movCCTotals.saldo)))}
-                        {movCCTotals.saldo < 0 && <span className="text-[10px] ml-0.5">a favor</span>}
-                      </p>
-                    </div>
-                  </div>
-                  {/* Timeline */}
-                  {movCCRows.length === 0 ? (
-                    <p className="text-center py-8 text-sm text-muted-foreground">Sin movimientos en el período</p>
-                  ) : (
-                    <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                      {movCCRows.map((r: any) => {
-                        const isVenta = r.debe > 0;
-                        return (
-                          <div key={r.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border hover:bg-muted/30">
-                            <div className={`w-2 h-2 rounded-full shrink-0 ${isVenta ? "bg-orange-400" : "bg-emerald-400"}`} />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium truncate">{r.comprobante}</p>
-                              <p className="text-[11px] text-muted-foreground">{r.fecha}{r.forma_pago ? ` · ${r.forma_pago}` : ""}</p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className={`text-sm font-semibold ${isVenta ? "text-orange-500" : "text-emerald-600"}`}>
-                                {isVenta ? `+${formatCurrency(r.debe)}` : `-${formatCurrency(r.haber)}`}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">Saldo: {formatCurrency(r.saldo)}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </TabsContent>
+            {/* Old resumen tab removed — now unified into the CC tab above */}
           </Tabs>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1996,68 +2070,6 @@ export default function ClientesPage() {
                   <Printer className="w-4 h-4 mr-2" />Imprimir
                 </Button>
               </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Cobranzas - Resumen de Cuenta Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Resumen de Cuenta — {selectedCobranzaClient?.nombre}</DialogTitle>
-          </DialogHeader>
-          <div className="flex gap-2 items-end mb-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Desde</Label>
-              <Input type="date" value={cobranzaFilterFrom} onChange={(e) => setCobranzaFilterFrom(e.target.value)} className="w-36 h-8 text-xs" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Hasta</Label>
-              <Input type="date" value={cobranzaFilterTo} onChange={(e) => setCobranzaFilterTo(e.target.value)} className="w-36 h-8 text-xs" />
-            </div>
-            <Button variant="outline" size="sm" onClick={() => selectedCobranzaClient && openCobranzaDetail(selectedCobranzaClient)}>Filtrar</Button>
-          </div>
-
-          {loadingDetail ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : cobranzaMovimientos.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8 text-sm">No hay movimientos registrados</p>
-          ) : (
-            <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50 text-muted-foreground">
-                    <th className="text-left py-2 px-3 font-medium">Fecha</th>
-                    <th className="text-left py-2 px-3 font-medium">Comprobante</th>
-                    <th className="text-right py-2 px-3 font-medium">Debe</th>
-                    <th className="text-right py-2 px-3 font-medium">Haber</th>
-                    <th className="text-right py-2 px-3 font-medium">Saldo</th>
-                    <th className="text-left py-2 px-3 font-medium">Cond. Pago</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cobranzaMovimientos.map((m) => (
-                    <tr key={m.id} className="border-b last:border-0">
-                      <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                      <td className="py-2 px-3 font-mono text-xs">{m.comprobante || "—"}</td>
-                      <td className="py-2 px-3 text-right">{m.debe > 0 ? formatCurrency(m.debe) : ""}</td>
-                      <td className="py-2 px-3 text-right">{m.haber > 0 ? formatCurrency(m.haber) : ""}</td>
-                      <td className={`py-2 px-3 text-right font-semibold ${m.saldo < 0 ? "text-red-500" : ""}`}>
-                        {formatCurrency(m.saldo)}
-                      </td>
-                      <td className="py-2 px-3 text-xs text-muted-foreground">{m.forma_pago || ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {selectedCobranzaClient && (
-            <div className="flex justify-between items-center pt-4 border-t">
-              <span className="text-sm font-semibold">Saldo deudor actual</span>
-              <span className="text-lg font-bold text-orange-500">{formatCurrency(selectedCobranzaClient.saldo)}</span>
             </div>
           )}
         </DialogContent>

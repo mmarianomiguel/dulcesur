@@ -1534,8 +1534,15 @@ export default function VentasPage() {
           observacion: despacho,
           metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
           lista_precio_id: listaPrecioId || null,
-          // TODO: Store Mixto split amounts (monto_efectivo, monto_transferencia, monto_cuenta_corriente)
-          // when those columns are added to the ventas table. Currently Mixto breakdown is only in caja_movimientos.
+          // monto_pagado: track how much was paid at POS (for pending invoice tracking)
+          // Envío sales: 0 — cobro confirmed from venta detail
+          monto_pagado: deliveryMethod === "delivery"
+            ? 0
+            : formaPago === "Efectivo" || formaPago === "Transferencia"
+              ? total  // fully paid at POS
+              : formaPago === "Mixto"
+                ? Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100  // non-CC portion paid at POS
+                : 0,  // CC or Pendiente — nothing paid yet
           ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
             cuenta_transferencia_id: cuentaBancariaId,
             cuenta_transferencia_alias: cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.alias || cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.nombre || null,
@@ -1549,7 +1556,7 @@ export default function VentasPage() {
         if (ventaError.message?.includes("duplicate key") || ventaError.message?.includes("ventas_numero_unique")) {
           const { data: retryNum } = await supabase.rpc("next_numero", { p_tipo: "venta" });
           if (retryNum) {
-            const { data: retryVenta, error: retryErr } = await supabase.from("ventas").insert({ ...{ numero: retryNum, tipo_comprobante: tipoComprobante, fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), cliente_id: clientId || null, vendedor_id: vendedorId || null, forma_pago: formaPago, subtotal, descuento_porcentaje: descuento, recargo_porcentaje: recargo, total, estado: "cerrada", observacion: despacho, metodo_entrega: deliveryMethod === "delivery" ? "envio" : "retiro", lista_precio_id: listaPrecioId || null } }).select().single();
+            const { data: retryVenta, error: retryErr } = await supabase.from("ventas").insert({ ...{ numero: retryNum, tipo_comprobante: tipoComprobante, fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), cliente_id: clientId || null, vendedor_id: vendedorId || null, forma_pago: formaPago, subtotal, descuento_porcentaje: descuento, recargo_porcentaje: recargo, total, estado: "cerrada", observacion: despacho, metodo_entrega: deliveryMethod === "delivery" ? "envio" : "retiro", lista_precio_id: listaPrecioId || null, monto_pagado: formaPago === "Efectivo" || formaPago === "Transferencia" ? total : formaPago === "Mixto" ? Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100 : 0 } }).select().single();
             if (!retryErr && retryVenta) { venta = retryVenta; } else { setErrorModal({ open: true, message: `Error al crear venta: ${retryErr?.message || ventaError.message}` }); setSaving(false); return; }
           }
         } else {
@@ -1737,6 +1744,25 @@ export default function VentasPage() {
                 forma_pago: "Efectivo",
                 venta_id: venta.id,
               });
+              // FIFO update monto_pagado on old CC ventas
+              const { data: pendingVentasMixto } = await supabase
+                .from("ventas")
+                .select("id, total, monto_pagado")
+                .eq("cliente_id", clientId)
+                .in("forma_pago", ["Cuenta Corriente", "Mixto", "Pendiente"])
+                .neq("estado", "anulada")
+                .neq("id", venta.id) // exclude current sale
+                .order("fecha", { ascending: true })
+                .order("created_at", { ascending: true });
+              let remMixto = oldDebtCollected;
+              for (const pv of pendingVentasMixto || []) {
+                if (remMixto <= 0) break;
+                const pvPend = pv.total - (pv.monto_pagado || 0);
+                if (pvPend <= 0) continue;
+                const apl = Math.min(remMixto, pvPend);
+                remMixto = Math.round((remMixto - apl) * 100) / 100;
+                await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + apl }).eq("id", pv.id);
+              }
             }
             // Update local state
             setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoMixto } : c));
@@ -1764,25 +1790,29 @@ export default function VentasPage() {
             });
           }
           // Handle non-CC entries (Efectivo, Transferencia) → caja
-          for (const entry of mixtoEntries) {
-            if (entry.metodo !== "Cuenta Corriente") {
-              const mixCuenta = entry.metodo === "Transferencia" && cuentaBancariaId
-                ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
-                : null;
-              await supabase.from("caja_movimientos").insert({
-                fecha: hoy,
-                hora,
-                tipo: "ingreso",
-                descripcion: `Venta #${numero} (${entry.metodo})${mixCuenta ? ` → ${mixCuenta.nombre}` : ""}`,
-                metodo_pago: entry.metodo,
-                monto: entry.monto,
-                referencia_id: venta.id,
-                referencia_tipo: "venta",
-                ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
-              });
+          // Skip caja for envío — cobro confirmed from venta detail
+          if (deliveryMethod !== "delivery") {
+            for (const entry of mixtoEntries) {
+              if (entry.metodo !== "Cuenta Corriente") {
+                const mixCuenta = entry.metodo === "Transferencia" && cuentaBancariaId
+                  ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
+                  : null;
+                await supabase.from("caja_movimientos").insert({
+                  fecha: hoy,
+                  hora,
+                  tipo: "ingreso",
+                  descripcion: `Venta #${numero} (${entry.metodo})${mixCuenta ? ` → ${mixCuenta.nombre}` : ""}`,
+                  metodo_pago: entry.metodo,
+                  monto: entry.monto,
+                  referencia_id: venta.id,
+                  referencia_tipo: "venta",
+                  ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
+                });
+              }
             }
           }
-        } else {
+        } else if (deliveryMethod !== "delivery") {
+          // Single payment — skip caja for envío
           const selectedCuenta = formaPago === "Transferencia" && cuentaBancariaId
             ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
             : null;
@@ -1802,7 +1832,7 @@ export default function VentasPage() {
         // Collect pending balance if toggled
         // For Mixto: already handled above in the combined flow — skip here
         // Collect ONLY the pre-existing debt (not what was just added by this sale's CC)
-        if (formaPago !== "Pendiente" && formaPago !== "Mixto" && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
+        if (formaPago !== "Pendiente" && formaPago !== "Mixto" && deliveryMethod !== "delivery" && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
           const saldoActualDB = saldoRealAntesDeTodo;
           if (saldoActualDB > 0) {
             const saldoPendiente = saldoActualDB;
@@ -1833,6 +1863,24 @@ export default function VentasPage() {
               forma_pago: formaPago,
               venta_id: venta.id,
             });
+            // FIFO update monto_pagado on CC/Mixto ventas so they reflect as paid
+            const { data: pendingVentas } = await supabase
+              .from("ventas")
+              .select("id, total, monto_pagado")
+              .eq("cliente_id", clientId)
+              .in("forma_pago", ["Cuenta Corriente", "Mixto", "Pendiente"])
+              .neq("estado", "anulada")
+              .order("fecha", { ascending: true })
+              .order("created_at", { ascending: true });
+            let remainingCobro = saldoPendiente;
+            for (const pv of pendingVentas || []) {
+              if (remainingCobro <= 0) break;
+              const pvPendiente = pv.total - (pv.monto_pagado || 0);
+              if (pvPendiente <= 0) continue;
+              const aplicar = Math.min(remainingCobro, pvPendiente);
+              remainingCobro = Math.round((remainingCobro - aplicar) * 100) / 100;
+              await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + aplicar }).eq("id", pv.id);
+            }
             if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoAfterCobro } : c));
           }
         }
@@ -2331,28 +2379,8 @@ export default function VentasPage() {
             </div>
           )}
 
-          {/* Cobro al entregar toggle */}
-          <button
-            onClick={() => setFormaPago(formaPago === "Pendiente" ? "Efectivo" : "Pendiente")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all text-xs ${
-              formaPago === "Pendiente"
-                ? "bg-amber-50 border-amber-300 text-amber-800"
-                : "bg-card border-border text-muted-foreground hover:bg-accent"
-            }`}
-          >
-            <Truck className="w-4 h-4 shrink-0" />
-            <span className="font-medium">Cobro al entregar</span>
-            <div className={`ml-auto relative w-8 h-4.5 rounded-full transition-colors ${formaPago === "Pendiente" ? "bg-amber-500" : "bg-gray-300"}`}>
-              <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${formaPago === "Pendiente" ? "translate-x-4" : "translate-x-0.5"}`} />
-            </div>
-          </button>
-
-          {formaPago === "Pendiente" && (
-            <p className="text-[11px] text-amber-600 -mt-1 px-1">No se registra pago. Se cobra desde la hoja de ruta al entregar.</p>
-          )}
-
-          {/* Payment method grid — hidden when Pendiente */}
-          {formaPago !== "Pendiente" && (
+          {/* Payment method grid */}
+          {(
           <div className="grid grid-cols-4 gap-1.5">
             {[
               { key: "Efectivo", label: "Efect.", icon: DollarSign },

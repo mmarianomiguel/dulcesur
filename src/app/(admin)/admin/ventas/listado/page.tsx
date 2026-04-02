@@ -71,6 +71,8 @@ import { defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptLineItem, ReceiptSale } from "@/components/receipt-print-view";
 import { PrintPreviewDialog } from "@/components/print-preview-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { CobroVentaSection } from "@/components/cobro-venta-section";
+import type { CobroVentaResult } from "@/components/cobro-venta-section";
 
 // ─── Historial types ───
 interface ClienteInfo {
@@ -198,6 +200,7 @@ export default function ListadoVentasPage() {
   // ─── Unified source filter ───
   const [filterSource, setFilterSource] = useState<"todos" | "pos" | "online">("todos");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
+  const [entregarDialog, setEntregarDialog] = useState<{ open: boolean; order: Pedido | null }>({ open: false, order: null });
 
   // ══════════════════════════════════════════════════════════════
   // HISTORIAL DE VENTAS STATE
@@ -260,7 +263,8 @@ export default function ListadoVentasPage() {
   const [poSaving, setPoSaving] = useState(false);
   const [poHasChanges, setPoHasChanges] = useState(false);
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
-  const [recargoTransferencia, setRecargoTransferencia] = useState(0);
+  const [recargoTransferencia, setRecargoTransferencia] = useState(2);
+  const [clienteSaldo, setClienteSaldo] = useState(0);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
   const [detailNCs, setDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
@@ -930,7 +934,9 @@ export default function ListadoVentasPage() {
 
   // Filter pedidos
   const poFiltered = poPedidos.filter((p) => {
-    if (poFilterEstado !== "todos" && p.estado !== poFilterEstado) return false;
+    if (poFilterEstado !== "todos") {
+      if (poFilterEstado === "entregado" ? (p.estado !== "entregado" && p.estado !== "cerrada") : p.estado !== poFilterEstado) return false;
+    }
     if (poFilterEntrega !== "todos" && p.metodo_entrega !== poFilterEntrega) return false;
     if (poSearch) {
       const q = norm(poSearch);
@@ -1040,11 +1046,13 @@ export default function ListadoVentasPage() {
             if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
           }
           if (pagos.length === 0) {
-            if (isOnlineOrder) {
-              // Online with no stored amounts — nothing is paid yet, show as pending
-              pagos.push({ metodo: `${ventaData.forma_pago || pedido.metodo_pago || "Efectivo"} (a cobrar)`, monto: ventaData.total || pedido.total });
+            const fpLabel = ventaData.forma_pago || pedido.metodo_pago || "Efectivo";
+            const isPending = fpLabel.toLowerCase() === "pendiente";
+            if (isOnlineOrder || isPending) {
+              // Online or Pendiente — nothing is paid yet, show as pending
+              pagos.push({ metodo: `${fpLabel} (a cobrar)`, monto: ventaData.total || pedido.total });
             } else {
-              pagos.push({ metodo: ventaData.forma_pago || pedido.metodo_pago || "Efectivo", monto: ventaData.total || pedido.total });
+              pagos.push({ metodo: fpLabel, monto: ventaData.total || pedido.total });
             }
           }
         }
@@ -1061,10 +1069,12 @@ export default function ListadoVentasPage() {
             if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
           }
           if (pagos.length === 0) {
-            if (isOnlineOrder) {
-              pagos.push({ metodo: `${ptData.metodo_pago || "Efectivo"} (a cobrar)`, monto: ptData.total || pedido.total });
+            const fpLabel2 = ptData.metodo_pago || "Efectivo";
+            const isPending2 = fpLabel2.toLowerCase() === "pendiente";
+            if (isOnlineOrder || isPending2) {
+              pagos.push({ metodo: `${fpLabel2} (a cobrar)`, monto: ptData.total || pedido.total });
             } else {
-              pagos.push({ metodo: ptData.metodo_pago || "Efectivo", monto: ptData.total || pedido.total });
+              pagos.push({ metodo: fpLabel2, monto: ptData.total || pedido.total });
             }
           }
         }
@@ -1072,6 +1082,15 @@ export default function ListadoVentasPage() {
     }
     setDetailPagos(pagos);
     if (!ventaId) setDetailNCs([]);
+
+    // Fetch client saldo
+    const cId = (pedido as any)._clienteId || (pedido as any).cliente_id;
+    if (cId) {
+      supabase.from("clientes").select("saldo").eq("id", cId).single()
+        .then(({ data: c }) => setClienteSaldo(c?.saldo || 0));
+    } else {
+      setClienteSaldo(0);
+    }
 
     setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId } as any);
     setPoEditItems(items.map((i) => ({ ...i })));
@@ -1606,7 +1625,9 @@ export default function ListadoVentasPage() {
       if (filterSource === "pos" && isOnlineOrder) return false;
       if (filterSource === "online" && !isOnlineOrder) return false;
       // Estado filter
-      if (poFilterEstado !== "todos" && o.estado !== poFilterEstado) return false;
+      if (poFilterEstado !== "todos") {
+        if (poFilterEstado === "entregado" ? (o.estado !== "entregado" && o.estado !== "cerrada") : o.estado !== poFilterEstado) return false;
+      }
       // Payment filter
       if (filterPayment !== "all") {
         const pago = (o.forma_pago || o.metodo_pago || "").toLowerCase();
@@ -1779,7 +1800,7 @@ export default function ListadoVentasPage() {
             {/* Estado */}
             <div className="flex items-center gap-1.5 pt-2">
               <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Estado</span>
-              {([["todos", "Todos"], ["pendiente", "Pendiente"], ["armado", "Armado"], ["entregado", "Entregado"], ["cerrada", "Completado"], ["cancelado", "Cancelado"]] as const).map(([val, label]) => (
+              {([["todos", "Todos"], ["pendiente", "Pendiente"], ["armado", "Armado"], ["entregado", "Entregado"], ["cancelado", "Cancelado"]] as const).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setPoFilterEstado(val)}
@@ -1977,6 +1998,15 @@ export default function ListadoVentasPage() {
                       }} title={printedPedidos.has(order.numero) ? "Ya impreso — reimprimir" : "Imprimir"}>
                         {printedPedidos.has(order.numero) ? <PrinterCheck className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
                       </Button>
+                      {/* Cobrar button — for online orders or POS with envío, not yet paid */}
+                      {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
+                        (order.isOnline || order._source === "pedidos" || order._tipo_comprobante === "Pedido Web" || (order.metodo_entrega || "").toLowerCase().includes("envio") || (order.metodo_entrega || "").toLowerCase().includes("envío")) &&
+                        (order.forma_pago === "Pendiente" || order.metodo_pago === "Pendiente" || !order.forma_pago)
+                      ) && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={() => poOpenDetail(order)} title="Cobrar">
+                          <DollarSign className="w-4 h-4" />
+                        </Button>
+                      )}
                       {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
                         <>
                           {order.estado === "pendiente" && (
@@ -1984,7 +2014,47 @@ export default function ListadoVentasPage() {
                               <Package className="w-4 h-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={async () => { await poHandleEstadoChange(order, "entregado"); setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p)); setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v)); showAdminToast("Marcado como entregado", "success"); }} title="Marcar entregado">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={async () => {
+                            // First check if payment was already registered (cobro already done)
+                            const ventaId = (order as any)._ventaId || (order as any).venta_id;
+                            let alreadyPaid = false;
+                            if (ventaId) {
+                              const { data: venta } = await supabase.from("ventas").select("monto_pagado, total, forma_pago").eq("id", ventaId).single();
+                              if (venta && venta.monto_pagado > 0 && venta.forma_pago !== "Pendiente") {
+                                alreadyPaid = true;
+                              }
+                              if (!alreadyPaid) {
+                                // Also check caja_movimientos
+                                const { count } = await supabase.from("caja_movimientos").select("id", { count: "exact", head: true }).eq("referencia_id", ventaId).eq("referencia_tipo", "venta");
+                                if (count && count > 0) alreadyPaid = true;
+                              }
+                            }
+
+                            if (alreadyPaid) {
+                              // Already paid — just mark as entregado, no payment
+                              if (ventaId) {
+                                await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", ventaId);
+                                await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
+                              }
+                              await poHandleEstadoChange(order, "entregado");
+                              setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p));
+                              setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v));
+                              showAdminToast("Marcado como entregado", "success");
+                            } else {
+                              // Check if order needs payment dialog
+                              const fp = (order.forma_pago || order.metodo_pago || "").toLowerCase();
+                              const hasPendingPayment = fp === "pendiente" || !fp || order._source === "pedidos" || (order as any).isOnline || (order.metodo_entrega || "").toLowerCase().includes("envio") || (order.metodo_entrega || "").toLowerCase().includes("envío");
+                              if (hasPendingPayment) {
+                                setEntregarDialog({ open: true, order });
+                              } else {
+                                // POS retiro already paid — direct mark
+                                await poHandleEstadoChange(order, "entregado");
+                                setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p));
+                                setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v));
+                                showAdminToast("Marcado como entregado", "success");
+                              }
+                            }
+                          }} title="Marcar entregado">
                             <CheckCircle className="w-4 h-4" />
                           </Button>
                         </>
@@ -2232,211 +2302,120 @@ export default function ListadoVentasPage() {
                   if (pendiente < 1) return null;
                   const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
                   if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
-                  const cobroMetodo = (poSelectedPedido as any)._cobroMetodo || "Efectivo";
-                  const cobroMonto = (poSelectedPedido as any)._cobroMonto;
-                  const cobroMixtoEf = (poSelectedPedido as any)._cobroMixtoEf || 0;
-                  const cobroMixtoTr = (poSelectedPedido as any)._cobroMixtoTr || 0;
-                  const cobroCuentaBancaria = (poSelectedPedido as any)._cobroCuentaBancaria || "";
-                  const setCobroField = (field: string, val: any) => setPoSelectedPedido((prev: any) => ({ ...prev, [field]: val }));
                   const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
 
-                  // Calculate totals
-                  let totalCobrado = 0;
-                  if (cobroMetodo === "Mixto") totalCobrado = cobroMixtoEf + cobroMixtoTr;
-                  else if (cobroMetodo === "Cuenta Corriente") totalCobrado = 0;
-                  else totalCobrado = cobroMonto ?? pendiente;
-                  const restanteCC = Math.max(0, Math.round((pendiente - totalCobrado) * 100) / 100);
-
-                  // Surcharge calc
-                  const montoTransf = cobroMetodo === "Transferencia" ? (cobroMonto ?? pendiente) : cobroMetodo === "Mixto" ? cobroMixtoTr : 0;
-                  const surcharge = recargoTransferencia > 0 && montoTransf > 0 ? Math.round(montoTransf * (recargoTransferencia / 100)) : 0;
-
                   return (
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-emerald-600" />
-                        <p className="text-sm font-semibold text-emerald-800">Registrar cobro</p>
-                        <span className="ml-auto text-sm font-bold text-emerald-700">Pendiente: {formatCurrency(pendiente)}</span>
-                      </div>
-                      {pagado > 0 && (
-                        <p className="text-xs text-emerald-600">Ya pagado: {formatCurrency(pagado)} — Resta: {formatCurrency(pendiente)}</p>
-                      )}
+                    <CobroVentaSection
+                      ventaId={(poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id || ""}
+                      clienteId={clienteId || ""}
+                      clienteNombre={poSelectedPedido.nombre_cliente || ""}
+                      clienteSaldo={clienteSaldo}
+                      montoVenta={pendiente}
+                      subtotalItems={pendiente}
+                      costoEnvio={0}
+                      recargoTransferencia={recargoTransferencia}
+                      cuentasBancarias={cuentasBancarias}
+                      defaultMetodo={(poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago}
+                      defaultEfectivo={(poSelectedPedido as any).monto_efectivo}
+                      defaultTransferencia={(poSelectedPedido as any).monto_transferencia}
+                      defaultCuentaAlias={(poSelectedPedido as any).cuenta_transferencia_alias}
+                      onConfirmar={async (result: CobroVentaResult) => {
+                        const hoy = todayARG();
+                        const hora = nowTimeARG();
+                        let ventaId = (poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id;
+                        if (!ventaId) {
+                          const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).single();
+                          ventaId = v?.id;
+                        }
+                        if (!ventaId) {
+                          showAdminToast("Error: no se encontró la venta vinculada", "error");
+                          return;
+                        }
 
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {[
-                          { key: "Efectivo", label: "Efect.", icon: DollarSign },
-                          { key: "Transferencia", label: "Transf.", icon: ArrowLeftRight },
-                          { key: "Mixto", label: "Mixto", icon: Shuffle },
-                          ...(clienteId ? [{ key: "Cuenta Corriente", label: "Cta Cte", icon: BookOpen }] : []),
-                        ].map(({ key, label, icon: Icon }) => (
-                          <button
-                            key={key}
-                            onClick={() => setCobroField("_cobroMetodo", key)}
-                            className={`flex flex-col items-center justify-center gap-0.5 rounded-lg border-2 p-1.5 transition-all text-[10px] font-medium ${
-                              cobroMetodo === key
-                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
-                                : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"
-                            }`}
-                          >
-                            <Icon className="w-3.5 h-3.5" />
-                            {label}
-                          </button>
-                        ))}
-                      </div>
+                        // Guard: check if already paid
+                        const { count: existingPayments } = await supabase.from("caja_movimientos").select("id", { count: "exact", head: true }).eq("referencia_id", ventaId).eq("referencia_tipo", "venta");
+                        if (existingPayments && existingPayments > 0) {
+                          showAdminToast("Este pedido ya tiene cobro registrado", "error");
+                          return;
+                        }
 
-                      {/* Amount input for Efectivo/Transferencia */}
-                      {(cobroMetodo === "Efectivo" || cobroMetodo === "Transferencia") && (
-                        <div>
-                          <label className="text-[10px] text-gray-500">Monto a cobrar</label>
-                          <Input type="number" value={cobroMonto ?? ""} placeholder={String(pendiente)} onChange={(e) => setCobroField("_cobroMonto", e.target.value === "" ? undefined : Number(e.target.value))} className="h-8 text-sm" max={pendiente} />
-                        </div>
-                      )}
-
-                      {/* Mixto inputs */}
-                      {cobroMetodo === "Mixto" && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-gray-500">Efectivo</label>
-                            <Input type="number" value={cobroMixtoEf || ""} onChange={(e) => setCobroField("_cobroMixtoEf", Number(e.target.value))} className="h-8 text-sm" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-gray-500">Transferencia</label>
-                            <Input type="number" value={cobroMixtoTr || ""} onChange={(e) => setCobroField("_cobroMixtoTr", Number(e.target.value))} className="h-8 text-sm" />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Bank account selector */}
-                      {(cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && cuentasBancarias.length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-gray-500">Cuenta bancaria</p>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {cuentasBancarias.map((cb: any) => (
-                              <button key={cb.id} onClick={() => setCobroField("_cobroCuentaBancaria", cb.nombre)}
-                                className={`flex items-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-xs transition-all text-left ${cobroCuentaBancaria === cb.nombre ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>
-                                <span className="truncate">{cb.alias || cb.nombre}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Transfer surcharge indicator */}
-                      {surcharge > 0 && (
-                        <div className="rounded-lg bg-violet-50 border border-violet-200 p-2">
-                          <p className="text-xs text-violet-800">
-                            Cliente debe transferir <span className="font-bold">{formatCurrency(montoTransf + surcharge)}</span>
-                            <span className="text-violet-600"> (incluye {recargoTransferencia}% recargo: {formatCurrency(surcharge)})</span>
-                          </p>
-                        </div>
-                      )}
-
-                      {/* CC remainder indicator */}
-                      {cobroMetodo !== "Cuenta Corriente" && restanteCC > 0 && clienteId && (
-                        <div className="rounded-lg bg-blue-50 border border-blue-200 p-2">
-                          <p className="text-xs text-blue-800">
-                            Restante <span className="font-bold">{formatCurrency(restanteCC)}</span> queda en cuenta corriente
-                          </p>
-                        </div>
-                      )}
-                      {cobroMetodo !== "Cuenta Corriente" && restanteCC > 0 && !clienteId && (
-                        <div className="rounded-lg bg-red-50 border border-red-200 p-2">
-                          <p className="text-xs text-red-700">Sin cliente — no se puede dejar saldo en cuenta corriente</p>
-                        </div>
-                      )}
-
-                      <Button
-                        size="sm"
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={cobroMetodo !== "Cuenta Corriente" && totalCobrado <= 0}
-                        onClick={async () => {
-                          const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-                          const hora = new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
-                          let ventaId = (poSelectedPedido as any).venta_id;
-                          if (!ventaId) {
-                            const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).single();
-                            ventaId = v?.id;
+                        // Build caja entries
+                        const entries: any[] = [];
+                        if (result.metodo === "Mixto") {
+                          if (result.efectivo > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: result.efectivo, referencia_id: ventaId, referencia_tipo: "venta" });
+                          if (result.transferencia > 0) {
+                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia${result.surcharge > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: result.transferencia + result.surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
                           }
-                          const entries: any[] = [];
-
-                          if (cobroMetodo === "Mixto") {
-                            if (cobroMixtoEf > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: cobroMixtoEf, referencia_id: ventaId, referencia_tipo: "venta" });
-                            if (cobroMixtoTr > 0) {
-                              const s = recargoTransferencia > 0 ? Math.round(cobroMixtoTr * (recargoTransferencia / 100)) : 0;
-                              entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia${s > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: cobroMixtoTr + s, referencia_id: ventaId, referencia_tipo: "venta", ...(cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
-                            }
-                          } else if (cobroMetodo === "Cuenta Corriente") {
-                            // All to CC — handled below in remainder logic
-                          } else {
-                            const monto = cobroMonto ?? pendiente;
-                            if (monto > 0) {
-                              const s = (cobroMetodo === "Transferencia" && recargoTransferencia > 0) ? Math.round(monto * (recargoTransferencia / 100)) : 0;
-                              entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${s > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: cobroMetodo, monto: cobroMetodo === "Transferencia" ? monto + s : monto, referencia_id: ventaId, referencia_tipo: "venta", ...(cobroMetodo === "Transferencia" && cobroCuentaBancaria ? { cuenta_bancaria: cobroCuentaBancaria } : {}) });
-                            }
+                        } else if (result.metodo === "Cuenta Corriente") {
+                          entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Cuenta Corriente)`, metodo_pago: "Cuenta Corriente", monto: result.monto, referencia_id: ventaId, referencia_tipo: "venta" });
+                        } else {
+                          if (result.monto > 0) {
+                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${result.surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: result.metodo, monto: result.metodo === "Transferencia" ? result.monto + result.surcharge : result.monto, referencia_id: ventaId, referencia_tipo: "venta", ...(result.metodo === "Transferencia" && result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
                           }
+                        }
+                        if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
 
-                          if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+                        // CC portion (Mixto remainder or full CC) — atomic saldo update
+                        const ccAmount = result.cuentaCorriente;
+                        if (ccAmount > 0 && clienteId) {
+                          const { data: newSaldo } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: ccAmount });
+                          const saldoAfter = newSaldo ?? 0;
+                          await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: result.metodo === "Cuenta Corriente" ? "A cuenta corriente" : "Saldo pendiente a cuenta corriente", debe: ccAmount, haber: 0, saldo: saldoAfter, forma_pago: result.metodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: ventaId });
+                          setClienteSaldo(saldoAfter);
+                        }
 
-                          // CC remainder
-                          const realRestante = cobroMetodo === "Cuenta Corriente" ? pendiente : restanteCC;
-                          if (realRestante > 0 && clienteId) {
-                            const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-                            const newSaldo = (cl?.saldo || 0) + realRestante;
-                            await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteId);
-                            await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: `Saldo pendiente a cuenta corriente`, debe: realRestante, haber: 0, saldo: newSaldo, forma_pago: cobroMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: ventaId });
+                        // Update venta
+                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pendiente };
+                        if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
+                        if (result.surcharge > 0) {
+                          const { data: ventaRow } = await supabase.from("ventas").select("total").eq("id", ventaId).single();
+                          if (ventaRow) ventaUpd.total = (ventaRow as any).total + result.surcharge;
+                        }
+                        await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
+
+                        // FIFO allocation: update monto_pagado on old invoices
+                        if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
+                          for (const alloc of result.saldoAllocations) {
+                            if (alloc.aplicar <= 0) continue;
+                            const { data: old } = await supabase.from("ventas").select("monto_pagado").eq("id", alloc.venta_id).single();
+                            await supabase.from("ventas").update({ monto_pagado: ((old as any)?.monto_pagado || 0) + alloc.aplicar }).eq("id", alloc.venta_id);
                           }
-
-                          // Update forma_pago + cuenta + surcharge + mark as delivered on venta
-                          if (ventaId) {
-                            const ventaUpd: Record<string, any> = { forma_pago: cobroMetodo, entregado: true, estado: "entregado" };
-                            if ((cobroMetodo === "Transferencia" || cobroMetodo === "Mixto") && cobroCuentaBancaria) {
-                              ventaUpd.cuenta_transferencia_alias = cobroCuentaBancaria;
-                            }
-                            if (recargoTransferencia > 0) {
-                              let trBase = 0;
-                              if (cobroMetodo === "Transferencia") trBase = cobroMonto ?? pendiente;
-                              else if (cobroMetodo === "Mixto") trBase = cobroMixtoTr;
-                              const surchargeToAdd = trBase > 0 ? Math.round(trBase * (recargoTransferencia / 100)) : 0;
-                              if (surchargeToAdd > 0) {
-                                const { data: ventaRow } = await supabase.from("ventas").select("total").eq("id", ventaId).single();
-                                if (ventaRow) ventaUpd.total = (ventaRow as any).total + surchargeToAdd;
-                              }
-                            }
-                            await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
-                            await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", poSelectedPedido.numero);
+                          const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
+                          if (totalAllocated > 0 && clienteId) {
+                            const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: -totalAllocated });
+                            const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
+                            await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro saldo #${poSelectedPedido.numero}`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: ventaId });
+                            setClienteSaldo(saldoAfter2);
                           }
+                        }
 
-                          // Refresh payment breakdown
-                          if (ventaId) {
-                            const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
-                              supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
-                              supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
-                              supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
-                            ]);
-                            const newPagos: { metodo: string; monto: number }[] = [];
-                            for (const m of movs || []) {
-                              let label = m.metodo_pago;
-                              if (m.metodo_pago === "Transferencia" && m.descripcion) {
-                                const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
-                                if (match) label = `Transferencia (${match[1]}%)`;
-                              }
-                              const existing = newPagos.find((p) => p.metodo === label);
-                              if (existing) existing.monto += m.monto;
-                              else newPagos.push({ metodo: label, monto: m.monto });
+                        // Refresh payment breakdown
+                        if (ventaId) {
+                          const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
+                            supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+                            supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
+                            supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+                          ]);
+                          const newPagos: { metodo: string; monto: number }[] = [];
+                          for (const m of movs || []) {
+                            let label = m.metodo_pago;
+                            if (m.metodo_pago === "Transferencia" && m.descripcion) {
+                              const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
+                              if (match) label = `Transferencia (${match[1]}%)`;
                             }
-                            const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
-                            if (ccTotal > 0) newPagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
-                            const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
-                            if (ncTotal > 0) newPagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
-                            setDetailPagos(newPagos);
+                            const existing = newPagos.find((p) => p.metodo === label);
+                            if (existing) existing.monto += m.monto;
+                            else newPagos.push({ metodo: label, monto: m.monto });
                           }
-                          showAdminToast("Cobro registrado", "success");
-                        }}
-                      >
-                        <DollarSign className="w-4 h-4 mr-1" />
-                        {cobroMetodo === "Cuenta Corriente" ? "Cargar a Cta Cte" : `Confirmar cobro — ${formatCurrency(totalCobrado + surcharge)}`}
-                      </Button>
-                    </div>
+                          const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
+                          if (ccTotal > 0) newPagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
+                          const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+                          if (ncTotal > 0) newPagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
+                          setDetailPagos(newPagos);
+                        }
+                        showAdminToast("Cobro registrado", "success");
+                      }}
+                    />
                   );
                 })()}
 
@@ -2447,125 +2426,78 @@ export default function ListadoVentasPage() {
                   </div>
                 )}
 
-                {/* Estado de preparación / entrega */}
-                {!isCancelled && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Estado de entrega:</Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {([
-                        ["pendiente", "⏳ Pendiente", "bg-amber-50 text-amber-700 border-amber-300"],
-                        ["armado", "📦 Armado", "bg-violet-50 text-violet-700 border-violet-300"],
-                        ["entregado", "🚚 Entregado", "bg-emerald-50 text-emerald-700 border-emerald-300"],
-                        ["cerrada", "✅ Completado", "bg-gray-100 text-gray-700 border-gray-300"],
-                        ["cancelado", "❌ Cancelado", "bg-red-50 text-red-700 border-red-300"],
-                      ] as const).map(([val, label, colors]) => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={async () => {
-                            if (val === poSelectedPedido.estado) return;
-                            if (val === "cancelado") {
-                              setPoCancelPedido(poSelectedPedido);
-                              return;
-                            }
-                            await poHandleEstadoChange(poSelectedPedido, val);
-                            setPoSelectedPedido({ ...poSelectedPedido, estado: val });
-                            // Update local arrays immediately for instant UI feedback
-                            setPoPedidos(prev => prev.map(p => p.numero === poSelectedPedido.numero ? { ...p, estado: val } : p));
-                            setVentas(prev => prev.map(v => v.numero === poSelectedPedido.numero ? { ...v, estado: val as string === "cancelado" ? "anulada" : val as string, entregado: val === "entregado" } as any : v));
-                            showAdminToast(`Estado actualizado a ${val}`, "success");
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                            poSelectedPedido.estado === val
-                              ? colors + " ring-2 ring-offset-1 ring-current"
-                              : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Estado de entrega — stepper */}
+                {!isCancelled && (() => {
+                  const steps = ["pendiente", "armado", "entregado"] as const;
+                  const stepLabels: Record<string, string> = { pendiente: "Pendiente", armado: "Armado", entregado: "Entregado" };
+                  const currentIdx = steps.indexOf(poSelectedPedido.estado as any);
+                  const isCompleted = poSelectedPedido.estado === "entregado" || poSelectedPedido.estado === "cerrada";
 
-                {/* Cuenta de transferencia - only show when there's actual transfer payment */}
-                {(() => { const fp = (((poSelectedPedido as any).forma_pago || "") + " " + (poSelectedPedido.metodo_pago || "")).toLowerCase(); const hasTransf = detailPagos.some((p) => p.metodo === "Transferencia") || (fp.includes("transferencia") && !fp.includes("mixto")); return hasTransf; })() && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-blue-800">💳 Cuenta de transferencia:</span>
-                        {(poSelectedPedido as any).cuenta_transferencia_alias ? (
-                          <span className="text-sm font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded">{(poSelectedPedido as any).cuenta_transferencia_alias}</span>
-                        ) : (
-                          <span className="text-xs text-blue-600 italic">Sin asignar</span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowCuentaSelector(!showCuentaSelector)}
-                        className="text-xs text-blue-700 hover:text-blue-900 font-medium underline"
-                      >
-                        {(poSelectedPedido as any).cuenta_transferencia_alias ? "Cambiar" : "Asignar cuenta"}
-                      </button>
-                    </div>
-                    {showCuentaSelector && (
-                      <div className="mt-3 space-y-1.5">
-                        {cuentasBancarias.length > 0 ? cuentasBancarias.map((cb) => {
-                          const isSelected = (poSelectedPedido as any)._pendingCuentaId === cb.id;
+                  const advanceTo = async (val: string) => {
+                    if (val === poSelectedPedido.estado) return;
+                    await poHandleEstadoChange(poSelectedPedido, val);
+                    setPoSelectedPedido({ ...poSelectedPedido, estado: val });
+                    setPoPedidos(prev => prev.map(p => p.numero === poSelectedPedido.numero ? { ...p, estado: val } : p));
+                    setVentas(prev => prev.map(v => v.numero === poSelectedPedido.numero ? { ...v, estado: val, entregado: val === "entregado" } as any : v));
+                    showAdminToast(`Estado: ${stepLabels[val] || val}`, "success");
+                  };
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Stepper */}
+                      <div className="flex items-center gap-0">
+                        {steps.map((step, i) => {
+                          const isActive = i <= currentIdx || isCompleted;
+                          const isCurrent = step === poSelectedPedido.estado || (isCompleted && step === "entregado");
                           return (
-                            <button
-                              key={cb.id}
-                              type="button"
-                              onClick={() => {
-                                setPoSelectedPedido({ ...poSelectedPedido, _pendingCuentaId: cb.id, _pendingCuentaAlias: cb.nombre } as any);
-                              }}
-                              className={`w-full text-left rounded-lg border p-2.5 transition flex items-center justify-between ${isSelected ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200" : "hover:bg-blue-50 hover:border-blue-300"}`}
-                            >
-                              <div>
-                                <span className="text-sm font-medium">{cb.nombre}</span>
-                                <span className="text-xs text-gray-500 ml-2">{cb.origen === "proveedor" ? "(Proveedor)" : "(Propia)"}</span>
-                                {cb.alias && <p className="text-xs text-gray-500">Alias: <span className="font-mono font-medium text-gray-700">{cb.alias}</span></p>}
-                              </div>
-                              {isSelected && <span className="text-blue-600 text-xs font-semibold">Seleccionada</span>}
-                            </button>
+                            <div key={step} className="flex items-center flex-1 last:flex-none">
+                              <button
+                                type="button"
+                                onClick={() => advanceTo(step)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                  isCurrent
+                                    ? "bg-emerald-600 text-white shadow-sm"
+                                    : isActive
+                                      ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                                      : "bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                                }`}
+                              >
+                                {isActive && !isCurrent ? (
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+                                ) : (
+                                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center text-[9px] font-bold ${
+                                    isCurrent ? "border-white bg-white/20 text-white" : "border-current"
+                                  }`}>{i + 1}</span>
+                                )}
+                                {stepLabels[step]}
+                              </button>
+                              {i < steps.length - 1 && (
+                                <div className={`flex-1 h-0.5 mx-1 rounded ${i < currentIdx || isCompleted ? "bg-emerald-300" : "bg-gray-200"}`} />
+                              )}
+                            </div>
                           );
-                        }) : (
-                          <p className="text-xs text-gray-500">No hay cuentas cargadas. Agregá una en Configuración.</p>
-                        )}
-                        {(poSelectedPedido as any)._pendingCuentaId && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const cbId = (poSelectedPedido as any)._pendingCuentaId;
-                              const alias = (poSelectedPedido as any)._pendingCuentaAlias;
-                              const ventaId = (poSelectedPedido as any)._ventaId;
-                              if (ventaId) {
-                                await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("id", ventaId);
-                                // Also update caja_movimientos so caja page shows which bank account
-                                await supabase.from("caja_movimientos").update({ cuenta_bancaria: alias }).eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("metodo_pago", "Transferencia");
-                              } else {
-                                await supabase.from("ventas").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
-                                // Find venta id to update caja_movimientos
-                                const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).maybeSingle();
-                                if (v) {
-                                  await supabase.from("caja_movimientos").update({ cuenta_bancaria: alias }).eq("referencia_id", v.id).eq("referencia_tipo", "venta").eq("metodo_pago", "Transferencia");
-                                }
-                              }
-                              await supabase.from("pedidos_tienda").update({ cuenta_transferencia_id: cbId, cuenta_transferencia_alias: alias }).eq("numero", poSelectedPedido.numero);
-                              const updated = { ...poSelectedPedido, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cbId, _pendingCuentaId: undefined, _pendingCuentaAlias: undefined } as any;
-                              setPoSelectedPedido(updated);
-                              // Also update the pedidos list so closing and reopening keeps the change
-                              setPoPedidos((prev) => prev.map((p) => p.numero === poSelectedPedido.numero ? { ...p, cuenta_transferencia_alias: alias, cuenta_transferencia_id: cbId } : p));
-                              setShowCuentaSelector(false);
-                              showAdminToast(`Cuenta asignada: ${alias}`, "success");
-                            }}
-                            className="w-full mt-2 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
-                          >
-                            Guardar cuenta
-                          </button>
-                        )}
+                        })}
                       </div>
-                    )}
+
+                      {/* Next action button */}
+                      {!isCompleted && currentIdx < steps.length - 1 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => advanceTo(steps[currentIdx + 1])}
+                        >
+                          Avanzar a {stepLabels[steps[currentIdx + 1]]}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Bank account info — read-only, shown only if already assigned */}
+                {(poSelectedPedido as any).cuenta_transferencia_alias && detailPagos.some((p) => p.metodo.includes("Transferencia")) && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    <span className="text-xs text-blue-700">Cuenta: <span className="font-semibold">{(poSelectedPedido as any).cuenta_transferencia_alias}</span></span>
                   </div>
                 )}
 
@@ -2848,6 +2780,101 @@ export default function ListadoVentasPage() {
             <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
             <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Entregar Dialog — ask about payment before marking as delivered */}
+      <Dialog open={entregarDialog.open} onOpenChange={(o) => setEntregarDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Marcar como entregado</DialogTitle></DialogHeader>
+          {entregarDialog.order && (() => {
+            const order = entregarDialog.order!;
+            const fp = order.forma_pago || order.metodo_pago || "Efectivo";
+            return (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  El pedido <span className="font-semibold">#{order.numero}</span> tiene pago pendiente.
+                </p>
+                <p className="text-sm text-gray-600">
+                  El cliente eligió: <span className="font-semibold">{fp}</span>
+                </p>
+                <div className="flex flex-col gap-2 pt-2">
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => {
+                      setEntregarDialog({ open: false, order: null });
+                      poOpenDetail(order);
+                    }}
+                  >
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Registrar cobro
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={async () => {
+                      setEntregarDialog({ open: false, order: null });
+                      // Auto-register payment with original method and mark as delivered
+                      const hoy = todayARG();
+                      const hora = nowTimeARG();
+                      let ventaId = (order as any)._ventaId || (order as any).venta_id;
+                      if (!ventaId) {
+                        const { data: v } = await supabase.from("ventas").select("id").eq("numero", order.numero).single();
+                        ventaId = v?.id;
+                      }
+
+                      // Guard: check if already paid (cobro was registered separately)
+                      if (ventaId) {
+                        const { count } = await supabase.from("caja_movimientos").select("id", { count: "exact", head: true }).eq("referencia_id", ventaId).eq("referencia_tipo", "venta");
+                        if (count && count > 0) {
+                          // Already has payment — just mark as entregado
+                          await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", ventaId);
+                          await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
+                          await poHandleEstadoChange(order, "entregado");
+                          setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p));
+                          setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v));
+                          showAdminToast("Marcado como entregado (cobro ya registrado)", "success");
+                          return;
+                        }
+                      }
+
+                      const clienteIdOrder = (order as any)._clienteId || (order as any).cliente_id;
+                      const metodo = fp.toLowerCase().includes("cuenta") ? "Cuenta Corriente"
+                        : fp.toLowerCase().includes("transfer") ? "Transferencia"
+                        : "Efectivo";
+
+                      if (ventaId) {
+                        if (metodo === "Cuenta Corriente" && clienteIdOrder) {
+                          // CC: add to saldo + register in caja
+                          const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteIdOrder).single();
+                          const newSaldo = (cl?.saldo || 0) + order.total;
+                          await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteIdOrder);
+                          await supabase.from("cuenta_corriente").insert({ cliente_id: clienteIdOrder, fecha: hoy, comprobante: `Cobro #${order.numero}`, descripcion: "A cuenta corriente", debe: order.total, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: ventaId });
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Cuenta Corriente)`, metodo_pago: "Cuenta Corriente", monto: order.total, referencia_id: ventaId, referencia_tipo: "venta" });
+                        } else {
+                          // Efectivo or Transferencia: caja entry
+                          const surchargeAmt = metodo === "Transferencia" && recargoTransferencia > 0 ? Math.round(order.total * recargoTransferencia / 100) : 0;
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}${surchargeAmt > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: metodo, monto: order.total + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta" });
+                          if (surchargeAmt > 0) {
+                            await supabase.from("ventas").update({ total: order.total + surchargeAmt }).eq("id", ventaId);
+                          }
+                        }
+                        await supabase.from("ventas").update({ forma_pago: metodo, monto_pagado: order.total, entregado: true, estado: "entregado" }).eq("id", ventaId);
+                        await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
+                      }
+                      await poHandleEstadoChange(order, "entregado");
+                      setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p));
+                      setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v));
+                      showAdminToast(`Entregado con pago ${metodo}`, "success");
+                    }}
+                  >
+                    <Truck className="w-4 h-4 mr-2" />
+                    Entregar con pago original ({fp})
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
