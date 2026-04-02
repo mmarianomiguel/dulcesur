@@ -478,7 +478,7 @@ export default function DashboardPage() {
       { data: ultimasVentasRaw },
       // fetchPedidosOnline runs in parallel too
     ] = await Promise.all([
-      supabase.from("tienda_config").select("dias_entrega, recargo_transferencia").single(),
+      supabase.from("tienda_config").select("dias_entrega, recargo_transferencia, url_tienda").single(),
       supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
       supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso"),
       supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true),
@@ -516,6 +516,7 @@ export default function DashboardPage() {
     // ─── Tienda config ───
     if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
     if ((tiendaConfig as any)?.recargo_transferencia > 0) setRecargoTransferencia((tiendaConfig as any).recargo_transferencia);
+    if ((tiendaConfig as any)?.url_tienda) setReceiptConfig((prev) => ({ ...prev, empresaWeb: prev.empresaWeb || (tiendaConfig as any).url_tienda }));
 
     // ─── Period sales (reuse single ventas query for both totals and margin) ───
     const periodSales = (periodSalesRaw || []).filter((v) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));

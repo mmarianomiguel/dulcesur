@@ -1839,6 +1839,12 @@ export default function ListadoVentasPage() {
             <h1 className="text-xl sm:text-2xl font-bold">Ventas y Pedidos</h1>
             <p className="text-sm text-muted-foreground">
               {filteredOrders.length} resultados{poPendientes > 0 ? ` · ${poPendientes} pendiente${poPendientes > 1 ? "s" : ""} online` : ""}
+              {hiddenFutureOrders > 0 && (
+                <span className="ml-2 inline-flex items-center gap-1 text-amber-600 font-medium">
+                  <Calendar className="w-3 h-3" />
+                  {hiddenFutureOrders} con entrega futura oculto{hiddenFutureOrders > 1 ? "s" : ""} — usá "Esta semana" para verlo{hiddenFutureOrders > 1 ? "s" : ""}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -2253,13 +2259,6 @@ export default function ListadoVentasPage() {
               <Button variant="outline" onClick={() => setVisiblePage((p) => p + 1)}>
                 Cargar más ({filteredOrders.length - PAGE_SIZE * visiblePage} restantes)
               </Button>
-            </div>
-          )}
-          {/* Hidden future orders notice */}
-          {hiddenFutureOrders > 0 && (
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg py-2 px-4">
-              <Calendar className="w-3.5 h-3.5 shrink-0" />
-              {hiddenFutureOrders} pedido{hiddenFutureOrders > 1 ? "s" : ""} online con entrega futura no {hiddenFutureOrders > 1 ? "se muestran" : "se muestra"} en "Hoy". Usá "Esta semana" o "Personalizado" para verlo{hiddenFutureOrders > 1 ? "s" : ""}.
             </div>
           )}
           {/* Total bar */}
