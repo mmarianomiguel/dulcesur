@@ -198,7 +198,7 @@ export function VentaDetailDialog({
   const [productSearch, setProductSearch] = useState("");
   const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
-
+  const [searchHighlight, setSearchHighlight] = useState(0);
 
   // Reset state when dialog opens/closes
   useEffect(() => {
@@ -206,6 +206,7 @@ export function VentaDetailDialog({
       setAddProductOpen(false);
       setProductSearch("");
       setProductResults([]);
+      setSearchHighlight(0);
     }
   }, [open]);
 
@@ -512,7 +513,7 @@ export function VentaDetailDialog({
               )}
             </div>
 
-            {/* Add product popover */}
+            {/* Add product — POS-style search panel */}
             {addProductOpen && isEditable && (
               <div className="mb-3 border rounded-lg p-3 bg-muted/20 space-y-2">
                 <div className="relative">
@@ -521,50 +522,71 @@ export function VentaDetailDialog({
                     autoFocus
                     placeholder="Buscar producto por nombre o código..."
                     value={productSearch}
-                    onChange={(e) => handleSearchProducts(e.target.value)}
+                    onChange={(e) => { handleSearchProducts(e.target.value); setSearchHighlight(0); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowDown") { e.preventDefault(); setSearchHighlight((h) => Math.min(h + 1, productResults.length - 1)); }
+                      else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHighlight((h) => Math.max(h - 1, 0)); }
+                      else if (e.key === "Enter" && productResults.length > 0) {
+                        e.preventDefault();
+                        const p = productResults[searchHighlight];
+                        if (p) addProduct(p);
+                      }
+                      else if (e.key === "Escape") { setAddProductOpen(false); setProductSearch(""); setProductResults([]); }
+                    }}
                     className="h-8 text-xs pl-8"
                   />
                 </div>
                 {searchingProducts && <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Buscando...</p>}
                 {productResults.length > 0 && (
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {productResults.map((p) => {
-                      const pres = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
-                      if (pres.length === 0) {
-                        return (
-                          <button
-                            key={p.id}
-                            className="w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 text-xs flex items-center justify-between gap-2"
-                            onClick={() => addProduct(p)}
-                          >
-                            <span className="font-medium flex items-center gap-1.5 min-w-0 truncate">
-                              {p.nombre}
-                              {p.es_combo && <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700">COMBO</span>}
-                            </span>
-                            <span className="text-muted-foreground shrink-0">{formatCurrency(p.precio)}</span>
-                          </button>
-                        );
-                      }
+                  <div className="max-h-64 overflow-y-auto space-y-1.5">
+                    {productResults.map((p, idx) => {
+                      const highlighted = idx === searchHighlight;
+                      const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
                       return (
-                        <div key={p.id} className="space-y-0.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-1">{p.nombre}</p>
+                        <div
+                          key={p.id}
+                          ref={highlighted ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+                          className={`rounded-lg border transition-colors ${highlighted ? "ring-2 ring-primary border-primary bg-muted/50" : "hover:bg-muted/30 border-transparent"}`}
+                          onMouseEnter={() => setSearchHighlight(idx)}
+                        >
                           <button
-                            className="w-full text-left px-3 py-1 rounded hover:bg-muted/50 text-xs flex items-center justify-between"
+                            className="w-full text-left p-2.5 flex items-center gap-2.5"
                             onClick={() => addProduct(p)}
                           >
-                            <span className="text-muted-foreground">Unidad</span>
-                            <span className="text-muted-foreground">{formatCurrency(p.precio)}</span>
+                            <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                              <Package className="w-4 h-4 text-muted-foreground/30" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-medium text-xs truncate">{p.nombre}</span>
+                                {p.es_combo && <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700">COMBO</span>}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                                {p.codigo && <span className="font-mono">{p.codigo}</span>}
+                                {p.codigo && <span>·</span>}
+                                <span className="font-semibold text-foreground text-xs">{formatCurrency(p.precio)}</span>
+                              </div>
+                            </div>
                           </button>
-                          {pres.map((pr, i) => (
-                            <button
-                              key={i}
-                              className="w-full text-left px-3 py-1 rounded hover:bg-muted/50 text-xs flex items-center justify-between"
-                              onClick={() => addProduct(p, pr)}
-                            >
-                              <span className="font-medium">{pr.nombre}</span>
-                              <span className="text-muted-foreground">{formatCurrency(pr.precio)}</span>
-                            </button>
-                          ))}
+                          {boxVariants.length > 0 && (
+                            <div className="flex gap-1.5 px-2.5 pb-2.5 pl-14">
+                              <button
+                                className="h-7 text-xs flex-1 rounded-md border border-input bg-background px-2 hover:bg-muted transition-colors"
+                                onClick={() => addProduct(p)}
+                              >
+                                + Unidad
+                              </button>
+                              {boxVariants.map((pr, i) => (
+                                <button
+                                  key={i}
+                                  className="h-7 text-xs flex-1 rounded-md bg-primary text-primary-foreground px-2 hover:bg-primary/90 transition-colors font-medium"
+                                  onClick={() => addProduct(p, pr)}
+                                >
+                                  + {pr.nombre}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
