@@ -2188,11 +2188,9 @@ export default function ClientesPage() {
                   const fechaFmt = new Date(cobroReceipt.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
                   const msg = encodeURIComponent(`Hola ${cobroReceipt.cliente}! Te enviamos el recibo de cobro N° ${cobroReceipt.numero} del ${fechaFmt}.\nMonto cobrado: ${formatCurrency(cobroReceipt.monto)}\nSaldo actual: ${formatCurrency(Math.max(0, cobroReceipt.saldoNuevo))}\n\nGracias por tu pago!`);
                   return (
-                    <Button variant="outline" className="flex-1 min-w-[80px] border-green-500 text-green-600 hover:bg-green-50" asChild>
-                      <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noopener noreferrer">
-                        <MessageSquare className="w-4 h-4 mr-2" />WhatsApp
-                      </a>
-                    </Button>
+                    <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-[80px] inline-flex items-center justify-center rounded-md border border-green-500 text-green-600 hover:bg-green-50 px-3 py-2 text-sm font-medium transition-colors">
+                      <MessageSquare className="w-4 h-4 mr-2" />WhatsApp
+                    </a>
                   );
                 })()}
                 <Button variant="outline" className="flex-1 min-w-[80px]" onClick={async () => {
