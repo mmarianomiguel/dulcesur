@@ -1962,11 +1962,9 @@ export default function ClientesPage() {
                         </div>
                         <div className="flex gap-1.5 shrink-0">
                           {phone && (
-                            <Button size="sm" variant="outline" className="h-8 px-2 border-green-500 text-green-600 hover:bg-green-50" asChild>
-                              <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noopener noreferrer" title="Enviar por WhatsApp">
-                                <MessageSquare className="w-3.5 h-3.5" />
-                              </a>
-                            </Button>
+                            <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noopener noreferrer" title="Enviar por WhatsApp" className="inline-flex items-center justify-center h-8 px-2 rounded-md border border-green-500 text-green-600 hover:bg-green-50 text-sm transition-colors">
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </a>
                           )}
                           <Button size="sm" variant="outline" className="h-8 px-2" title="Ver / Reimprimir" onClick={() => {
                             setCobroReceipt({
