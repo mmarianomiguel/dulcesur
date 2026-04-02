@@ -29,7 +29,7 @@ import {
   X,
   UserCheck,
 } from "lucide-react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useWhiteLabel } from "@/hooks/use-white-label";
 import { useDarkMode } from "@/hooks/use-dark-mode";
@@ -140,6 +140,26 @@ const navigation: NavItem[] = [
 ];
 
 const ALWAYS_VISIBLE = ["Dashboard", "Configuración"];
+
+function SidebarLogo({ logoUrl, logoInitial }: { logoUrl: string; logoInitial: string }) {
+  const [imgError, setImgError] = useState(false);
+  const validUrl = logoUrl && (logoUrl.startsWith("http://") || logoUrl.startsWith("https://") || logoUrl.startsWith("/"));
+
+  // Reset error state when URL changes
+  useEffect(() => { setImgError(false); }, [logoUrl]);
+
+  if (validUrl && !imgError) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={logoUrl} alt="Logo" className="w-9 h-9 rounded-lg object-contain" onError={() => setImgError(true)} />
+    );
+  }
+  return (
+    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-lg">
+      {logoInitial || "C"}
+    </div>
+  );
+}
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -327,14 +347,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 h-16 shrink-0 relative">
-          {wl.logo_url && (wl.logo_url.startsWith("http://") || wl.logo_url.startsWith("https://") || wl.logo_url.startsWith("/")) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={wl.logo_url} alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
-          ) : (
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-lg">
-              {wl.logo_initial || "C"}
-            </div>
-          )}
+          <SidebarLogo logoUrl={wl.logo_url} logoInitial={wl.logo_initial} />
           {!collapsed && (
             <div className="flex flex-col flex-1">
               <span className="text-base font-semibold tracking-tight text-sidebar-foreground">
