@@ -234,7 +234,7 @@ export function VentaDetailDialog({
       })()
     : data.total - ncTotal;
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
-  const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr"));
+  const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr") && !p.metodo.includes("(a cobrar)"));
   // Calculate real payments total (excluding NCs and "Pendiente de cobro")
   const totalPagado = (pagos || []).reduce((s, p) => {
     if (p.metodo === "Pendiente de cobro") return s;

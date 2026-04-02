@@ -276,16 +276,18 @@ export default function PedidosOnlinePage() {
   // Build payment entries from pedido fields (checkout data / cobro saved data)
   const buildPaymentsFromPedido = (pedido: Pedido): PaymentEntry[] => {
     const metodo = (pedido.metodo_pago || "").toLowerCase();
+    const isPaid = pedido.estado === "entregado";
+    const sfx = isPaid ? "" : " (a cobrar)";
     const payments: PaymentEntry[] = [];
     if (metodo === "mixto" || metodo.includes("mixto")) {
-      if ((pedido.monto_efectivo || 0) > 0) payments.push({ metodo: "Efectivo", monto: pedido.monto_efectivo });
-      if ((pedido.monto_transferencia || 0) > 0) payments.push({ metodo: "Transferencia", monto: pedido.monto_transferencia, cuenta_bancaria: pedido.cuenta_bancaria_alias || null });
+      if ((pedido.monto_efectivo || 0) > 0) payments.push({ metodo: `Efectivo${sfx}`, monto: pedido.monto_efectivo });
+      if ((pedido.monto_transferencia || 0) > 0) payments.push({ metodo: `Transferencia${sfx}`, monto: pedido.monto_transferencia, cuenta_bancaria: pedido.cuenta_bancaria_alias || null });
     } else if (metodo.includes("transferencia")) {
-      payments.push({ metodo: "Transferencia", monto: pedido.total, cuenta_bancaria: pedido.cuenta_bancaria_alias || null });
+      payments.push({ metodo: `Transferencia${sfx}`, monto: pedido.total, cuenta_bancaria: pedido.cuenta_bancaria_alias || null });
     } else if (metodo.includes("cuenta")) {
-      payments.push({ metodo: "Cuenta Corriente", monto: pedido.total });
+      payments.push({ metodo: `Cuenta Corriente${sfx}`, monto: pedido.total });
     } else if (metodo.includes("efectivo")) {
-      payments.push({ metodo: "Efectivo", monto: pedido.total });
+      payments.push({ metodo: `Efectivo${sfx}`, monto: pedido.total });
     }
     if (payments.length === 0) payments.push({ metodo: "Pendiente de cobro", monto: pedido.total });
     return payments;
