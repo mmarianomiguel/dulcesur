@@ -1042,6 +1042,7 @@ export default function ListadoVentasPage() {
         unidades_por_presentacion: item.unidades_por_presentacion || 1,
         codigo: item.codigo,
         descuento: item.descuento,
+        costo_unitario: item.costo_unitario || 0,
       }));
     }
 
