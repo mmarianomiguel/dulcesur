@@ -1138,7 +1138,16 @@ export default function ListadoVentasPage() {
   const poUpdateItemQty = (index: number, qty: number) => {
     if (qty <= 0) return;
     setPoEditItems((prev) => prev.map((item, i) =>
-      i === index ? { ...item, cantidad: qty, subtotal: qty * item.precio_unitario } : item
+      i === index ? { ...item, cantidad: qty, subtotal: qty * item.precio_unitario * (1 - (item.descuento || 0) / 100) } : item
+    ));
+    setPoHasChanges(true);
+  };
+
+  // Update item discount
+  const poUpdateItemDiscount = (index: number, pct: number) => {
+    const d = Math.max(0, Math.min(100, pct));
+    setPoEditItems((prev) => prev.map((item, i) =>
+      i === index ? { ...item, descuento: d, subtotal: item.cantidad * item.precio_unitario * (1 - d / 100) } : item
     ));
     setPoHasChanges(true);
   };
@@ -1679,8 +1688,8 @@ export default function ListadoVentasPage() {
   };
 
   const allOrders = useMemo(() => {
-    // Don't compute until both sources are loaded to avoid flash
-    if (loading || poLoading) return [];
+    // Only block render on initial load (no data yet), not on refetch after save
+    if ((loading || poLoading) && ventas.length === 0 && poPedidos.length === 0) return [];
     const fromHistorial: Pedido[] = ventas.map((v) => {
       const estado = v.estado === "anulada" ? "cancelado" : v.entregado ? "entregado" : v.estado === "cerrada" ? "cerrada" : v.estado || "pendiente";
       return {
@@ -2301,6 +2310,7 @@ export default function ListadoVentasPage() {
             const isCancelled = poSelectedPedido.estado === "cancelado";
             const isDelivered = poSelectedPedido.estado === "entregado";
             const isNCType = poSelectedPedido._tipo_comprobante?.includes("Nota de Crédito");
+            const isEditable = poSelectedPedido.estado === "pendiente" || poSelectedPedido.estado === "armado";
             const estBadge = estadoBadge[poSelectedPedido.estado] || estadoBadge.pendiente;
             const itemsSubtotal = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
             const descPct = poSelectedPedido._descuento_porcentaje || 0;
@@ -2672,7 +2682,7 @@ export default function ListadoVentasPage() {
                     <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
                       <Package className="w-4 h-4" /> {isNCType ? "Productos devueltos" : "Productos"} ({isNCType ? poEditItems.filter((i) => i.cantidad > 0).length : poEditItems.length})
                     </h3>
-                    {!isCancelled && !isNCType && (
+                    {isEditable && !isNCType && (
                       <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setPoAddProductOpen(true)}>
                         <Plus className="w-3 h-3" /> Agregar producto
                       </Button>
@@ -2687,11 +2697,14 @@ export default function ListadoVentasPage() {
                           <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-24">Presentacion</th>
                           <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-20">Cant.</th>
                           <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
-                          {poEditItems.some((i) => (i.descuento || 0) > 0) && (
+                          {isEditable && (
+                            <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-20">Desc.%</th>
+                          )}
+                          {!isEditable && poEditItems.some((i) => (i.descuento || 0) > 0) && (
                             <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>
                           )}
                           <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
-                          {!isCancelled && !isNCType && !isDelivered && <th className="w-10"></th>}
+                          {isEditable && !isNCType && <th className="w-10"></th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -2710,7 +2723,7 @@ export default function ListadoVentasPage() {
                             </td>
                             <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
                             <td className="px-3 py-2 text-center">
-                              {isCancelled || isNCType || isDelivered ? (
+                              {!isEditable || isNCType ? (
                                 <span>{item.cantidad}</span>
                               ) : (
                                 <Input
@@ -2728,11 +2741,26 @@ export default function ListadoVentasPage() {
                                 <p className="text-[10px] text-muted-foreground">{formatCurrency(item.precio_unitario / item.unidades_por_presentacion)} c/u</p>
                               )}
                             </td>
-                            {poEditItems.some((i) => (i.descuento || 0) > 0) && (
+                            {isEditable && (
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-0.5">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={item.descuento || 0}
+                                    onChange={(e) => poUpdateItemDiscount(idx, Number(e.target.value))}
+                                    className="h-7 w-14 text-center"
+                                  />
+                                  <span className="text-xs text-muted-foreground">%</span>
+                                </div>
+                              </td>
+                            )}
+                            {!isEditable && poEditItems.some((i) => (i.descuento || 0) > 0) && (
                               <td className="px-3 py-2 text-right text-xs">{(item.descuento || 0) > 0 ? `-${item.descuento}%` : ""}</td>
                             )}
                             <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad * (1 - (item.descuento || 0) / 100))}</td>
-                            {!isCancelled && !isNCType && !isDelivered && (
+                            {isEditable && !isNCType && (
                               <td className="px-2 py-2">
                                 <button
                                   onClick={() => poRemoveItem(idx)}
