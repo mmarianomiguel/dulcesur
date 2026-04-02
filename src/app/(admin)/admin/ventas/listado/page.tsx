@@ -140,6 +140,7 @@ interface PedidoItem {
   unidades_por_presentacion: number;
   codigo?: string;
   descuento?: number;
+  costo_unitario?: number;
 }
 
 interface Pedido {
@@ -181,6 +182,7 @@ interface ProductoSearch {
   codigo: string;
   nombre: string;
   precio: number;
+  costo?: number;
   unidad_medida?: string;
   es_combo?: boolean;
   imagen_url?: string;
@@ -1155,12 +1157,12 @@ export default function ListadoVentasPage() {
     setPoSearchingProducts(true);
     const { data } = await supabase
       .from("productos")
-      .select("id, codigo, nombre, precio, unidad_medida, es_combo, imagen_url, stock, presentaciones(nombre, precio, cantidad)")
+      .select("id, codigo, nombre, precio, costo, unidad_medida, es_combo, imagen_url, stock, presentaciones(nombre, precio, cantidad)")
       .eq("activo", true)
       .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
       .limit(10);
     setPoProductResults((data || []).map((p: any) => ({
-      id: p.id, codigo: p.codigo, nombre: p.nombre, precio: p.precio,
+      id: p.id, codigo: p.codigo, nombre: p.nombre, precio: p.precio, costo: p.costo || 0,
       unidad_medida: p.unidad_medida, es_combo: p.es_combo || false,
       imagen_url: p.imagen_url || undefined, stock: p.stock ?? undefined,
       presentaciones: p.es_combo ? [] : (p.presentaciones || []).map((pr: any) => ({
@@ -1187,6 +1189,7 @@ export default function ListadoVentasPage() {
         precio_unitario: presPrecio,
         subtotal: presPrecio,
         unidades_por_presentacion: presUpp,
+        costo_unitario: product.costo || 0,
       }]);
       setPoHasChanges(true);
     }
@@ -1351,6 +1354,7 @@ export default function ListadoVentasPage() {
             unidad_medida: "Un",
             presentacion: item.presentacion,
             unidades_por_presentacion: item.unidades_por_presentacion || 1,
+            costo_unitario: item.costo_unitario || 0,
           }))
         );
         if (viErr) errores.push(`Error sync venta_items: ${viErr.message}`);
