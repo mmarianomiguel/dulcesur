@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mockup — Cobro en Detalle de Venta</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .mock-dialog { max-width: 580px; margin: 40px auto; background: white; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,.25); border: 1px solid #e5e7eb; }
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .fade-in { animation: fadeIn .2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+
+  <!-- Context label -->
+  <div class="text-center mb-4">
+    <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Mockup — Sección de cobro dentro del detalle de venta</span>
+  </div>
+
+  <div class="mock-dialog overflow-hidden">
+    <!-- Dialog header (simulated) -->
+    <div class="px-5 pt-5 pb-3 border-b border-gray-100">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-gray-900">Pedido Web #PW-0047</h2>
+          <p class="text-xs text-gray-500 mt-0.5">01/04/2026 — Distribuidora Norte SRL</p>
+        </div>
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Pendiente de cobro</span>
+      </div>
+    </div>
+
+    <!-- Items section (collapsed for mockup) -->
+    <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Items del pedido</span>
+        <button class="text-xs text-blue-600 hover:underline">Editar items</button>
+      </div>
+      <div class="mt-2 space-y-1.5">
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">3x Alfajor Havanna — Caja x12</span>
+          <span class="font-medium text-gray-900">$36.000</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">5x Galletitas Terrabusi x3u</span>
+          <span class="font-medium text-gray-900">$22.500</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">2x Dulce de leche Sancor 1kg</span>
+          <span class="font-medium text-gray-900">$11.500</span>
+        </div>
+      </div>
+      <div class="mt-2 pt-2 border-t border-gray-200 flex justify-between">
+        <span class="text-sm font-semibold text-gray-600">Subtotal (precio efectivo)</span>
+        <span class="text-sm font-bold text-gray-900">$70.000</span>
+      </div>
+    </div>
+
+    <!-- ====================== -->
+    <!-- COBRO SECTION — THE MOCKUP -->
+    <!-- ====================== -->
+    <div class="px-5 py-4 space-y-4">
+
+      <!-- Section title -->
+      <div class="flex items-center gap-2">
+        <div class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100">
+          <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3 class="text-sm font-semibold text-gray-900">Registrar cobro</h3>
+      </div>
+
+      <!-- Payment method selector -->
+      <div>
+        <label class="text-xs font-medium text-gray-500 mb-1.5 block">Forma de pago</label>
+        <div class="grid grid-cols-4 gap-1.5">
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium hover:border-gray-300 hover:bg-gray-50 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Efectivo
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-emerald-500 bg-emerald-50 p-2 text-emerald-700 text-[11px] font-semibold transition-all ring-1 ring-emerald-500/20">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>
+            Transferencia
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium hover:border-gray-300 hover:bg-gray-50 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/><path stroke-linecap="round" d="M12 6v12"/></svg>
+            Mixto
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium hover:border-gray-300 hover:bg-gray-50 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+            Cta Cte
+          </button>
+        </div>
+      </div>
+
+      <!-- Transfer-specific: bank account + surcharge -->
+      <div class="fade-in space-y-3">
+        <!-- Bank account selector -->
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1.5 block">Cuenta destino</label>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button class="flex items-center gap-2 rounded-lg border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 text-left transition-all">
+              <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+              <div>
+                <div class="font-semibold">Macro</div>
+                <div class="text-[10px] text-emerald-600/70">dulcesur.macro</div>
+              </div>
+            </button>
+            <button class="flex items-center gap-2 rounded-lg border-2 border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-500 text-left hover:border-gray-300 transition-all">
+              <div class="w-2 h-2 rounded-full bg-gray-300"></div>
+              <div>
+                <div class="font-semibold">Galicia</div>
+                <div class="text-[10px] text-gray-400">dulcesur.galicia</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Surcharge indicator -->
+        <div class="rounded-lg bg-violet-50 border border-violet-200/80 px-3 py-2.5 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+            <div>
+              <p class="text-xs font-medium text-violet-800">Recargo transferencia <span class="font-bold">2%</span></p>
+              <p class="text-[10px] text-violet-600">Cliente transfiere $71.400 (incluye $1.400 de recargo)</p>
+            </div>
+          </div>
+          <span class="text-sm font-bold text-violet-700">+$1.400</span>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="border-t border-dashed border-gray-200"></div>
+
+      <!-- Cobrar saldo adeudado toggle -->
+      <div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" checked class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4" />
+            <div>
+              <label class="text-sm font-medium text-gray-900 cursor-pointer">Cobrar saldo adeudado</label>
+              <p class="text-[10px] text-gray-500">El cliente tiene saldo pendiente de comprobantes anteriores</p>
+            </div>
+          </div>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">$45.200</span>
+        </div>
+
+        <!-- FIFO allocation table -->
+        <div class="mt-3 border rounded-lg overflow-hidden fade-in">
+          <div class="bg-gray-50 px-3 py-2 flex items-center justify-between border-b">
+            <span class="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Asignacion FIFO</span>
+            <div class="flex gap-1">
+              <button class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">FIFO</button>
+              <button class="px-2 py-0.5 rounded text-[10px] font-medium text-gray-400 hover:bg-gray-100 border border-transparent">Manual</button>
+            </div>
+          </div>
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-[10px] text-gray-400 uppercase border-b bg-gray-50/50">
+                <th class="text-left px-3 py-1.5 font-medium">Comprobante</th>
+                <th class="text-left px-2 py-1.5 font-medium">Fecha</th>
+                <th class="text-right px-2 py-1.5 font-medium">Pendiente</th>
+                <th class="text-right px-3 py-1.5 font-medium">Aplicar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-gray-100 hover:bg-gray-50/50">
+                <td class="px-3 py-2 font-mono text-gray-700">FA-B-00312</td>
+                <td class="px-2 py-2 text-gray-500">15/03/2026</td>
+                <td class="px-2 py-2 text-right text-orange-600 font-medium">$28.500</td>
+                <td class="px-3 py-2 text-right">
+                  <span class="font-semibold text-emerald-600">$28.500 <span class="text-emerald-500">&#10003;</span></span>
+                </td>
+              </tr>
+              <tr class="border-b border-gray-100 hover:bg-gray-50/50">
+                <td class="px-3 py-2 font-mono text-gray-700">FA-B-00318</td>
+                <td class="px-2 py-2 text-gray-500">22/03/2026</td>
+                <td class="px-2 py-2 text-right text-orange-600 font-medium">$16.700</td>
+                <td class="px-3 py-2 text-right">
+                  <span class="font-semibold text-blue-600">$16.700 <span class="text-blue-500">&#10003;</span></span>
+                </td>
+              </tr>
+              <tr class="hover:bg-gray-50/50">
+                <td class="px-3 py-2 font-mono text-gray-700">REM-X-00045</td>
+                <td class="px-2 py-2 text-gray-500">28/03/2026</td>
+                <td class="px-2 py-2 text-right text-orange-600 font-medium">$8.200</td>
+                <td class="px-3 py-2 text-right">
+                  <span class="text-gray-400">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="bg-gray-50 px-3 py-2 border-t flex items-center justify-between">
+            <span class="text-[11px] font-medium text-gray-500">Total asignado</span>
+            <span class="text-xs font-bold text-emerald-600">$45.200 / $45.200</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="border-t border-dashed border-gray-200"></div>
+
+      <!-- Summary breakdown -->
+      <div class="bg-gray-50 rounded-lg px-4 py-3 space-y-2">
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Pedido (subtotal efectivo)</span>
+          <span class="font-medium text-gray-800">$70.000</span>
+        </div>
+        <div class="flex justify-between text-sm text-violet-600">
+          <span>Recargo transferencia (2%)</span>
+          <span class="font-medium">+$1.400</span>
+        </div>
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Saldo adeudado anterior</span>
+          <span class="font-medium text-gray-800">$45.200</span>
+        </div>
+        <div class="border-t border-gray-200 pt-2 flex justify-between">
+          <span class="text-sm font-bold text-gray-900">Total a cobrar</span>
+          <span class="text-lg font-bold text-gray-900">$116.600</span>
+        </div>
+      </div>
+
+      <!-- Confirm button -->
+      <button class="w-full py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-sm shadow-emerald-200">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Confirmar cobro — $116.600
+      </button>
+
+      <p class="text-[10px] text-gray-400 text-center">Se registra en caja, actualiza saldo del cliente y marca los comprobantes como pagados</p>
+    </div>
+  </div>
+
+  <!-- ====================== -->
+  <!-- MIXTO VARIANT -->
+  <!-- ====================== -->
+  <div class="text-center mt-12 mb-4">
+    <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Variante — Pago Mixto (sin saldo adeudado)</span>
+  </div>
+
+  <div class="mock-dialog overflow-hidden">
+    <div class="px-5 pt-5 pb-3 border-b border-gray-100">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-gray-900">Pedido Web #PW-0051</h2>
+          <p class="text-xs text-gray-500 mt-0.5">01/04/2026 — Kiosco El Sol</p>
+        </div>
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Pendiente de cobro</span>
+      </div>
+    </div>
+
+    <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Items del pedido</span>
+        <button class="text-xs text-blue-600 hover:underline">Editar items</button>
+      </div>
+      <div class="mt-2 space-y-1.5">
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">10x Caramelos Flynn Paff x50u</span>
+          <span class="font-medium text-gray-900">$35.000</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">4x Chocolate Aguila 150g</span>
+          <span class="font-medium text-gray-900">$15.000</span>
+        </div>
+      </div>
+      <div class="mt-2 pt-2 border-t border-gray-200 flex justify-between">
+        <span class="text-sm font-semibold text-gray-600">Subtotal (precio efectivo)</span>
+        <span class="text-sm font-bold text-gray-900">$50.000</span>
+      </div>
+    </div>
+
+    <div class="px-5 py-4 space-y-4">
+      <div class="flex items-center gap-2">
+        <div class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100">
+          <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3 class="text-sm font-semibold text-gray-900">Registrar cobro</h3>
+      </div>
+
+      <!-- Payment method — Mixto selected -->
+      <div>
+        <label class="text-xs font-medium text-gray-500 mb-1.5 block">Forma de pago</label>
+        <div class="grid grid-cols-4 gap-1.5">
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Efectivo
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>
+            Transferencia
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-emerald-500 bg-emerald-50 p-2 text-emerald-700 text-[11px] font-semibold transition-all ring-1 ring-emerald-500/20">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/><path stroke-linecap="round" d="M12 6v12"/></svg>
+            Mixto
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+            Cta Cte
+          </button>
+        </div>
+      </div>
+
+      <!-- Mixto split inputs -->
+      <div class="fade-in grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Efectivo</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+            <input type="text" value="25.000" class="w-full rounded-lg border border-gray-200 bg-white h-9 text-sm font-medium text-right pr-3 pl-6 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 mb-1 block">Transferencia</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+            <input type="text" value="25.000" class="w-full rounded-lg border border-gray-200 bg-white h-9 text-sm font-medium text-right pr-3 pl-6 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Bank account -->
+      <div class="fade-in">
+        <label class="text-xs font-medium text-gray-500 mb-1.5 block">Cuenta destino (para transferencia)</label>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button class="flex items-center gap-2 rounded-lg border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 text-left transition-all">
+            <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+            <div>
+              <div class="font-semibold">Macro</div>
+              <div class="text-[10px] text-emerald-600/70">dulcesur.macro</div>
+            </div>
+          </button>
+          <button class="flex items-center gap-2 rounded-lg border-2 border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-500 text-left hover:border-gray-300 transition-all">
+            <div class="w-2 h-2 rounded-full bg-gray-300"></div>
+            <div>
+              <div class="font-semibold">Galicia</div>
+              <div class="text-[10px] text-gray-400">dulcesur.galicia</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Surcharge only on transfer portion -->
+      <div class="fade-in rounded-lg bg-violet-50 border border-violet-200/80 px-3 py-2.5 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+          <div>
+            <p class="text-xs font-medium text-violet-800">Recargo 2% sobre porcion transferencia ($25.000)</p>
+            <p class="text-[10px] text-violet-600">Cliente transfiere $25.500</p>
+          </div>
+        </div>
+        <span class="text-sm font-bold text-violet-700">+$500</span>
+      </div>
+
+      <!-- No pending saldo -->
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200/60">
+        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p class="text-xs text-emerald-700 font-medium">El cliente no tiene saldo adeudado</p>
+      </div>
+
+      <!-- Divider -->
+      <div class="border-t border-dashed border-gray-200"></div>
+
+      <!-- Summary -->
+      <div class="bg-gray-50 rounded-lg px-4 py-3 space-y-2">
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Pedido (subtotal efectivo)</span>
+          <span class="font-medium text-gray-800">$50.000</span>
+        </div>
+        <div class="flex justify-between text-xs text-gray-500 pl-3">
+          <span>Efectivo</span>
+          <span>$25.000</span>
+        </div>
+        <div class="flex justify-between text-xs text-gray-500 pl-3">
+          <span>Transferencia</span>
+          <span>$25.000</span>
+        </div>
+        <div class="flex justify-between text-sm text-violet-600">
+          <span>Recargo transferencia (2% s/ $25.000)</span>
+          <span class="font-medium">+$500</span>
+        </div>
+        <div class="border-t border-gray-200 pt-2 flex justify-between">
+          <span class="text-sm font-bold text-gray-900">Total a cobrar</span>
+          <span class="text-lg font-bold text-gray-900">$50.500</span>
+        </div>
+      </div>
+
+      <!-- Confirm -->
+      <button class="w-full py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-sm shadow-emerald-200">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Confirmar cobro — $50.500
+      </button>
+
+      <p class="text-[10px] text-gray-400 text-center">Se registra en caja, actualiza saldo del cliente y marca los comprobantes como pagados</p>
+    </div>
+  </div>
+
+  <!-- ====================== -->
+  <!-- CUENTA CORRIENTE VARIANT -->
+  <!-- ====================== -->
+  <div class="text-center mt-12 mb-4">
+    <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Variante — Todo a Cuenta Corriente</span>
+  </div>
+
+  <div class="mock-dialog overflow-hidden mb-16">
+    <div class="px-5 pt-5 pb-3 border-b border-gray-100">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-gray-900">Factura B #FA-B-00401</h2>
+          <p class="text-xs text-gray-500 mt-0.5">01/04/2026 — Maxikiosco Luna (POS envio)</p>
+        </div>
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Pendiente de cobro</span>
+      </div>
+    </div>
+
+    <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+      <div class="mt-0 space-y-1.5">
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">6x Gomitas Mogul x30u</span>
+          <span class="font-medium text-gray-900">$18.000</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-700">2x Chupetines Pico Dulce x50u</span>
+          <span class="font-medium text-gray-900">$12.000</span>
+        </div>
+      </div>
+      <div class="mt-2 pt-2 border-t border-gray-200 flex justify-between">
+        <span class="text-sm font-semibold text-gray-600">Subtotal (precio efectivo)</span>
+        <span class="text-sm font-bold text-gray-900">$30.000</span>
+      </div>
+    </div>
+
+    <div class="px-5 py-4 space-y-4">
+      <div class="flex items-center gap-2">
+        <div class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100">
+          <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3 class="text-sm font-semibold text-gray-900">Registrar cobro</h3>
+      </div>
+
+      <!-- Cta Cte selected -->
+      <div>
+        <label class="text-xs font-medium text-gray-500 mb-1.5 block">Forma de pago</label>
+        <div class="grid grid-cols-4 gap-1.5">
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Efectivo
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>
+            Transferencia
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-gray-200 bg-white p-2 text-gray-400 text-[11px] font-medium transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/><path stroke-linecap="round" d="M12 6v12"/></svg>
+            Mixto
+          </button>
+          <button class="flex flex-col items-center gap-1 rounded-lg border-2 border-emerald-500 bg-emerald-50 p-2 text-emerald-700 text-[11px] font-semibold transition-all ring-1 ring-emerald-500/20">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+            Cta Cte
+          </button>
+        </div>
+      </div>
+
+      <!-- CC info -->
+      <div class="rounded-lg bg-blue-50 border border-blue-200/80 px-3 py-2.5">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+          <div>
+            <p class="text-xs font-medium text-blue-800">Se carga $30.000 a la cuenta corriente del cliente</p>
+            <p class="text-[10px] text-blue-600">Saldo actual: $15.200 &rarr; Nuevo saldo: $45.200</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="border-t border-dashed border-gray-200"></div>
+
+      <!-- Summary -->
+      <div class="bg-gray-50 rounded-lg px-4 py-3 space-y-2">
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Pedido (subtotal efectivo)</span>
+          <span class="font-medium text-gray-800">$30.000</span>
+        </div>
+        <div class="flex justify-between text-sm text-blue-600">
+          <span>A cuenta corriente</span>
+          <span class="font-medium">$30.000</span>
+        </div>
+        <div class="border-t border-gray-200 pt-2 flex justify-between">
+          <span class="text-sm font-bold text-gray-900">No se cobra en caja</span>
+          <span class="text-lg font-bold text-gray-400">$0</span>
+        </div>
+      </div>
+
+      <!-- Confirm -->
+      <button class="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-sm shadow-blue-200">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+        Cargar a Cuenta Corriente — $30.000
+      </button>
+
+      <p class="text-[10px] text-gray-400 text-center">No impacta en caja. Se actualiza el saldo del cliente y se registra en cuenta corriente</p>
+    </div>
+  </div>
+
+</body>
+</html>

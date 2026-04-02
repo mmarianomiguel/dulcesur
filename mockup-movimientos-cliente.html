@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mockup — Movimientos y Cobros del Cliente</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .dialog { max-width: 880px; margin: 30px auto; background: white; border-radius: 14px; box-shadow: 0 25px 50px -12px rgba(0,0,0,.2); border: 1px solid #e2e8f0; overflow: hidden; }
+    .tab-active { color: #0f172a; border-bottom: 2px solid #0f172a; font-weight: 600; }
+    .tab-inactive { color: #94a3b8; border-bottom: 2px solid transparent; }
+    .tab-inactive:hover { color: #64748b; }
+    input[type="date"] { font-size: 12px; }
+    .num { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen py-6">
+
+  <!-- ============================================= -->
+  <!--  VISTA 1: RESUMEN DE CUENTA (Libro Diario)    -->
+  <!-- ============================================= -->
+  <div class="text-center mb-3">
+    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Vista 1 — Resumen de Cuenta (libro diario)</span>
+  </div>
+
+  <div class="dialog">
+    <!-- Header -->
+    <div class="px-6 pt-5 pb-0">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
+            <svg class="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div>
+            <h2 class="text-[15px] font-bold text-slate-900">Resumen de Cuenta</h2>
+            <p class="text-[11px] text-slate-400 mt-0.5">Yanina Ovejero <span class="text-slate-300 mx-1">|</span> CUIT 27-34567890-1</p>
+          </div>
+        </div>
+        <button class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Filters row -->
+      <div class="flex items-end gap-2 mb-4">
+        <div>
+          <label class="text-[10px] text-slate-400 font-medium uppercase tracking-wider block mb-1">Filtrar</label>
+          <select class="border border-slate-200 rounded-lg px-3 py-1.5 h-8 text-xs text-slate-600 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 w-48">
+            <option>Ver todos los movimientos</option>
+            <option>Solo compras (debe)</option>
+            <option>Solo pagos (haber)</option>
+            <option>Solo con saldo pendiente</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-400 font-medium uppercase tracking-wider block mb-1">Desde</label>
+          <input type="date" value="2026-02-23" class="border border-slate-200 rounded-lg px-2.5 py-1.5 h-8 text-xs w-36 focus:outline-none focus:ring-2 focus:ring-slate-400" />
+        </div>
+        <div>
+          <label class="text-[10px] text-slate-400 font-medium uppercase tracking-wider block mb-1">Hasta</label>
+          <input type="date" value="2026-03-23" class="border border-slate-200 rounded-lg px-2.5 py-1.5 h-8 text-xs w-36 focus:outline-none focus:ring-2 focus:ring-slate-400" />
+        </div>
+        <button class="h-8 px-4 text-xs font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors">
+          Filtrar
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex gap-6 border-b border-slate-200">
+        <button class="tab-active pb-2.5 text-[13px] px-0.5">Resumen</button>
+        <button class="tab-inactive pb-2.5 text-[13px] px-0.5">Compras</button>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="px-6 py-4">
+      <!-- Libro diario table -->
+      <div class="border border-slate-200 rounded-xl overflow-hidden">
+        <div class="max-h-[400px] overflow-y-auto">
+          <table class="w-full text-[13px]">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-[72px]">Fecha</th>
+                <th class="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400">Comprobante</th>
+                <th class="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-[100px]">Debe</th>
+                <th class="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-[100px]">Haber</th>
+                <th class="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-[110px]">Saldo</th>
+                <th class="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-[110px]">Cond. Pago</th>
+                <th class="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-[60px]">Obs.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num">02/03</td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00012857</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-medium text-emerald-600">$56.510</td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$190.353</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num"></td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">
+                  <span class="inline-flex items-center gap-1.5">
+                    NC X 00001-00000177
+                    <span class="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-100 text-red-600">NC</span>
+                  </span>
+                </td>
+                <td class="py-2 px-3 text-right num text-xs font-medium">$28.500</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$218.853</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num"></td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">
+                  <span class="inline-flex items-center gap-1.5">
+                    NC X 00001-00000177
+                    <span class="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-100 text-red-600">NC</span>
+                  </span>
+                </td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-medium text-emerald-600">$28.500</td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$190.353</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num"></td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00012858</td>
+                <td class="py-2 px-3 text-right num text-xs font-medium">$2.940</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$193.293</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num"></td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00012858</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-medium text-emerald-600">$2.940</td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$190.353</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50 border-t border-t-slate-200">
+                <td class="py-2 px-3 text-slate-400 text-xs num">07/03</td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00013009</td>
+                <td class="py-2 px-3 text-right num text-xs font-medium">$40.185</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$230.538</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num"></td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00013009</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-medium text-emerald-600">$40.185</td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$190.353</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50 border-t border-t-slate-200">
+                <td class="py-2 px-3 text-slate-400 text-xs num">09/03</td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00013062</td>
+                <td class="py-2 px-3 text-right num text-xs font-medium">$45.064</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$235.417</td>
+                <td class="py-2 px-3 text-xs text-slate-500">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-violet-50 text-violet-600">Transferencia</span>
+                </td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num"></td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00013062</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-medium text-emerald-600">$45.064</td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$190.353</td>
+                <td class="py-2 px-3 text-xs text-slate-500">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-violet-50 text-violet-600">Transferencia</span>
+                </td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50 border-t border-t-slate-200">
+                <td class="py-2 px-3 text-slate-400 text-xs num">16/03</td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00013280</td>
+                <td class="py-2 px-3 text-right num text-xs font-medium">$80.120</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$270.473</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-slate-400 text-xs num"></td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00013280</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-medium text-emerald-600">$80.120</td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$190.353</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+              <!-- Highlighted last row -->
+              <tr class="hover:bg-blue-50/50 bg-blue-50/30 border-t border-t-slate-200">
+                <td class="py-2 px-3 text-slate-400 text-xs num">24/03</td>
+                <td class="py-2 px-3 text-xs font-mono text-slate-700">RM X 00001-00013484</td>
+                <td class="py-2 px-3 text-right num text-xs"></td>
+                <td class="py-2 px-3 text-right num text-xs font-medium text-emerald-600">$25.930</td>
+                <td class="py-2 px-3 text-right num text-xs font-bold text-orange-600">$190.353</td>
+                <td class="py-2 px-3 text-xs text-slate-500">Efectivo</td>
+                <td class="py-2 px-3"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Totals footer -->
+        <div class="bg-slate-50 border-t border-slate-200 px-4 py-3">
+          <div class="flex items-center justify-end gap-6">
+            <div class="text-right">
+              <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Pendiente</p>
+              <p class="text-sm font-bold text-slate-900 num">$9.029.158</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Cobrado</p>
+              <p class="text-sm font-bold text-emerald-600 num">$8.838.805</p>
+            </div>
+            <div class="text-right pl-4 border-l-2 border-slate-200">
+              <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Saldo deudor</p>
+              <p class="text-lg font-extrabold text-orange-600 num">$190.353</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex items-center justify-between mt-4">
+        <div class="flex gap-2">
+          <button class="h-9 px-4 text-xs font-semibold rounded-lg flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Ingresar Pago
+          </button>
+          <button class="h-9 px-4 text-xs font-medium rounded-lg flex items-center gap-2 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18.75 3.75H5.25"/></svg>
+            Imprimir resumen
+          </button>
+          <button class="h-9 px-4 text-xs font-medium rounded-lg flex items-center gap-2 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+            Exportar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================================= -->
+  <!--  VISTA 2: RECIBO / COBRO (Ingresar Pago)      -->
+  <!-- ============================================= -->
+  <div class="text-center mt-12 mb-3">
+    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Vista 2 — Recibo / Registrar Cobro (se abre desde "Ingresar Pago")</span>
+  </div>
+
+  <div class="dialog">
+    <!-- Header with receipt number -->
+    <div class="px-6 pt-5 pb-4 border-b border-slate-100 bg-slate-50/50">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
+            <svg class="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15a2.25 2.25 0 012.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"/></svg>
+          </div>
+          <div>
+            <h2 class="text-[15px] font-bold text-slate-900">Registrar Cobro</h2>
+            <p class="text-[11px] text-slate-400 mt-0.5">Yanina Ovejero <span class="text-slate-300 mx-1">|</span> Saldo: <span class="font-semibold text-orange-500">$190.353</span></p>
+          </div>
+        </div>
+        <div class="text-right">
+          <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Recibo N°</p>
+          <p class="text-sm font-mono font-bold text-slate-900">00001-00000999</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-6 py-4 space-y-5">
+
+      <!-- Comprobantes pendientes de pago -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Comprobantes pendientes de pago</h3>
+          <div class="flex gap-1">
+            <button class="px-2.5 py-1 rounded-md text-[10px] font-semibold bg-slate-900 text-white">FIFO</button>
+            <button class="px-2.5 py-1 rounded-md text-[10px] font-medium text-slate-400 hover:bg-slate-100 border border-transparent">Manual</button>
+          </div>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <table class="w-full text-[12px]">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400">Comprobante N°</th>
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-20">Fecha</th>
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-16">Vto.</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-24">Total FC</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-24">Saldo FC</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-28">
+                  <span class="flex items-center justify-end gap-1">
+                    Pago
+                    <svg class="w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-slate-100 hover:bg-emerald-50/30">
+                <td class="py-2.5 px-3 font-mono text-slate-700 text-xs">RM X 00001-00008526</td>
+                <td class="py-2.5 px-3 text-xs text-slate-500 num">30/06/25</td>
+                <td class="py-2.5 px-3 text-xs text-slate-400 num">28/08/25</td>
+                <td class="py-2.5 px-3 text-right num text-xs text-slate-700">$250.530</td>
+                <td class="py-2.5 px-3 text-right num text-xs font-medium text-orange-600">$184.033</td>
+                <td class="py-2.5 px-3 text-right">
+                  <div class="relative">
+                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">$</span>
+                    <input type="text" value="25.000" class="w-full rounded-lg border border-emerald-300 bg-emerald-50/50 h-7 text-xs font-semibold text-right pr-2.5 pl-5 text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 num" />
+                  </div>
+                </td>
+              </tr>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2.5 px-3 font-mono text-slate-700 text-xs">RM X 00001-00008719</td>
+                <td class="py-2.5 px-3 text-xs text-slate-500 num">08/09/25</td>
+                <td class="py-2.5 px-3 text-xs text-slate-400 num">12/09/25</td>
+                <td class="py-2.5 px-3 text-right num text-xs text-slate-700">$6.320</td>
+                <td class="py-2.5 px-3 text-right num text-xs font-medium text-orange-600">$6.320</td>
+                <td class="py-2.5 px-3 text-right">
+                  <div class="relative">
+                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-300">$</span>
+                    <input type="text" value="" placeholder="0" class="w-full rounded-lg border border-slate-200 h-7 text-xs text-right pr-2.5 pl-5 text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 num placeholder:text-slate-300" />
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Saldo total -->
+          <div class="bg-slate-50 border-t border-slate-200 px-4 py-2.5 flex items-center justify-end">
+            <span class="text-xs text-slate-400 mr-3 font-medium">Saldo total</span>
+            <span class="text-sm font-bold text-orange-600 num">$190.353</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detalle de Cobros (formas de pago) -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Detalle de cobros</h3>
+          <button class="h-7 px-3 text-[11px] font-medium rounded-lg flex items-center gap-1.5 border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+            Agregar pago
+          </button>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <table class="w-full text-[12px]">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400">Forma de pago</th>
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400">Detalle / Cuenta</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-28">Recibido</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-28">Importe</th>
+                <th class="w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2.5 px-3">
+                  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-green-50 border border-green-200 text-green-700 text-xs font-medium">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
+                    Efectivo
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-400">—</td>
+                <td class="py-2.5 px-3 text-right num text-xs font-medium text-slate-700">$25.000</td>
+                <td class="py-2.5 px-3 text-right num text-xs font-bold text-slate-900">$25.000</td>
+                <td class="py-2.5 px-1">
+                  <button class="w-6 h-6 rounded-md hover:bg-red-50 flex items-center justify-center text-slate-300 hover:text-red-500 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bottom summary -->
+      <div class="bg-slate-50 rounded-xl border border-slate-200 p-4">
+        <div class="flex items-center justify-between">
+          <div class="space-y-1.5">
+            <div class="flex items-center gap-6">
+              <div>
+                <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Cobrado</p>
+                <p class="text-base font-bold text-emerald-600 num">$25.000</p>
+              </div>
+              <div class="w-px h-8 bg-slate-200"></div>
+              <div>
+                <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Saldo restante</p>
+                <p class="text-base font-bold text-orange-600 num">$165.353</p>
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button class="h-10 px-5 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-white transition-colors">
+              Cancelar
+            </button>
+            <button class="h-10 px-6 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Guardar e Imprimir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================================= -->
+  <!--  VISTA 3: RECIBO con Transferencia + Recargo   -->
+  <!-- ============================================= -->
+  <div class="text-center mt-12 mb-3">
+    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Vista 3 — Recibo con Transferencia (recargo 2%) + pago FIFO a 2 facturas</span>
+  </div>
+
+  <div class="dialog mb-16">
+    <div class="px-6 pt-5 pb-4 border-b border-slate-100 bg-slate-50/50">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
+            <svg class="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15a2.25 2.25 0 012.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"/></svg>
+          </div>
+          <div>
+            <h2 class="text-[15px] font-bold text-slate-900">Registrar Cobro</h2>
+            <p class="text-[11px] text-slate-400 mt-0.5">Distribuidora Norte SRL <span class="text-slate-300 mx-1">|</span> Saldo: <span class="font-semibold text-orange-500">$45.200</span></p>
+          </div>
+        </div>
+        <div class="text-right">
+          <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Recibo N°</p>
+          <p class="text-sm font-mono font-bold text-slate-900">00001-00001000</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-6 py-4 space-y-5">
+
+      <!-- Comprobantes pendientes — FIFO applied -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Comprobantes pendientes de pago</h3>
+          <div class="flex gap-1">
+            <button class="px-2.5 py-1 rounded-md text-[10px] font-semibold bg-slate-900 text-white">FIFO</button>
+            <button class="px-2.5 py-1 rounded-md text-[10px] font-medium text-slate-400 hover:bg-slate-100">Manual</button>
+          </div>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <table class="w-full text-[12px]">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400">Comprobante N°</th>
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-20">Fecha</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-24">Total FC</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-24">Saldo FC</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-28">Pago</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-slate-100">
+                <td class="py-2.5 px-3 font-mono text-slate-700 text-xs">FC B-00312</td>
+                <td class="py-2.5 px-3 text-xs text-slate-500 num">15/03/26</td>
+                <td class="py-2.5 px-3 text-right num text-xs text-slate-700">$121.669</td>
+                <td class="py-2.5 px-3 text-right num text-xs font-medium text-orange-600">$28.500</td>
+                <td class="py-2.5 px-3 text-right">
+                  <span class="text-xs font-bold text-emerald-600 num">$28.500 <span class="text-emerald-500">&#10003;</span></span>
+                </td>
+              </tr>
+              <tr class="border-b border-slate-100">
+                <td class="py-2.5 px-3 font-mono text-slate-700 text-xs">FC B-00318</td>
+                <td class="py-2.5 px-3 text-xs text-slate-500 num">22/03/26</td>
+                <td class="py-2.5 px-3 text-right num text-xs text-slate-700">$95.449</td>
+                <td class="py-2.5 px-3 text-right num text-xs font-medium text-orange-600">$16.700</td>
+                <td class="py-2.5 px-3 text-right">
+                  <span class="text-xs font-bold text-blue-600 num">$16.700 <span class="text-blue-500">&#10003;</span></span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 flex items-center justify-between">
+            <span class="text-[11px] text-slate-400 font-medium">Total asignado</span>
+            <span class="text-xs font-bold text-emerald-600 num">$45.200 / $45.200</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detalle de Cobros -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Detalle de cobros</h3>
+          <button class="h-7 px-3 text-[11px] font-medium rounded-lg flex items-center gap-1.5 border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+            Agregar pago
+          </button>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <table class="w-full text-[12px]">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400">Forma de pago</th>
+                <th class="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400">Detalle / Cuenta</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-28">Recibido</th>
+                <th class="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-slate-400 w-28">Importe</th>
+                <th class="w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-slate-100">
+                <td class="py-2.5 px-3">
+                  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-violet-50 border border-violet-200 text-violet-700 text-xs font-medium">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>
+                    Transferencia
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-600">
+                  <span class="inline-flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span>
+                    Macro — dulcesur.macro
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 text-right num text-xs font-medium text-slate-700">$46.104</td>
+                <td class="py-2.5 px-3 text-right num text-xs font-bold text-slate-900">$45.200</td>
+                <td class="py-2.5 px-1">
+                  <button class="w-6 h-6 rounded-md hover:bg-red-50 flex items-center justify-center text-slate-300 hover:text-red-500 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Surcharge indicator -->
+        <div class="mt-2 rounded-lg bg-violet-50 border border-violet-200/60 px-3 py-2 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+            <p class="text-[11px] text-violet-700">Recargo transferencia <span class="font-bold">2%</span> — Cliente transfiere <span class="font-bold">$46.104</span> (incluye $904 de recargo)</p>
+          </div>
+          <span class="text-xs font-bold text-violet-600">+$904</span>
+        </div>
+      </div>
+
+      <!-- Bottom summary -->
+      <div class="bg-slate-50 rounded-xl border border-slate-200 p-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-6">
+            <div>
+              <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Cobrado</p>
+              <p class="text-base font-bold text-emerald-600 num">$45.200</p>
+            </div>
+            <div class="w-px h-8 bg-slate-200"></div>
+            <div>
+              <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Recargo transf.</p>
+              <p class="text-base font-bold text-violet-600 num">+$904</p>
+            </div>
+            <div class="w-px h-8 bg-slate-200"></div>
+            <div>
+              <p class="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Saldo restante</p>
+              <p class="text-base font-bold text-emerald-600 num">$0 <span class="text-[10px] font-medium text-emerald-500">saldado</span></p>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button class="h-10 px-5 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-white transition-colors">
+              Cancelar
+            </button>
+            <button class="h-10 px-6 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Guardar e Imprimir
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>
