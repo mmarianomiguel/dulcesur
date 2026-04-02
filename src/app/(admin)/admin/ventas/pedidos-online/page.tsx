@@ -747,6 +747,17 @@ export default function PedidosOnlinePage() {
         const descAmt = Math.round((v.subtotal || pedido.subtotal) * (v.descuento_porcentaje || 0) / 100);
         const recAmt = Math.round(((v.subtotal || pedido.subtotal) - descAmt) * (v.recargo_porcentaje || 0) / 100);
         const surchargeCalc = Math.max(0, v.total - ((v.subtotal || pedido.subtotal) - descAmt + recAmt));
+        // Derive formaPago from actual caja_movimientos payments (overrides v.forma_pago which may be stale)
+        let derivedFormaPago: string;
+        if ((movs || []).length > 0) {
+          if (pagoTr > 0 && pagoEf === 0 && pagoCC === 0) derivedFormaPago = "Transferencia";
+          else if (pagoEf > 0 && pagoTr === 0 && pagoCC === 0) derivedFormaPago = "Efectivo";
+          else if (pagoCC > 0 && pagoEf === 0 && pagoTr === 0) derivedFormaPago = "Cuenta Corriente";
+          else if (pagoTr > 0 || pagoEf > 0) derivedFormaPago = "Mixto";
+          else derivedFormaPago = v.forma_pago || pedido.metodo_pago || "Efectivo";
+        } else {
+          derivedFormaPago = v.forma_pago || pedido.metodo_pago || "Efectivo";
+        }
         setPrintSale({
           numero: v.numero || pedido.numero,
           total: v.total,
@@ -755,7 +766,7 @@ export default function PedidosOnlinePage() {
           recargo: recAmt,
           transferSurcharge: surchargeCalc,
           tipoComprobante: v.tipo_comprobante || "X",
-          formaPago: v.forma_pago || pedido.metodo_pago || "Efectivo",
+          formaPago: derivedFormaPago,
           cliente: pedido.nombre_cliente,
           clienteDireccion: pedido.direccion_texto,
           clienteTelefono: pedido.telefono,
