@@ -466,7 +466,7 @@ export default function ListadoVentasPage() {
       fecha_entrega: null,
       metodo_pago: v.forma_pago,
       subtotal: v.subtotal,
-      costo_envio: 0,
+      costo_envio: ptData?.costo_envio || 0,
       total: v.total,
       observacion: v.observacion,
       cliente_auth_id: null,
@@ -1265,7 +1265,7 @@ export default function ListadoVentasPage() {
       const isHistorial = poSelectedPedido._source === "historial";
       const descPct = (poSelectedPedido as any)._descuento_porcentaje || 0;
       const recPct = (poSelectedPedido as any)._recargo_porcentaje || 0;
-      const nuevoTotal = isHistorial
+      const nuevoTotal = (isHistorial && !poSelectedPedido.isOnline)
         ? Math.round(nuevoSubtotal * (1 - descPct / 100) * (1 + recPct / 100))
         : nuevoSubtotal + (poSelectedPedido.costo_envio || 0) + ((poSelectedPedido as any).recargo_transferencia || 0);
       const refLabel = isHistorial ? `Edición Venta #${poSelectedPedido.numero}` : `Edición Pedido Web #${poSelectedPedido.numero}`;
