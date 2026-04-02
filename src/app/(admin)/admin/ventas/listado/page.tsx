@@ -1042,10 +1042,9 @@ export default function ListadoVentasPage() {
       if (ventaId) {
         const { data: ventaData } = await supabase.from("ventas").select("monto_efectivo, monto_transferencia, forma_pago, total").eq("id", ventaId).single();
         if (ventaData) {
-          // For online orders, only transferencia counts as paid (cash collected at delivery)
+          // For online orders, nothing is confirmed paid until caja_movimientos exists
           if (isOnlineOrder) {
-            if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ventaData.monto_transferencia });
-            // Show efectivo as pending/to-collect, not as paid
+            if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia (a cobrar)", monto: ventaData.monto_transferencia });
             if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ventaData.monto_efectivo });
           } else {
             if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo", monto: ventaData.monto_efectivo });
@@ -2088,8 +2087,8 @@ export default function ListadoVentasPage() {
                       </Button>
                       {/* Cobrar button — for online orders or POS with envío, not yet paid */}
                       {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
-                        (order.isOnline || order._source === "pedidos" || order._tipo_comprobante === "Pedido Web" || (order.metodo_entrega || "").toLowerCase().includes("envio") || (order.metodo_entrega || "").toLowerCase().includes("envío")) &&
-                        (order.forma_pago === "Pendiente" || order.metodo_pago === "Pendiente" || !order.forma_pago)
+                        order.isOnline || order._source === "pedidos" || order._tipo_comprobante === "Pedido Web" || (order.metodo_entrega || "").toLowerCase().includes("envio") || (order.metodo_entrega || "").toLowerCase().includes("envío") ||
+                        order.forma_pago === "Pendiente" || order.metodo_pago === "Pendiente"
                       ) && (
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={() => poOpenDetail(order)} title="Cobrar">
                           <DollarSign className="w-4 h-4" />
