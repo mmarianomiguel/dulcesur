@@ -239,6 +239,7 @@ export function VentaDetailDialog({
       })()
     : data.total - ncTotal;
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
+  const canCobrar = editable && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr") && !p.metodo.includes("(a cobrar)"));
   // Calculate real payments total (excluding NCs and "Pendiente de cobro")
   const totalPagado = (pagos || []).reduce((s, p) => {
@@ -387,7 +388,7 @@ export function VentaDetailDialog({
                   </p>
                 )}
                 {/* Payment breakdown — show for entregado/read-only, hide when cobro section handles it */}
-                {!(cobroConfig && isEditable) && pagos && pagos.length > 0 ? (
+                {!(cobroConfig && canCobrar && !hasCobro) && pagos && pagos.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-muted-foreground">Detalle de pago:</p>
                     {pagos.map((p, i) => {
@@ -419,7 +420,7 @@ export function VentaDetailDialog({
                       </div>
                     )}
                   </div>
-                ) : !(cobroConfig && isEditable) ? (
+                ) : !(cobroConfig && canCobrar && !hasCobro) ? (
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Banknote className="w-3 h-3" /> Pago: {pago}
                   </p>
@@ -451,7 +452,7 @@ export function VentaDetailDialog({
           )}
 
           {/* ═══ COBRO SECTION ═══ */}
-          {cobroConfig && isEditable && !hasCobro && (
+          {cobroConfig && canCobrar && !hasCobro && (
             <div className="border-2 border-emerald-200 bg-emerald-50/30 rounded-xl p-4">
               <CobroVentaSection
                 ventaId={cobroConfig.ventaId}
