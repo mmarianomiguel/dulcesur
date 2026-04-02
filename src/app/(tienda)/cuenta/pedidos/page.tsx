@@ -317,14 +317,29 @@ export default function PedidosPage() {
       // Map pedidos with their ventas
       const pedidosList: Pedido[] = (data || []).map((p: any) => {
         const venta = ventaRecords[p.numero] || undefined;
+        // Prefer venta_items (source of truth after admin edits) over pedido_tienda_items
+        const sourceItems = (venta?.items && venta.items.length > 0)
+          ? venta.items.map((item: any) => ({
+              id: 0,
+              nombre: item.descripcion?.replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "").replace(/\s*\(Unidad\)\s*$/, "") || "",
+              presentacion: item.presentacion || "Unidad",
+              unidades_por_presentacion: item.unidades_por_presentacion || 1,
+              cantidad: item.cantidad,
+              precio_unitario: item.precio_unitario,
+              descuento: item.descuento || 0,
+              producto_id: item.producto_id || undefined,
+              es_combo: !!(item.producto_id && comboMap[item.producto_id]),
+              combo_items: item.producto_id ? comboMap[item.producto_id] || undefined : undefined,
+            }))
+          : ((p as any).pedido_tienda_items || []).map((item: any) => ({
+              ...item,
+              es_combo: !!(item.producto_id && comboMap[item.producto_id]),
+              combo_items: item.producto_id ? comboMap[item.producto_id] || undefined : undefined,
+            }));
         return {
           ...p,
           estado: deriveEstado(p.estado, venta),
-          items: ((p as any).pedido_tienda_items || []).map((item: any) => ({
-            ...item,
-            es_combo: !!(item.producto_id && comboMap[item.producto_id]),
-            combo_items: item.producto_id ? comboMap[item.producto_id] || undefined : undefined,
-          })),
+          items: sourceItems,
           venta,
         };
       });

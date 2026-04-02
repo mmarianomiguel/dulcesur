@@ -298,7 +298,7 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
           p_hora: nowTimeARG(),
           p_cuenta_bancaria_id: line.cuentaBancariaId || null,
           p_cuenta_bancaria_nombre: cuenta?.nombre || null,
-          p_allocations: lineAllocs.length > 0 ? JSON.stringify(lineAllocs) : "[]",
+          p_allocations: lineAllocs,
         });
 
         if (error) {

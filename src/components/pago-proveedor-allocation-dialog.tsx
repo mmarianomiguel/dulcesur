@@ -204,15 +204,10 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
         p_cuenta_bancaria_id: cuentaBancariaId || null,
         p_cuenta_bancaria_nombre: cuenta?.nombre || null,
         p_registrar_caja: registrarCaja,
-        p_allocations:
-          activeAllocations.length > 0
-            ? JSON.stringify(
-                activeAllocations.map((a) => ({
-                  compra_id: a.compra_id,
-                  monto_aplicado: a.monto_aplicado,
-                }))
-              )
-            : "[]",
+        p_allocations: activeAllocations.map((a) => ({
+          compra_id: a.compra_id,
+          monto_aplicado: a.monto_aplicado,
+        })),
       });
 
       if (error) {
