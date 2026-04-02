@@ -1335,20 +1335,24 @@ export default function ListadoVentasPage() {
             .eq("referencia_id", ventaId)
             .eq("referencia_tipo", "venta")
             .limit(1);
-          const metodoPago = cajaRows?.[0]?.metodo_pago || ventaData?.forma_pago || "Efectivo";
-          const cuentaBancaria = cajaRows?.[0]?.cuenta_bancaria || null;
 
-          const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
-            fecha: hoy, hora,
-            tipo: diferencia > 0 ? "ingreso" : "egreso",
-            descripcion: `Ajuste por edición #${poSelectedPedido.numero} (${diferencia > 0 ? "+" : ""}${formatCurrency(diferencia)})`,
-            metodo_pago: metodoPago,
-            monto: Math.abs(diferencia),
-            referencia_id: ventaId,
-            referencia_tipo: diferencia > 0 ? "venta" : "ajuste_edicion",
-            cuenta_bancaria: cuentaBancaria,
-          });
-          if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
+          // Only adjust caja if venta was already paid (has existing caja entries).
+          // For unpaid ventas, skip — the full amount will be registered when cobro is collected.
+          if (cajaRows && cajaRows.length > 0) {
+            const metodoPago = cajaRows[0].metodo_pago || ventaData?.forma_pago || "Efectivo";
+            const cuentaBancaria = cajaRows[0].cuenta_bancaria || null;
+            const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
+              fecha: hoy, hora,
+              tipo: diferencia > 0 ? "ingreso" : "egreso",
+              descripcion: `Ajuste por edición #${poSelectedPedido.numero} (${diferencia > 0 ? "+" : ""}${formatCurrency(diferencia)})`,
+              metodo_pago: metodoPago,
+              monto: Math.abs(diferencia),
+              referencia_id: ventaId,
+              referencia_tipo: "ajuste_edicion",
+              cuenta_bancaria: cuentaBancaria,
+            });
+            if (cajaErr) errores.push(`Error caja: ${cajaErr.message}`);
+          }
 
           const clienteId = ventaData?.cliente_id;
           if (clienteId) {
