@@ -338,6 +338,7 @@ export default function PedidosPage() {
             }));
         return {
           ...p,
+          total: venta?.total ?? p.total,
           estado: deriveEstado(p.estado, venta),
           items: sourceItems,
           venta,
