@@ -144,7 +144,8 @@ export default function ClientesPage() {
   const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, totalComprado: 0 });
   const [movCCTotals, setMovCCTotals] = useState({ debe: 0, haber: 0, saldo: 0, saldoInicial: 0 });
   const [movExpanded, setMovExpanded] = useState<string | null>(null);
-  const [movTab, setMovTab] = useState<"resumen" | "compras">("resumen");
+  const [movTab, setMovTab] = useState<"resumen" | "compras" | "cobros">("resumen");
+  const [cobrosCliente, setCobrosCliente] = useState<any[]>([]);
   const [movCCFilter, setMovCCFilter] = useState("all");
   // Payment from movimientos
   const [payMovOpen, setPayMovOpen] = useState(false);
@@ -605,6 +606,18 @@ export default function ClientesPage() {
     const totalDebe = ccRows.reduce((s: number, r) => s + r.debe, 0);
     const totalHaber = ccRows.reduce((s: number, r) => s + r.haber, 0);
     setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0, saldoInicial: 0 });
+
+    // === Tab Cobros ===
+    let cobrosQuery = supabase
+      .from("cobros")
+      .select("id, numero, fecha, hora, monto, forma_pago, observacion, cuenta_bancaria_id, cobro_items(venta_id, monto_aplicado, ventas(numero, total)), cuentas_bancarias(nombre, alias)")
+      .eq("cliente_id", clienteId)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (desde) cobrosQuery = cobrosQuery.gte("fecha", desde);
+    if (hasta) cobrosQuery = cobrosQuery.lte("fecha", hasta);
+    const { data: cobrosData } = await cobrosQuery;
+    setCobrosCliente(cobrosData || []);
 
     setMovLoading(false);
   };
@@ -1595,7 +1608,7 @@ export default function ClientesPage() {
             </div>
 
             {/* Tabs */}
-            <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "resumen" | "compras")} className="">
+            <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "resumen" | "compras" | "cobros")} className="">
             <div className="flex gap-6 border-b">
               <button
                 onClick={() => setMovTab("resumen")}
@@ -1608,6 +1621,12 @@ export default function ClientesPage() {
                 className={`pb-2.5 text-[13px] px-0.5 border-b-2 transition-colors ${movTab === "compras" ? "text-foreground border-foreground font-semibold" : "text-muted-foreground border-transparent hover:text-foreground/70"}`}
               >
                 Compras
+              </button>
+              <button
+                onClick={() => setMovTab("cobros")}
+                className={`pb-2.5 text-[13px] px-0.5 border-b-2 transition-colors ${movTab === "cobros" ? "text-foreground border-foreground font-semibold" : "text-muted-foreground border-transparent hover:text-foreground/70"}`}
+              >
+                Cobros {cobrosCliente.length > 0 && <span className="ml-1 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">{cobrosCliente.length}</span>}
               </button>
             </div>
 
@@ -1908,6 +1927,85 @@ export default function ClientesPage() {
                   </>
                 );
               })()}
+            </TabsContent>
+
+            {/* ══════ TAB COBROS ══════ */}
+            <TabsContent value="cobros" className="mt-0 px-6 pt-4 pb-6">
+              {cobrosCliente.length === 0 ? (
+                <div className="text-center py-10 text-sm text-muted-foreground">No hay cobros registrados en el período seleccionado</div>
+              ) : (
+                <div className="space-y-2">
+                  {cobrosCliente.map((c) => {
+                    const cuenta = (c as any).cuentas_bancarias;
+                    const items: any[] = (c as any).cobro_items || [];
+                    const fechaFmt = new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+                    const phone = movClient?.telefono || "";
+                    const digits = phone.replace(/\D/g, "");
+                    const wa = digits.startsWith("54") ? digits : `54${digits.startsWith("0") ? digits.slice(1) : digits}`;
+                    const msg = encodeURIComponent(`Hola ${movClient?.nombre}! Te enviamos el recibo de cobro N° ${c.numero} del ${fechaFmt}.\nMonto cobrado: ${formatCurrency(c.monto)}\n\nGracias por tu pago!`);
+                    return (
+                      <div key={c.id} className="rounded-lg border p-3 text-sm flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-mono font-semibold text-xs">{c.numero}</span>
+                            <span className="text-muted-foreground text-xs">{fechaFmt}</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-muted">{c.forma_pago}</span>
+                            {cuenta && <span className="text-xs text-muted-foreground">{cuenta.nombre}</span>}
+                          </div>
+                          <p className="font-bold text-base text-emerald-700">{formatCurrency(c.monto)}</p>
+                          {items.length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Aplicado a: {items.map((i: any) => i.ventas?.numero || "—").join(", ")}
+                            </p>
+                          )}
+                          {c.observacion && <p className="text-xs text-muted-foreground italic mt-0.5">{c.observacion}</p>}
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {phone && (
+                            <Button size="sm" variant="outline" className="h-8 px-2 border-green-500 text-green-600 hover:bg-green-50" asChild>
+                              <a href={`https://wa.me/${wa}?text=${msg}`} target="_blank" rel="noopener noreferrer" title="Enviar por WhatsApp">
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </a>
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" className="h-8 px-2" title="Ver / Reimprimir" onClick={() => {
+                            setCobroReceipt({
+                              open: true,
+                              cliente: movClient?.nombre || "",
+                              clienteCuit: movClient?.cuit || "",
+                              clienteDomicilio: [movClient?.domicilio, movClient?.localidad, movClient?.provincia].filter(Boolean).join(", "),
+                              clienteTelefono: movClient?.telefono || "",
+                              monto: c.monto,
+                              formaPago: c.forma_pago,
+                              fecha: c.fecha,
+                              saldoAnterior: c.monto + (movClient?.saldo || 0),
+                              saldoNuevo: movClient?.saldo || 0,
+                              empresaNombre: empresa?.nombre || "",
+                              empresaCuit: empresa?.cuit || "",
+                              empresaDomicilio: empresa?.domicilio || "",
+                              empresaTelefono: empresa?.telefono || "",
+                              cuentaBancaria: cuenta?.nombre || "",
+                              cuentaAlias: cuenta?.alias || "",
+                              observacion: c.observacion || "",
+                              numero: c.numero,
+                              comprobantes: items.map((i: any) => ({
+                                comprobante: i.ventas?.numero || "—",
+                                debe: i.ventas?.total || 0,
+                                haber: i.monto_aplicado,
+                              })),
+                            });
+                          }}>
+                            <Printer className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="text-xs text-muted-foreground text-right mt-1">
+                    {cobrosCliente.length} cobro(s) · Total: {formatCurrency(cobrosCliente.reduce((s, c) => s + c.monto, 0))}
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             {/* Old resumen tab removed — now unified into the CC tab above */}
