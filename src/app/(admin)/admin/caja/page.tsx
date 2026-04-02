@@ -229,9 +229,12 @@ export default function CajaPage() {
       if ((v as any).tipo_comprobante?.toLowerCase().startsWith("nota de crédito")) return false;
       if (v.estado === "anulada") return false;
       const d = new Date(v.created_at);
-      // Web orders from today: always include (they may arrive before caja opens)
       const isWebOrder = (v as any).origen === "tienda";
-      if (!isWebOrder) {
+      if (isWebOrder) {
+        // Exclude web orders not yet delivered/paid (pickup or delivery pending)
+        const PENDING = new Set(["pendiente", "armado", "confirmado"]);
+        if (PENDING.has(((v as any).estado || "").toLowerCase())) return false;
+      } else {
         if (d < aperturaDate) return false;
       }
       if (cierreDate && d > cierreDate) return false;
@@ -488,9 +491,11 @@ export default function CajaPage() {
     });
     const filteredVts = (vts || []).filter((v: any) => {
       const d = new Date(v.created_at);
-      // Web orders: don't filter by apertura time (they may arrive before caja opens)
       const isWebOrder = v.origen === "tienda";
-      if (!isWebOrder) {
+      if (isWebOrder) {
+        const PENDING = new Set(["pendiente", "armado", "confirmado"]);
+        if (PENDING.has((v.estado || "").toLowerCase())) return false;
+      } else {
         if (d < aperturaDate) return false;
       }
       if (cierreDate && d > cierreDate) return false;
@@ -872,9 +877,9 @@ export default function CajaPage() {
       const ncAmount = ncByVenta[v.id] || 0;
       const remaining = v.total - accounted - ncAmount;
       if (remaining > 1) {
-        // Check if already fully paid via monto_pagado (e.g. saldo allocation from hoja de ruta)
+        // Check if paid via cobro (monto_pagado) or marked as CC from hoja de ruta
         const montoPagado = (v as any).monto_pagado || 0;
-        if (montoPagado + ncAmount >= v.total - 1) {
+        if (montoPagado + ncAmount >= v.total - 1 || v.forma_pago === "Cuenta Corriente") {
           addDesglose("Cuenta Corriente", remaining, v.id);
         } else {
           // Use stored amounts for online orders, or forma_pago as hint
