@@ -122,6 +122,7 @@ export interface ProductSearchResult {
   nombre: string;
   precio: number;
   unidad_medida?: string;
+  presentaciones?: { nombre: string; precio: number; unidades_por_presentacion: number }[];
 }
 
 // ─── Status badge config ───
@@ -257,20 +258,23 @@ export function VentaDetailDialog({
     onEditItemsChange(editItems.filter((_, i) => i !== index));
   };
 
-  const addProduct = (product: ProductSearchResult) => {
+  const addProduct = (product: ProductSearchResult, pres?: { nombre: string; precio: number; unidades_por_presentacion: number }) => {
     if (!editItems || !onEditItemsChange) return;
-    const existing = editItems.findIndex((i) => i.producto_id === product.id);
+    const presNombre = pres?.nombre || "Unidad";
+    const presPrecio = pres?.precio ?? product.precio;
+    const presUpp = pres?.unidades_por_presentacion ?? 1;
+    const existing = editItems.findIndex((i) => i.producto_id === product.id && i.presentacion === presNombre);
     if (existing >= 0) {
       updateItemQty(existing, editItems[existing].cantidad + 1);
     } else {
       onEditItemsChange([...editItems, {
         producto_id: product.id,
         nombre: product.nombre,
-        presentacion: "Unidad",
+        presentacion: presNombre,
         cantidad: 1,
-        precio_unitario: product.precio,
-        subtotal: product.precio,
-        unidades_por_presentacion: 1,
+        precio_unitario: presPrecio,
+        subtotal: presPrecio,
+        unidades_por_presentacion: presUpp,
       }]);
     }
     setAddProductOpen(false);
@@ -522,17 +526,44 @@ export function VentaDetailDialog({
                 </div>
                 {searchingProducts && <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Buscando...</p>}
                 {productResults.length > 0 && (
-                  <div className="max-h-40 overflow-y-auto space-y-1">
-                    {productResults.map((p) => (
-                      <button
-                        key={p.id}
-                        className="w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 text-xs flex items-center justify-between"
-                        onClick={() => addProduct(p)}
-                      >
-                        <span className="font-medium">{p.nombre}</span>
-                        <span className="text-muted-foreground">{formatCurrency(p.precio)}</span>
-                      </button>
-                    ))}
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {productResults.map((p) => {
+                      const pres = p.presentaciones || [];
+                      if (pres.length === 0) {
+                        return (
+                          <button
+                            key={p.id}
+                            className="w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 text-xs flex items-center justify-between"
+                            onClick={() => addProduct(p)}
+                          >
+                            <span className="font-medium">{p.nombre}</span>
+                            <span className="text-muted-foreground">{formatCurrency(p.precio)}</span>
+                          </button>
+                        );
+                      }
+                      return (
+                        <div key={p.id} className="space-y-0.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 pt-1">{p.nombre}</p>
+                          <button
+                            className="w-full text-left px-3 py-1 rounded hover:bg-muted/50 text-xs flex items-center justify-between"
+                            onClick={() => addProduct(p)}
+                          >
+                            <span className="text-muted-foreground">Unidad</span>
+                            <span className="text-muted-foreground">{formatCurrency(p.precio)}</span>
+                          </button>
+                          {pres.map((pr, i) => (
+                            <button
+                              key={i}
+                              className="w-full text-left px-3 py-1 rounded hover:bg-muted/50 text-xs flex items-center justify-between"
+                              onClick={() => addProduct(p, pr)}
+                            >
+                              <span className="font-medium">{pr.nombre}</span>
+                              <span className="text-muted-foreground">{formatCurrency(pr.precio)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setAddProductOpen(false); setProductSearch(""); setProductResults([]); }}>

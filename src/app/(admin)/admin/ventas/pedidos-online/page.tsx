@@ -1075,11 +1075,22 @@ export default function PedidosOnlinePage() {
         onSearchProducts={async (query) => {
           const { data } = await supabase
             .from("productos")
-            .select("id, codigo, nombre, precio, unidad_medida")
+            .select("id, codigo, nombre, precio, unidad_medida, presentaciones(nombre, precio, cantidad)")
             .eq("activo", true)
             .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
             .limit(10);
-          return (data || []) as { id: string; codigo: string; nombre: string; precio: number; unidad_medida?: string }[];
+          return (data || []).map((p: any) => ({
+            id: p.id,
+            codigo: p.codigo,
+            nombre: p.nombre,
+            precio: p.precio,
+            unidad_medida: p.unidad_medida,
+            presentaciones: (p.presentaciones || []).map((pr: any) => ({
+              nombre: pr.nombre,
+              precio: pr.precio,
+              unidades_por_presentacion: pr.cantidad,
+            })),
+          }));
         }}
         onConfirmAction={(title, message, action) => {
           setConfirmDialog({ open: true, title, message, onConfirm: action });
