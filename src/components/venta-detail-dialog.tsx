@@ -122,6 +122,7 @@ export interface ProductSearchResult {
   nombre: string;
   precio: number;
   unidad_medida?: string;
+  es_combo?: boolean;
   presentaciones?: { nombre: string; precio: number; unidades_por_presentacion: number }[];
 }
 
@@ -528,16 +529,19 @@ export function VentaDetailDialog({
                 {productResults.length > 0 && (
                   <div className="max-h-48 overflow-y-auto space-y-1">
                     {productResults.map((p) => {
-                      const pres = p.presentaciones || [];
+                      const pres = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
                       if (pres.length === 0) {
                         return (
                           <button
                             key={p.id}
-                            className="w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 text-xs flex items-center justify-between"
+                            className="w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 text-xs flex items-center justify-between gap-2"
                             onClick={() => addProduct(p)}
                           >
-                            <span className="font-medium">{p.nombre}</span>
-                            <span className="text-muted-foreground">{formatCurrency(p.precio)}</span>
+                            <span className="font-medium flex items-center gap-1.5 min-w-0 truncate">
+                              {p.nombre}
+                              {p.es_combo && <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700">COMBO</span>}
+                            </span>
+                            <span className="text-muted-foreground shrink-0">{formatCurrency(p.precio)}</span>
                           </button>
                         );
                       }

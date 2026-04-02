@@ -1075,7 +1075,7 @@ export default function PedidosOnlinePage() {
         onSearchProducts={async (query) => {
           const { data } = await supabase
             .from("productos")
-            .select("id, codigo, nombre, precio, unidad_medida, presentaciones(nombre, precio, cantidad)")
+            .select("id, codigo, nombre, precio, unidad_medida, es_combo, presentaciones(nombre, precio, cantidad)")
             .eq("activo", true)
             .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
             .limit(10);
@@ -1085,7 +1085,8 @@ export default function PedidosOnlinePage() {
             nombre: p.nombre,
             precio: p.precio,
             unidad_medida: p.unidad_medida,
-            presentaciones: (p.presentaciones || []).map((pr: any) => ({
+            es_combo: p.es_combo || false,
+            presentaciones: p.es_combo ? [] : (p.presentaciones || []).map((pr: any) => ({
               nombre: pr.nombre,
               precio: pr.precio,
               unidades_por_presentacion: pr.cantidad,
