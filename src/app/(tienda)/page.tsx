@@ -740,7 +740,9 @@ export default function TiendaPage() {
               .eq("activo", true)
               .eq("visibilidad", "visible");
 
-            if (orden === "precio_asc") {
+            if (orden === "manual") {
+              query = query.eq("destacado", true).order("nombre", { ascending: true });
+            } else if (orden === "precio_asc") {
               query = query.order("precio", { ascending: true });
             } else if (orden === "precio_desc") {
               query = query.order("precio", { ascending: false });

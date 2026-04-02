@@ -1387,6 +1387,7 @@ function BlockConfigForm({
                 <SelectValue placeholder="Orden" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="manual">Manual (marcados como destacados)</SelectItem>
                 <SelectItem value="recientes">Más recientes</SelectItem>
                 <SelectItem value="precio_asc">Precio: menor a mayor</SelectItem>
                 <SelectItem value="precio_desc">Precio: mayor a menor</SelectItem>

@@ -67,6 +67,7 @@ import {
   Lock,
   LockOpen,
   Store,
+  Star,
 } from "lucide-react";
 
 import { ImageUpload } from "@/components/image-upload";
@@ -300,6 +301,7 @@ export default function ProductosPage() {
     descripcion_detallada: "",
     visibilidad: "visible",
     imagen_url: "",
+    destacado: false,
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
@@ -355,7 +357,7 @@ export default function ProductosPage() {
     }
 
     const [allProdsRaw, allPres, allCI] = await Promise.all([
-      fetchAllPages("productos", "id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, fecha_actualizacion, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
+      fetchAllPages("productos", "id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
       fetchAllPages("presentaciones", "producto_id, sku, nombre, cantidad"),
       fetchAllPages("combo_items", "combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)"),
     ]);
@@ -468,6 +470,7 @@ export default function ProductosPage() {
       descripcion_detallada: "",
       visibilidad: "visible",
       imagen_url: "",
+      destacado: false,
     });
     setSelectedProveedores([]);
     setPresentaciones([]);
@@ -573,6 +576,7 @@ export default function ProductosPage() {
       descripcion_detallada: p.descripcion_detallada || "",
       visibilidad: p.visibilidad || "visible",
       imagen_url: p.imagen_url || "",
+      destacado: !!(p as any).destacado,
     });
     setShowDescription(!!(p.descripcion_detallada));
     setIsCombo(!!(p as any).es_combo);
@@ -675,6 +679,7 @@ export default function ProductosPage() {
         unidad_medida: form.unidad_medida,
         descripcion_detallada: form.descripcion_detallada || null,
         visibilidad: form.visibilidad,
+        destacado: form.destacado,
         imagen_url: form.imagen_url || null,
         fecha_actualizacion: new Date().toISOString(),
         es_combo: isCombo,
@@ -848,6 +853,7 @@ export default function ProductosPage() {
       descripcion_detallada: p.descripcion_detallada || "",
       visibilidad: p.visibilidad || "visible",
       imagen_url: p.imagen_url || "",
+      destacado: !!(p as any).destacado,
     });
     setShowDescription(!!(p.descripcion_detallada));
 
@@ -2261,6 +2267,15 @@ export default function ProductosPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, destacado: !form.destacado })}
+                className={`flex items-center gap-1 h-8 px-2.5 rounded-md border text-xs font-medium transition-all ${form.destacado ? "border-amber-300 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-gray-400 hover:text-amber-500 hover:border-amber-200"}`}
+                title={form.destacado ? "Quitar de destacados" : "Marcar como destacado"}
+              >
+                <Star className={`w-3.5 h-3.5 ${form.destacado ? "fill-amber-500" : ""}`} />
+                {form.destacado ? "Destacado" : "Destacar"}
+              </button>
               <Select
                 value={form.visibilidad}
                 onValueChange={(v) => setForm({ ...form, visibilidad: v || "visible" })}

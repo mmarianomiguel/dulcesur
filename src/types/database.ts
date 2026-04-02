@@ -118,6 +118,7 @@ export interface Producto {
   costo: number;
   unidad_medida: string;
   activo: boolean;
+  destacado: boolean;
   fecha_actualizacion: string;
   created_at: string;
   updated_at: string;
