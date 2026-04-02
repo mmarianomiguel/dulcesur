@@ -88,6 +88,7 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
   useEffect(() => {
     if (!open || !cliente) return;
     setLoading(true);
+    let cancelled = false;
     const fetchData = async () => {
       // Fetch all non-cancelled invoices — filter by pending amount client-side
       // (can't filter forma_pago because partial payments like Pedido Web have forma_pago=Efectivo)
@@ -141,12 +142,14 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
         }).filter((v) => v.pendiente > 0.01);
       }
 
+      if (cancelled) return;
       setInvoices(pending);
 
       const { data: cb } = await supabase
         .from("cuentas_bancarias")
         .select("id, nombre, alias")
         .eq("activo", true);
+      if (cancelled) return;
       setCuentas(cb || []);
 
       setObservacion("");
@@ -155,6 +158,7 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
       setLoading(false);
     };
     fetchData();
+    return () => { cancelled = true; };
   }, [open, cliente]);
 
   // Total monto = sum of all payment lines
@@ -431,8 +435,8 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                                     inputMode="numeric"
                                     value={a.monto_aplicado ? a.monto_aplicado.toLocaleString("es-AR") : ""}
                                     onChange={(e) => {
-                                      const v = e.target.value.replace(/\./g, "").replace(/[^0-9]/g, "");
-                                      handleManualChange(a.venta_id, Number(v) || 0);
+                                      const v = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                                      handleManualChange(a.venta_id, parseFloat(v) || 0);
                                     }}
                                     placeholder="0"
                                     className={`w-full rounded-lg h-7 text-xs font-semibold text-right pr-2.5 pl-5 tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
@@ -571,8 +575,8 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                             inputMode="numeric"
                             value={line.montoInput}
                             onChange={(e) => {
-                              const raw = e.target.value.replace(/\./g, "").replace(/[^0-9]/g, "");
-                              const num = Number(raw) || 0;
+                              const raw = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                              const num = parseFloat(raw) || 0;
                               updateLine(line.id, {
                                 monto: num,
                                 montoInput: num > 0 ? num.toLocaleString("es-AR") : raw === "" ? "" : "0",

@@ -747,26 +747,30 @@ export default function CheckoutPage() {
         });
 
         if (stockError) {
-          // Fallback: if RPC doesn't exist, decrement stock directly
+          // Fallback: if RPC doesn't exist, decrement stock atomically
           for (const si of stockItems) {
-            const { data: p } = await supabase.from("productos").select("stock").eq("id", si.producto_id).single();
-            if (p) {
-              const antes = p.stock;
-              const despues = antes - si.cantidad;
-              if (despues < 0) {
+            const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
+              p_product_id: si.producto_id,
+              p_change: -si.cantidad,
+            });
+            if (stockResult) {
+              const stockAntes = stockResult.old_stock ?? (stockResult.new_stock + si.cantidad);
+              const stockDespues = stockResult.new_stock ?? (stockAntes - si.cantidad);
+              if (stockDespues < 0) {
                 // Insufficient stock - rollback
                 await supabase.from("venta_items").delete().eq("venta_id", venta.id);
                 await supabase.from("ventas").delete().eq("id", venta.id);
                 await supabase.from("pedido_tienda_items").delete().eq("pedido_id", pedido.id);
                 await supabase.from("pedidos_tienda").delete().eq("id", pedido.id);
+                // Revert stock
+                await supabase.rpc("atomic_update_stock", { p_product_id: si.producto_id, p_change: si.cantidad });
                 setErrors([`Stock insuficiente para ${si.descripcion}. Por favor revisá tu carrito.`]);
                 setSubmitting(false);
                 return;
               }
-              await supabase.from("productos").update({ stock: despues }).eq("id", si.producto_id);
               await supabase.from("stock_movimientos").insert({
                 producto_id: si.producto_id, tipo: "Venta", cantidad: -si.cantidad,
-                cantidad_antes: antes, cantidad_despues: despues,
+                cantidad_antes: stockAntes, cantidad_despues: stockDespues,
                 referencia: `Pedido Web #${numero}`, descripcion: si.descripcion, usuario: "Tienda Online", orden_id: venta.id,
               });
             }

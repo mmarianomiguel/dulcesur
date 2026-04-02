@@ -74,6 +74,7 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
   useEffect(() => {
     if (!open || !proveedor) return;
     setLoading(true);
+    let cancelled = false;
     const fetchData = async () => {
       const { data } = await supabase
         .from("compras")
@@ -95,12 +96,14 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
         }))
         .filter((c: PendingCompra) => c.pendiente > 0);
 
+      if (cancelled) return;
       setCompras(pending);
 
       const { data: cb } = await supabase
         .from("cuentas_bancarias")
         .select("id, nombre, alias")
         .eq("activa", true);
+      if (cancelled) return;
       setCuentas(cb || []);
 
       setMonto(Math.max(0, Math.round(proveedor.saldo)));
@@ -112,6 +115,7 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
       setLoading(false);
     };
     fetchData();
+    return () => { cancelled = true; };
   }, [open, proveedor]);
 
   // FIFO auto-allocation
@@ -272,8 +276,8 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
               autoFocus
               value={monto ? monto.toLocaleString("es-AR") : ""}
               onChange={(e) => {
-                const v = e.target.value.replace(/\./g, "").replace(/[^0-9]/g, "");
-                setMonto(Number(v) || 0);
+                const v = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                setMonto(parseFloat(v) || 0);
               }}
               className="text-lg font-semibold h-11 mt-1"
             />
@@ -409,10 +413,8 @@ export function PagoProveedorAllocationDialog({ open, onOpenChange, proveedor, o
                                   : ""
                               }
                               onChange={(e) => {
-                                const v = e.target.value
-                                  .replace(/\./g, "")
-                                  .replace(/[^0-9]/g, "");
-                                handleManualChange(a.compra_id, Number(v) || 0);
+                                const v = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                                handleManualChange(a.compra_id, parseFloat(v) || 0);
                               }}
                               className="h-7 text-xs text-right w-28 ml-auto"
                             />

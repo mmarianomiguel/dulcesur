@@ -224,6 +224,8 @@ export default function ListadoVentasPage() {
     return "";
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [visiblePage, setVisiblePage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -268,6 +270,7 @@ export default function ListadoVentasPage() {
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
   const [detailNCs, setDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
+  const [editandoPago, setEditandoPago] = useState(false);
 
   // PO Cancel confirmation
   const [poCancelPedido, setPoCancelPedido] = useState<Pedido | null>(null);
@@ -323,8 +326,10 @@ export default function ListadoVentasPage() {
       query = query.gte("fecha", filterFrom).lte("fecha", filterTo);
     }
 
+    query = query.limit(200);
     const { data } = await query;
     let results = (data as unknown as VentaRow[]) || [];
+    setVisiblePage(1);
 
     // Recover client names for ventas where join returned null but cliente_id exists
     // This can happen due to RLS policies or FK issues
@@ -478,6 +483,7 @@ export default function ListadoVentasPage() {
     setPoSelectedPedido(pseudoPedido);
     setPoEditItems(pedidoItems.map((i) => ({ ...i })));
     setPoHasChanges(false);
+    setEditandoPago(false);
     setPoDetailOpen(true);
   };
 
@@ -1095,6 +1101,7 @@ export default function ListadoVentasPage() {
     setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId } as any);
     setPoEditItems(items.map((i) => ({ ...i })));
     setPoHasChanges(false);
+    setEditandoPago(false);
     setPoDetailOpen(true);
   };
 
@@ -1385,7 +1392,8 @@ export default function ListadoVentasPage() {
 
     // Single update to pedidos_tienda by numero (covers all sources)
     if (pedido.numero) {
-      await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("numero", pedido.numero);
+      const { error: ptErr } = await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("numero", pedido.numero);
+      if (ptErr) showAdminToast(`Error al sincronizar pedido: ${ptErr.message}`, "error");
     }
 
     // Find linked venta (use cached _ventaId first, then query)
@@ -1419,21 +1427,49 @@ export default function ListadoVentasPage() {
           if (match) upp = Number(match[1]);
         }
         const unitsToRestore = item.cantidad * upp;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
-        if (!prod) continue;
-        const stockAntes = prod.stock;
-        const stockDespues = stockAntes + unitsToRestore;
-        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
-        await supabase.from("stock_movimientos").insert({
-          producto_id: item.producto_id,
-          tipo: "anulacion",
-          cantidad: unitsToRestore,
-          cantidad_antes: stockAntes,
-          cantidad_despues: stockDespues,
-          referencia: `Cancelación Pedido Web #${pedido.numero}`,
-          descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
-          usuario: currentUser?.nombre || "Admin Sistema",
-        });
+
+        // Check if product is a combo
+        const { data: prodInfo } = await supabase.from("productos").select("id, es_combo").eq("id", item.producto_id).single();
+        if (!prodInfo) continue;
+
+        if ((prodInfo as any).es_combo) {
+          // Combo: reverse stock on each component product
+          const { data: comboItems } = await supabase
+            .from("combo_items")
+            .select("producto_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .eq("combo_id", item.producto_id);
+          for (const ci of comboItems || []) {
+            const compUnits = unitsToRestore * (ci as any).cantidad;
+            const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: (ci as any).producto_id, p_change: compUnits });
+            const stockAntes = (stockResult?.new_stock ?? 0) - compUnits;
+            const stockDespues = stockResult?.new_stock ?? 0;
+            await supabase.from("stock_movimientos").insert({
+              producto_id: (ci as any).producto_id,
+              tipo: "anulacion",
+              cantidad: compUnits,
+              cantidad_antes: stockAntes,
+              cantidad_despues: stockDespues,
+              referencia: `Cancelación Pedido Web #${pedido.numero}`,
+              descripcion: `Devolución stock combo - ${(ci as any).productos?.nombre || item.nombre} (${item.presentacion})`,
+              usuario: currentUser?.nombre || "Admin Sistema",
+            });
+          }
+        } else {
+          // Regular product: atomic stock update
+          const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: unitsToRestore });
+          const stockAntes = (stockResult?.new_stock ?? 0) - unitsToRestore;
+          const stockDespues = stockResult?.new_stock ?? 0;
+          await supabase.from("stock_movimientos").insert({
+            producto_id: item.producto_id,
+            tipo: "anulacion",
+            cantidad: unitsToRestore,
+            cantidad_antes: stockAntes,
+            cantidad_despues: stockDespues,
+            referencia: `Cancelación Pedido Web #${pedido.numero}`,
+            descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
+            usuario: currentUser?.nombre || "Admin Sistema",
+          });
+        }
       }
 
       // Reverse caja_movimientos for linked venta
@@ -1496,27 +1532,79 @@ export default function ListadoVentasPage() {
           if (match) upp = Number(match[1]);
         }
         const unitsToDecrement = item.cantidad * upp;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
-        if (!prod) continue;
-        const stockAntes = prod.stock;
-        const stockDespues = stockAntes - unitsToDecrement;
-        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
-        await supabase.from("stock_movimientos").insert({
-          producto_id: item.producto_id,
-          tipo: "Venta",
-          cantidad: -unitsToDecrement,
-          cantidad_antes: stockAntes,
-          cantidad_despues: stockDespues,
-          referencia: `Reactivación Pedido Web #${pedido.numero}`,
-          descripcion: `Descuento stock - ${item.nombre} (${item.presentacion})`,
-          usuario: currentUser?.nombre || "Admin Sistema",
-        });
+
+        // Check if product is a combo
+        const { data: prodInfo } = await supabase.from("productos").select("id, es_combo").eq("id", item.producto_id).single();
+        if (!prodInfo) continue;
+
+        if ((prodInfo as any).es_combo) {
+          // Combo: decrement stock on each component product
+          const { data: comboItems } = await supabase
+            .from("combo_items")
+            .select("producto_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .eq("combo_id", item.producto_id);
+          for (const ci of comboItems || []) {
+            const compUnits = unitsToDecrement * (ci as any).cantidad;
+            const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: (ci as any).producto_id, p_change: -compUnits });
+            const stockAntes = (stockResult?.new_stock ?? 0) + compUnits;
+            const stockDespues = stockResult?.new_stock ?? 0;
+            await supabase.from("stock_movimientos").insert({
+              producto_id: (ci as any).producto_id,
+              tipo: "Venta",
+              cantidad: -compUnits,
+              cantidad_antes: stockAntes,
+              cantidad_despues: stockDespues,
+              referencia: `Reactivación Pedido Web #${pedido.numero}`,
+              descripcion: `Descuento stock combo - ${(ci as any).productos?.nombre || item.nombre} (${item.presentacion})`,
+              usuario: currentUser?.nombre || "Admin Sistema",
+            });
+          }
+        } else {
+          // Regular product: atomic stock update
+          const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: -unitsToDecrement });
+          const stockAntes = (stockResult?.new_stock ?? 0) + unitsToDecrement;
+          const stockDespues = stockResult?.new_stock ?? 0;
+          await supabase.from("stock_movimientos").insert({
+            producto_id: item.producto_id,
+            tipo: "Venta",
+            cantidad: -unitsToDecrement,
+            cantidad_antes: stockAntes,
+            cantidad_despues: stockDespues,
+            referencia: `Reactivación Pedido Web #${pedido.numero}`,
+            descripcion: `Descuento stock - ${item.nombre} (${item.presentacion})`,
+            usuario: currentUser?.nombre || "Admin Sistema",
+          });
+        }
       }
     }
 
     // Update local state instead of full refetch for speed
     setPoPedidos((prev) => prev.map((p) => p.numero === pedido.numero ? { ...p, estado: nuevoEstado } : p));
     setVentas((prev) => prev.map((v) => v.numero === pedido.numero ? { ...v, estado: nuevoEstado === "cancelado" ? "anulada" : nuevoEstado, entregado: nuevoEstado === "entregado" } as any : v));
+  };
+
+  // Change metodo_pago for online orders / POS envio orders
+  const handleCambiarMetodoPago = async (nuevoMetodo: string) => {
+    if (!poSelectedPedido) return;
+    const total = poSelectedPedido.total;
+    const updates: Record<string, unknown> = { metodo_pago: nuevoMetodo };
+    if (nuevoMetodo === "efectivo") { updates.monto_efectivo = total; updates.monto_transferencia = 0; }
+    else if (nuevoMetodo === "transferencia") { updates.monto_efectivo = 0; updates.monto_transferencia = total; }
+    else { updates.monto_efectivo = 0; updates.monto_transferencia = 0; }
+
+    const { error } = await supabase.from("pedidos_tienda").update(updates).eq("numero", poSelectedPedido.numero);
+    if (error) { showAdminToast(`Error: ${error.message}`, "error"); return; }
+
+    const ventaId = (poSelectedPedido as any)._ventaId;
+    if (ventaId) {
+      const ventaForma = nuevoMetodo.charAt(0).toUpperCase() + nuevoMetodo.slice(1).replace("_", " ");
+      await supabase.from("ventas").update({ forma_pago: ventaForma }).eq("id", ventaId);
+    }
+
+    setPoSelectedPedido({ ...poSelectedPedido, metodo_pago: nuevoMetodo });
+    setPoPedidos((prev) => prev.map((p) => p.numero === poSelectedPedido.numero ? { ...p, metodo_pago: nuevoMetodo } : p));
+    setEditandoPago(false);
+    showAdminToast("Método de pago actualizado", "success");
   };
 
   // PO Stats
@@ -1867,7 +1955,7 @@ export default function ListadoVentasPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredOrders.map((order, idx) => {
+          {filteredOrders.slice(0, PAGE_SIZE * visiblePage).map((order, idx) => {
             const est = estadoBadge[order.estado] || estadoBadge.pendiente;
             const isHistorial = order._source === "historial";
             const pago = formatPago(order.forma_pago || order.metodo_pago);
@@ -2077,6 +2165,14 @@ export default function ListadoVentasPage() {
               </Card>
             );
           })}
+          {/* Load more button */}
+          {filteredOrders.length > PAGE_SIZE * visiblePage && (
+            <div className="flex justify-center pt-3">
+              <Button variant="outline" onClick={() => setVisiblePage((p) => p + 1)}>
+                Cargar más ({filteredOrders.length - PAGE_SIZE * visiblePage} restantes)
+              </Button>
+            </div>
+          )}
           {/* Total bar */}
           {filteredOrders.length > 0 && (
             <div className="flex justify-end pt-2 px-2">
@@ -2289,6 +2385,30 @@ export default function ListadoVentasPage() {
                         <div className="flex items-center justify-between">
                           <span className="font-medium">{formatPago((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago)}</span>
                           <span className="font-bold">{formatCurrency(poSelectedPedido.total)}</span>
+                        </div>
+                      )}
+                      {/* Cambiar método de pago — solo si no hay cobro confirmado y la orden está activa */}
+                      {!isCancelled && !isDelivered && (poSelectedPedido.isOnline || poSelectedPedido.metodo_entrega === "envio") && detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Cr")).length === 0 && (
+                        <div className="pt-1 border-t">
+                          {!editandoPago ? (
+                            <button onClick={() => setEditandoPago(true)} className="text-xs text-primary hover:underline font-medium">
+                              Cambiar método de pago
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Select defaultValue={(poSelectedPedido as any).forma_pago?.toLowerCase().replace(" ", "_") || poSelectedPedido.metodo_pago || "transferencia"} onValueChange={handleCambiarMetodoPago}>
+                                <SelectTrigger className="h-7 text-xs flex-1">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="efectivo">Efectivo</SelectItem>
+                                  <SelectItem value="transferencia">Transferencia</SelectItem>
+                                  <SelectItem value="cuenta_corriente">Cuenta Corriente</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <button onClick={() => setEditandoPago(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2846,9 +2966,8 @@ export default function ListadoVentasPage() {
                       if (ventaId) {
                         if (metodo === "Cuenta Corriente" && clienteIdOrder) {
                           // CC: add to saldo + register in caja
-                          const { data: cl } = await supabase.from("clientes").select("saldo").eq("id", clienteIdOrder).single();
-                          const newSaldo = (cl?.saldo || 0) + order.total;
-                          await supabase.from("clientes").update({ saldo: newSaldo }).eq("id", clienteIdOrder);
+                          const { data: nuevoSaldoData } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteIdOrder, p_change: order.total });
+                          const newSaldo = nuevoSaldoData ?? 0;
                           await supabase.from("cuenta_corriente").insert({ cliente_id: clienteIdOrder, fecha: hoy, comprobante: `Cobro #${order.numero}`, descripcion: "A cuenta corriente", debe: order.total, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: ventaId });
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Cuenta Corriente)`, metodo_pago: "Cuenta Corriente", monto: order.total, referencia_id: ventaId, referencia_tipo: "venta" });
                         } else {

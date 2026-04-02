@@ -835,9 +835,9 @@ export default function ClientesPage() {
 
       let imported = 0, updated = 0, failed = 0;
 
-      for (let i = 0; i < rows.length; i++) {
-        setImportProgress(`Procesando ${i + 1} de ${rows.length}...`);
-        const row = rows[i];
+      // Pre-parse all rows into payloads
+      const parsedRows: { row: any; nombre: string; cuit: string; payload: Record<string, any> }[] = [];
+      for (const row of rows) {
         const nombre = getVal(row, "nombre", "cliente", "razon social");
         if (!nombre) { failed++; continue; }
 
@@ -888,24 +888,53 @@ export default function ClientesPage() {
           payload.vendedor_id = vendMap[vendedorName.toLowerCase()];
         }
 
-        // Check if client exists by CUIT or by exact name
+        parsedRows.push({ row, nombre, cuit, payload });
+      }
+
+      setImportProgress("Buscando clientes existentes...");
+
+      // Batch fetch existing clients by CUIT
+      const allCuits = parsedRows.map((r) => r.cuit).filter(Boolean);
+      const cuitMap = new Map<string, string>();
+      if (allCuits.length > 0) {
+        const { data: byCuits } = await supabase.from("clientes").select("id, cuit").eq("activo", true).in("cuit", allCuits);
+        if (byCuits) byCuits.forEach((c) => { if (c.cuit) cuitMap.set(c.cuit, c.id); });
+      }
+
+      // Batch fetch existing clients by nombre (for rows without CUIT match)
+      const nombresWithoutCuit = parsedRows
+        .filter((r) => !r.cuit || !cuitMap.has(r.cuit))
+        .map((r) => r.nombre);
+      const nameMap = new Map<string, string>();
+      if (nombresWithoutCuit.length > 0) {
+        const { data: byNames } = await supabase.from("clientes").select("id, nombre").eq("activo", true).in("nombre", nombresWithoutCuit);
+        if (byNames) byNames.forEach((c) => nameMap.set(c.nombre, c.id));
+      }
+
+      // Process rows using lookup maps
+      const newRecords: Record<string, any>[] = [];
+      for (let i = 0; i < parsedRows.length; i++) {
+        setImportProgress(`Procesando ${i + 1} de ${parsedRows.length}...`);
+        const { nombre, cuit, payload } = parsedRows[i];
+
         let existingId: string | null = null;
-        if (cuit) {
-          const { data: byCuit } = await supabase.from("clientes").select("id").eq("cuit", cuit).eq("activo", true).maybeSingle();
-          if (byCuit) existingId = byCuit.id;
-        }
-        if (!existingId) {
-          const { data: byName } = await supabase.from("clientes").select("id").eq("nombre", nombre).eq("activo", true).maybeSingle();
-          if (byName) existingId = byName.id;
-        }
+        if (cuit && cuitMap.has(cuit)) existingId = cuitMap.get(cuit)!;
+        if (!existingId && nameMap.has(nombre)) existingId = nameMap.get(nombre)!;
 
         if (existingId) {
           await supabase.from("clientes").update(payload).eq("id", existingId);
           updated++;
         } else {
-          await supabase.from("clientes").insert(payload);
-          imported++;
+          newRecords.push(payload);
         }
+      }
+
+      // Batch insert new clients
+      if (newRecords.length > 0) {
+        setImportProgress(`Insertando ${newRecords.length} clientes nuevos...`);
+        const { error: insertError } = await supabase.from("clientes").insert(newRecords);
+        if (insertError) throw insertError;
+        imported = newRecords.length;
       }
 
       showAdminToast(`Importación completa: ${imported} nuevos, ${updated} actualizados${failed > 0 ? `, ${failed} omitidos` : ""}`, "success");

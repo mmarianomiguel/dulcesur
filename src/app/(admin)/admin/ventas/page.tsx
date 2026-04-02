@@ -1516,47 +1516,44 @@ export default function VentasPage() {
       if (numError) { setErrorModal({ open: true, message: `Error al generar número: ${numError.message}` }); setSaving(false); return; }
       const numero = numData || "00001-00000000";
 
-      let { data: venta, error: ventaError } = await supabase
-        .from("ventas")
-        .insert({
-          numero,
-          tipo_comprobante: tipoComprobante,
-          fecha: fechaVenta,
-          cliente_id: clientId || null,
-          vendedor_id: vendedorId || null,
-          forma_pago: formaPago,
-          subtotal,
-          descuento_porcentaje: descuento,
-          recargo_porcentaje: recargo,
-          total,
-          estado: formaPago === "Pendiente" ? "pendiente" : "cerrada",
-          entregado: formaPago === "Pendiente" ? false : undefined,
-          observacion: despacho,
-          metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
-          lista_precio_id: listaPrecioId || null,
-          // monto_pagado: track how much was paid at POS (for pending invoice tracking)
-          // Envío sales: 0 — cobro confirmed from venta detail
-          monto_pagado: deliveryMethod === "delivery"
-            ? 0
-            : formaPago === "Efectivo" || formaPago === "Transferencia"
-              ? total  // fully paid at POS
-              : formaPago === "Mixto"
-                ? Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100  // non-CC portion paid at POS
-                : 0,  // CC or Pendiente — nothing paid yet
-          ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
-            cuenta_transferencia_id: cuentaBancariaId,
-            cuenta_transferencia_alias: cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.alias || cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.nombre || null,
-          } : {}),
-        })
-        .select()
-        .single();
+      const ventaPayload = {
+        numero,
+        tipo_comprobante: tipoComprobante,
+        fecha: fechaVenta,
+        cliente_id: clientId || null,
+        vendedor_id: vendedorId || null,
+        forma_pago: formaPago,
+        subtotal,
+        descuento_porcentaje: descuento,
+        recargo_porcentaje: recargo,
+        total,
+        estado: formaPago === "Pendiente" ? "pendiente" : "cerrada",
+        entregado: formaPago === "Pendiente" ? false : undefined,
+        observacion: despacho,
+        metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
+        lista_precio_id: listaPrecioId || null,
+        // monto_pagado: track how much was paid at POS (for pending invoice tracking)
+        // Envío sales: 0 — cobro confirmed from venta detail
+        monto_pagado: deliveryMethod === "delivery"
+          ? 0
+          : formaPago === "Efectivo" || formaPago === "Transferencia"
+            ? total  // fully paid at POS
+            : formaPago === "Mixto"
+              ? Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100  // non-CC portion paid at POS
+              : 0,  // CC or Pendiente — nothing paid yet
+        ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
+          cuenta_transferencia_id: cuentaBancariaId,
+          cuenta_transferencia_alias: cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.alias || cuentasBancarias.find((c) => c.id === cuentaBancariaId)?.nombre || null,
+        } : {}),
+      };
+      let { data: venta, error: ventaError } = await supabase.from("ventas").insert(ventaPayload).select().single();
 
       if (ventaError) {
         // Retry with new number if duplicate key
         if (ventaError.message?.includes("duplicate key") || ventaError.message?.includes("ventas_numero_unique")) {
           const { data: retryNum } = await supabase.rpc("next_numero", { p_tipo: "venta" });
           if (retryNum) {
-            const { data: retryVenta, error: retryErr } = await supabase.from("ventas").insert({ ...{ numero: retryNum, tipo_comprobante: tipoComprobante, fecha: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), cliente_id: clientId || null, vendedor_id: vendedorId || null, forma_pago: formaPago, subtotal, descuento_porcentaje: descuento, recargo_porcentaje: recargo, total, estado: "cerrada", observacion: despacho, metodo_entrega: deliveryMethod === "delivery" ? "envio" : "retiro", lista_precio_id: listaPrecioId || null, monto_pagado: formaPago === "Efectivo" || formaPago === "Transferencia" ? total : formaPago === "Mixto" ? Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100 : 0 } }).select().single();
+            const { data: retryVenta, error: retryErr } = await supabase.from("ventas").insert({ ...ventaPayload, numero: retryNum }).select().single();
             if (!retryErr && retryVenta) { venta = retryVenta; } else { setErrorModal({ open: true, message: `Error al crear venta: ${retryErr?.message || ventaError.message}` }); setSaving(false); return; }
           }
         } else {
@@ -2089,12 +2086,18 @@ export default function VentasPage() {
                         message: "Hay items en el carrito con Cuenta Corriente. ¿Cambiar cliente?",
                         onConfirm: () => {
                           setClientId("");
+                          setClientAddresses([]);
+                          setSelectedAddressId("");
+                          setDeliveryMethod("pickup");
                           if (codigoClienteRef.current) codigoClienteRef.current.value = "";
                         },
                       });
                       return;
                     }
                     setClientId("");
+                    setClientAddresses([]);
+                    setSelectedAddressId("");
+                    setDeliveryMethod("pickup");
                     if (codigoClienteRef.current) codigoClienteRef.current.value = "";
                   }}
                   className="px-2.5 h-9 flex items-center hover:bg-muted cursor-pointer border-l"

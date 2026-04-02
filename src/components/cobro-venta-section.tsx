@@ -123,7 +123,7 @@ export function CobroVentaSection({
       );
       if (match) setCuentaBancariaId(match.id);
     }
-  }, []);
+  }, [defaultMetodo, defaultCuentaAlias, cuentasBancarias]);
 
   // Auto-select first bank account for Transferencia/Mixto
   useEffect(() => {
@@ -157,6 +157,7 @@ export function CobroVentaSection({
       setSaldoAllocations([]);
       return;
     }
+    let cancelled = false;
     const fetchPending = async () => {
       const { data: ventas } = await supabase
         .from("ventas")
@@ -188,9 +189,12 @@ export function CobroVentaSection({
           return { ...v, pendiente: Math.round((v.pendiente - reduce) * 100) / 100 };
         }).filter((v) => v.pendiente > 0.01);
       }
-      setPendingInvoices(pending);
+      if (!cancelled) {
+        setPendingInvoices(pending);
+      }
     };
     fetchPending();
+    return () => { cancelled = true; };
   }, [cobrarSaldo, clienteId, clienteSaldo, ventaId]);
 
   // FIFO auto-allocation
@@ -210,15 +214,15 @@ export function CobroVentaSection({
         venta_id: inv.id, numero: inv.numero, fecha: inv.fecha, pendiente: inv.pendiente, aplicar: 0,
       })));
     }
-  }, [saldoMode]);
+  }, [saldoMode, pendingInvoices]);
 
   // ─── Computed values ───
   const recPct = recargoTransferencia || 0;
 
   const surcharge = useMemo(() => {
     if (recPct <= 0) return 0;
-    if (metodo === "Transferencia") return Math.round(montoVenta * recPct / 100);
-    if (metodo === "Mixto") return Math.round(mixtoTransferencia * recPct / 100);
+    if (metodo === "Transferencia") return Math.round(montoVenta * recPct) / 100;
+    if (metodo === "Mixto") return Math.round(mixtoTransferencia * recPct) / 100;
     return 0;
   }, [metodo, montoVenta, mixtoTransferencia, recPct]);
 
@@ -276,6 +280,9 @@ export function CobroVentaSection({
         saldoAllocations: cobrarSaldo ? saldoAllocations.filter((a) => a.aplicar > 0) : [],
       });
       setDone(true);
+    } catch (err: any) {
+      const { showAdminToast } = await import("@/components/admin-toast");
+      showAdminToast("Error al registrar cobro: " + (err.message || "Error inesperado"), "error");
     } finally {
       setSaving(false);
       submittingRef.current = false;
@@ -574,7 +581,8 @@ export function CobroVentaSection({
                             {saldoMode === "manual" ? (
                               <input type="text" inputMode="numeric" value={a.aplicar || ""} placeholder="0"
                                 onChange={(e) => {
-                                  const raw = Math.max(0, Math.min(Number(e.target.value.replace(/[^0-9]/g, "")) || 0, a.pendiente));
+                                  const parsed = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                                  const raw = Math.max(0, Math.min(parseFloat(parsed) || 0, a.pendiente));
                                   setSaldoAllocations((prev) => {
                                     const otherSum = prev.reduce((s, x) => s + (x.venta_id === a.venta_id ? 0 : x.aplicar), 0);
                                     const maxForThis = Math.min(raw, Math.max(0, clienteSaldo - otherSum));

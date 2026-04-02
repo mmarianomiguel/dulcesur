@@ -250,6 +250,17 @@ export default function PedidosOnlinePage() {
 
   useEffect(() => { fetchPedidos(); }, [fetchPedidos]);
 
+  // Realtime subscription: refresh when any pedido changes (from any page)
+  useEffect(() => {
+    const channel = supabase
+      .channel("pedidos-tienda-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos_tienda" }, () => {
+        fetchPedidos();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchPedidos]);
+
   // Filter pedidos
   const filtered = pedidos.filter((p) => {
     if (filterEstado === "activos" && (p.estado === "entregado" || p.estado === "cancelado")) return false;
@@ -393,11 +404,9 @@ export default function PedidosOnlinePage() {
 
       for (const [productoId, diff] of Object.entries(stockDiffs)) {
         if (Math.abs(diff) < 0.001) continue;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", productoId).single();
-        if (!prod) { errores.push(`Producto ${productoId} no encontrado`); continue; }
-        const stockAntes = prod.stock;
-        const stockDespues = stockAntes + diff;
-        await supabase.from("productos").update({ stock: stockDespues }).eq("id", productoId);
+        const { data: stockDespues, error: rpcErr } = await supabase.rpc("atomic_update_stock", { p_product_id: productoId, p_change: diff });
+        if (rpcErr) { errores.push(`Error stock ${productoId}: ${rpcErr.message}`); continue; }
+        const stockAntes = (stockDespues ?? 0) - diff;
         await supabase.from("stock_movimientos").insert({
           producto_id: productoId, tipo: diff > 0 ? "Ajuste" : "Venta", cantidad: diff,
           cantidad_antes: stockAntes, cantidad_despues: stockDespues,
@@ -491,7 +500,11 @@ export default function PedidosOnlinePage() {
   // Update estado with status flow
   const handleEstadoChange = async (pedido: Pedido, nuevoEstado: string) => {
     const estadoAnterior = pedido.estado;
-    await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
+    const { error: updateError } = await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("id", pedido.id);
+    if (updateError) {
+      showAdminToast(`Error al cambiar estado: ${updateError.message}`, "error");
+      return;
+    }
 
     const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;
     const ventaUpdate: Record<string, unknown> = { estado: ventaEstado };
@@ -537,9 +550,7 @@ export default function PedidosOnlinePage() {
         } else if (metodo.includes("cuenta")) {
           // Cuenta Corriente: no caja entry, create CC entry
           if (clienteId) {
-            const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-            const saldoActual = clienteData?.saldo || 0;
-            const nuevoSaldo = saldoActual + total;
+            const { data: nuevoSaldo } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: total });
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clienteId, fecha: hoy,
               comprobante: `Pedido Web #${pedido.numero}`,
@@ -547,7 +558,6 @@ export default function PedidosOnlinePage() {
               debe: total, haber: 0, saldo: nuevoSaldo,
               forma_pago: "Cuenta Corriente", venta_id: ventaId,
             });
-            await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clienteId);
           }
         } else {
           // Efectivo (default)
@@ -597,43 +607,90 @@ export default function PedidosOnlinePage() {
       await supabase.from("ventas").update({ monto_pagado: 0 }).eq("id", ventaId);
     }
 
-    // Return stock when cancelling
+    // Return stock when cancelling (handles combos: restores component product stock)
     if (nuevoEstado === "cancelado" && estadoAnterior !== "cancelado") {
       for (const item of pedido.items) {
         if (!item.producto_id) continue;
-        const upp = item.unidades_por_presentacion || 1;
-        const unitsToRestore = item.cantidad * upp;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        // Check if product is a combo
+        const { data: prod } = await supabase.from("productos").select("id, es_combo").eq("id", item.producto_id).single();
         if (!prod) continue;
-        const stockAntes = prod.stock;
-        await supabase.from("productos").update({ stock: stockAntes + unitsToRestore }).eq("id", item.producto_id);
-        await supabase.from("stock_movimientos").insert({
-          producto_id: item.producto_id, tipo: "anulacion", cantidad: unitsToRestore,
-          cantidad_antes: stockAntes, cantidad_despues: stockAntes + unitsToRestore,
-          referencia: `Cancelación Pedido Web #${pedido.numero}`,
-          descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
-          usuario: currentUser?.nombre || "Admin Sistema",
-        });
+
+        if (prod.es_combo) {
+          // Combo: reverse stock on each component product
+          const { data: comboItems } = await supabase
+            .from("combo_items")
+            .select("producto_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .eq("combo_id", item.producto_id);
+          for (const ci of comboItems || []) {
+            const componentId = (ci as any).producto_id;
+            const unitsToRestore = item.cantidad * (ci as any).cantidad;
+            const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: componentId, p_change: unitsToRestore });
+            const stockAntes = (newStock ?? 0) - unitsToRestore;
+            await supabase.from("stock_movimientos").insert({
+              producto_id: componentId, tipo: "anulacion", cantidad: unitsToRestore,
+              cantidad_antes: stockAntes, cantidad_despues: newStock,
+              referencia: `Cancelación Pedido Web #${pedido.numero}`,
+              descripcion: `Devolución stock combo - ${(ci as any).productos?.nombre || item.nombre}`,
+              usuario: currentUser?.nombre || "Admin Sistema",
+            });
+          }
+        } else {
+          // Regular product
+          const upp = item.unidades_por_presentacion || 1;
+          const unitsToRestore = item.cantidad * upp;
+          const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: unitsToRestore });
+          const stockAntes = (newStock ?? 0) - unitsToRestore;
+          await supabase.from("stock_movimientos").insert({
+            producto_id: item.producto_id, tipo: "anulacion", cantidad: unitsToRestore,
+            cantidad_antes: stockAntes, cantidad_despues: newStock,
+            referencia: `Cancelación Pedido Web #${pedido.numero}`,
+            descripcion: `Devolución stock - ${item.nombre} (${item.presentacion})`,
+            usuario: currentUser?.nombre || "Admin Sistema",
+          });
+        }
       }
     }
 
-    // Re-decrement stock if un-cancelling
+    // Re-decrement stock if un-cancelling (handles combos: decrements component product stock)
     if (estadoAnterior === "cancelado" && nuevoEstado !== "cancelado") {
       for (const item of pedido.items) {
         if (!item.producto_id) continue;
-        const upp = item.unidades_por_presentacion || 1;
-        const unitsToDecrement = item.cantidad * upp;
-        const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
+        const { data: prod } = await supabase.from("productos").select("id, es_combo").eq("id", item.producto_id).single();
         if (!prod) continue;
-        const stockAntes = prod.stock;
-        await supabase.from("productos").update({ stock: stockAntes - unitsToDecrement }).eq("id", item.producto_id);
-        await supabase.from("stock_movimientos").insert({
-          producto_id: item.producto_id, tipo: "Venta", cantidad: -unitsToDecrement,
-          cantidad_antes: stockAntes, cantidad_despues: stockAntes - unitsToDecrement,
-          referencia: `Reactivación Pedido Web #${pedido.numero}`,
-          descripcion: `Descuento stock - ${item.nombre} (${item.presentacion})`,
-          usuario: currentUser?.nombre || "Admin Sistema",
-        });
+
+        if (prod.es_combo) {
+          // Combo: decrement stock on each component product
+          const { data: comboItems } = await supabase
+            .from("combo_items")
+            .select("producto_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .eq("combo_id", item.producto_id);
+          for (const ci of comboItems || []) {
+            const componentId = (ci as any).producto_id;
+            const unitsToDecrement = item.cantidad * (ci as any).cantidad;
+            const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: componentId, p_change: -unitsToDecrement });
+            const stockAntes = (newStock ?? 0) + unitsToDecrement;
+            await supabase.from("stock_movimientos").insert({
+              producto_id: componentId, tipo: "Venta", cantidad: -unitsToDecrement,
+              cantidad_antes: stockAntes, cantidad_despues: newStock,
+              referencia: `Reactivación Pedido Web #${pedido.numero}`,
+              descripcion: `Descuento stock combo - ${(ci as any).productos?.nombre || item.nombre}`,
+              usuario: currentUser?.nombre || "Admin Sistema",
+            });
+          }
+        } else {
+          // Regular product
+          const upp = item.unidades_por_presentacion || 1;
+          const unitsToDecrement = item.cantidad * upp;
+          const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: -unitsToDecrement });
+          const stockAntes = (newStock ?? 0) + unitsToDecrement;
+          await supabase.from("stock_movimientos").insert({
+            producto_id: item.producto_id, tipo: "Venta", cantidad: -unitsToDecrement,
+            cantidad_antes: stockAntes, cantidad_despues: newStock,
+            referencia: `Reactivación Pedido Web #${pedido.numero}`,
+            descripcion: `Descuento stock - ${item.nombre} (${item.presentacion})`,
+            usuario: currentUser?.nombre || "Admin Sistema",
+          });
+        }
       }
     }
 

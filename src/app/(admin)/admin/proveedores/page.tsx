@@ -364,6 +364,9 @@ export default function ProveedoresPage() {
       };
 
       let imported = 0, updated = 0, failed = 0;
+
+      // Pre-parse all rows into payloads
+      const parsedRows: { nombre: string; cuit: string; payload: Record<string, any> }[] = [];
       for (const row of rows) {
         const nombre = getVal(row, "nombre", "proveedor");
         if (!nombre) { failed++; continue; }
@@ -390,24 +393,47 @@ export default function ProveedoresPage() {
           activo: true,
         };
 
-        // Match by CUIT or name
+        parsedRows.push({ nombre, cuit: payload.cuit || "", payload });
+      }
+
+      // Batch fetch existing proveedores by CUIT
+      const allCuits = parsedRows.map((r) => r.cuit).filter(Boolean);
+      const cuitMap = new Map<string, string>();
+      if (allCuits.length > 0) {
+        const { data: byCuits } = await supabase.from("proveedores").select("id, cuit").eq("activo", true).in("cuit", allCuits);
+        if (byCuits) byCuits.forEach((p) => { if (p.cuit) cuitMap.set(p.cuit, p.id); });
+      }
+
+      // Batch fetch existing proveedores by nombre (for rows without CUIT match)
+      const nombresWithoutCuit = parsedRows
+        .filter((r) => !r.cuit || !cuitMap.has(r.cuit))
+        .map((r) => r.nombre);
+      const nameMap = new Map<string, string>();
+      if (nombresWithoutCuit.length > 0) {
+        const { data: byNames } = await supabase.from("proveedores").select("id, nombre").eq("activo", true).in("nombre", nombresWithoutCuit);
+        if (byNames) byNames.forEach((p) => nameMap.set(p.nombre, p.id));
+      }
+
+      // Process rows using lookup maps
+      const newRecords: Record<string, any>[] = [];
+      for (const { nombre, cuit, payload } of parsedRows) {
         let existingId: string | null = null;
-        if (payload.cuit) {
-          const { data: byCuit } = await supabase.from("proveedores").select("id").eq("cuit", payload.cuit).eq("activo", true).maybeSingle();
-          if (byCuit) existingId = byCuit.id;
-        }
-        if (!existingId) {
-          const { data: byName } = await supabase.from("proveedores").select("id").eq("nombre", nombre).eq("activo", true).maybeSingle();
-          if (byName) existingId = byName.id;
-        }
+        if (cuit && cuitMap.has(cuit)) existingId = cuitMap.get(cuit)!;
+        if (!existingId && nameMap.has(nombre)) existingId = nameMap.get(nombre)!;
 
         if (existingId) {
           await supabase.from("proveedores").update(payload).eq("id", existingId);
           updated++;
         } else {
-          await supabase.from("proveedores").insert(payload);
-          imported++;
+          newRecords.push(payload);
         }
+      }
+
+      // Batch insert new proveedores
+      if (newRecords.length > 0) {
+        const { error: insertError } = await supabase.from("proveedores").insert(newRecords);
+        if (insertError) throw insertError;
+        imported = newRecords.length;
       }
 
       showAdminToast(`Importación: ${imported} nuevos, ${updated} actualizados${failed > 0 ? `, ${failed} omitidos` : ""}`, "success");

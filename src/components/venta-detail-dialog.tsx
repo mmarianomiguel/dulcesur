@@ -140,6 +140,7 @@ const estadoFlow: Record<string, string[]> = {
   confirmado: ["entregado", "cancelado"],
   entregado: [],
   cancelado: ["pendiente"],
+  anulada: [],
 };
 
 function cleanDesc(desc: string) {
@@ -211,7 +212,7 @@ export function VentaDetailDialog({
 
   const isPedidoWeb = data.origen === "pedidos";
   const isHistorial = !isPedidoWeb;
-  const estado = data.estado === "anulada" ? "cancelado" : data.entregado ? "entregado" : data.estado || "pendiente";
+  const estado = data.entregado ? "entregado" : data.estado || "pendiente";
   const estInfo = estadoBadge[estado] || estadoBadge.pendiente;
   const EstIcon = estInfo.icon;
   const pago = data.forma_pago || data.metodo_pago || "—";
@@ -225,7 +226,12 @@ export function VentaDetailDialog({
     : (data.subtotal || items.reduce((s, i) => s + i.subtotal, 0));
   const ncTotal = (pagos || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
   const displayTotal = editable && editItems
-    ? itemsSubtotal + (envio || 0)
+    ? (() => {
+        let t = itemsSubtotal + (envio || 0);
+        if (descPct > 0) t = Math.round(t * (1 - descPct / 100) * 100) / 100;
+        if (recPct > 0) t = Math.round(t * (1 + recPct / 100) * 100) / 100;
+        return t;
+      })()
     : data.total - ncTotal;
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr"));
