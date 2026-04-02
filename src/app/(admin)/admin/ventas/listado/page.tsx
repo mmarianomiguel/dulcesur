@@ -2519,7 +2519,7 @@ export default function ListadoVentasPage() {
                           if (totalAllocated > 0 && clienteId) {
                             const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: -totalAllocated });
                             const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
-                            await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro saldo #${poSelectedPedido.numero}`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: ventaId });
+                            await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro saldo #${poSelectedPedido.numero}`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: null });
                             setClienteSaldo(saldoAfter2);
                           }
                         }

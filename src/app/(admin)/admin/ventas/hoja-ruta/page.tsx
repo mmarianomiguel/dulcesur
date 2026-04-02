@@ -1748,7 +1748,7 @@ export default function HojaDeRutaPage() {
                       if (totalAllocated > 0 && payVenta.cliente_id) {
                         const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: -totalAllocated });
                         const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
-                        await supabase.from("cuenta_corriente").insert({ cliente_id: payVenta.cliente_id, fecha: hoy, comprobante: `Cobro saldo entrega`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: payVenta.id });
+                        await supabase.from("cuenta_corriente").insert({ cliente_id: payVenta.cliente_id, fecha: hoy, comprobante: `Cobro saldo entrega`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: null });
                       }
                     }
 
