@@ -1270,28 +1270,32 @@ export default function ListadoVentasPage() {
         : nuevoSubtotal + (poSelectedPedido.costo_envio || 0) + ((poSelectedPedido as any).recargo_transferencia || 0);
       const refLabel = isHistorial ? `Edición Venta #${poSelectedPedido.numero}` : `Edición Pedido Web #${poSelectedPedido.numero}`;
 
-      // Update pedido_tienda_items (only for PO source)
-      if (!isHistorial) {
-        const { error: delErr } = await supabase.from("pedido_tienda_items").delete().eq("pedido_id", poSelectedPedido.id);
-        if (delErr) throw new Error(`Error eliminando items: ${delErr.message}`);
-        const { error: insErr } = await supabase.from("pedido_tienda_items").insert(
-          poEditItems.map((item) => ({
-            pedido_id: poSelectedPedido.id,
-            producto_id: item.producto_id,
-            nombre: item.nombre,
-            presentacion: item.presentacion,
-            cantidad: item.cantidad,
-            precio_unitario: item.precio_unitario,
-            subtotal: item.precio_unitario * item.cantidad,
-          }))
-        );
-        if (insErr) throw new Error(`Error insertando items: ${insErr.message}`);
-
+      // Update pedido_tienda_items — for PO source OR historial ventas from online orders
+      // (so the client sees the updated items in their tienda account)
+      const pedidoTiendaId = poSelectedPedido.id > 0 ? poSelectedPedido.id : null;
+      const shouldSyncPedidoTienda = !isHistorial || (poSelectedPedido.isOnline && pedidoTiendaId);
+      if (shouldSyncPedidoTienda && pedidoTiendaId) {
+        const { error: delErr } = await supabase.from("pedido_tienda_items").delete().eq("pedido_id", pedidoTiendaId);
+        if (delErr) errores.push(`Error actualizando items en tienda: ${delErr.message}`);
+        else {
+          const { error: insErr } = await supabase.from("pedido_tienda_items").insert(
+            poEditItems.map((item) => ({
+              pedido_id: pedidoTiendaId,
+              producto_id: item.producto_id,
+              nombre: item.nombre,
+              presentacion: item.presentacion,
+              cantidad: item.cantidad,
+              precio_unitario: item.precio_unitario,
+              subtotal: item.precio_unitario * item.cantidad,
+            }))
+          );
+          if (insErr) errores.push(`Error insertando items en tienda: ${insErr.message}`);
+        }
         const { error: pedErr } = await supabase.from("pedidos_tienda").update({
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
-        }).eq("id", poSelectedPedido.id);
-        if (pedErr) throw new Error(`Error actualizando pedido: ${pedErr.message}`);
+        }).eq("id", pedidoTiendaId);
+        if (pedErr) errores.push(`Error actualizando total en tienda: ${pedErr.message}`);
       }
 
       // Update venta + venta_items
