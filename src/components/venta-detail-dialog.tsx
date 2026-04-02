@@ -123,6 +123,8 @@ export interface ProductSearchResult {
   precio: number;
   unidad_medida?: string;
   es_combo?: boolean;
+  imagen_url?: string;
+  stock?: number;
   presentaciones?: { nombre: string; precio: number; unidades_por_presentacion: number }[];
 }
 
@@ -538,52 +540,61 @@ export function VentaDetailDialog({
                 </div>
                 {searchingProducts && <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Buscando...</p>}
                 {productResults.length > 0 && (
-                  <div className="max-h-64 overflow-y-auto space-y-1.5">
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
                     {productResults.map((p, idx) => {
                       const highlighted = idx === searchHighlight;
                       const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
+                      const stockVal = p.stock ?? null;
                       return (
                         <div
                           key={p.id}
                           ref={highlighted ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
-                          className={`rounded-lg border transition-colors ${highlighted ? "ring-2 ring-primary border-primary bg-muted/50" : "hover:bg-muted/30 border-transparent"}`}
+                          className={`rounded-xl border p-3 transition-colors ${highlighted ? "ring-2 ring-primary border-primary bg-muted/50" : "hover:border-primary/30 hover:bg-primary/5"}`}
                           onMouseEnter={() => setSearchHighlight(idx)}
                         >
                           <button
-                            className="w-full text-left p-2.5 flex items-center gap-2.5"
                             onClick={() => addProduct(p)}
+                            className="w-full flex items-center gap-3 text-left"
                           >
-                            <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                              <Package className="w-4 h-4 text-muted-foreground/30" />
+                            <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {p.imagen_url ? (
+                                <img src={p.imagen_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-5 h-5 text-muted-foreground/30" />
+                              )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-medium text-xs truncate">{p.nombre}</span>
-                                {p.es_combo && <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700">COMBO</span>}
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-sm truncate">{p.nombre}</span>
+                                {p.es_combo && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-700 shrink-0">COMBO</span>}
                               </div>
-                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
-                                {p.codigo && <span className="font-mono">{p.codigo}</span>}
-                                {p.codigo && <span>·</span>}
-                                <span className="font-semibold text-foreground text-xs">{formatCurrency(p.precio)}</span>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                <span className="font-mono">{p.codigo}</span>
+                                <span>·</span>
+                                {stockVal !== null && (
+                                  <>
+                                    <span>Stock: <strong className={stockVal <= 0 ? "text-red-500" : ""}>{stockVal}</strong></span>
+                                    <span>·</span>
+                                  </>
+                                )}
+                                <span className="font-semibold text-foreground">{formatCurrency(p.precio)}</span>
                               </div>
                             </div>
                           </button>
                           {boxVariants.length > 0 && (
-                            <div className="flex gap-1.5 px-2.5 pb-2.5 pl-14">
-                              <button
-                                className="h-7 text-xs flex-1 rounded-md border border-input bg-background px-2 hover:bg-muted transition-colors"
-                                onClick={() => addProduct(p)}
-                              >
+                            <div className="flex gap-2 mt-2.5 pl-14">
+                              <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => addProduct(p)}>
                                 + Unidad
-                              </button>
+                              </Button>
                               {boxVariants.map((pr, i) => (
-                                <button
+                                <Button
                                   key={i}
-                                  className="h-7 text-xs flex-1 rounded-md bg-primary text-primary-foreground px-2 hover:bg-primary/90 transition-colors font-medium"
+                                  size="sm"
+                                  className="h-8 text-xs flex-1"
                                   onClick={() => addProduct(p, pr)}
                                 >
-                                  + {pr.nombre}
-                                </button>
+                                  + {pr.nombre} ({pr.unidades_por_presentacion} un.)
+                                </Button>
                               ))}
                             </div>
                           )}
