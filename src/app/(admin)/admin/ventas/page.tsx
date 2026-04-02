@@ -1841,8 +1841,8 @@ export default function VentasPage() {
               descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
               metodo_pago: formaPago,
               monto: saldoPendiente,
-              referencia_id: venta.id,
-              referencia_tipo: "venta",
+              referencia_id: null,
+              referencia_tipo: "cobro_saldo",
             });
             // Atomic saldo update via RPC (negative = reduce debt from cobro)
             const { data: newSaldoAfterCobro } = await supabase.rpc("atomic_update_client_saldo", {

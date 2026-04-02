@@ -759,16 +759,19 @@ export default function CajaPage() {
     // totalVentas is computed AFTER ventasDesglose (below) as the sum of actual money flow
 
     // Cobros de cuenta corriente del día (pagos que reducen deuda CC)
-    const cobrosCC = movements.filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC"));
+    const cobrosCC = movements.filter((m) => m.tipo === "ingreso" && (
+      (m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC")) ||
+      m.referencia_tipo === "cobro_saldo"
+    ));
     const cobrosCCTotal = cobrosCC.reduce((a, m) => a + m.monto, 0);
     const cobrosCCEfectivo = cobrosCC.filter((m) => m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0);
     const cobrosCCTransferencia = cobrosCC.filter((m) => m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0);
 
     const depositosEfectivo = movements
-      .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta")
+      .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo")
       .reduce((a, m) => a + m.monto, 0);
     const depositosOtros = movements
-      .filter((m) => m.tipo === "ingreso" && m.metodo_pago !== "Efectivo" && m.referencia_tipo !== "venta")
+      .filter((m) => m.tipo === "ingreso" && m.metodo_pago !== "Efectivo" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo")
       .reduce((a, m) => a + m.monto, 0);
     const depositos = depositosEfectivo + depositosOtros;
 
@@ -797,16 +800,16 @@ export default function CajaPage() {
       .reduce((a, m) => a + Math.abs(m.monto), 0);
 
     const efectivoInicial = turno?.efectivo_inicial ?? 0;
-    const efectivoEsperado = efectivoInicial + ventasEfectivo + depositosEfectivo - gastos - retiros - notasCreditoEgresos - anulaciones;
+    const efectivoEsperado = efectivoInicial + ventasEfectivo + depositosEfectivo + cobrosCCEfectivo - gastos - retiros - notasCreditoEgresos - anulaciones;
 
     // Individual egreso items for breakdown display
     const egresosDetalle = movements
       .filter((m) => m.tipo === "egreso" || (m.tipo === "cancelacion" && (m.referencia_tipo === "nota_credito" || m.referencia_tipo === "anulacion") && m.metodo_pago === "Efectivo"))
       .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: Math.abs(m.monto) }));
 
-    // Individual ingreso items (non-venta) for breakdown display
+    // Individual ingreso items (non-venta, non-cobro_saldo) for breakdown display
     const ingresosDetalle = movements
-      .filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta")
+      .filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo")
       .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: m.monto, metodo: m.metodo_pago || "Efectivo" }));
 
     // Ventas breakdown by ACTUAL money flow (caja_movimientos + CC entries)

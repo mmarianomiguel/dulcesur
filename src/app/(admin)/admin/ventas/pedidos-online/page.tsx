@@ -508,9 +508,15 @@ export default function PedidosOnlinePage() {
       return;
     }
 
+    const hoyGlobal = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;
     const ventaUpdate: Record<string, unknown> = { estado: ventaEstado };
-    if (nuevoEstado === "entregado") ventaUpdate.entregado = true;
+    if (nuevoEstado === "entregado") {
+      ventaUpdate.entregado = true;
+      // Update venta.fecha to actual delivery date so caja/reports land on the right day
+      // (checkout creates delivery ventas with fecha = fechaEntrega which may be in the future)
+      ventaUpdate.fecha = hoyGlobal;
+    }
     if (nuevoEstado === "cancelado") {
       ventaUpdate.entregado = false;
       ventaUpdate.observacion = "ANULADA (Cancelación desde Pedidos Online)";
@@ -526,7 +532,7 @@ export default function PedidosOnlinePage() {
       const { data: existingCC } = await supabase.from("cuenta_corriente").select("id").eq("venta_id", ventaId).limit(1);
 
       if ((!existingCaja || existingCaja.length === 0) && (!existingCC || existingCC.length === 0)) {
-        const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+        const hoy = hoyGlobal;
         const hora = nowTimeARG();
 
         // Fetch fresh payment data from DB (includes cuenta_transferencia_alias from venta)
@@ -701,7 +707,75 @@ export default function PedidosOnlinePage() {
   };
 
   // Print receipt
-  const handlePrint = (pedido: Pedido) => {
+  const handlePrint = async (pedido: Pedido) => {
+    // If we have a linked venta, fetch real data (tipoComprobante, surcharge, item discounts, etc.)
+    if (pedido.ventaId) {
+      const [{ data: v }, { data: vitems }, { data: movs }] = await Promise.all([
+        supabase.from("ventas").select("id, numero, total, subtotal, descuento_porcentaje, recargo_porcentaje, tipo_comprobante, forma_pago, monto_efectivo, monto_transferencia, metodo_entrega, cliente_id, moneda").eq("id", pedido.ventaId).single(),
+        supabase.from("venta_items").select("*").eq("venta_id", pedido.ventaId).order("created_at"),
+        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", pedido.ventaId).eq("referencia_tipo", "venta"),
+      ]);
+      if (v) {
+        const lineItems: ReceiptLineItem[] = (vitems || []).map((item: any) => ({
+          id: item.id,
+          producto_id: item.producto_id || "",
+          code: item.codigo || "",
+          description: item.descripcion,
+          qty: item.cantidad,
+          unit: item.unidad_medida || "Un",
+          price: item.precio_unitario,
+          discount: item.descuento || 0,
+          subtotal: item.subtotal,
+          presentacion: item.presentacion || "",
+          unidades_por_presentacion: item.unidades_por_presentacion ?? 1,
+          stock: 0,
+        }));
+        let pagoEf = 0, pagoTr = 0, pagoCC = 0;
+        for (const m of movs || []) {
+          if (m.tipo === "ingreso") {
+            if (m.metodo_pago === "Efectivo") pagoEf += m.monto;
+            else if (m.metodo_pago === "Transferencia") pagoTr += m.monto;
+            else if (m.metodo_pago === "Cuenta Corriente") pagoCC += m.monto;
+          }
+        }
+        if ((movs || []).length === 0) {
+          if (v.forma_pago === "Efectivo") pagoEf = v.total;
+          else if (v.forma_pago === "Transferencia") pagoTr = v.total;
+          else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
+          else if (v.forma_pago === "Mixto") { pagoEf = v.monto_efectivo || 0; pagoTr = v.monto_transferencia || 0; }
+        }
+        const descAmt = Math.round((v.subtotal || pedido.subtotal) * (v.descuento_porcentaje || 0) / 100);
+        const recAmt = Math.round(((v.subtotal || pedido.subtotal) - descAmt) * (v.recargo_porcentaje || 0) / 100);
+        const surchargeCalc = Math.max(0, v.total - ((v.subtotal || pedido.subtotal) - descAmt + recAmt));
+        setPrintSale({
+          numero: v.numero || pedido.numero,
+          total: v.total,
+          subtotal: v.subtotal || pedido.subtotal,
+          descuento: descAmt,
+          recargo: recAmt,
+          transferSurcharge: surchargeCalc,
+          tipoComprobante: v.tipo_comprobante || "X",
+          formaPago: v.forma_pago || pedido.metodo_pago || "Efectivo",
+          cliente: pedido.nombre_cliente,
+          clienteDireccion: pedido.direccion_texto,
+          clienteTelefono: pedido.telefono,
+          metodoEntrega: v.metodo_entrega || null,
+          vendedor: "Tienda Online",
+          moneda: v.moneda || "ARS",
+          items: lineItems,
+          fecha: new Date(pedido.created_at).toLocaleDateString("es-AR"),
+          saldoAnterior: 0,
+          saldoNuevo: 0,
+          pagoEfectivo: pagoEf || undefined,
+          pagoTransferencia: pagoTr || undefined,
+          pagoCuentaCorriente: pagoCC || undefined,
+        });
+        setPrintOpen(true);
+        return;
+      }
+    }
+
+    // Fallback: no linked venta yet — use pedido data directly
     const items: ReceiptLineItem[] = pedido.items.map((i, idx) => ({
       id: String(idx),
       producto_id: i.producto_id || "",
@@ -716,11 +790,9 @@ export default function PedidosOnlinePage() {
       unidades_por_presentacion: i.unidades_por_presentacion || 1,
       stock: 0,
     }));
-
     const efvo = detailPayments.filter(p => p.metodo === "Efectivo").reduce((s, p) => s + p.monto, 0);
     const transf = detailPayments.filter(p => p.metodo === "Transferencia").reduce((s, p) => s + p.monto, 0);
     const cc = detailPayments.filter(p => p.metodo === "Cuenta Corriente").reduce((s, p) => s + p.monto, 0);
-
     setPrintSale({
       numero: pedido.numero,
       total: pedido.total,

@@ -518,9 +518,12 @@ export default function ClientesPage() {
         });
       } else {
         // Regular sale or ND → Debe (full amount)
+        // Only show forma_pago on the DEBE row for CC/Pendiente (it signals the debt type)
+        // For Efectivo/Transferencia/Mixto the payment method appears on the HABER row when paid
+        const debeFormaPago = (fp === "Cuenta Corriente" || fp === "Pendiente") ? fp : "";
         entries.push({
           id: `v-${v.id}-debe`, fecha: v.fecha, created_at: v.created_at || v.fecha,
-          comprobante: comp, debe: v.total, haber: 0, forma_pago: fp, descripcion: "", venta_id: v.id,
+          comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
         });
 
         // Add Haber entries for payments on this sale
