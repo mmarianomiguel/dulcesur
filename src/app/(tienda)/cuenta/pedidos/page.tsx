@@ -179,6 +179,25 @@ export default function PedidosPage() {
         }
       }
 
+      // Also check cobros allocated to these ventas (cobros have referencia_tipo='cobro' in caja_movimientos)
+      if (ventaIds.length > 0) {
+        const { data: cobroItems } = await supabase
+          .from("cobro_items")
+          .select("venta_id, cobro_id, monto_aplicado, cobros(forma_pago, fecha, hora)")
+          .in("venta_id", ventaIds);
+        for (const ci of cobroItems || []) {
+          const key = ci.venta_id;
+          if (!pagosMap[key]) pagosMap[key] = [];
+          const cobro = (ci as any).cobros;
+          pagosMap[key].push({
+            metodo_pago: cobro?.forma_pago || "Cobro",
+            monto: ci.monto_aplicado,
+            fecha: cobro?.fecha || undefined,
+            descripcion: "Cobro aplicado",
+          });
+        }
+      }
+
       // Also check cuenta_corriente for CC payments
       if (ventaIds.length > 0) {
         const { data: ccMovs } = await supabase
