@@ -1364,9 +1364,7 @@ export default function ListadoVentasPage() {
               .eq("venta_id", ventaId)
               .limit(1);
             if (ccRows && ccRows.length > 0) {
-              const { data: clienteData } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-              const saldoActual = clienteData?.saldo || 0;
-              const nuevoSaldo = saldoActual + diferencia;
+              const { data: newSaldo } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: diferencia });
               await supabase.from("cuenta_corriente").insert({
                 cliente_id: clienteId,
                 fecha: hoy,
@@ -1374,11 +1372,10 @@ export default function ListadoVentasPage() {
                 descripcion: `Ajuste por edición (${diferencia > 0 ? "aumento" : "reducción"})`,
                 debe: diferencia > 0 ? diferencia : 0,
                 haber: diferencia < 0 ? Math.abs(diferencia) : 0,
-                saldo: nuevoSaldo,
+                saldo: newSaldo ?? 0,
                 forma_pago: "Ajuste",
                 venta_id: ventaId,
               });
-              await supabase.from("clientes").update({ saldo: nuevoSaldo }).eq("id", clienteId);
             }
           }
         }
