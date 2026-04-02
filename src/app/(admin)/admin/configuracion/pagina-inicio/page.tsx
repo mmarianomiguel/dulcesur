@@ -134,7 +134,7 @@ const BLOCK_TYPES: BlockTypeDef[] = [
     defaultConfig: {
       titulo_seccion: "Productos Destacados",
       max_items: 8,
-      orden: "recientes",
+      orden: "manual",
     },
   },
   {

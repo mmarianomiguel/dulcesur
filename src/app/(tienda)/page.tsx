@@ -734,23 +734,45 @@ export default function TiendaPage() {
 
         promises.push(
           (async () => {
-            let query = supabase
-              .from("productos")
-              .select("id, nombre, precio, imagen_url, activo, stock, es_combo, precio_anterior, fecha_actualizacion, created_at, updated_at, categorias(id, nombre)")
-              .eq("activo", true)
-              .eq("visibilidad", "visible");
+            // First try to fetch manually featured products
+            const baseSelect = "id, nombre, precio, imagen_url, activo, stock, es_combo, precio_anterior, fecha_actualizacion, created_at, updated_at, categorias(id, nombre)";
+            let prods: any[] | null = null;
 
-            if (orden === "manual") {
-              query = query.eq("destacado", true).order("nombre", { ascending: true });
-            } else if (orden === "precio_asc") {
-              query = query.order("precio", { ascending: true });
-            } else if (orden === "precio_desc") {
-              query = query.order("precio", { ascending: false });
-            } else {
-              query = query.order("nombre", { ascending: true });
+            if (orden === "manual" || orden === "recientes") {
+              // Try featured products first
+              const { data: featured } = await supabase
+                .from("productos")
+                .select(baseSelect)
+                .eq("activo", true)
+                .eq("visibilidad", "visible")
+                .eq("destacado", true)
+                .order("nombre", { ascending: true })
+                .limit(maxItems);
+
+              if (featured && featured.length > 0) {
+                prods = featured;
+              }
             }
 
-            const { data: prods } = await query.limit(maxItems);
+            // Fallback: if no featured products or non-manual mode, use configured order
+            if (!prods) {
+              let query = supabase
+                .from("productos")
+                .select(baseSelect)
+                .eq("activo", true)
+                .eq("visibilidad", "visible");
+
+              if (orden === "precio_asc") {
+                query = query.order("precio", { ascending: true });
+              } else if (orden === "precio_desc") {
+                query = query.order("precio", { ascending: false });
+              } else {
+                query = query.order("nombre", { ascending: true });
+              }
+
+              const { data } = await query.limit(maxItems);
+              prods = data;
+            }
             if (prods) {
               setProductos(prods as unknown as Producto[]);
               // Load presentations in parallel (no dependency on categories)
