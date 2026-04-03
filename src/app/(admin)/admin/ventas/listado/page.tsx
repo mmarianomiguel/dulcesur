@@ -2608,7 +2608,19 @@ export default function ListadoVentasPage() {
                           if (totalAllocated > 0 && clienteId) {
                             const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: -totalAllocated });
                             const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
-                            await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro saldo #${poSelectedPedido.numero}`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: null });
+                            // Create per-venta CC haber entries (so each venta shows the cobro in client's Mis Pedidos)
+                            let runningSaldo2 = saldoAfter2 + totalAllocated;
+                            for (const alloc of result.saldoAllocations) {
+                              if (alloc.aplicar <= 0) continue;
+                              runningSaldo2 -= alloc.aplicar;
+                              await supabase.from("cuenta_corriente").insert({
+                                cliente_id: clienteId, fecha: hoy,
+                                comprobante: `Cobro saldo #${alloc.numero}`,
+                                descripcion: `Cobro deuda anterior — ${result.metodo}`,
+                                debe: 0, haber: alloc.aplicar, saldo: Math.max(0, runningSaldo2),
+                                forma_pago: result.metodo, venta_id: alloc.venta_id,
+                              });
+                            }
                             setClienteSaldo(saldoAfter2);
                           }
                         }

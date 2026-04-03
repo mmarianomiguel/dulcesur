@@ -230,38 +230,36 @@ export default function PedidosPage() {
         setClienteSaldo(clienteSaldoReal);
       }
 
-      // Get CC debe per venta (these are the debts that were charged to cuenta corriente)
-      const ccDebeMap: Record<string, number> = {};
+      // Get NET CC debt per venta (debe - haber for each venta_id)
+      // This accounts for partial cobros that were linked to the venta
+      const ccNetMap: Record<string, number> = {};
       if (ventaIds.length > 0) {
-        const { data: ccDebes } = await supabase
+        const { data: ccEntries } = await supabase
           .from("cuenta_corriente")
-          .select("venta_id, debe")
-          .in("venta_id", ventaIds)
-          .gt("debe", 0);
-        for (const cc of ccDebes || []) {
-          ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + cc.debe;
+          .select("venta_id, debe, haber")
+          .in("venta_id", ventaIds);
+        for (const cc of ccEntries || []) {
+          if (!cc.venta_id) continue;
+          ccNetMap[cc.venta_id] = (ccNetMap[cc.venta_id] || 0) + (cc.debe || 0) - (cc.haber || 0);
         }
       }
 
-      // Build saldo map: distribute clienteSaldoReal across ventas with CC debt (newest first)
-      // Ventas with CC debt that exceed the client's real saldo are already paid
+      // Build saldo map: only show pending for ventas with positive net CC debt
+      // Use clienteSaldoReal as cap — if net debts exceed client saldo, oldest are paid
       const saldoMap: Record<string, number> = {};
       const ventasWithCCDebt = allVentas
-        .filter((v: any) => (ccDebeMap[v.id] || 0) > 0)
+        .filter((v: any) => (ccNetMap[v.id] || 0) > 0)
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       let remainingSaldo = clienteSaldoReal;
       for (const v of ventasWithCCDebt) {
-        const ccDebe = ccDebeMap[v.id] || 0;
-        const assign = Math.min(remainingSaldo, ccDebe);
+        const netDebt = Math.max(0, ccNetMap[v.id] || 0);
+        const assign = Math.min(remainingSaldo, netDebt);
         saldoMap[v.id] = assign;
         remainingSaldo = Math.round((remainingSaldo - assign) * 100) / 100;
       }
-      // All other ventas: 0 pending
       for (const v of allVentas) {
         if (saldoMap[v.id] === undefined) saldoMap[v.id] = 0;
       }
-      // Also add pending for undelivered online orders (no venta yet, or venta without CC)
-      // These are captured in pedidos_tienda but not in cuenta_corriente
 
       // Build venta records with NCs and payment info
       const ventaRecords: Record<string, VentaRecord> = {};

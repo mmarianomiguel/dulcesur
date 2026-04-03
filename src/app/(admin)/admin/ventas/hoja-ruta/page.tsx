@@ -1762,7 +1762,7 @@ export default function HojaDeRutaPage() {
                       }
                     }
 
-                    // FIFO saldo allocation (pay old debts) — atomic saldo
+                    // FIFO saldo allocation (pay old debts) — atomic saldo + per-venta CC entries
                     if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
                       for (const alloc of result.saldoAllocations) {
                         if (alloc.aplicar <= 0) continue;
@@ -1773,7 +1773,19 @@ export default function HojaDeRutaPage() {
                       if (totalAllocated > 0 && payVenta.cliente_id) {
                         const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: -totalAllocated });
                         const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
-                        await supabase.from("cuenta_corriente").insert({ cliente_id: payVenta.cliente_id, fecha: hoy, comprobante: `Cobro saldo entrega`, descripcion: `Cobro deuda anterior (${result.saldoAllocations.length} comprobante${result.saldoAllocations.length > 1 ? "s" : ""})`, debe: 0, haber: totalAllocated, saldo: saldoAfter2, forma_pago: result.metodo, venta_id: null });
+                        // Create per-venta CC haber entries (so each venta shows the cobro)
+                        let runningSaldo2 = saldoAfter2 + totalAllocated; // reconstruct pre-update
+                        for (const alloc of result.saldoAllocations) {
+                          if (alloc.aplicar <= 0) continue;
+                          runningSaldo2 -= alloc.aplicar;
+                          await supabase.from("cuenta_corriente").insert({
+                            cliente_id: payVenta.cliente_id, fecha: hoy,
+                            comprobante: `Cobro saldo #${alloc.numero}`,
+                            descripcion: `Cobro deuda anterior — ${result.metodo}`,
+                            debe: 0, haber: alloc.aplicar, saldo: Math.max(0, runningSaldo2),
+                            forma_pago: result.metodo, venta_id: alloc.venta_id,
+                          });
+                        }
                       }
                     }
 
