@@ -137,7 +137,7 @@ export default function CheckoutPage() {
   const [clienteId, setClienteId] = useState<string | null>(null);
 
   // Delivery
-  const [metodoEntrega, setMetodoEntrega] = useState<"retiro" | "envio">("retiro");
+  const [metodoEntrega, setMetodoEntrega] = useState<"retiro" | "envio" | "">("");
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [showNewAddress, setShowNewAddress] = useState(false);
@@ -423,6 +423,7 @@ export default function CheckoutPage() {
     if (!telefono || phoneDigits.length < 8 || phoneDigits.length > 15) errs.push("Ingresá un teléfono válido (entre 8 y 15 dígitos).");
     if (!email) errs.push("El email es obligatorio.");
     else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) errs.push("Ingresá un email válido.");
+    if (!metodoEntrega) errs.push("Seleccioná un método de entrega.");
     if (metodoEntrega === "retiro" && config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) {
       errs.push(`El monto mínimo para retiro en local es ${formatCurrency(config.monto_minimo_pedido)}.`);
     }
