@@ -208,11 +208,11 @@ export default function PedidosOnlinePage() {
     // Parallel: fetch items + linked ventas at the same time
     const [{ data: allItems }, { data: ventas }] = await Promise.all([
       supabase.from("pedido_tienda_items").select("*").in("pedido_id", ids),
-      supabase.from("ventas").select("id, numero, cliente_id").in("numero", numeros),
+      supabase.from("ventas").select("id, numero, cliente_id, estado").in("numero", numeros),
     ]);
 
-    const ventaMap: Record<string, { id: string; cliente_id: string }> = {};
-    for (const v of ventas || []) ventaMap[v.numero] = { id: v.id, cliente_id: v.cliente_id };
+    const ventaMap: Record<string, { id: string; cliente_id: string; estado: string }> = {};
+    for (const v of ventas || []) ventaMap[v.numero] = { id: v.id, cliente_id: v.cliente_id, estado: v.estado };
     const ventaIds = Object.values(ventaMap).map(v => v.id);
 
     // Fetch UPP for quantity display
@@ -236,13 +236,17 @@ export default function PedidosOnlinePage() {
     });
 
     setPedidos(data.map((p: any) => {
-      const ventaId = ventaMap[p.numero]?.id;
+      const ventaInfo = ventaMap[p.numero];
+      // ventas.estado is the source of truth when a venta exists
+      const estado = ventaInfo?.estado
+        ? ventaInfo.estado.toLowerCase()
+        : (p.estado || "pendiente").toLowerCase();
       return {
         ...p,
-        estado: (p.estado || "pendiente").toLowerCase(),
+        estado,
         items: itemsByPedido[p.id] || [],
-        ventaId: ventaId || undefined,
-        clienteId: ventaMap[p.numero]?.cliente_id || undefined,
+        ventaId: ventaInfo?.id || undefined,
+        clienteId: ventaInfo?.cliente_id || undefined,
       };
     }));
     setLoading(false);
@@ -250,11 +254,14 @@ export default function PedidosOnlinePage() {
 
   useEffect(() => { fetchPedidos(); }, [fetchPedidos]);
 
-  // Realtime subscription: refresh when any pedido changes (from any page)
+  // Realtime: refresh when pedidos_tienda OR ventas change (historial/hoja de ruta updates estado)
   useEffect(() => {
     const channel = supabase
       .channel("pedidos-tienda-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "pedidos_tienda" }, () => {
+        fetchPedidos();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "ventas" }, () => {
         fetchPedidos();
       })
       .subscribe();
