@@ -2743,6 +2743,10 @@ export default function ListadoVentasPage() {
                       <tbody>
                         {(isNCType ? poEditItems.filter((i) => i.cantidad > 0) : poEditItems).map((item, idx) => {
                           const isCombo = poSelectedPedido._comboIds?.has(item.producto_id);
+                          const upp = item.unidades_por_presentacion || 1;
+                          const isMedio = upp < 1;
+                          const displayQty = isMedio ? item.cantidad * upp : item.cantidad;
+                          const displayStep = isMedio ? upp : 0.5;
                           return (
                           <tr key={idx} className="border-b last:border-0">
                             <td className="px-3 py-2">
@@ -2757,13 +2761,19 @@ export default function ListadoVentasPage() {
                             <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
                             <td className="px-3 py-2 text-center">
                               {!isEditable || isNCType ? (
-                                <span>{item.cantidad}</span>
+                                <span>{displayQty}</span>
                               ) : (
                                 <Input
                                   type="number"
-                                  min={1}
-                                  value={item.cantidad}
-                                  onChange={(e) => poUpdateItemQty(idx, Number(e.target.value))}
+                                  min={displayStep}
+                                  step={displayStep}
+                                  value={displayQty}
+                                  onChange={(e) => {
+                                    const v = Number(e.target.value);
+                                    if (v <= 0) return;
+                                    const rawQty = isMedio ? Math.round(v / upp) : v;
+                                    poUpdateItemQty(idx, rawQty);
+                                  }}
                                   className="h-7 w-16 text-center mx-auto"
                                 />
                               )}
