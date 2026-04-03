@@ -2360,9 +2360,14 @@ export default function ListadoVentasPage() {
             const descPct = poSelectedPedido._descuento_porcentaje || 0;
             const recPct = poSelectedPedido._recargo_porcentaje || 0;
             const envio = poSelectedPedido.costo_envio || 0;
-            const computedTotal = isHistorial
-              ? itemsSubtotal * (1 - descPct / 100) * (1 + recPct / 100)
-              : itemsSubtotal + envio;
+            // Use the stored total from the DB (already includes discounts, surcharges, shipping)
+            // Only fall back to computation if no stored total exists
+            const storedTotal = poSelectedPedido.total || (poSelectedPedido as any)._total || 0;
+            const computedTotal = storedTotal > 0
+              ? storedTotal
+              : isHistorial
+                ? itemsSubtotal * (1 - descPct / 100)
+                : itemsSubtotal + envio;
 
             return (
             <>
