@@ -215,23 +215,56 @@ export default function PedidosPage() {
         }
       }
 
-      // Compute pending balance per venta using monto_pagado + cobro_items (whichever is higher)
-      const saldoMap: Record<string, number> = {};
+      // Compute pending balance per venta.
+      // Use clientes.saldo as source of truth, then distribute across ventas with CC debt (FIFO oldest first).
+      // This handles cases where cobros were applied but monto_pagado wasn't updated on the venta.
+      let clienteSaldoReal = 0;
+      if (clienteId) {
+        const { data: cli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+        clienteSaldoReal = Math.max(0, cli?.saldo || 0);
+      }
+
+      // First pass: compute raw pending per venta from monto_pagado + tracked payments
+      const rawPendingMap: Record<string, number> = {};
       for (const v of allVentas) {
         const montoPagado = v.monto_pagado || 0;
-        // Also sum cobro_items applied to this venta (may be higher than monto_pagado if update was missed)
         const totalCobrado = (pagosMap[v.id] || [])
-          .filter((p) => !p.metodo_pago.includes("Cuenta Corriente"))
-          .reduce((s, p) => s + Math.abs(p.monto), 0);
-        // Use the higher of monto_pagado or actual tracked payments
+          .filter((p: any) => !p.metodo_pago.includes("Cuenta Corriente"))
+          .reduce((s: number, p: any) => s + Math.abs(p.monto), 0);
         const effectivePaid = Math.max(montoPagado, totalCobrado);
-        saldoMap[v.id] = Math.max(0, (v.total || 0) - effectivePaid);
+        rawPendingMap[v.id] = Math.max(0, (v.total || 0) - effectivePaid);
 
-        // If monto_pagado > sum of pagos already tracked, there's an untracked cobro
+        // Add synthetic pago entry if monto_pagado > tracked
         const gap = Math.round((montoPagado - totalCobrado) * 100) / 100;
         if (gap >= 1) {
           if (!pagosMap[v.id]) pagosMap[v.id] = [];
           pagosMap[v.id].push({ metodo_pago: v.forma_pago || "Cobro", monto: gap, descripcion: "Cobro aplicado" });
+        }
+      }
+
+      // Second pass: if sum of raw pending > client's actual saldo, some ventas were paid via cobros
+      // not tracked per-venta. Distribute real saldo across ventas (newest first = older debts paid first).
+      const saldoMap: Record<string, number> = {};
+      const totalRawPending = Object.values(rawPendingMap).reduce((s, v) => s + v, 0);
+      if (totalRawPending > 0 && clienteSaldoReal < totalRawPending) {
+        // Client owes less than computed — distribute real saldo to newest ventas first
+        const ventasByDate = allVentas
+          .filter((v: any) => rawPendingMap[v.id] > 0)
+          .sort((a: any, b: any) => new Date(b.fecha || b.created_at).getTime() - new Date(a.fecha || a.created_at).getTime());
+        let remaining = clienteSaldoReal;
+        for (const v of ventasByDate) {
+          const assign = Math.min(remaining, rawPendingMap[v.id]);
+          saldoMap[v.id] = assign;
+          remaining = Math.round((remaining - assign) * 100) / 100;
+        }
+        // Zero out any venta not assigned
+        for (const v of allVentas) {
+          if (saldoMap[v.id] === undefined) saldoMap[v.id] = 0;
+        }
+      } else {
+        // Raw pending matches or is less than client saldo — use raw values
+        for (const v of allVentas) {
+          saldoMap[v.id] = rawPendingMap[v.id] || 0;
         }
       }
 
