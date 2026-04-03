@@ -2823,7 +2823,7 @@ export default function ListadoVentasPage() {
                     {envio > 0 && (
                       <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
                     )}
-                    <p className="text-base font-bold">Total: {formatCurrency(poSelectedPedido.total)}</p>
+                    <p className="text-base font-bold">Total: {formatCurrency(computedTotal)}</p>
                   </div>
                 </div>
               </div>
@@ -2934,7 +2934,11 @@ export default function ListadoVentasPage() {
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {poProductResults.map((p, idx) => {
                   const highlighted = idx === poSearchHighlight;
-                  const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones.filter((pr: any) => pr.unidades_por_presentacion > 1) : [];
+                  const rawVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
+                  const hasMedio = rawVariants.some((pr: any) => (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio"));
+                  const boxPresItem = rawVariants.find((pr: any) => (pr.unidades_por_presentacion || 1) > 1);
+                  const syntheticMedio = (!hasMedio && boxPresItem) ? [{ nombre: "½ Caja", precio: Math.round((boxPresItem as any).precio / 2), unidades_por_presentacion: 0.5 }] : [];
+                  const boxVariants = [...rawVariants.filter((pr: any) => (pr.unidades_por_presentacion || 1) > 1), ...syntheticMedio];
                   const stockVal = p.stock ?? null;
                   return (
                     <div
@@ -2963,11 +2967,14 @@ export default function ListadoVentasPage() {
                       {boxVariants.length > 0 && (
                         <div className="flex gap-2 mt-2.5 pl-14">
                           <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => poAddProduct(p)}>+ Unidad</Button>
-                          {boxVariants.map((pr, i) => (
-                            <Button key={i} size="sm" className="h-8 text-xs flex-1" onClick={() => poAddProduct(p, pr)}>
-                              + {pr.nombre} ({pr.unidades_por_presentacion} un.)
-                            </Button>
-                          ))}
+                          {boxVariants.map((pr, i) => {
+                            const isMedioVar = (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio");
+                            return (
+                              <Button key={i} size="sm" className="h-8 text-xs flex-1" onClick={() => poAddProduct(p, pr)}>
+                                + {isMedioVar ? "½ Caja" : pr.nombre}
+                              </Button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
