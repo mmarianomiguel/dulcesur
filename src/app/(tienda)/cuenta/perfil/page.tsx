@@ -76,16 +76,18 @@ export default function PerfilPage() {
       if (data) {
         setNombre(data.nombre);
         setEmail(data.email);
-        setTelefono(data.telefono || "");
+        // telefono will be overridden by clientes.telefono if available (more reliable)
         if (data.cliente_id) {
           setClienteId(data.cliente_id);
           // Fetch client details
           const { data: cliente } = await supabase
             .from("clientes")
-            .select("tipo_documento, numero_documento, domicilio, provincia, localidad, codigo_postal, saldo, zona_entrega, dias_entrega")
+            .select("tipo_documento, numero_documento, domicilio, provincia, localidad, codigo_postal, saldo, zona_entrega, dias_entrega, telefono")
             .eq("id", data.cliente_id)
             .single();
           if (cliente) {
+            // Use clientes.telefono as primary (admin manages it), fallback to clientes_auth
+            setTelefono(cliente.telefono || data.telefono || "");
             setTipoDocumento(cliente.tipo_documento || "");
             setNumeroDocumento(cliente.numero_documento || "");
             setDomicilio(cliente.domicilio || "");
@@ -101,6 +103,9 @@ export default function PerfilPage() {
               if (zona) setZonaNombre(zona.nombre);
             }
           }
+        } else {
+          // No linked cliente — use clientes_auth.telefono
+          setTelefono(data.telefono || "");
         }
       }
     };
