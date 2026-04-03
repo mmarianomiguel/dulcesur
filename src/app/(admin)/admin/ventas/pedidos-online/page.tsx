@@ -208,11 +208,11 @@ export default function PedidosOnlinePage() {
     // Parallel: fetch items + linked ventas at the same time
     const [{ data: allItems }, { data: ventas }] = await Promise.all([
       supabase.from("pedido_tienda_items").select("*").in("pedido_id", ids),
-      supabase.from("ventas").select("id, numero, cliente_id, estado").in("numero", numeros),
+      supabase.from("ventas").select("id, numero, cliente_id, estado, entregado").in("numero", numeros),
     ]);
 
-    const ventaMap: Record<string, { id: string; cliente_id: string; estado: string }> = {};
-    for (const v of ventas || []) ventaMap[v.numero] = { id: v.id, cliente_id: v.cliente_id, estado: v.estado };
+    const ventaMap: Record<string, { id: string; cliente_id: string; estado: string; entregado: boolean }> = {};
+    for (const v of ventas || []) ventaMap[v.numero] = { id: v.id, cliente_id: v.cliente_id, estado: v.estado, entregado: v.entregado };
     const ventaIds = Object.values(ventaMap).map(v => v.id);
 
     // Fetch UPP for quantity display
@@ -237,10 +237,18 @@ export default function PedidosOnlinePage() {
 
     setPedidos(data.map((p: any) => {
       const ventaInfo = ventaMap[p.numero];
-      // ventas.estado is the source of truth when a venta exists
-      const estado = ventaInfo?.estado
-        ? ventaInfo.estado.toLowerCase()
-        : (p.estado || "pendiente").toLowerCase();
+      // Derive estado: check venta.entregado flag first, then map venta.estado to pedido states, fallback to pedidos_tienda.estado
+      let estado = (p.estado || "pendiente").toLowerCase();
+      if (ventaInfo) {
+        if (ventaInfo.entregado || ventaInfo.estado === "entregado" || ventaInfo.estado === "entregada") {
+          estado = "entregado";
+        } else if (ventaInfo.estado === "anulada") {
+          estado = "cancelado";
+        } else if (ventaInfo.estado === "facturada") {
+          estado = "entregado"; // facturada implies delivered
+        }
+        // For "abierta"/"cerrada" states, keep pedidos_tienda.estado as it's more specific
+      }
       return {
         ...p,
         estado,
