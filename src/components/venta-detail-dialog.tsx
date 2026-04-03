@@ -545,6 +545,10 @@ export function VentaDetailDialog({
                     {productResults.map((p, idx) => {
                       const highlighted = idx === searchHighlight;
                       const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
+                      const hasMedio = boxVariants.some(pr => (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio"));
+                      const boxPres = boxVariants.find(pr => (pr.unidades_por_presentacion || 1) > 1);
+                      const syntheticMedio = (!hasMedio && boxPres) ? [{ nombre: "½ Caja", precio: Math.round(boxPres.precio / 2), unidades_por_presentacion: 0.5 }] : [];
+                      const allVariants = [...boxVariants, ...syntheticMedio];
                       const stockVal = p.stock ?? null;
                       return (
                         <div
@@ -582,21 +586,25 @@ export function VentaDetailDialog({
                               </div>
                             </div>
                           </button>
-                          {boxVariants.length > 0 && (
+                          {allVariants.length > 0 && (
                             <div className="flex gap-2 mt-2.5 pl-14">
                               <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => addProduct(p)}>
                                 + Unidad
                               </Button>
-                              {boxVariants.map((pr, i) => (
-                                <Button
-                                  key={i}
-                                  size="sm"
-                                  className="h-8 text-xs flex-1"
-                                  onClick={() => addProduct(p, pr)}
-                                >
-                                  + {pr.nombre} ({pr.unidades_por_presentacion} un.)
-                                </Button>
-                              ))}
+                              {allVariants.map((pr, i) => {
+                                const isMedioVariant = (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio");
+                                const label = isMedioVariant ? "½ Caja" : pr.nombre;
+                                return (
+                                  <Button
+                                    key={i}
+                                    size="sm"
+                                    className="h-8 text-xs flex-1"
+                                    onClick={() => addProduct(p, pr)}
+                                  >
+                                    + {label}
+                                  </Button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -615,7 +623,7 @@ export function VentaDetailDialog({
                 <thead>
                   <tr className="border-b bg-muted/30">
                     <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Producto</th>
-                    {(isEditable || items.some(i => i.presentacion)) && (
+                    {!isEditable && items.some(i => i.presentacion) && (
                       <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-28">Presentación</th>
                     )}
                     <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-20">Cant.</th>
@@ -628,29 +636,67 @@ export function VentaDetailDialog({
                 <tbody>
                   {isEditable && editItems ? (
                     // ─── Editable rows ───
-                    editItems.map((item, idx) => (
-                      <tr key={idx} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-medium">{item.nombre}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
-                        <td className="px-3 py-2 text-center">
-                          <Input
-                            type="number"
-                            min={0.5}
-                            step={0.5}
-                            value={item.cantidad}
-                            onChange={(e) => updateItemQty(idx, Number(e.target.value))}
-                            className="h-7 w-16 text-center mx-auto"
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad)}</td>
-                        <td className="px-2 py-2">
-                          <button onClick={() => removeItem(idx)} className="text-muted-foreground hover:text-destructive disabled:opacity-30" disabled={editItems.length <= 1} title="Quitar producto">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    editItems.map((item, idx) => {
+                      const upp = item.unidades_por_presentacion || 1;
+                      const isMedio = upp < 1;
+                      const displayQty = isMedio ? item.cantidad * upp : item.cantidad;
+                      const displayStep = isMedio ? upp : 0.5;
+                      return (
+                        <tr key={idx} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-medium">
+                            <div className="flex flex-col gap-0.5">
+                              <span>{item.nombre}</span>
+                              {item.presentacion && item.presentacion !== "Unidad" && (
+                                <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary">{item.presentacion}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                className="w-6 h-6 rounded border flex items-center justify-center text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+                                onClick={() => {
+                                  const newDisplay = Math.round((displayQty - displayStep) * 100) / 100;
+                                  if (newDisplay <= 0) return;
+                                  const newRaw = isMedio ? Math.round(newDisplay / upp) : newDisplay;
+                                  updateItemQty(idx, newRaw);
+                                }}
+                              >−</button>
+                              <Input
+                                type="number"
+                                min={displayStep}
+                                step={displayStep}
+                                value={displayQty}
+                                onChange={(e) => {
+                                  const v = Number(e.target.value);
+                                  if (v <= 0) return;
+                                  const rawQty = isMedio ? Math.round(v / upp) : v;
+                                  updateItemQty(idx, rawQty);
+                                }}
+                                className="h-7 w-16 text-center"
+                              />
+                              <button
+                                type="button"
+                                className="w-6 h-6 rounded border flex items-center justify-center text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+                                onClick={() => {
+                                  const newDisplay = Math.round((displayQty + displayStep) * 100) / 100;
+                                  const newRaw = isMedio ? Math.round(newDisplay / upp) : newDisplay;
+                                  updateItemQty(idx, newRaw);
+                                }}
+                              >+</button>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad)}</td>
+                          <td className="px-2 py-2">
+                            <button onClick={() => removeItem(idx)} className="text-muted-foreground hover:text-destructive disabled:opacity-30" disabled={editItems.length <= 1} title="Quitar producto">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     // ─── Read-only rows ───
                     items.map((item, idx) => {
