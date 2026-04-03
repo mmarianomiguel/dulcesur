@@ -1171,22 +1171,22 @@ export default function ClientesPage() {
 
           <Card className="overflow-visible">
             <CardContent className="pt-6 overflow-visible">
-              <div className="flex flex-wrap gap-4">
-                <div className="space-y-1.5 flex-1 min-w-[200px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="space-y-1.5">
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">NOMBRE / CUIT</span>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input placeholder="Buscar por nombre o CUIT..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
                   </div>
                 </div>
-                <div className="space-y-1.5 min-w-[180px]">
+                <div className="space-y-1.5">
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">DOMICILIO</span>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input placeholder="Filtrar por domicilio..." value={filterDomicilio} onChange={(e) => setFilterDomicilio(e.target.value)} className="pl-9" />
                   </div>
                 </div>
-                <div className="space-y-1.5 min-w-[180px]">
+                <div className="space-y-1.5">
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">ZONA DE ENTREGA</span>
                   <Select value={filterZona || "all"} onValueChange={(v) => setFilterZona(v === "all" ? "" : (v || ""))}>
                     <SelectTrigger>
@@ -1201,7 +1201,7 @@ export default function ClientesPage() {
                   </Select>
                 </div>
                 {vendedores.length > 0 && (
-                  <div className="space-y-1.5 min-w-[200px]" ref={vendedorRef}>
+                  <div className="space-y-1.5" ref={vendedorRef}>
                     <span className="text-xs text-muted-foreground font-semibold tracking-wide">VENDEDOR</span>
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1236,7 +1236,7 @@ export default function ClientesPage() {
                     </div>
                   </div>
                 )}
-                <div className="space-y-1.5 min-w-[160px]">
+                <div className="space-y-1.5">
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">ORDENAR POR</span>
                   <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as any)}>
                     <SelectTrigger>
@@ -1259,7 +1259,43 @@ export default function ClientesPage() {
               {loading ? (
                 <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                {/* ── Mobile card list ── */}
+                <div className="sm:hidden divide-y">
+                  {filtered.map((client) => {
+                    const zona = zonas.find((z) => z.id === client.zona_entrega);
+                    return (
+                      <div key={client.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
+                        <div className="flex-1 min-w-0" onClick={() => openMovimientos(client)}>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium text-sm">{client.nombre}</span>
+                            {(client as any).origen === "tienda" && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-pink-300 text-pink-600 bg-pink-50">Tienda</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {zona && <span className="text-xs text-blue-600">{zona.nombre}</span>}
+                            {client.telefono && <span className="text-xs text-muted-foreground">{client.telefono}</span>}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right min-w-[70px]">
+                          {client.saldo > 0 ? (
+                            <span className="font-semibold text-orange-500 text-sm">{formatCurrency(client.saldo)}</span>
+                          ) : client.saldo < 0 ? (
+                            <span className="font-semibold text-emerald-600 text-xs">+{formatCurrency(Math.abs(client.saldo))}</span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </div>
+                        <div className="flex gap-0.5 shrink-0">
+                          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openMovimientos(client)} title="Movimientos"><History className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openEdit(client)} title="Editar"><Edit className="w-4 h-4" /></Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {filtered.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">Sin resultados</div>}
+                </div>
+                {/* ── Desktop table ── */}
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
@@ -1353,6 +1389,7 @@ export default function ClientesPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -1420,7 +1457,29 @@ export default function ClientesPage() {
               ) : filteredCobranzas.length === 0 ? (
                 <p className="text-center text-muted-foreground py-12 text-sm">No hay clientes con saldo pendiente</p>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                {/* ── Mobile cobranzas cards ── */}
+                <div className="sm:hidden divide-y">
+                  {filteredCobranzas.map((c) => (
+                    <div key={c.id} className="py-3 px-4 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{c.nombre}</p>
+                        {c.cuit && <p className="text-xs text-muted-foreground font-mono mt-0.5">{c.cuit}</p>}
+                      </div>
+                      <span className="font-bold text-orange-500 text-sm shrink-0">{formatCurrency(c.saldo)}</span>
+                      <div className="flex gap-1 shrink-0">
+                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openMovimientos(c)} title="Resumen"><Eye className="w-4 h-4" /></Button>
+                        <Button size="icon" className="h-9 w-9" onClick={() => { setCobroClient(c); setCobroOpen(true); }} title="Cobrar"><DollarSign className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-end border-t pt-3 px-4">
+                    <span className="text-sm text-muted-foreground mr-4">Saldo total:</span>
+                    <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente)}</span>
+                  </div>
+                </div>
+                {/* ── Desktop cobranzas table ── */}
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
@@ -1455,6 +1514,7 @@ export default function ClientesPage() {
                     <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente)}</span>
                   </div>
                 </div>
+                </>
               )}
             </CardContent>
           </Card>

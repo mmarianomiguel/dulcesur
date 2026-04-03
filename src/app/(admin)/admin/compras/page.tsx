@@ -1504,7 +1504,107 @@ export default function ComprasPage() {
                     </div>
                   </div>
                 )}
-              <div className="overflow-x-auto">
+              {/* ── Mobile items cards ── */}
+              <div className="sm:hidden divide-y">
+                {items.map((item, idx) => {
+                  const costoChanged = item.costo_unitario !== item.costo_original;
+                  return (
+                    <div key={item.producto_id} className="py-3 px-4 space-y-2">
+                      {/* Product header */}
+                      <div className="flex items-center gap-2">
+                        <div className="w-9 h-9 rounded bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                          {item.imagen_url ? (
+                            <img src={item.imagen_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon className="w-3.5 h-3.5 text-muted-foreground/40" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{item.nombre}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{item.codigo}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500 shrink-0" onClick={() => removeItem(idx)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                      {/* Inputs row */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {item.unidades_por_caja > 0 && (
+                          <div>
+                            <label className="text-muted-foreground mb-1 block">Cajas</label>
+                            <Input
+                              type="number" min={0} value={item.cajas}
+                              onChange={(e) => {
+                                const newCajas = Math.max(0, Number(e.target.value));
+                                const newTotal = newCajas * item.unidades_por_caja + item.sueltas;
+                                setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cajas: newCajas, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) } : it));
+                              }}
+                              className="h-8 text-center"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">{item.unidades_por_caja > 0 ? "Sueltas" : "Cantidad"}</label>
+                          <Input
+                            type="number" min={0}
+                            value={item.unidades_por_caja > 0 ? item.sueltas : item.cantidad}
+                            onChange={(e) => {
+                              const val = Math.max(0, Number(e.target.value));
+                              if (item.unidades_por_caja > 0) {
+                                const newTotal = item.cajas * item.unidades_por_caja + val;
+                                setItems((prev) => prev.map((it, i) => i === idx ? { ...it, sueltas: val, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) } : it));
+                              } else {
+                                setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: Math.max(1, val), sueltas: val, subtotal: calcSubtotal(it.costo_unitario, Math.max(1, val), it.descuento) } : it));
+                              }
+                            }}
+                            className="h-8 text-center"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">Costo unit.</label>
+                          <MoneyInput
+                            min={0} value={item.costo_unitario}
+                            onValueChange={(val) => updateItemField(idx, "costo_unitario", val)}
+                            className="h-8 text-right"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground mb-1 block">Dto%</label>
+                          <Input
+                            type="number" min={0} max={100}
+                            value={item.descuento || ""} placeholder="0"
+                            onChange={(e) => updateItemField(idx, "descuento", Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                            className="h-8 text-center"
+                          />
+                        </div>
+                      </div>
+                      {/* Summary row */}
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Total: <span className="font-semibold text-foreground">{item.cantidad} un.</span></span>
+                        <span>Subtotal: <span className="font-semibold text-foreground">{formatCurrency(item.subtotal)}</span></span>
+                      </div>
+                      {/* Actualizar precio */}
+                      {costoChanged && item.costo_original > 0 && (
+                        <label className="flex items-center gap-2 cursor-pointer text-xs">
+                          <input
+                            type="checkbox" checked={item.actualizarPrecio}
+                            onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarPrecio: e.target.checked } : it))}
+                            className="w-3.5 h-3.5 rounded border-gray-300 accent-primary"
+                          />
+                          <span className="text-muted-foreground">Actualizar PVP:</span>
+                          {item.actualizarPrecio ? (
+                            <span>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original)}</span></span>
+                          ) : (
+                            <span>Mantener {formatCurrency(item.precio_original)}</span>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* ── Desktop items table ── */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground">
@@ -2515,7 +2615,30 @@ export default function ComprasPage() {
               <p className="text-sm">No se encontraron compras</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* ── Mobile compras cards ── */}
+            <div className="sm:hidden divide-y">
+              {filtered.map((p) => (
+                <div key={p.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openDetail(p)}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{p.proveedores?.nombre || "---"}</span>
+                      <Badge variant={p.estado === "Confirmada" ? "default" : p.estado === "Pendiente" ? "secondary" : "destructive"} className="text-[10px] font-normal">{p.estado || "---"}</Badge>
+                      {p.estado_pago && <Badge variant="outline" className={`text-[10px] font-normal ${p.estado_pago === "Pagada" ? "border-green-300 bg-green-50 text-green-700" : p.estado_pago === "Pago Parcial" ? "border-orange-300 bg-orange-50 text-orange-700" : "border-yellow-300 bg-yellow-50 text-yellow-700"}`}>{p.estado_pago}</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                      <span className="font-mono">{p.numero}</span>
+                      <span>·</span>
+                      <span>{new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
+                      {p.forma_pago && <><span>·</span><span>{p.forma_pago}</span></>}
+                    </div>
+                  </div>
+                  <span className="font-semibold text-sm shrink-0">{formatCurrency(p.total)}</span>
+                </div>
+              ))}
+            </div>
+            {/* ── Desktop compras table ── */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
@@ -2583,6 +2706,7 @@ export default function ComprasPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

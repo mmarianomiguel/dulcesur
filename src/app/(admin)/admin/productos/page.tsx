@@ -2085,7 +2085,46 @@ export default function ProductosPage() {
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* ── Mobile product cards ── */}
+            <div className="sm:hidden divide-y">
+              {paginatedProducts.map((product) => {
+                const displayStock = (product as any).es_combo ? (comboStockMap[product.id] ?? 0) : product.stock;
+                return (
+                  <div key={product.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors" onClick={() => openEdit(product)}>
+                    <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                      {product.imagen_url
+                        ? <img src={product.imagen_url} alt="" className="w-full h-full object-cover" />
+                        : <ImageIcon className="w-5 h-5 text-muted-foreground/40" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-sm leading-tight">{product.nombre}</span>
+                        {(product as any).es_combo && <Badge className="text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700 border border-emerald-300">COMBO</Badge>}
+                        {product.visibilidad === "oculto" && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">Oculto</span>}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground">{product.categorias?.nombre || "—"}</span>
+                        {product.marcas?.nombre && <span className="text-xs text-muted-foreground">· {product.marcas.nombre}</span>}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-semibold text-sm">{formatCurrency(product.precio)}</p>
+                      {displayStock === 0 ? (
+                        <span className="text-[11px] text-red-500 font-medium">Sin stock</span>
+                      ) : displayStock <= (product.stock_minimo || 5) ? (
+                        <span className="text-[11px] text-orange-500 font-medium">Stock: {displayStock}</span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">Stock: {displayStock}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {paginatedProducts.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">Sin resultados</div>}
+            </div>
+            {/* ── Desktop table ── */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
@@ -2214,6 +2253,7 @@ export default function ProductosPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
           <div className="flex items-center justify-between pt-4 border-t mt-4">
             <p className="text-sm text-muted-foreground">
