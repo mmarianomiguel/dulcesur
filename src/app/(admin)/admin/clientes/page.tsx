@@ -610,7 +610,7 @@ export default function ClientesPage() {
     // === Tab Cobros ===
     let cobrosQuery = supabase
       .from("cobros")
-      .select("id, numero, fecha, hora, monto, forma_pago, observacion, cuenta_bancaria_id, cobro_items(venta_id, monto_aplicado, ventas(numero, total)), cuentas_bancarias(nombre, alias)")
+      .select("id, numero, fecha, hora, monto, forma_pago, observacion, cuenta_bancaria_id, cobro_items(venta_id, monto_aplicado, ventas(numero, total))")
       .eq("cliente_id", clienteId)
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
@@ -1936,7 +1936,7 @@ export default function ClientesPage() {
               ) : (
                 <div className="space-y-2">
                   {cobrosCliente.map((c) => {
-                    const cuenta = (c as any).cuentas_bancarias;
+                    const cuenta = c.cuenta_bancaria_id ? cuentasBancarias.find((cb: any) => cb.id === c.cuenta_bancaria_id) : null;
                     const items: any[] = (c as any).cobro_items || [];
                     const fechaFmt = new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
                     const phone = movClient?.telefono || "";
