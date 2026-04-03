@@ -113,7 +113,18 @@ export function CobroVentaSection({
     if (defaultMetodo) {
       const m = defaultMetodo.toLowerCase();
       if (m.includes("transferencia")) setMetodo("Transferencia");
-      else if (m.includes("mixto")) setMetodo("Mixto");
+      else if (m.includes("mixto")) {
+        setMetodo("Mixto");
+        // Pre-fill Mixto amounts from what the client chose at checkout
+        if (defaultEfectivo && defaultEfectivo > 0) setMixtoEfectivo(defaultEfectivo);
+        if (defaultTransferencia && defaultTransferencia > 0) {
+          setMixtoToggleTransferencia(true);
+        }
+        if (!defaultEfectivo && !defaultTransferencia) {
+          // No pre-fill available — default 50/50
+          setMixtoEfectivo(Math.floor(montoVenta / 2));
+        }
+      }
       else if (m.includes("cuenta")) setMetodo("Cuenta Corriente");
       else setMetodo("Efectivo");
     }
@@ -123,7 +134,7 @@ export function CobroVentaSection({
       );
       if (match) setCuentaBancariaId(match.id);
     }
-  }, [defaultMetodo, defaultCuentaAlias, cuentasBancarias]);
+  }, [defaultMetodo, defaultEfectivo, defaultTransferencia, defaultCuentaAlias, cuentasBancarias, montoVenta]);
 
   // Auto-select first bank account for Transferencia/Mixto
   useEffect(() => {
@@ -219,12 +230,17 @@ export function CobroVentaSection({
   // ─── Computed values ───
   const recPct = recargoTransferencia || 0;
 
+  // If the order already has a defined payment method (online order), the total already includes
+  // the transfer surcharge — don't add it again. Only calculate surcharge when changing payment method.
+  const isOriginalMetodo = defaultMetodo && metodo.toLowerCase() === defaultMetodo.toLowerCase().replace("_", " ");
   const surcharge = useMemo(() => {
     if (recPct <= 0) return 0;
+    // Don't add surcharge if keeping original method (already included in total)
+    if (isOriginalMetodo) return 0;
     if (metodo === "Transferencia") return Math.round(montoVenta * recPct) / 100;
     if (metodo === "Mixto") return Math.round(mixtoTransferencia * recPct) / 100;
     return 0;
-  }, [metodo, montoVenta, mixtoTransferencia, recPct]);
+  }, [metodo, montoVenta, mixtoTransferencia, recPct, isOriginalMetodo]);
 
   const saldoTotalAsignado = useMemo(
     () => saldoAllocations.reduce((s, a) => s + a.aplicar, 0),

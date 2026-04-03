@@ -1149,7 +1149,10 @@ export default function ListadoVentasPage() {
     setDetailPagos(pagos);
     if (!ventaId) setDetailNCs([]);
     setClienteSaldo(clienteData?.saldo || 0);
-    setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId } as any);
+    // Enrich pedido with payment split from pedidos_tienda (for Mixto pre-fill)
+    const ptEfectivo = ptData?.monto_efectivo || (ventaData as any)?.monto_efectivo || 0;
+    const ptTransferencia = ptData?.monto_transferencia || (ventaData as any)?.monto_transferencia || 0;
+    setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId, monto_efectivo: ptEfectivo, monto_transferencia: ptTransferencia } as any);
     setPoEditItems(items.map((i) => ({ ...i })));
     setPoHasChanges(false);
     setEditandoPago(false);
