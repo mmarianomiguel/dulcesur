@@ -1409,9 +1409,13 @@ export default function HojaDeRutaPage() {
                       {/* Header row */}
                       <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b">
                         <div className="flex items-center gap-2">
-                          <span className="flex items-center justify-center w-7 h-7 rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                            {idx + 1}
-                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={orden[group.ventas[0].id] ?? idx + 1}
+                            onChange={(e) => handleOrdenChange(group.ventas[0].id, e.target.value)}
+                            className="w-8 h-7 rounded-full bg-muted text-xs font-bold text-muted-foreground text-center border-0 focus:ring-2 focus:ring-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {group.ventas.map((v) => (
                               <span key={v.id} className="flex items-center gap-1">
@@ -1425,10 +1429,6 @@ export default function HojaDeRutaPage() {
                           <Badge variant="secondary" className={estaPago ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}>
                             {estaPago ? "Pagado" : `Debe ${formatCurrency(debe)}`}
                           </Badge>
-                          <div className="hidden sm:flex flex-col">
-                            <button onClick={() => moveOrder(group.ventas[0].id, "up")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowUp className="w-3 h-3" /></button>
-                            <button onClick={() => moveOrder(group.ventas[0].id, "down")} className="text-muted-foreground hover:text-foreground p-0.5"><ArrowDown className="w-3 h-3" /></button>
-                          </div>
                         </div>
                       </div>
 
