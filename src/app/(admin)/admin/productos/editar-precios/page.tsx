@@ -416,15 +416,22 @@ export default function EditarPreciosPage() {
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter, sortOrder]);
 
-  // Get caja price for a product
+  // Get caja price for a product (matches "Caja", "Caja (x24)", "Caja x12", etc.)
   const getCajaPrice = useCallback(
     (productoId: string) => {
       const pres = presentaciones.find(
-        (p) => p.producto_id === productoId && p.nombre.toLowerCase() === "caja"
+        (p) => p.producto_id === productoId && p.nombre.toLowerCase().startsWith("caja")
       );
-      return pres?.precio ?? null;
+      if (!pres) return null;
+      // If there are pending price changes, project the caja price proportionally
+      const prod = productos.find((pr) => pr.id === productoId);
+      const newPrecio = priceChanges[productoId];
+      if (prod && newPrecio !== undefined && prod.precio > 0 && newPrecio !== prod.precio) {
+        return Math.round(pres.precio * (newPrecio / prod.precio));
+      }
+      return pres.precio;
     },
-    [presentaciones]
+    [presentaciones, productos, priceChanges]
   );
 
   // Get active discount for a product
@@ -489,10 +496,14 @@ export default function EditarPreciosPage() {
       // Update costo and recalculate precio maintaining current margin
       const currentCosto = costoChanges[id] ?? prod.costo ?? 0;
       const currentPrecio = priceChanges[id] ?? prod.precio;
-      const margin = currentCosto > 0 ? (currentPrecio - currentCosto) / currentCosto : 0;
-      const newPrecio = Math.round(val * (1 + margin));
       setCostoChanges((prev) => ({ ...prev, [id]: Math.round(val * 100) / 100 }));
-      setPriceChanges((prev) => ({ ...prev, [id]: newPrecio }));
+      // Only recalculate precio if there was a previous costo to derive margin from
+      if (currentCosto > 0) {
+        const margin = (currentPrecio - currentCosto) / currentCosto;
+        const newPrecio = Math.round(val * (1 + margin));
+        setPriceChanges((prev) => ({ ...prev, [id]: newPrecio }));
+      }
+      // If costo was 0, keep current precio unchanged
     } else if (editingField === "margen") {
       // Set margin and recalculate precio from costo
       const costo = costoChanges[id] ?? prod.costo ?? 0;
@@ -1066,16 +1077,17 @@ export default function EditarPreciosPage() {
                   ]}
                 />
                 {/* Ordenar */}
-                <SearchableSelect
-                  label="Ordenar por"
-                  value={sortOrder}
-                  onChange={(v) => setSortOrder(v as "nombre" | "modificacion")}
-                  allLabel=""
-                  options={[
-                    { value: "nombre", label: "Nombre A-Z" },
-                    { value: "modificacion", label: "Últ. modificación" },
-                  ]}
-                />
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground font-semibold tracking-wide uppercase">Ordenar por</Label>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as "nombre" | "modificacion")}
+                    className="flex w-full rounded-lg border border-input bg-transparent py-2 px-2.5 text-sm h-8"
+                  >
+                    <option value="nombre">Nombre A-Z</option>
+                    <option value="modificacion">Últ. modificación</option>
+                  </select>
+                </div>
               </div>
             </div>
           )}
@@ -1091,7 +1103,7 @@ export default function EditarPreciosPage() {
               {filteredProductos.length} productos
               {hasChanges && (
                 <span className="ml-2 text-orange-600 font-medium">
-                  ({Object.keys(priceChanges).length} modificados)
+                  ({new Set([...Object.keys(priceChanges), ...Object.keys(costoChanges)]).size} modificados)
                 </span>
               )}
             </p>
@@ -1135,7 +1147,7 @@ export default function EditarPreciosPage() {
                 }}
               >
                 <Pencil className="w-4 h-4 mr-1.5" />
-                Edici&oacute;n Masiva
+                Edición Masiva
                 {selectedIds.size > 0 && (
                   <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-xs">
                     {selectedIds.size}
@@ -1306,7 +1318,7 @@ export default function EditarPreciosPage() {
       <Dialog open={massEditOpen} onOpenChange={setMassEditOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Edici&oacute;n Masiva de Precios</DialogTitle>
+            <DialogTitle>Edición Masiva de Precios</DialogTitle>
             <DialogDescription>
               Aplicar cambio a {selectedIds.size} productos seleccionados
             </DialogDescription>
@@ -1401,7 +1413,7 @@ export default function EditarPreciosPage() {
             }
             {/* Operacion */}
             {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && <div>
-              <Label className="text-sm font-medium mb-2 block">Operaci&oacute;n</Label>
+              <Label className="text-sm font-medium mb-2 block">Operación</Label>
               <div className="flex gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -1539,7 +1551,7 @@ export default function EditarPreciosPage() {
           <DialogHeader>
             <DialogTitle>Confirmar cambios</DialogTitle>
             <DialogDescription>
-              &iquest;Est&aacute;s seguro de aplicar estos cambios a {massEditPreview.length} productos?
+              ¿Estás seguro de aplicar estos cambios a {massEditPreview.length} productos? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
