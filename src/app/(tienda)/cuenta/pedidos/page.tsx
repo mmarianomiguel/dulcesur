@@ -215,18 +215,20 @@ export default function PedidosPage() {
         }
       }
 
-      // Compute pending balance per venta using monto_pagado (more reliable than cuenta_corriente aggregation)
-      // Also add synthetic pago entry for cobros applied outside of caja_movimientos (e.g. saldo allocation from hoja de ruta)
+      // Compute pending balance per venta using monto_pagado + cobro_items (whichever is higher)
       const saldoMap: Record<string, number> = {};
       for (const v of allVentas) {
         const montoPagado = v.monto_pagado || 0;
-        saldoMap[v.id] = Math.max(0, (v.total || 0) - montoPagado);
-
-        // If monto_pagado > sum of pagos already tracked, there's an untracked cobro
-        const yaTracked = (pagosMap[v.id] || [])
+        // Also sum cobro_items applied to this venta (may be higher than monto_pagado if update was missed)
+        const totalCobrado = (pagosMap[v.id] || [])
           .filter((p) => !p.metodo_pago.includes("Cuenta Corriente"))
           .reduce((s, p) => s + Math.abs(p.monto), 0);
-        const gap = Math.round((montoPagado - yaTracked) * 100) / 100;
+        // Use the higher of monto_pagado or actual tracked payments
+        const effectivePaid = Math.max(montoPagado, totalCobrado);
+        saldoMap[v.id] = Math.max(0, (v.total || 0) - effectivePaid);
+
+        // If monto_pagado > sum of pagos already tracked, there's an untracked cobro
+        const gap = Math.round((montoPagado - totalCobrado) * 100) / 100;
         if (gap >= 1) {
           if (!pagosMap[v.id]) pagosMap[v.id] = [];
           pagosMap[v.id].push({ metodo_pago: v.forma_pago || "Cobro", monto: gap, descripcion: "Cobro aplicado" });

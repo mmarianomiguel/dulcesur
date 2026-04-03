@@ -596,6 +596,10 @@ export default function HojaDeRutaPage() {
       if ((payMetodo === "Transferencia" || payMetodo === "Mixto") && cuentaSeleccionada) {
         ventaUpdate.cuenta_transferencia_alias = cuentaSeleccionada.alias || cuentaSeleccionada.nombre;
       }
+      // Update monto_pagado so the system knows this venta is paid
+      if (paid > 0) {
+        ventaUpdate.monto_pagado = (pagadoPorVenta[venta.id] || 0) + paid;
+      }
       await supabase.from("ventas").update(ventaUpdate).eq("id", venta.id);
     }
 

@@ -734,8 +734,11 @@ export default function DashboardPage() {
 
       if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
 
-      // Update forma_pago + cuenta_transferencia_alias on the venta
+      // Update forma_pago + monto_pagado + cuenta_transferencia_alias on the venta
       const ventaUpdate: Record<string, any> = { forma_pago: metodo };
+      if (totalCobrado > 0) {
+        ventaUpdate.monto_pagado = totalCobrado;
+      }
       if ((metodo === "Transferencia" || metodo === "Mixto") && cobroCuentaBancaria) {
         ventaUpdate.cuenta_transferencia_alias = cobroCuentaBancaria;
       }
