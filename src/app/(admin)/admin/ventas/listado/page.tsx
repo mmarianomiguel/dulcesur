@@ -1106,9 +1106,11 @@ export default function ListadoVentasPage() {
     }
 
     // Fallback: if no caja_movimientos (online orders not yet paid)
+    // Check if venta is already fully paid via monto_pagado
+    const alreadyPaid = ventaData && ventaData.monto_pagado > 0 && ventaData.monto_pagado >= (ventaData.total || pedido.total) * 0.99;
     if (pagos.length === 0) {
       if (ventaData) {
-        if (isOnlineOrder) {
+        if (isOnlineOrder && !alreadyPaid) {
           if (ventaData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia (a cobrar)", monto: ventaData.monto_transferencia });
           if (ventaData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ventaData.monto_efectivo });
         } else {
@@ -1118,14 +1120,14 @@ export default function ListadoVentasPage() {
         if (pagos.length === 0) {
           const fpLabel = ventaData.forma_pago || pedido.metodo_pago || "Efectivo";
           const isPending = fpLabel.toLowerCase() === "pendiente";
-          if (isOnlineOrder || isPending) {
+          if ((isOnlineOrder || isPending) && !alreadyPaid) {
             pagos.push({ metodo: `${fpLabel} (a cobrar)`, monto: ventaData.total || pedido.total });
           } else {
             pagos.push({ metodo: fpLabel, monto: ventaData.total || pedido.total });
           }
         }
       } else if (ptData) {
-        if (isOnlineOrder) {
+        if (isOnlineOrder && !alreadyPaid) {
           if (ptData.monto_transferencia > 0) pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
           if (ptData.monto_efectivo > 0) pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptData.monto_efectivo });
         } else {
@@ -1135,7 +1137,7 @@ export default function ListadoVentasPage() {
         if (pagos.length === 0) {
           const fpLabel2 = ptData.metodo_pago || "Efectivo";
           const isPending2 = fpLabel2.toLowerCase() === "pendiente";
-          if (isOnlineOrder || isPending2) {
+          if ((isOnlineOrder || isPending2) && !alreadyPaid) {
             pagos.push({ metodo: `${fpLabel2} (a cobrar)`, monto: ptData.total || pedido.total });
           } else {
             pagos.push({ metodo: fpLabel2, monto: ptData.total || pedido.total });
