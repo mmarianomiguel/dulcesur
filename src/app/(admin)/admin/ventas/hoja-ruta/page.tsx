@@ -468,6 +468,8 @@ export default function HojaDeRutaPage() {
   // Payment dialog state
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [payVenta, setPayVenta] = useState<VentaRow | null>(null);
+  const [payDefaultEfectivo, setPayDefaultEfectivo] = useState<number | undefined>();
+  const [payDefaultTransferencia, setPayDefaultTransferencia] = useState<number | undefined>();
   const [payMetodo, setPayMetodo] = useState<"Efectivo" | "Transferencia" | "Mixto" | "Cuenta Corriente">("Efectivo");
   const [payMonto, setPayMonto] = useState(0);
   const [payEfectivo, setPayEfectivo] = useState(0);
@@ -510,11 +512,15 @@ export default function HojaDeRutaPage() {
     setPayMonto(totalDebe);
 
     // Pre-fill amounts from pedidos_tienda if it's a Mixto online order
+    let ptEf: number = 0;
+    let ptTr: number = 0;
     if (metodoOriginal === "Mixto" && v.numero) {
       const { data: pt } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia").eq("numero", v.numero).maybeSingle();
       if (pt && (pt.monto_efectivo > 0 || pt.monto_transferencia > 0)) {
-        setPayEfectivo(pt.monto_efectivo || 0);
-        setPayTransferencia(pt.monto_transferencia || 0);
+        ptEf = pt.monto_efectivo || 0;
+        ptTr = pt.monto_transferencia || 0;
+        setPayEfectivo(ptEf);
+        setPayTransferencia(ptTr);
       } else {
         setPayEfectivo(Math.floor(totalDebe / 2));
         setPayTransferencia(totalDebe - Math.floor(totalDebe / 2));
@@ -523,6 +529,9 @@ export default function HojaDeRutaPage() {
       setPayEfectivo(metodoOriginal === "Mixto" ? Math.floor(totalDebe / 2) : totalDebe);
       setPayTransferencia(metodoOriginal === "Mixto" ? totalDebe - Math.floor(totalDebe / 2) : 0);
     }
+    // Also set defaults for CobroVentaSection
+    setPayDefaultEfectivo(ptEf || undefined);
+    setPayDefaultTransferencia(ptTr || undefined);
 
     setPayCuentaBancariaId("");
     setPayDialogOpen(true);
@@ -1690,6 +1699,8 @@ export default function HojaDeRutaPage() {
                   recargoTransferencia={porcentajeTransferencia}
                   cuentasBancarias={cuentasBancarias.map(c => ({ id: c.id, nombre: c.nombre, alias: (c as any).alias || "" }))}
                   defaultMetodo={payVenta.forma_pago}
+                  defaultEfectivo={payDefaultEfectivo}
+                  defaultTransferencia={payDefaultTransferencia}
                   defaultCuentaAlias={(payVenta as any).cuenta_transferencia_alias}
                   onConfirmar={async (result: CobroVentaResult) => {
                     const hoy = getArgentinaToday();
