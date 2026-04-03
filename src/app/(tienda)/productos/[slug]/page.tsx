@@ -216,12 +216,12 @@ export default function ProductoDetallePage() {
             ? supabase.from("combo_items").select("cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, precio, imagen_url)").eq("combo_id", productId)
             : Promise.resolve({ data: null }),
           prod.marca_id
-            ? supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).gt("stock", 0).neq("id", productId).limit(MAX_RELATED)
+            ? supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).eq("visibilidad", "visible").gt("stock", 0).neq("id", productId).limit(MAX_RELATED)
             : Promise.resolve({ data: [] as any[] }),
           prod.subcategoria_id
-            ? supabase.from("productos").select(relSelect).eq("subcategoria_id", prod.subcategoria_id).eq("activo", true).gt("stock", 0).neq("id", productId).limit(MAX_RELATED)
+            ? supabase.from("productos").select(relSelect).eq("subcategoria_id", prod.subcategoria_id).eq("activo", true).eq("visibilidad", "visible").gt("stock", 0).neq("id", productId).limit(MAX_RELATED)
             : Promise.resolve({ data: [] as any[] }),
-          supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("activo", true).gt("stock", 0).neq("id", productId).limit(MAX_RELATED),
+          supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("activo", true).eq("visibilidad", "visible").gt("stock", 0).neq("id", productId).limit(MAX_RELATED),
         ]);
 
         // Check restricted category access
