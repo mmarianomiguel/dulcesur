@@ -480,6 +480,8 @@ export default function VentasPage() {
       if (d.excluir_combos && isCombo) continue;
       // Skip if product is in exclusion list
       if (d.productos_excluidos_ids?.length > 0 && d.productos_excluidos_ids.includes(product.id)) continue;
+      // Skip if discount is client-specific and current client doesn't match
+      if (d.clientes_ids?.length > 0 && (!clientId || !d.clientes_ids.includes(clientId))) continue;
       // Check minimum quantity for volume discounts - skip if qty not met or not provided
       if (d.cantidad_minima && d.cantidad_minima > 0) {
         if (qty == null || qty < d.cantidad_minima) continue;
@@ -487,23 +489,36 @@ export default function VentasPage() {
       // Check presentation filter
       if (d.presentacion === "unidad" && presName !== "Unidad") continue;
       if (d.presentacion === "caja" && presName === "Unidad") continue;
+
+      // Determine the effective discount percentage
+      let effectivePercent = Number(d.porcentaje);
+      if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && product.precio > 0) {
+        // Convert fixed price to equivalent percentage
+        effectivePercent = Math.max(0, Math.min(100, ((product.precio - d.precio_fijo) / product.precio) * 100));
+      }
+
       // Check scope
       if (d.aplica_a === "todos") {
-        bestDiscount = Math.max(bestDiscount, Number(d.porcentaje));
+        bestDiscount = Math.max(bestDiscount, effectivePercent);
       } else if (d.aplica_a === "categorias") {
         const catIds: string[] = d.categorias_ids || [];
         if (catIds.includes((product as any).categoria_id) || catIds.includes((product as any).subcategoria_id)) {
-          bestDiscount = Math.max(bestDiscount, Number(d.porcentaje));
+          bestDiscount = Math.max(bestDiscount, effectivePercent);
         }
       } else if (d.aplica_a === "subcategorias") {
         const subIds: string[] = d.subcategorias_ids || [];
         if ((product as any).subcategoria_id && subIds.includes((product as any).subcategoria_id)) {
-          bestDiscount = Math.max(bestDiscount, Number(d.porcentaje));
+          bestDiscount = Math.max(bestDiscount, effectivePercent);
         }
       } else if (d.aplica_a === "productos") {
         const prodIds: string[] = d.productos_ids || [];
         if (prodIds.includes(product.id)) {
-          bestDiscount = Math.max(bestDiscount, Number(d.porcentaje));
+          bestDiscount = Math.max(bestDiscount, effectivePercent);
+        }
+      } else if (d.aplica_a === "marcas") {
+        const mIds: string[] = d.marcas_ids || [];
+        if ((product as any).marca_id && mIds.includes((product as any).marca_id)) {
+          bestDiscount = Math.max(bestDiscount, effectivePercent);
         }
       }
     }

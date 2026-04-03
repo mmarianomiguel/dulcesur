@@ -133,9 +133,25 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const [marcasCollapsed, setMarcasCollapsed] = useState(!searchParams.get("marca"));
   const [presentacionesMap, setPresentacionesMap] = useState<Record<string, { nombre: string; cantidad: number; precio: number }[]>>(initialData?.presentacionesMap || {});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>(initialData?.activeDiscounts || []);
+  const [tiendaClienteId, setTiendaClienteId] = useState<string | null>(null);
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({}); // productId -> presentacion index
   const [cartUnits, setCartUnits] = useState<Record<string, number>>({}); // productId -> total units in cart
   const [diasOcultarSinStock, setDiasOcultarSinStock] = useState(initialData?.diasOcultarSinStock ?? 7);
+
+  // Resolve tienda cliente_id for client-specific discounts
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("cliente_auth");
+      if (raw) {
+        const auth = JSON.parse(raw);
+        if (auth?.id) {
+          supabase.from("clientes_auth").select("cliente_id").eq("id", auth.id).single().then(({ data }) => {
+            if (data?.cliente_id) setTiendaClienteId(data.cliente_id);
+          });
+        }
+      }
+    } catch { /* no auth */ }
+  }, []);
 
   // Sync cart units
   useEffect(() => {
@@ -223,7 +239,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
         supabase.from("categorias").select("id, nombre, restringida"),
         supabase.from("subcategorias").select("id, nombre, categoria_id"),
         supabase.from("marcas").select("id, nombre"),
-        supabase.from("descuentos").select("id, aplica_a, porcentaje, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("descuentos").select("id, aplica_a, porcentaje, tipo_descuento, precio_fijo, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, marcas_ids, clientes_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo, excluir_combos").eq("activo", true).lte("fecha_inicio", today),
         supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
         supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible"),
       ]);
@@ -268,36 +284,43 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
   function getProductDiscount(producto: Producto, presLabel?: string | null, qty?: number): number {
     let best = 0;
-    // If no presLabel provided, treat as "Unidad" (default presentation)
     const effectivePres = presLabel ?? "Unidad";
     const isBox = effectivePres !== "Unidad" && !effectivePres.startsWith("Unidad");
     const isUnit = !isBox;
     for (const d of activeDiscounts) {
-      // Skip if product is in exclusion list
       if (d.productos_excluidos_ids?.length > 0 && d.productos_excluidos_ids.includes(producto.id)) continue;
-      // Skip volume discounts if qty not met
+      if (d.clientes_ids?.length > 0 && (!tiendaClienteId || !d.clientes_ids.includes(tiendaClienteId))) continue;
+      if (d.excluir_combos && (producto as any).es_combo) continue;
       if (d.cantidad_minima && d.cantidad_minima > 0) {
         if (qty == null || qty < d.cantidad_minima) continue;
       }
-      // Check presentation filter
       if (d.presentacion === "unidad" && isBox) continue;
       if (d.presentacion === "caja" && isUnit) continue;
+      let effectivePercent = Number(d.porcentaje);
+      if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && producto.precio > 0) {
+        effectivePercent = Math.max(0, Math.min(100, ((producto.precio - d.precio_fijo) / producto.precio) * 100));
+      }
       if (d.aplica_a === "todos") {
-        best = Math.max(best, Number(d.porcentaje));
+        best = Math.max(best, effectivePercent);
       } else if (d.aplica_a === "categorias") {
         const ids: string[] = d.categorias_ids || [];
         if (ids.includes(producto.categoria_id) || (producto.subcategoria_id && ids.includes(producto.subcategoria_id))) {
-          best = Math.max(best, Number(d.porcentaje));
+          best = Math.max(best, effectivePercent);
         }
       } else if (d.aplica_a === "subcategorias") {
         const subIds: string[] = d.subcategorias_ids || [];
         if (producto.subcategoria_id && subIds.includes(producto.subcategoria_id)) {
-          best = Math.max(best, Number(d.porcentaje));
+          best = Math.max(best, effectivePercent);
         }
       } else if (d.aplica_a === "productos") {
         const ids: string[] = d.productos_ids || [];
         if (ids.includes(producto.id)) {
-          best = Math.max(best, Number(d.porcentaje));
+          best = Math.max(best, effectivePercent);
+        }
+      } else if (d.aplica_a === "marcas") {
+        const mIds: string[] = d.marcas_ids || [];
+        if ((producto as any).marca_id && mIds.includes((producto as any).marca_id)) {
+          best = Math.max(best, effectivePercent);
         }
       }
     }

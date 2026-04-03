@@ -9,12 +9,15 @@ interface Descuento {
   id: string;
   nombre: string;
   porcentaje: number;
+  tipo_descuento: "porcentaje" | "precio_fijo";
+  precio_fijo: number | null;
   aplica_a: string;
   productos_ids: string[];
   categorias_ids: string[];
   subcategorias_ids: string[];
   marcas_ids: string[];
   productos_excluidos_ids: string[];
+  clientes_ids: string[];
   activo: boolean;
   fecha_inicio: string;
   fecha_fin: string | null;
@@ -1280,7 +1283,8 @@ export default function EditarPreciosPage() {
                           if (!disc) return <span className="text-muted-foreground">—</span>;
                           return (
                             <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
-                              -{disc.porcentaje}%
+                              {disc.tipo_descuento === "precio_fijo" && disc.precio_fijo != null ? formatCurrency(disc.precio_fijo) : `-${disc.porcentaje}%`}
+                              {disc.clientes_ids?.length > 0 && " 👤"}
                             </Badge>
                           );
                         })()}

@@ -36,6 +36,8 @@ import {
   ArrowRight,
   Clock,
   AlertCircle,
+  DollarSign,
+  Users,
 } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
@@ -44,6 +46,8 @@ interface Descuento {
   nombre: string;
   descripcion: string | null;
   porcentaje: number;
+  tipo_descuento: "porcentaje" | "precio_fijo";
+  precio_fijo: number | null;
   fecha_inicio: string;
   fecha_fin: string | null;
   aplica_a: string;
@@ -52,11 +56,18 @@ interface Descuento {
   productos_ids: string[];
   productos_excluidos_ids: string[];
   marcas_ids: string[];
+  clientes_ids: string[];
   presentacion: string;
   cantidad_minima: number | null;
   activo: boolean;
   created_at: string;
   updated_at: string;
+}
+
+interface ClienteOption {
+  id: string;
+  nombre: string;
+  cuit: string | null;
 }
 
 interface Categoria {
@@ -152,6 +163,9 @@ export default function DescuentosPage() {
   const [productosIds, setProductosIds] = useState<string[]>([]);
   const [productosExcluidosIds, setProductosExcluidosIds] = useState<string[]>([]);
   const [marcasIds, setMarcasIds] = useState<string[]>([]);
+  const [clientesIds, setClientesIds] = useState<string[]>([]);
+  const [tipoDescuento, setTipoDescuento] = useState<"porcentaje" | "precio_fijo">("porcentaje");
+  const [precioFijo, setPrecioFijo] = useState<number | null>(null);
 
   // categories for step 4
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -170,6 +184,10 @@ export default function DescuentosPage() {
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [marcaSearch, setMarcaSearch] = useState("");
 
+  // clientes for client-specific discounts
+  const [clientesAll, setClientesAll] = useState<ClienteOption[]>([]);
+  const [clienteSearch, setClienteSearch] = useState("");
+
   // editing
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -187,16 +205,18 @@ export default function DescuentosPage() {
   }, []);
 
   const fetchCategorias = useCallback(async () => {
-    const [{ data: cats }, { data: subs }, { data: prods }, { data: marcasData }] = await Promise.all([
+    const [{ data: cats }, { data: subs }, { data: prods }, { data: marcasData }, { data: clientesData }] = await Promise.all([
       supabase.from("categorias").select("id, nombre").order("nombre"),
       supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
       supabase.from("productos").select("id, nombre, codigo").eq("activo", true).order("nombre").limit(10000),
       supabase.from("marcas").select("id, nombre").order("nombre"),
+      supabase.from("clientes").select("id, nombre, cuit").eq("activo", true).order("nombre"),
     ]);
     setCategorias(cats ?? []);
     setSubcategorias(subs ?? []);
     setProductosAll(prods ?? []);
     setMarcas(marcasData ?? []);
+    setClientesAll(clientesData ?? []);
   }, []);
 
   useEffect(() => {
@@ -220,11 +240,15 @@ export default function DescuentosPage() {
     setPresentación("todas");
     setCantidadMinima(null);
     setExcluirCombos(true);
+    setClientesIds([]);
+    setTipoDescuento("porcentaje");
+    setPrecioFijo(null);
     setEditId(null);
     setCatSearch("");
     setExpandedCats([]);
     setProdSearch("");
     setMarcaSearch("");
+    setClienteSearch("");
     setSaveError(null);
   };
 
@@ -247,6 +271,9 @@ export default function DescuentosPage() {
     setProductosIds(d.productos_ids ?? []);
     setProductosExcluidosIds(d.productos_excluidos_ids ?? []);
     setMarcasIds(d.marcas_ids ?? []);
+    setClientesIds(d.clientes_ids ?? []);
+    setTipoDescuento(d.tipo_descuento || "porcentaje");
+    setPrecioFijo(d.precio_fijo ?? null);
     setPresentación(d.presentacion);
     setCantidadMinima(d.cantidad_minima ?? null);
     setExcluirCombos((d as any).excluir_combos ?? true);
@@ -269,6 +296,9 @@ export default function DescuentosPage() {
       productos_ids: aplicaA === "productos" ? productosIds : [],
       productos_excluidos_ids: productosExcluidosIds.length > 0 ? productosExcluidosIds : [],
       marcas_ids: marcasIds.length > 0 ? marcasIds : [],
+      clientes_ids: clientesIds.length > 0 ? clientesIds : [],
+      tipo_descuento: tipoDescuento,
+      precio_fijo: tipoDescuento === "precio_fijo" ? precioFijo : null,
       presentacion,
       cantidad_minima: cantidadMinima && cantidadMinima > 0 ? cantidadMinima : null,
       excluir_combos: excluirCombos,
@@ -388,7 +418,7 @@ export default function DescuentosPage() {
 
   const canNext = () => {
     if (step === 0) return nombre.trim().length > 0;
-    if (step === 1) return porcentaje > 0 && porcentaje <= 100;
+    if (step === 1) return tipoDescuento === "precio_fijo" ? (precioFijo != null && precioFijo > 0) : (porcentaje > 0 && porcentaje <= 100);
     if (step === 2) return fechaInicio.length > 0;
     return true;
   };
@@ -492,7 +522,7 @@ export default function DescuentosPage() {
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left px-4 py-3 font-medium">Nombre</th>
-                    <th className="text-left px-4 py-3 font-medium">Porcentaje</th>
+                    <th className="text-left px-4 py-3 font-medium">Descuento</th>
                     <th className="text-left px-4 py-3 font-medium">Vigencia</th>
                     <th className="text-left px-4 py-3 font-medium">Aplica a</th>
                     <th className="text-left px-4 py-3 font-medium">Marcas</th>
@@ -510,9 +540,13 @@ export default function DescuentosPage() {
                         <td className="px-4 py-3 font-medium">{d.nombre}</td>
                         <td className="px-4 py-3">
                           <Badge variant="secondary">
-                            <Percent className="w-3 h-3 mr-1" />
-                            {Number(d.porcentaje)}%
+                            {d.tipo_descuento === "precio_fijo" ? (<><DollarSign className="w-3 h-3 mr-1" />{formatCurrency(d.precio_fijo || 0)}</>) : (<><Percent className="w-3 h-3 mr-1" />{Number(d.porcentaje)}%</>)}
                           </Badge>
+                          {d.clientes_ids && d.clientes_ids.length > 0 && (
+                            <Badge variant="outline" className="ml-1.5 text-blue-600 border-blue-200">
+                              <Users className="w-3 h-3 mr-1" />{d.clientes_ids.length}
+                            </Badge>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {d.fecha_fin
@@ -628,57 +662,107 @@ export default function DescuentosPage() {
           {/* Step 2 - Porcentaje */}
           {step === 1 && (
             <div className="space-y-6 py-4">
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-5xl font-bold text-primary">{porcentaje} %</span>
-                <span className="text-sm text-muted-foreground">de descuento</span>
-              </div>
-
-              <div className="px-4">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={porcentaje}
-                  onChange={(e) => setPorcentaje(Number(e.target.value))}
-                  className="w-full accent-primary"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>0%</span>
-                  <span>50%</span>
-                  <span>100%</span>
+              {/* Tipo de descuento toggle */}
+              <div className="space-y-2">
+                <Label>Tipo de descuento</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setTipoDescuento("porcentaje")}
+                    className={`flex flex-col items-center p-4 rounded-lg border-2 transition-colors ${tipoDescuento === "porcentaje" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                  >
+                    <Percent className="w-6 h-6 mb-1 text-muted-foreground" />
+                    <span className="text-sm font-medium">Porcentaje</span>
+                    <span className="text-xs text-muted-foreground">Ej: 20% de descuento</span>
+                  </button>
+                  <button
+                    onClick={() => setTipoDescuento("precio_fijo")}
+                    className={`flex flex-col items-center p-4 rounded-lg border-2 transition-colors ${tipoDescuento === "precio_fijo" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                  >
+                    <DollarSign className="w-6 h-6 mb-1 text-muted-foreground" />
+                    <span className="text-sm font-medium">Precio fijo</span>
+                    <span className="text-xs text-muted-foreground">Ej: $5.000 por unidad</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Valor exacto</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
+              {tipoDescuento === "porcentaje" ? (<>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-5xl font-bold text-primary">{porcentaje} %</span>
+                  <span className="text-sm text-muted-foreground">de descuento</span>
+                </div>
+
+                <div className="px-4">
+                  <input
+                    type="range"
                     min={0}
                     max={100}
                     value={porcentaje}
-                    onChange={(e) => setPorcentaje(Math.min(100, Math.max(0, Number(e.target.value))))}
-                    className="w-32"
+                    onChange={(e) => setPorcentaje(Number(e.target.value))}
+                    className="w-full accent-primary"
                   />
-                  <span className="text-muted-foreground font-medium">%</span>
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label>Valores rápidos</Label>
-                <div className="flex flex-wrap gap-2">
-                  {QUICK_PERCENTS.map((v) => (
-                    <Button
-                      key={v}
-                      variant={porcentaje === v ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPorcentaje(v)}
-                    >
-                      {v}%
-                    </Button>
-                  ))}
+                <div className="space-y-2">
+                  <Label>Valor exacto</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={porcentaje}
+                      onChange={(e) => setPorcentaje(Math.min(100, Math.max(0, Number(e.target.value))))}
+                      className="w-32"
+                    />
+                    <span className="text-muted-foreground font-medium">%</span>
+                  </div>
                 </div>
-              </div>
+
+                <div className="space-y-2">
+                  <Label>Valores rápidos</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {QUICK_PERCENTS.map((v) => (
+                      <Button
+                        key={v}
+                        variant={porcentaje === v ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setPorcentaje(v)}
+                      >
+                        {v}%
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </>) : (
+                <div className="space-y-4">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-5xl font-bold text-primary">{formatCurrency(precioFijo || 0)}</span>
+                    <span className="text-sm text-muted-foreground">precio fijo por unidad</span>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Precio de venta</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground font-medium">$</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={precioFijo ?? ""}
+                        onChange={(e) => setPrecioFijo(e.target.value ? Number(e.target.value) : null)}
+                        placeholder="Ej: 5000"
+                        className="w-48"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+                    El precio fijo reemplaza el precio original del producto. Solo se aplica a los productos seleccionados en el paso siguiente.
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(0)}>
@@ -1174,6 +1258,62 @@ export default function DescuentosPage() {
                 </div>
               )}
 
+              {/* Clientes exclusivos (opcional) */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Clientes exclusivos</Label>
+                  <span className="text-xs text-muted-foreground">(opcional)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Si seleccionás clientes, el descuento solo aplica a ellos. Si no seleccionás ninguno, aplica a todos.</p>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar cliente por nombre o CUIT..."
+                    value={clienteSearch}
+                    onChange={(e) => setClienteSearch(e.target.value)}
+                    className="pl-8 h-9 text-sm"
+                  />
+                </div>
+                {clienteSearch.length >= 2 && (
+                  <div className="border rounded-lg max-h-36 overflow-y-auto">
+                    {clientesAll
+                      .filter((c) => (norm(c.nombre).includes(norm(clienteSearch)) || (c.cuit && c.cuit.includes(clienteSearch))) && !clientesIds.includes(c.id))
+                      .slice(0, 8)
+                      .map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="flex items-center w-full px-3 py-1.5 text-sm hover:bg-muted/50 text-left"
+                          onClick={() => { setClientesIds((prev) => [...prev, c.id]); setClienteSearch(""); }}
+                        >
+                          <Users className="w-3 h-3 mr-2 text-blue-400" />
+                          <span>{c.nombre}</span>
+                          {c.cuit && <span className="ml-auto text-xs text-muted-foreground">{c.cuit}</span>}
+                        </button>
+                      ))}
+                    {clientesAll.filter((c) => (norm(c.nombre).includes(norm(clienteSearch)) || (c.cuit && c.cuit.includes(clienteSearch))) && !clientesIds.includes(c.id)).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-muted-foreground text-center">Sin resultados</p>
+                    )}
+                  </div>
+                )}
+                {clientesIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {clientesIds.map((id) => {
+                      const c = clientesAll.find((cl) => cl.id === id);
+                      return (
+                        <Badge key={id} variant="secondary" className="gap-1 pr-1 bg-blue-50 text-blue-700 border-blue-200">
+                          {c?.nombre || id.slice(0, 8)}
+                          <button type="button" onClick={() => setClientesIds((prev) => prev.filter((x) => x !== id))} className="hover:bg-blue-200 rounded-full p-0.5">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <Separator />
 
               {/* Resumen */}
@@ -1186,8 +1326,14 @@ export default function DescuentosPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Descuento</span>
-                    <span className="font-medium">{porcentaje}%</span>
+                    <span className="font-medium">{tipoDescuento === "precio_fijo" ? formatCurrency(precioFijo || 0) + " (precio fijo)" : porcentaje + "%"}</span>
                   </div>
+                  {clientesIds.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Clientes</span>
+                      <span className="font-medium">{clientesIds.length} cliente{clientesIds.length !== 1 ? "s" : ""} exclusivo{clientesIds.length !== 1 ? "s" : ""}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Desde</span>
                     <span className="font-medium">{fechaInicio ? formatDate(fechaInicio) : "—"}</span>

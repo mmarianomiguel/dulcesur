@@ -90,6 +90,7 @@ export default function ProductoDetallePage() {
   const [loading, setLoading] = useState(true);
   const [cartQtys, setCartQtys] = useState<Record<string, number>>({});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>([]);
+  const [tiendaClienteId, setTiendaClienteId] = useState<string | null>(null);
   const [restricted, setRestricted] = useState(false);
   const { permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
 
@@ -125,30 +126,39 @@ export default function ProductoDetallePage() {
     const isBox = effectivePres !== "Unidad" && !effectivePres.startsWith("Unidad");
     const isUnit = !isBox;
     for (const d of activeDiscounts) {
-      // Skip if product is in exclusion list
       if (d.productos_excluidos_ids?.length > 0 && d.productos_excluidos_ids.includes(prod.id)) continue;
-      // Skip volume discounts if qty not met
+      if (d.clientes_ids?.length > 0 && (!tiendaClienteId || !d.clientes_ids.includes(tiendaClienteId))) continue;
+      if (d.excluir_combos && (prod as any).es_combo) continue;
       if (d.cantidad_minima && d.cantidad_minima > 0) {
         if (qty == null || qty < d.cantidad_minima) continue;
       }
       if (d.presentacion === "unidad" && isBox) continue;
       if (d.presentacion === "caja" && isUnit) continue;
+      let effectivePercent = Number(d.porcentaje);
+      if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && prod.precio > 0) {
+        effectivePercent = Math.max(0, Math.min(100, ((prod.precio - d.precio_fijo) / prod.precio) * 100));
+      }
       if (d.aplica_a === "todos") {
-        best = Math.max(best, Number(d.porcentaje));
+        best = Math.max(best, effectivePercent);
       } else if (d.aplica_a === "categorias") {
         const ids: string[] = d.categorias_ids || [];
         if (ids.includes(prod.categoria_id) || (prod.subcategoria_id && ids.includes(prod.subcategoria_id))) {
-          best = Math.max(best, Number(d.porcentaje));
+          best = Math.max(best, effectivePercent);
         }
       } else if (d.aplica_a === "subcategorias") {
         const subIds: string[] = d.subcategorias_ids || [];
         if (prod.subcategoria_id && subIds.includes(prod.subcategoria_id)) {
-          best = Math.max(best, Number(d.porcentaje));
+          best = Math.max(best, effectivePercent);
         }
       } else if (d.aplica_a === "productos") {
         const ids: string[] = d.productos_ids || [];
         if (ids.includes(prod.id)) {
-          best = Math.max(best, Number(d.porcentaje));
+          best = Math.max(best, effectivePercent);
+        }
+      } else if (d.aplica_a === "marcas") {
+        const mIds: string[] = d.marcas_ids || [];
+        if ((prod as any).marca_id && mIds.includes((prod as any).marca_id)) {
+          best = Math.max(best, effectivePercent);
         }
       }
     }
@@ -159,6 +169,18 @@ export default function ProductoDetallePage() {
     if (!slug) return;
     async function fetchData() {
       setLoading(true);
+
+      // Resolve tienda cliente_id for client-specific discounts
+      try {
+        const raw = localStorage.getItem("cliente_auth");
+        if (raw) {
+          const auth = JSON.parse(raw);
+          if (auth?.id) {
+            const { data: authData } = await supabase.from("clientes_auth").select("cliente_id").eq("id", auth.id).single();
+            if (authData?.cliente_id) setTiendaClienteId(authData.cliente_id);
+          }
+        }
+      } catch { /* no auth */ }
 
       // Round 1: Resolve slug (if needed) + fetch product + discounts — all in parallel
       let productId = id;
@@ -179,7 +201,7 @@ export default function ProductoDetallePage() {
       const today = new Date().toISOString().split("T")[0];
       const [{ data: prod }, { data: discountsRaw }] = await Promise.all([
         supabase.from("productos").select("id, nombre, descripcion_detallada, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", productId).single(),
-        supabase.from("descuentos").select("id, aplica_a, porcentaje, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("descuentos").select("id, aplica_a, porcentaje, tipo_descuento, precio_fijo, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, marcas_ids, clientes_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo, excluir_combos").eq("activo", true).lte("fecha_inicio", today),
       ]);
       setActiveDiscounts((discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
 
