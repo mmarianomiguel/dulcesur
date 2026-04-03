@@ -179,7 +179,7 @@ export default function PedidosPage() {
         }
       }
 
-      // Also check cobros allocated to these ventas (cobros have referencia_tipo='cobro' in caja_movimientos)
+      // Also check cobros allocated to these ventas — only add if no caja_movimientos exist for this venta
       if (ventaIds.length > 0) {
         const { data: cobroItems } = await supabase
           .from("cobro_items")
@@ -187,6 +187,8 @@ export default function PedidosPage() {
           .in("venta_id", ventaIds);
         for (const ci of cobroItems || []) {
           const key = ci.venta_id;
+          // Only add cobro if there are no caja_movimientos for this venta (avoid double-counting)
+          if (pagosMap[key] && pagosMap[key].length > 0) continue;
           if (!pagosMap[key]) pagosMap[key] = [];
           const cobro = (ci as any).cobros;
           pagosMap[key].push({
@@ -198,18 +200,19 @@ export default function PedidosPage() {
         }
       }
 
-      // Also check cuenta_corriente for CC payments
+      // Also check cuenta_corriente for CC debt entries
       if (ventaIds.length > 0) {
         const { data: ccMovs } = await supabase
           .from("cuenta_corriente")
           .select("venta_id, debe, forma_pago")
-          .in("venta_id", ventaIds);
+          .in("venta_id", ventaIds)
+          .gt("debe", 0);
         for (const cc of ccMovs || []) {
           const key = cc.venta_id;
           if (!pagosMap[key]) pagosMap[key] = [];
-          // Only add if not already tracked via caja_movimientos
+          // Only add CC debt if not already tracked
           const hasCC = pagosMap[key].some((p) => p.metodo_pago === "Cuenta Corriente");
-          if (!hasCC && cc.debe > 0) {
+          if (!hasCC) {
             pagosMap[key].push({ metodo_pago: "Cuenta Corriente", monto: cc.debe });
           }
         }
@@ -224,22 +227,11 @@ export default function PedidosPage() {
         clienteSaldoReal = Math.max(0, cli?.saldo || 0);
       }
 
-      // First pass: compute raw pending per venta from monto_pagado + tracked payments
+      // First pass: compute raw pending per venta from monto_pagado
       const rawPendingMap: Record<string, number> = {};
       for (const v of allVentas) {
         const montoPagado = v.monto_pagado || 0;
-        const totalCobrado = (pagosMap[v.id] || [])
-          .filter((p: any) => !p.metodo_pago.includes("Cuenta Corriente"))
-          .reduce((s: number, p: any) => s + Math.abs(p.monto), 0);
-        const effectivePaid = Math.max(montoPagado, totalCobrado);
-        rawPendingMap[v.id] = Math.max(0, (v.total || 0) - effectivePaid);
-
-        // Add synthetic pago entry if monto_pagado > tracked
-        const gap = Math.round((montoPagado - totalCobrado) * 100) / 100;
-        if (gap >= 1) {
-          if (!pagosMap[v.id]) pagosMap[v.id] = [];
-          pagosMap[v.id].push({ metodo_pago: v.forma_pago || "Cobro", monto: gap, descripcion: "Cobro aplicado" });
-        }
+        rawPendingMap[v.id] = Math.max(0, (v.total || 0) - montoPagado);
       }
 
       // Second pass: if sum of raw pending > client's actual saldo, some ventas were paid via cobros
