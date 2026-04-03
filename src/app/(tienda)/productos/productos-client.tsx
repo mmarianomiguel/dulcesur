@@ -239,7 +239,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
         supabase.from("categorias").select("id, nombre, restringida"),
         supabase.from("subcategorias").select("id, nombre, categoria_id"),
         supabase.from("marcas").select("id, nombre"),
-        supabase.from("descuentos").select("id, aplica_a, porcentaje, tipo_descuento, precio_fijo, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, marcas_ids, clientes_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo, excluir_combos").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
         supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
         supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible"),
       ]);

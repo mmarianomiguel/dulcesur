@@ -201,7 +201,7 @@ export default function ProductoDetallePage() {
       const today = new Date().toISOString().split("T")[0];
       const [{ data: prod }, { data: discountsRaw }] = await Promise.all([
         supabase.from("productos").select("id, nombre, descripcion_detallada, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", productId).single(),
-        supabase.from("descuentos").select("id, aplica_a, porcentaje, tipo_descuento, precio_fijo, categorias_ids, subcategorias_ids, productos_ids, productos_excluidos_ids, marcas_ids, clientes_ids, cantidad_minima, presentacion, fecha_fin, fecha_inicio, activo, excluir_combos").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
       ]);
       setActiveDiscounts((discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
 
