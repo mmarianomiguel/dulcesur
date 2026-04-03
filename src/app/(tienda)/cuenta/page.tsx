@@ -19,10 +19,21 @@ interface ClienteAuth {
   email: string;
 }
 
+function getStoredCliente(): ClienteAuth | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = localStorage.getItem("cliente_auth");
+    if (stored) { const p = JSON.parse(stored); if (p?.id) return p; }
+  } catch {}
+  return null;
+}
+
 export default function CuentaPage() {
-  const [cliente, setCliente] = useState<ClienteAuth | null>(null);
+  const [cliente, setCliente] = useState<ClienteAuth | null>(getStoredCliente);
   const [tab, setTab] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [error, setError] = useState("");
   const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState<string>("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png");
@@ -45,6 +56,8 @@ export default function CuentaPage() {
   const [regConfirm, setRegConfirm] = useState("");
 
   useEffect(() => {
+    setMounted(true);
+
     // Load logo from tienda_config
     supabase.from("tienda_config").select("logo_url").limit(1).single().then(({ data }) => {
       if (data?.logo_url) setLogoUrl(data.logo_url);
@@ -53,7 +66,7 @@ export default function CuentaPage() {
     const stored = localStorage.getItem("cliente_auth");
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Verify client still exists in DB
+      // Verify client still exists in DB (background check — UI already shows cached data)
       supabase
         .from("clientes_auth")
         .select("id, nombre, email")
@@ -64,11 +77,13 @@ export default function CuentaPage() {
             // Client no longer exists — clear stale session
             localStorage.removeItem("cliente_auth");
             setCliente(null);
+            setCheckingAuth(false);
             return;
           }
           // Update local data with DB values
           const fresh = { id: clienteDB.id, nombre: clienteDB.nombre, email: clienteDB.email };
           setCliente(fresh);
+          setCheckingAuth(false);
           localStorage.setItem("cliente_auth", JSON.stringify(fresh));
           // Fetch order count
           supabase
@@ -79,6 +94,8 @@ export default function CuentaPage() {
               if (count !== null) setOrderCount(count);
             });
         });
+    } else {
+      setCheckingAuth(false);
     }
   }, []);
 
@@ -154,6 +171,15 @@ export default function CuentaPage() {
     "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-gray-400";
   const selectClass =
     "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all bg-white text-gray-900";
+
+  // Show spinner during SSR hydration / auth check to avoid flash of login form
+  if (!mounted || (!cliente && checkingAuth)) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!cliente) {
     return (
