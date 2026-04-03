@@ -180,7 +180,8 @@ export default function PedidosPage() {
         }
       }
 
-      // Also check cobros allocated to these ventas — only add if no caja_movimientos exist for this venta
+      // Also check cobros allocated to these ventas (cobro_items track per-venta payment from cobros)
+      // These are ADDITIONAL payments on top of caja_movimientos (e.g. paying CC debt later)
       if (ventaIds.length > 0) {
         const { data: cobroItems } = await supabase
           .from("cobro_items")
@@ -188,15 +189,15 @@ export default function PedidosPage() {
           .in("venta_id", ventaIds);
         for (const ci of cobroItems || []) {
           const key = ci.venta_id;
-          // Only add cobro if there are no caja_movimientos for this venta (avoid double-counting)
-          if (pagosMap[key] && pagosMap[key].length > 0) continue;
           if (!pagosMap[key]) pagosMap[key] = [];
           const cobro = (ci as any).cobros;
+          // Check if this cobro is already tracked via caja_movimientos (same cobro_id as referencia_id)
+          // Cobros create caja entries with referencia_tipo='cobro', not 'venta', so they won't overlap
           pagosMap[key].push({
             metodo_pago: cobro?.forma_pago || "Cobro",
             monto: ci.monto_aplicado,
             fecha: cobro?.fecha || undefined,
-            descripcion: "Cobro aplicado",
+            descripcion: "Cobro posterior",
           });
         }
       }
