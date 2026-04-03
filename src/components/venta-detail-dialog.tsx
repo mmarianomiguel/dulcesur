@@ -657,7 +657,9 @@ export function VentaDetailDialog({
                       const name = item.nombre || cleanDesc(item.descripcion);
                       const isCombo = data.comboIds?.has(item.producto_id || "");
                       const upp = item.unidades_por_presentacion ?? 1;
-                      const displayQty = upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad;
+                      const presNombre = (item.presentacion || "").toLowerCase();
+                      const displayQty = presNombre.includes("medio") ? item.cantidad * 0.5
+                        : (upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad);
                       return (
                         <tr key={item.id || idx} className="border-b last:border-0">
                           <td className="px-3 py-2">

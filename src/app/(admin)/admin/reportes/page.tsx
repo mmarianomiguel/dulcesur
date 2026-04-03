@@ -215,7 +215,7 @@ export default function ReportesPage() {
   const getUnidadesPres = (item: any) => {
     let u = Number(item.unidades_por_presentacion) || 1;
     const presTxt = ((item as any).presentacion || "").toLowerCase();
-    if (presTxt.includes("medio") && u === 1) u = 0.5;
+    if (presTxt.includes("medio")) return 0.5; // Always 0.5 regardless of stored units_per_pres
     // Fallback: if unidades_por_presentacion is 1 but presentacion says otherwise, extract from name
     if (u === 1 && presTxt && presTxt !== "unidad") {
       const match = presTxt.match(/x\s*(\d+)/);
@@ -640,6 +640,10 @@ export default function ReportesPage() {
                                     const itemCost = getItemCost(item);
                                     const descPct = Number((item as any).descuento) || 0;
                                     const precioVenta = item.precio_unitario * (1 - descPct / 100);
+                                    const presNombre = ((item as any).presentacion || "").toLowerCase();
+                                    const upp = Number((item as any).unidades_por_presentacion) || 1;
+                                    const displayQty = presNombre.includes("medio") ? item.cantidad * 0.5
+                                      : (upp > 0 && upp < 1 ? item.cantidad * upp : item.cantidad);
                                     return (
                                       <tr key={idx} className="border-b border-muted/50 last:border-0">
                                         <td className="py-1.5 px-4 pl-12">
@@ -649,7 +653,7 @@ export default function ReportesPage() {
                                           )}
                                           {descPct > 0 && <span className="ml-1 text-[10px] text-orange-600">(-{descPct}%)</span>}
                                         </td>
-                                        <td className="py-1.5 px-3 text-center">{item.cantidad}</td>
+                                        <td className="py-1.5 px-3 text-center">{displayQty}</td>
                                         <td className="py-1.5 px-3 text-right">{fc(precioVenta)}</td>
                                         <td className="py-1.5 px-3 text-right text-muted-foreground">{fc(itemCost)}</td>
                                         <td className="py-1.5 px-3 text-right">{fc(item.subtotal)}</td>
