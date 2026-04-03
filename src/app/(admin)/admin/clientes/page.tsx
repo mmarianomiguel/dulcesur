@@ -337,6 +337,25 @@ export default function ClientesPage() {
     if (editingClient) {
       await supabase.from("clientes").update(payload).eq("id", editingClient.id);
       logAudit({ userName: currentUser?.nombre || "Admin", action: "UPDATE", module: "clientes", entityId: editingClient.id, after: { nombre: payload.nombre } });
+
+      // Auto-create tienda access if client now has email + DNI but no auth yet
+      if (!authId && form.email && form.numero_documento) {
+        try {
+          const res = await fetch("/api/auth/tienda", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "create-from-admin",
+              nombre: form.nombre,
+              email: form.email,
+              password: form.numero_documento,
+              cliente_id: editingClient.id,
+              telefono: form.telefono || "",
+            }),
+          });
+          if (res.ok) showAdminToast("Acceso a tienda online creado automáticamente (contraseña: DNI)", "success");
+        } catch { /* silently ignore */ }
+      }
     } else {
       const { data: newC } = await supabase.from("clientes").insert(payload).select("id").single();
       logAudit({ userName: currentUser?.nombre || "Admin", action: "CREATE", module: "clientes", entityId: newC?.id, after: { nombre: payload.nombre } });
@@ -2664,7 +2683,43 @@ export default function ClientesPage() {
                   </Button>
                 </div>
               ) : editingClient ? (
-                <p className="text-sm text-muted-foreground">Este cliente no tiene una cuenta en la tienda online.</p>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">Este cliente no tiene una cuenta en la tienda online.</p>
+                  {form.email && form.numero_documento ? (
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/auth/tienda", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              action: "create-from-admin",
+                              nombre: form.nombre,
+                              email: form.email,
+                              password: form.numero_documento,
+                              cliente_id: editingClient.id,
+                              telefono: form.telefono || "",
+                            }),
+                          });
+                          if (res.ok) {
+                            showAdminToast("Acceso a tienda online creado (contraseña: DNI)", "success");
+                            // Refresh auth info
+                            const { data: authRec } = await supabase.from("clientes_auth").select("id, email").eq("cliente_id", editingClient.id).maybeSingle();
+                            if (authRec) { setAuthEmail(authRec.email); setAuthId(authRec.id); }
+                          } else {
+                            const data = await res.json();
+                            showAdminToast(data.error || "Error al crear acceso", "error");
+                          }
+                        } catch { showAdminToast("Error al crear acceso a tienda", "error"); }
+                      }}
+                    >
+                      <Users className="w-4 h-4 mr-2" />Crear acceso a tienda online
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Para crear acceso necesita tener <strong>email</strong> y <strong>número de documento</strong>. Completelos en la pestaña de datos y guarde primero.</p>
+                  )}
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Guarde el cliente primero para gestionar su contraseña.</p>
               )}
