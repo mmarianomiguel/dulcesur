@@ -2325,11 +2325,11 @@ export default function ClientesPage() {
                   if (r.comprobantes.length > 0) {
                     pdf.setFontSize(8); pdf.setTextColor(150); pdf.text("COMPROBANTES ASOCIADOS", m, y); y += 5;
                     pdf.setTextColor(0); pdf.setFontSize(9);
-                    pdf.text("Comprobante", m, y); pdf.text("Debe", w - m - 24, y); pdf.text("Haber", w - m, y, { align: "right" }); y += 3;
+                    pdf.text("Comprobante", m, y); pdf.text("Debe", w - m - 40, y, { align: "right" }); pdf.text("Haber", w - m, y, { align: "right" }); y += 3;
                     pdf.line(m, y, w - m, y); y += 4;
                     for (const c of r.comprobantes) {
                       pdf.setFont("helvetica", "normal"); pdf.text(c.comprobante, m, y);
-                      pdf.setTextColor(220, 38, 38); pdf.text(fmtC(c.debe), w - m - 24, y);
+                      pdf.setTextColor(220, 38, 38); pdf.text(fmtC(c.debe), w - m - 40, y, { align: "right" });
                       pdf.setTextColor(5, 150, 105); pdf.text(c.haber > 0 ? fmtC(c.haber) : "—", w - m, y, { align: "right" });
                       pdf.setTextColor(0); y += 5;
                     }
