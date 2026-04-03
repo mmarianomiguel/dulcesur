@@ -1735,7 +1735,7 @@ export default function ProductosPage() {
       {/* Filters */}
       <Card className="overflow-visible">
         <CardContent className="pt-6 space-y-4 overflow-visible">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex-1">
               <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Buscar</Label>
               <div className="relative">
@@ -1744,11 +1744,11 @@ export default function ProductosPage() {
                   placeholder="Buscar por codigo o descripcion..."
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  className="pl-9"
+                  className="pl-9 h-11 text-base sm:h-9 sm:text-sm"
                 />
               </div>
             </div>
-            <div className="flex-shrink-0 self-end flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant={comboFilter === "si" ? "default" : "outline"}
                 className="gap-2"
@@ -2288,39 +2288,39 @@ export default function ProductosPage() {
 
       {/* Create/Edit Dialog - Single scrollable dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
+        <DialogContent className="w-full sm:max-w-4xl max-h-[100dvh] sm:max-h-[92vh] h-[100dvh] sm:h-auto p-0 gap-0 flex flex-col overflow-hidden rounded-none sm:rounded-lg">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 text-primary">
-                <Package className="w-5 h-5" />
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b bg-muted/30 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-primary/10 text-primary shrink-0">
+                <Package className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <DialogHeader className="p-0 space-y-0">
-                  <DialogTitle className="text-lg font-semibold">
+                  <DialogTitle className="text-base sm:text-lg font-semibold truncate">
                     {editingProduct ? "Editar artículo" : "Nuevo artículo"}
                   </DialogTitle>
                 </DialogHeader>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {editingProduct ? `Codigo: ${form.codigo || "---"}` : "Complete los datos del producto"}
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {editingProduct ? `Cod: ${form.codigo || "---"} · ${form.nombre || ""}` : "Complete los datos del producto"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2">
               <button
                 type="button"
                 onClick={() => setForm({ ...form, destacado: !form.destacado })}
-                className={`flex items-center gap-1 h-8 px-2.5 rounded-md border text-xs font-medium transition-all ${form.destacado ? "border-amber-300 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-gray-400 hover:text-amber-500 hover:border-amber-200"}`}
+                className={`flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-md border text-xs font-medium transition-all ${form.destacado ? "border-amber-300 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-gray-400 hover:text-amber-500 hover:border-amber-200"}`}
                 title={form.destacado ? "Quitar de destacados" : "Marcar como destacado"}
               >
                 <Star className={`w-3.5 h-3.5 ${form.destacado ? "fill-amber-500" : ""}`} />
-                {form.destacado ? "Destacado" : "Destacar"}
+                <span className="hidden sm:inline">{form.destacado ? "Destacado" : "Destacar"}</span>
               </button>
               <Select
                 value={form.visibilidad}
                 onValueChange={(v) => setForm({ ...form, visibilidad: v || "visible" })}
               >
-                <SelectTrigger className={`w-32 h-8 text-xs font-medium ${form.visibilidad === "visible" ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-orange-300 bg-orange-50 text-orange-700"}`}>
+                <SelectTrigger className={`w-24 sm:w-32 h-8 text-xs font-medium ${form.visibilidad === "visible" ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-orange-300 bg-orange-50 text-orange-700"}`}>
                   <SelectValue placeholder="Visibilidad" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2332,10 +2332,10 @@ export default function ProductosPage() {
           </div>
 
           {editingProduct && (
-            <div className="flex border-b bg-muted/20 px-6">
+            <div className="flex border-b bg-muted/20 px-2 sm:px-6 overflow-x-auto shrink-0 scrollbar-none">
               {[["info","Información"],["precios","Precios"],["descuentos","Descuentos"],["stock","Stock"],["historial","Historial"]].map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setEditTab(key)}
-                  className={`px-4 py-2.5 text-xs font-medium transition-all border-b-2 -mb-px ${editTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                  className={`shrink-0 px-3 sm:px-4 py-3 text-xs font-medium transition-all border-b-2 -mb-px ${editTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                   {label}
                 </button>
               ))}
@@ -2343,7 +2343,7 @@ export default function ProductosPage() {
           )}
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
             {/* Combo toggle */}
             {!editingProduct && (
               <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
@@ -2376,15 +2376,15 @@ export default function ProductosPage() {
                 <ImageIcon className="w-4 h-4" />
                 Producto
               </h3>
-              <div className="flex gap-4">
-                <div className="w-32 shrink-0">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="w-24 sm:w-32 shrink-0 mx-auto sm:mx-0">
                   <ImageUpload
                     value={form.imagen_url || undefined}
                     onChange={(url) => setForm((prev) => ({ ...prev, imagen_url: url }))}
                   />
                 </div>
                 <div className="flex-1 space-y-3">
-                  <div className="grid grid-cols-[150px_1fr_120px] gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr_120px] gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Codigo</Label>
                       <Input
@@ -2438,7 +2438,7 @@ export default function ProductosPage() {
             {/* Section 2: Classification - horizontal row */}
             <div>
               <h3 className="text-sm font-medium mb-3 text-muted-foreground">Clasificación</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Categoria searchable */}
                 {(() => {
                   const [catSearch, setCatSearch] = [formCatSearch, setFormCatSearch];
@@ -2558,7 +2558,7 @@ export default function ProductosPage() {
               <h3 className="text-sm font-medium text-muted-foreground">Precios e Inventario</h3>
 
               {/* Pricing row with visual cards */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="relative rounded-xl border-2 border-blue-100 bg-gradient-to-b from-blue-50/80 to-white p-3 space-y-1.5">
                   <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center">
@@ -2665,7 +2665,7 @@ export default function ProductosPage() {
               </div>
 
               {/* Stock row */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Stock actual</Label>
                   {editingProduct && (editingProduct as any).es_combo ? (
@@ -2760,8 +2760,8 @@ export default function ProductosPage() {
                   {/* Formulario inline para crear descuento */}
                   {showDiscountForm && (
                     <div className="p-3 bg-orange-50/50 border-b space-y-3">
-                      <div className="grid grid-cols-4 gap-2">
-                        <div className="col-span-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="col-span-2 sm:col-span-2">
                           <Label className="text-[10px] text-muted-foreground">Nombre</Label>
                           <Input
                             placeholder="Ej: Promo x10 unidades"
@@ -2808,7 +2808,7 @@ export default function ProductosPage() {
                           <span className="text-[10px] text-muted-foreground">unidades para que aplique</span>
                         </div>
                       )}
-                      <div className="grid grid-cols-3 gap-2 items-end">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                         <div>
                           <Label className="text-[10px] text-muted-foreground">Desde</Label>
                           <Input
@@ -2900,7 +2900,7 @@ export default function ProductosPage() {
                       <Box className="w-3.5 h-3.5 text-emerald-600" />
                       <p className="text-xs font-semibold text-emerald-700">{box.nombre}</p>
                     </div>
-                    <div className="grid grid-cols-5 gap-3 text-xs">
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 text-xs">
                       <div><span className="text-muted-foreground block">Costo</span><p className="font-semibold">{formatCurrency(box.costo)}</p></div>
                       <div><span className="text-muted-foreground block">Precio</span><p className="font-semibold">{formatCurrency(box.precio)}</p></div>
                       <div><span className="text-muted-foreground block">Margen</span><p className={`font-semibold ${boxGanancia >= 0 ? "text-emerald-700" : "text-red-600"}`}>{box.costo > 0 ? `${boxMargen.toFixed(1)}%` : "—"}</p></div>
@@ -3029,7 +3029,7 @@ export default function ProductosPage() {
                           </div>
                         </div>
                         {/* 3 cards: Costo / Precio / Margen — same style as Unit */}
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="rounded-lg border border-blue-100 bg-white/80 p-2.5 space-y-1">
                             <div className="flex items-center gap-1">
                               <div className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center">
@@ -3069,7 +3069,7 @@ export default function ProductosPage() {
                           </div>
                         </div>
                         {/* Extra fields: Unidades, Oferta, Código, Nombre */}
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                           <div className="space-y-1">
                             <label className="text-[10px] text-muted-foreground font-medium">Unidades</label>
                             <Input type="number" value={pres.cantidad} onChange={(e) => { const newQty = Number(e.target.value); updatePresentacion(idx, "cantidad", newQty); if (unit && newQty > 0) { const cn = pres.nombre; const auto = !cn || /^Caja\s*x\d*$/i.test(cn); if (auto) updatePresentacion(idx, "nombre", newQty < 1 ? "Medio Carton" : `Caja x${newQty}`); updatePresentacion(idx, "costo", unit.costo * newQty); updatePresentacion(idx, "precio", unit.precio * newQty); } }} className="h-8 text-xs" step={form.unidad_medida === "Mt" ? 0.5 : 1} min={form.unidad_medida === "Mt" ? 0.5 : 1} />
@@ -3400,15 +3400,15 @@ export default function ProductosPage() {
           </div>
 
           {/* Sticky footer */}
-          <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/30">
-            <p className="text-xs text-muted-foreground">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-t bg-muted/30 shrink-0">
+            <p className="text-xs text-muted-foreground hidden sm:block">
               {editingProduct ? "Los cambios se guardaran al confirmar" : "Complete los campos obligatorios"}
             </p>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleSave} disabled={saving}>
+              <Button className="flex-1 sm:flex-none" onClick={handleSave} disabled={saving}>
                 {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {editingProduct ? "Guardar cambios" : "Crear articulo"}
               </Button>
