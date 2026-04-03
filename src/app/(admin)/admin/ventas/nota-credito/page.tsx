@@ -426,21 +426,22 @@ export default function NotaCreditoPage() {
           const comp = ci.productos;
           if (!comp) continue;
           const unitsToReturn = item.qty * ci.cantidad;
-          const newStock = comp.stock + unitsToReturn;
-          await supabase.from("productos").update({ stock: newStock }).eq("id", comp.id);
+          // Use atomic RPC to prevent race conditions
+          const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
+            p_producto_id: comp.id,
+            p_change: unitsToReturn,
+          });
           await supabase.from("stock_movimientos").insert({
             producto_id: comp.id,
             tipo: "devolucion",
-            cantidad_antes: comp.stock,
-            cantidad_despues: newStock,
+            cantidad_antes: stockResult?.stock_antes ?? comp.stock,
+            cantidad_despues: stockResult?.stock_despues ?? (comp.stock + unitsToReturn),
             cantidad: unitsToReturn,
             referencia: `NC ${numero}`,
             descripcion: `Devolución combo ${item.description} - ${comp.nombre}`,
             usuario: currentUser?.nombre || "Admin Sistema",
             orden_id: venta.id,
           });
-          // Update local cache so subsequent iterations see updated stock
-          comp.stock = newStock;
         }
       } else {
         let upp = item.unidades_por_presentacion || 1;

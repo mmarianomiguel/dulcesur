@@ -387,7 +387,7 @@ export default function VendedoresPage() {
         id: v.id,
         fecha: v.fecha,
         hora: v.created_at ? new Date(v.created_at).toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" }) : "",
-        nro_comprobante: (isNC ? "NC " : "") + (v.numero || ((v as any).tipo_comprobante || "")),
+        nro_comprobante: (isNC ? "NC " : "") + (v.numero || (v as any).tipo_comprobante || "S/N"),
         cliente_nombre: v.cliente_id ? (clienteMap[v.cliente_id] || "Cliente") : "Consumidor final",
         total: v.total * sign,
         comision,

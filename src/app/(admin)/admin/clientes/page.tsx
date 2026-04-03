@@ -735,7 +735,9 @@ export default function ClientesPage() {
     });
 
     if (ccError) {
-      showAdminToast("Error al registrar en cuenta corriente", "error");
+      // Rollback: revert saldo change since CC entry failed
+      await supabase.rpc("atomic_update_client_saldo", { p_client_id: movClient?.id, p_change: montoReal });
+      showAdminToast("Error al registrar en cuenta corriente. Saldo revertido.", "error");
       setPayMovSaving(false);
       return;
     }

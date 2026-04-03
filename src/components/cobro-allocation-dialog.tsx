@@ -263,6 +263,12 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
       return;
     }
 
+    // In manual mode, validate allocated amount doesn't exceed received amount
+    if (mode === "manual" && totalAsignado > montoCobrar + 0.01) {
+      showAdminToast(`El monto asignado (${totalAsignado.toFixed(2)}) supera el monto recibido (${montoCobrar.toFixed(2)})`, "error");
+      return;
+    }
+
     const activeAllocations = allocations.filter((a) => a.monto_aplicado > 0);
 
     setSaving(true);

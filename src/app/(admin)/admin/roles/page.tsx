@@ -247,8 +247,9 @@ export default function RolesPage() {
 
     const rows: { rol_id: string; modulo: string; submodulo: string; habilitado: boolean }[] = [];
     Object.entries(permisos).forEach(([key, habilitado]) => {
+      if (!habilitado) return; // Only insert enabled permissions
       const [modulo, submodulo] = key.split("::");
-      rows.push({ rol_id: permRol.id, modulo, submodulo, habilitado });
+      rows.push({ rol_id: permRol.id, modulo, submodulo, habilitado: true });
     });
 
     if (rows.length > 0) {
