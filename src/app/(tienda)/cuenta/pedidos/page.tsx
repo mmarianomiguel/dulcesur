@@ -81,6 +81,7 @@ const estadoBadge: Record<string, { bg: string; text: string; dot: string }> = {
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [ventasPOS, setVentasPOS] = useState<VentaRecord[]>([]);
+  const [clienteSaldo, setClienteSaldo] = useState(0);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedCombos, setExpandedCombos] = useState<Set<string>>(new Set());
@@ -218,47 +219,48 @@ export default function PedidosPage() {
         }
       }
 
-      // Compute pending balance per venta.
-      // Use clientes.saldo as source of truth, then distribute across ventas with CC debt (FIFO oldest first).
-      // This handles cases where cobros were applied but monto_pagado wasn't updated on the venta.
+      // Compute pending balance per venta using clientes.saldo as source of truth.
+      // Approach: find ventas with CC debt (debe entries in cuenta_corriente), then check
+      // which ones are still outstanding by matching against the client's real saldo.
       let clienteSaldoReal = 0;
       if (clienteId) {
         const { data: cli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
         clienteSaldoReal = Math.max(0, cli?.saldo || 0);
+        setClienteSaldo(clienteSaldoReal);
       }
 
-      // First pass: compute raw pending per venta from monto_pagado
-      const rawPendingMap: Record<string, number> = {};
-      for (const v of allVentas) {
-        const montoPagado = v.monto_pagado || 0;
-        rawPendingMap[v.id] = Math.max(0, (v.total || 0) - montoPagado);
+      // Get CC debe per venta (these are the debts that were charged to cuenta corriente)
+      const ccDebeMap: Record<string, number> = {};
+      if (ventaIds.length > 0) {
+        const { data: ccDebes } = await supabase
+          .from("cuenta_corriente")
+          .select("venta_id, debe")
+          .in("venta_id", ventaIds)
+          .gt("debe", 0);
+        for (const cc of ccDebes || []) {
+          ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + cc.debe;
+        }
       }
 
-      // Second pass: if sum of raw pending > client's actual saldo, some ventas were paid via cobros
-      // not tracked per-venta. Distribute real saldo across ventas (newest first = older debts paid first).
+      // Build saldo map: distribute clienteSaldoReal across ventas with CC debt (newest first)
+      // Ventas with CC debt that exceed the client's real saldo are already paid
       const saldoMap: Record<string, number> = {};
-      const totalRawPending = Object.values(rawPendingMap).reduce((s, v) => s + v, 0);
-      if (totalRawPending > 0 && clienteSaldoReal < totalRawPending) {
-        // Client owes less than computed — distribute real saldo to newest ventas first
-        const ventasByDate = allVentas
-          .filter((v: any) => rawPendingMap[v.id] > 0)
-          .sort((a: any, b: any) => new Date(b.fecha || b.created_at).getTime() - new Date(a.fecha || a.created_at).getTime());
-        let remaining = clienteSaldoReal;
-        for (const v of ventasByDate) {
-          const assign = Math.min(remaining, rawPendingMap[v.id]);
-          saldoMap[v.id] = assign;
-          remaining = Math.round((remaining - assign) * 100) / 100;
-        }
-        // Zero out any venta not assigned
-        for (const v of allVentas) {
-          if (saldoMap[v.id] === undefined) saldoMap[v.id] = 0;
-        }
-      } else {
-        // Raw pending matches or is less than client saldo — use raw values
-        for (const v of allVentas) {
-          saldoMap[v.id] = rawPendingMap[v.id] || 0;
-        }
+      const ventasWithCCDebt = allVentas
+        .filter((v: any) => (ccDebeMap[v.id] || 0) > 0)
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      let remainingSaldo = clienteSaldoReal;
+      for (const v of ventasWithCCDebt) {
+        const ccDebe = ccDebeMap[v.id] || 0;
+        const assign = Math.min(remainingSaldo, ccDebe);
+        saldoMap[v.id] = assign;
+        remainingSaldo = Math.round((remainingSaldo - assign) * 100) / 100;
       }
+      // All other ventas: 0 pending
+      for (const v of allVentas) {
+        if (saldoMap[v.id] === undefined) saldoMap[v.id] = 0;
+      }
+      // Also add pending for undelivered online orders (no venta yet, or venta without CC)
+      // These are captured in pedidos_tienda but not in cuenta_corriente
 
       // Build venta records with NCs and payment info
       const ventaRecords: Record<string, VentaRecord> = {};
@@ -458,7 +460,8 @@ export default function PedidosPage() {
     const deudasPedidos = pedidos.filter((p) => p.venta && p.venta.saldo_pendiente > 0 && p.venta.estado !== "anulada").map((p) => ({ numero: p.venta!.numero, tipo: p.venta!.tipo_comprobante, monto: p.venta!.saldo_pendiente }));
     const deudasPOS = ventasPOS.filter((v) => v.saldo_pendiente > 0 && v.estado !== "anulada").map((v) => ({ numero: v.numero, tipo: v.tipo_comprobante, monto: v.saldo_pendiente }));
     const deudas = [...deudasPedidos, ...deudasPOS];
-    const totalDeuda = deudas.reduce((s, d) => s + d.monto, 0);
+    // Use client's real saldo as the header total (source of truth)
+    const totalDeuda = clienteSaldo;
     if (totalDeuda <= 0) return null;
     return (
       <div className="mb-6 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-5">
