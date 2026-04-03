@@ -639,20 +639,26 @@ export default function ListadoVentasPage() {
           if (saldoErr) { errores.push(`Error actualizando saldo: ${saldoErr.message}`); }
 
           // Insert reversal CC entries with the new running saldo
-          let saldoRunning = nuevoSaldo ?? 0;
-          for (let i = ccRows.length - 1; i >= 0; i--) {
-            const cc = ccRows[i];
-            await supabase.from("cuenta_corriente").insert({
-              cliente_id: v.cliente_id,
-              fecha: hoy,
-              comprobante: `Anulación Venta #${v.numero}`,
-              descripcion: `Anulación de venta${motivoTexto}`,
-              debe: (cc as any).haber,
-              haber: (cc as any).debe,
-              saldo: saldoRunning,
-              forma_pago: "Anulación",
-              venta_id: v.id,
-            });
+          if (!saldoErr && nuevoSaldo != null) {
+            let saldoRunning = nuevoSaldo;
+            for (let i = ccRows.length - 1; i >= 0; i--) {
+              const cc = ccRows[i];
+              const reversalDebe = (cc as any).haber;
+              const reversalHaber = (cc as any).debe;
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: v.cliente_id,
+                fecha: hoy,
+                comprobante: `Anulación Venta #${v.numero}`,
+                descripcion: `Anulación de venta${motivoTexto}`,
+                debe: reversalDebe,
+                haber: reversalHaber,
+                saldo: saldoRunning,
+                forma_pago: "Anulación",
+                venta_id: v.id,
+              });
+              // Update running saldo for next entry
+              saldoRunning = saldoRunning + reversalDebe - reversalHaber;
+            }
           }
         }
       }

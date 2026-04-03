@@ -61,7 +61,11 @@ class VentaService extends BaseService<Venta> {
     const ventaData = data as Venta;
     const ventaItems = items.map((i) => ({ ...i, venta_id: ventaData.id }));
     const { error: itemsError } = await supabase.from("venta_items").insert(ventaItems);
-    if (itemsError) throw new Error(itemsError.message);
+    if (itemsError) {
+      // Rollback: delete orphaned venta
+      await supabase.from(this.table).delete().eq("id", ventaData.id);
+      throw new Error(itemsError.message);
+    }
 
     return ventaData;
   }

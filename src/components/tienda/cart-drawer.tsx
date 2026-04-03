@@ -32,6 +32,8 @@ interface CartContextType {
   clearCart: () => void;
   itemCount: number;
   subtotal: number;
+  minimoRetiro: number;
+  minimoEnvio: number;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -46,6 +48,8 @@ export function useCart() {
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [minimoRetiro, setMinimoRetiro] = useState(15000);
+  const [minimoEnvio, setMinimoEnvio] = useState(50000);
 
   useEffect(() => {
     function syncFromStorage() {
@@ -64,6 +68,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("cart-updated", syncFromStorage);
       window.removeEventListener("storage", syncFromStorage);
     };
+  }, []);
+
+  // Fetch minimum amounts from tienda_config
+  useEffect(() => {
+    supabase.from("tienda_config").select("monto_minimo_pedido, monto_minimo_envio, umbral_envio_gratis").single().then(({ data }) => {
+      if (data) {
+        setMinimoRetiro(data.monto_minimo_pedido ?? 15000);
+        setMinimoEnvio(data.monto_minimo_envio ?? data.umbral_envio_gratis ?? 50000);
+      }
+    });
   }, []);
 
   const persist = useCallback((next: CartItem[]) => {
@@ -135,6 +149,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         itemCount,
         subtotal,
+        minimoRetiro,
+        minimoEnvio,
       }}
     >
       {children}
@@ -144,7 +160,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 }
 
 function CartDrawer() {
-  const { items, isOpen, closeCart, clearCart, updateQuantity, removeItem, subtotal, itemCount } =
+  const { items, isOpen, closeCart, clearCart, updateQuantity, removeItem, subtotal, itemCount, minimoRetiro, minimoEnvio } =
     useCart();
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -354,8 +370,8 @@ function CartDrawer() {
             <div className="border-t border-gray-100 p-6 space-y-4">
               {/* Progress bar */}
               {(() => {
-                const MINIMO_RETIRO = 15000;
-                const MINIMO_ENVIO = 50000;
+                const MINIMO_RETIRO = minimoRetiro;
+                const MINIMO_ENVIO = minimoEnvio;
                 if (subtotal >= MINIMO_ENVIO) {
                   return (
                     <div className="bg-green-50 rounded-lg px-3 py-2">

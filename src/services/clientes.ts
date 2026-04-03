@@ -25,7 +25,8 @@ class ClienteService extends BaseService<Cliente> {
   }
 
   async updateSaldo(id: string, saldo: number): Promise<void> {
-    await supabase.from(this.table).update({ saldo }).eq("id", id);
+    const { error } = await supabase.from(this.table).update({ saldo }).eq("id", id);
+    if (error) throw new Error(`Error actualizando saldo del cliente: ${error.message}`);
   }
 
   async getConSaldo(): Promise<Cliente[]> {

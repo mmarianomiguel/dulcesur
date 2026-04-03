@@ -54,7 +54,11 @@ export default function PerfilPage() {
   useEffect(() => {
     const stored = localStorage.getItem("cliente_auth");
     if (!stored) { window.location.href = "/cuenta"; return; }
-    const { id } = JSON.parse(stored);
+    let id: string;
+    try {
+      id = JSON.parse(stored).id;
+    } catch { window.location.href = "/cuenta"; return; }
+    if (!id) { window.location.href = "/cuenta"; return; }
     setClienteAuthId(id);
 
     const fetchProfile = async () => {
@@ -103,15 +107,15 @@ export default function PerfilPage() {
     fetchProfile();
 
     // Fetch stats
-    supabase.from("clientes_auth").select("created_at").eq("id", id).single().then(({ data: authData }) => {
+    Promise.resolve(supabase.from("clientes_auth").select("created_at").eq("id", id).single()).then(({ data: authData }) => {
       if (authData?.created_at) {
         const d = new Date(authData.created_at);
         setMiembroDesde(d.toLocaleDateString("es-AR", { month: "long", year: "numeric" }));
       }
-    });
-    supabase.from("pedidos_tienda").select("id", { count: "exact", head: true }).eq("cliente_auth_id", id).then(({ count }) => {
+    }).catch(() => {});
+    Promise.resolve(supabase.from("pedidos_tienda").select("id", { count: "exact", head: true }).eq("cliente_auth_id", id)).then(({ count }) => {
       if (count != null) setTotalPedidos(count);
-    });
+    }).catch(() => {});
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -147,7 +151,7 @@ export default function PerfilPage() {
       // Get default zona and vendedor
       const [{ data: defaultZona }, { data: defaultVendor }] = await Promise.all([
         supabase.from("zonas_entrega").select("id").ilike("nombre", "%zona 1%").limit(1).maybeSingle(),
-        supabase.from("usuarios").select("id").limit(1).single(),
+        supabase.from("usuarios").select("id").limit(1).maybeSingle(),
       ]);
       const { data: newCliente } = await supabase
         .from("clientes")

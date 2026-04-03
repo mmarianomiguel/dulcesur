@@ -1,9 +1,21 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from "@supabase/ssr";
 import fs from 'fs/promises';
+import path from 'path';
 
-const ALMACEN_PATH = 'c:\\Users\\N3yck\\Desktop\\Proyectos Claude\\almacen.json';
+const ALMACEN_PATH = path.join(process.cwd(), 'almacen.json');
 
-export async function GET() {
+async function checkAdmin(request: NextRequest): Promise<boolean> {
+  const supabaseAuth = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll() { return request.cookies.getAll(); }, setAll() {} } }
+  );
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  return !!user;
+}
+
+export async function GET(request: NextRequest) {
   try {
     const data = await fs.readFile(ALMACEN_PATH, 'utf-8');
     const productos = JSON.parse(data);
@@ -17,8 +29,11 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    if (!(await checkAdmin(request))) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
     const { id, imageUrl } = await request.json();
     const data = await fs.readFile(ALMACEN_PATH, 'utf-8');
     const productos = JSON.parse(data);

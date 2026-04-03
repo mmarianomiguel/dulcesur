@@ -478,8 +478,9 @@ export default function CheckoutPage() {
     }
 
     // Build presentation cost + price maps from the single presentaciones query
-    const presCostMap: Record<string, Record<number, number>> = {};
-    for (const pr of presData || []) { if (!presCostMap[pr.producto_id]) presCostMap[pr.producto_id] = {}; if (pr.costo > 0) presCostMap[pr.producto_id][pr.cantidad] = pr.costo; }
+    // Use string keys to avoid numeric coercion issues (e.g. 0.5 for Medio Cartón)
+    const presCostMap: Record<string, Record<string, number>> = {};
+    for (const pr of presData || []) { if (!presCostMap[pr.producto_id]) presCostMap[pr.producto_id] = {}; if (pr.costo > 0) presCostMap[pr.producto_id][String(pr.cantidad)] = pr.costo; }
 
     // For combo products, compute stock from components
     const comboIds = (stockData || []).filter((p: any) => p.es_combo).map((p: any) => p.id);
@@ -678,7 +679,7 @@ export default function CheckoutPage() {
           const prodId = item.id.split("_")[0];
           // Frozen cost: presentation-specific > base cost × units (combos already have summed cost in costoMap)
           const isCombo = (stockData || []).some((p: any) => p.id === prodId && p.es_combo);
-          const presCost = presCostMap[prodId]?.[presUnitsVal];
+          const presCost = presCostMap[prodId]?.[String(presUnitsVal)];
           const costoUnit = presCost ? presCost : isCombo ? (costoMap[prodId] || 0) : (costoMap[prodId] || 0) * presUnitsVal;
           return {
             venta_id: venta.id,
