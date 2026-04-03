@@ -128,20 +128,8 @@ export function CobroVentaSection({
       else if (m.includes("cuenta")) setMetodo("Cuenta Corriente");
       else setMetodo("Efectivo");
     }
-    if (defaultCuentaAlias) {
-      const match = cuentasBancarias.find(
-        (c) => c.alias === defaultCuentaAlias || c.nombre === defaultCuentaAlias
-      );
-      if (match) setCuentaBancariaId(match.id);
-    }
-  }, [defaultMetodo, defaultEfectivo, defaultTransferencia, defaultCuentaAlias, cuentasBancarias, montoVenta]);
-
-  // Auto-select first bank account for Transferencia/Mixto
-  useEffect(() => {
-    if ((metodo === "Transferencia" || (metodo === "Mixto" && mixtoToggleTransferencia)) && !cuentaBancariaId && cuentasBancarias.length > 0) {
-      setCuentaBancariaId(cuentasBancarias[0].id);
-    }
-  }, [metodo, mixtoToggleTransferencia, cuentasBancarias]);
+    // Don't pre-select bank account — let the person collecting choose
+  }, [defaultMetodo, defaultEfectivo, defaultTransferencia, cuentasBancarias, montoVenta]);
 
   // ─── Mixto computed ───
   const mixtoActiveMethods = useMemo(() => {
