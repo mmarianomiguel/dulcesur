@@ -359,20 +359,22 @@ export default function CheckoutPage() {
                   ventaDeudas[cc.venta_id] = (ventaDeudas[cc.venta_id] || 0) + (cc.debe || 0) - (cc.haber || 0);
                 }
               }
-              const deudas = Object.entries(ventaDeudas)
-                .filter(([, m]) => m > 0)
-                .map(([, m]) => ({ numero: "", monto: m }));
-              // Get venta numbers
+              // Cap per-venta debts by client's real saldo (newest first — old debts are paid)
               const ventaIdsWithDebt = Object.entries(ventaDeudas).filter(([, m]) => m > 0).map(([id]) => id);
               if (ventaIdsWithDebt.length > 0) {
-                const { data: ventas } = await supabase.from("ventas").select("id, numero, tipo_comprobante").in("id", ventaIdsWithDebt);
-                const detalles = (ventas || []).map((v: any) => ({
-                  numero: `${v.tipo_comprobante} ${v.numero}`,
-                  monto: ventaDeudas[v.id] || 0,
-                }));
+                const { data: ventas } = await supabase.from("ventas").select("id, numero, tipo_comprobante, created_at").in("id", ventaIdsWithDebt);
+                const sorted = (ventas || []).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                let remainingSaldo = saldo;
+                const detalles: { numero: string; monto: number }[] = [];
+                for (const v of sorted) {
+                  const netDebt = Math.max(0, ventaDeudas[v.id] || 0);
+                  const assign = Math.min(remainingSaldo, netDebt);
+                  if (assign > 0) {
+                    detalles.push({ numero: `${v.tipo_comprobante} ${v.numero}`, monto: assign });
+                    remainingSaldo = Math.round((remainingSaldo - assign) * 100) / 100;
+                  }
+                }
                 setDeudasDetalle(detalles);
-              } else {
-                setDeudasDetalle(deudas);
               }
             }
           });
