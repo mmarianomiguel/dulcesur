@@ -90,21 +90,23 @@ const STEPS = [
 
 const QUICK_PERCENTS = [5, 10, 15, 20, 25, 30, 50];
 
-function getEstado(d: Descuento): "activo" | "vencido" | "inactivo" {
+function getEstado(d: Descuento): "activo" | "programado" | "vencido" | "inactivo" {
   if (!d.activo) return "inactivo";
   if (d.fecha_fin) {
     const fin = new Date(d.fecha_fin + "T23:59:59");
     if (fin < new Date()) return "vencido";
   }
-  const inicio = new Date(d.fecha_inicio);
-  if (inicio > new Date()) return "activo"; // futuro pero activo
+  const inicio = new Date(d.fecha_inicio + "T00:00:00");
+  if (inicio > new Date()) return "programado";
   return "activo";
 }
 
-function estadoBadge(estado: "activo" | "vencido" | "inactivo") {
+function estadoBadge(estado: "activo" | "programado" | "vencido" | "inactivo") {
   switch (estado) {
     case "activo":
       return <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Activo</Badge>;
+    case "programado":
+      return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Programado</Badge>;
     case "vencido":
       return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Vencido</Badge>;
     case "inactivo":
@@ -285,6 +287,7 @@ export default function DescuentosPage() {
       }
       setSaving(false);
       setDialogOpen(false);
+      resetWizard();
       fetchDescuentos();
     } catch (err: any) {
       const msg = err.message || "Error al guardar el descuento";

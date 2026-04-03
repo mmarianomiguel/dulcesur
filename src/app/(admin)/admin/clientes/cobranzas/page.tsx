@@ -48,7 +48,6 @@ interface CuentaMovimiento {
 
 export default function CobranzasPage() {
   const [clients, setClients] = useState<ClienteDeuda[]>([]);
-  const [allClients, setAllClients] = useState<ClienteDeuda[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -74,13 +73,6 @@ export default function CobranzasPage() {
       .gt("saldo", 0)
       .order("saldo", { ascending: false });
     setClients(data || []);
-
-    const { data: all } = await supabase
-      .from("clientes")
-      .select("id, nombre, cuit, saldo")
-      .eq("activo", true)
-      .order("nombre");
-    setAllClients(all || []);
     setLoading(false);
   }, []);
 

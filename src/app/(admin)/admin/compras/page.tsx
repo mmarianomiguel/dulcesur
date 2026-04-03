@@ -904,7 +904,10 @@ export default function ComprasPage() {
                 const newPresCosto = pres.costo > 0 ? Math.round(item.costo_unitario * pres.cantidad) : 0;
                 // FIX 6: Error handling for presentation updates
                 const { error: presErr } = await supabase.from("presentaciones").update({ precio: newPresPrecio, costo: newPresCosto }).eq("id", pres.id);
-                if (presErr) console.error("Error updating presentation:", pres.id, presErr);
+                if (presErr) {
+                  console.error("Error updating presentation:", pres.id, presErr);
+                  showAdminToast(`Error actualizando presentación de ${item.nombre}: ${presErr.message}`, "error");
+                }
               }
             }
             preciosActualizados.push({

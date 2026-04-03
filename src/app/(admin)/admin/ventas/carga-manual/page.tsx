@@ -392,7 +392,7 @@ export default function CargaManualPage() {
             // Get unidades_por_presentacion for the item's unit
             let unitsMultiplier = 1;
             if (item.unit && item.unit !== "Unidad") {
-              const { data: pres } = await supabase.from("presentaciones").select("cantidad").eq("producto_id", item.producto_id).eq("nombre", item.unit).limit(1).single();
+              const { data: pres } = await supabase.from("presentaciones").select("cantidad").eq("producto_id", item.producto_id).eq("nombre", item.unit).limit(1).maybeSingle();
               if (pres?.cantidad) {
                 unitsMultiplier = pres.cantidad;
               } else {
