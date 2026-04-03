@@ -118,7 +118,7 @@ export default function PedidosPage() {
       // Fetch pedidos tienda
       const { data } = await supabase
         .from("pedidos_tienda")
-        .select("id, numero, created_at, estado, total, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, unidades_por_presentacion, producto_id)")
+        .select("id, numero, created_at, estado, total, metodo_pago, monto_efectivo, monto_transferencia, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, unidades_por_presentacion, producto_id)")
         .eq("cliente_auth_id", id)
         .order("created_at", { ascending: false });
 
@@ -363,12 +363,47 @@ export default function PedidosPage() {
               es_combo: !!(item.producto_id && comboMap[item.producto_id]),
               combo_items: item.producto_id ? comboMap[item.producto_id] || undefined : undefined,
             }));
+        // If venta has no tracked payments yet, use pedidos_tienda payment split
+        let ventaWithPagos = venta;
+        if (ventaWithPagos && ventaWithPagos.pagos.length === 0) {
+          const ptPagos: PagoDetalle[] = [];
+          const mp = (p.metodo_pago || "").toLowerCase();
+          if (mp === "mixto") {
+            if (p.monto_efectivo > 0) ptPagos.push({ metodo_pago: "Efectivo (a cobrar)", monto: p.monto_efectivo });
+            if (p.monto_transferencia > 0) ptPagos.push({ metodo_pago: "Transferencia (a cobrar)", monto: p.monto_transferencia });
+          } else if (mp === "transferencia") {
+            ptPagos.push({ metodo_pago: "Transferencia (a cobrar)", monto: p.total });
+          } else if (mp === "efectivo") {
+            ptPagos.push({ metodo_pago: "Efectivo (a cobrar)", monto: p.total });
+          }
+          if (ptPagos.length > 0) ventaWithPagos = { ...ventaWithPagos, pagos: ptPagos };
+        } else if (!ventaWithPagos) {
+          // No linked venta at all — build pagos from pedido data
+          const ptPagos: PagoDetalle[] = [];
+          const mp = (p.metodo_pago || "").toLowerCase();
+          if (mp === "mixto") {
+            if (p.monto_efectivo > 0) ptPagos.push({ metodo_pago: "Efectivo (a cobrar)", monto: p.monto_efectivo });
+            if (p.monto_transferencia > 0) ptPagos.push({ metodo_pago: "Transferencia (a cobrar)", monto: p.monto_transferencia });
+          } else if (mp === "transferencia") {
+            ptPagos.push({ metodo_pago: "Transferencia (a cobrar)", monto: p.total });
+          } else if (mp === "efectivo") {
+            ptPagos.push({ metodo_pago: "Efectivo (a cobrar)", monto: p.total });
+          }
+          // Create a minimal venta-like record for display
+          if (ptPagos.length > 0) {
+            ventaWithPagos = {
+              id: "", numero: p.numero, tipo_comprobante: "Pedido Web", fecha: "", created_at: p.created_at,
+              forma_pago: p.metodo_pago || "", total: p.total, origen: "tienda",
+              entregado: false, items: [], notas_credito: [], pagos: ptPagos, saldo_pendiente: p.total,
+            };
+          }
+        }
         return {
           ...p,
-          total: venta?.total ?? p.total,
-          estado: deriveEstado(p.estado, venta),
+          total: ventaWithPagos?.total ?? p.total,
+          estado: deriveEstado(p.estado, ventaWithPagos),
           items: sourceItems,
-          venta,
+          venta: ventaWithPagos,
         };
       });
 
