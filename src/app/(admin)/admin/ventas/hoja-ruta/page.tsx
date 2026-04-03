@@ -500,7 +500,7 @@ export default function HojaDeRutaPage() {
 
   const [payGroupVentas, setPayGroupVentas] = useState<VentaRow[]>([]);
 
-  const openPayDialog = (v: VentaRow, groupVentas?: VentaRow[]) => {
+  const openPayDialog = async (v: VentaRow, groupVentas?: VentaRow[]) => {
     const allVentas = groupVentas || [v];
     setPayGroupVentas(allVentas);
     const totalDebe = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
@@ -508,8 +508,22 @@ export default function HojaDeRutaPage() {
     const metodoOriginal = v.forma_pago === "Transferencia" ? "Transferencia" : v.forma_pago === "Mixto" ? "Mixto" : "Efectivo";
     setPayMetodo(metodoOriginal);
     setPayMonto(totalDebe);
-    setPayEfectivo(metodoOriginal === "Mixto" ? Math.floor(totalDebe / 2) : totalDebe);
-    setPayTransferencia(metodoOriginal === "Mixto" ? totalDebe - Math.floor(totalDebe / 2) : 0);
+
+    // Pre-fill amounts from pedidos_tienda if it's a Mixto online order
+    if (metodoOriginal === "Mixto" && v.numero) {
+      const { data: pt } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia").eq("numero", v.numero).maybeSingle();
+      if (pt && (pt.monto_efectivo > 0 || pt.monto_transferencia > 0)) {
+        setPayEfectivo(pt.monto_efectivo || 0);
+        setPayTransferencia(pt.monto_transferencia || 0);
+      } else {
+        setPayEfectivo(Math.floor(totalDebe / 2));
+        setPayTransferencia(totalDebe - Math.floor(totalDebe / 2));
+      }
+    } else {
+      setPayEfectivo(metodoOriginal === "Mixto" ? Math.floor(totalDebe / 2) : totalDebe);
+      setPayTransferencia(metodoOriginal === "Mixto" ? totalDebe - Math.floor(totalDebe / 2) : 0);
+    }
+
     setPayCuentaBancariaId("");
     setPayDialogOpen(true);
   };
@@ -522,12 +536,8 @@ export default function HojaDeRutaPage() {
     let totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMetodo === "Cuenta Corriente" ? 0 : payMonto;
     if (totalPagando <= 0 && payMetodo !== "Cuenta Corriente") return;
 
-    // Transfer surcharge
-    let surchargeAmount = 0;
-    if (porcentajeTransferencia > 0) {
-      const montoTransf = payMetodo === "Transferencia" ? payMonto : payMetodo === "Mixto" ? payTransferencia : 0;
-      surchargeAmount = Math.round(montoTransf * (porcentajeTransferencia / 100));
-    }
+    // Transfer surcharge — calculated per-venta in the loop below, not globally
+    const hasSurcharge = porcentajeTransferencia > 0 && (payMetodo === "Transferencia" || payMetodo === "Mixto");
 
     setPaySaving(true);
     const hoy = getArgentinaToday();
@@ -565,7 +575,7 @@ export default function HojaDeRutaPage() {
           });
         }
         if (trPart > 0) {
-          const trSurcharge = surchargeAmount > 0 ? Math.round(trPart * (porcentajeTransferencia / 100)) : 0;
+          const trSurcharge = hasSurcharge ? Math.round(trPart * (porcentajeTransferencia / 100)) : 0;
           await supabase.from("caja_movimientos").insert({
             fecha: hoy, hora, tipo: "ingreso",
             descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
@@ -575,7 +585,7 @@ export default function HojaDeRutaPage() {
           });
         }
       } else if (payMetodo === "Transferencia") {
-        const trSurcharge = surchargeAmount > 0 ? Math.round(paid * (porcentajeTransferencia / 100)) : 0;
+        const trSurcharge = hasSurcharge ? Math.round(paid * (porcentajeTransferencia / 100)) : 0;
         await supabase.from("caja_movimientos").insert({
           fecha: hoy, hora, tipo: "ingreso",
           descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,

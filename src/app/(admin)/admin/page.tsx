@@ -679,7 +679,14 @@ export default function DashboardPage() {
       return;
     }
     if (pendiente > 0) {
-      setDeliveryConfirm({ open: true, venta, pendiente, type: "unpaid" });
+      // Pre-fill Mixto amounts from pedidos_tienda if available
+      let initMixtoEf: number | undefined;
+      let initMixtoTr: number | undefined;
+      if (venta.forma_pago === "Mixto" && venta.numero) {
+        const { data: pt } = await supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia").eq("numero", venta.numero).maybeSingle();
+        if (pt) { initMixtoEf = pt.monto_efectivo || undefined; initMixtoTr = pt.monto_transferencia || undefined; }
+      }
+      setDeliveryConfirm({ open: true, venta, pendiente, type: "unpaid", cobroMetodo: venta.forma_pago || undefined, cobroMixtoEf: initMixtoEf, cobroMixtoTr: initMixtoTr });
       return;
     }
     setDeliveryConfirm({ open: true, venta, pendiente: 0, type: "paid" });
