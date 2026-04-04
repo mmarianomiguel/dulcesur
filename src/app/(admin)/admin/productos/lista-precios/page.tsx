@@ -1431,41 +1431,38 @@ export default function ListaPreciosPage() {
           pdf.setLineDashPattern([], 0);
 
           // ── Fixed zones ──
-          const headerH = 6;
-          const footerH = 4.5;
+          const headerH = 5;
+          const footerH = 3.5;
           const headerBottom = y + headerH;
           const footerTop = y + cellH - footerH;
-          const contentTop = headerBottom;
-          const contentH = footerTop - contentTop;
+          const contentTop = headerBottom + 0.5;
+          const contentH = footerTop - contentTop - 0.5;
 
-          // ── HEADER: logo left, web right ──
+          // ── HEADER: logo left, web right (compact strip) ──
           if (logoBase64) {
-            const lH = headerH - 0.5;
+            const lH = 6;
             const lW = lH * logoAspectRatio;
             try { pdf.addImage(logoBase64, "PNG", x + pad, y + 0.3, lW, lH); } catch {}
           }
           if (config.webUrl) {
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(8);
-            pdf.setTextColor(80);
-            pdf.text(config.webUrl, x + cellW - pad, y + 3.8, { align: "right" });
+            pdf.setFontSize(7);
+            pdf.setTextColor(100);
+            pdf.text(config.webUrl, x + cellW - pad, y + 3.5, { align: "right" });
             pdf.setTextColor(0);
           }
-          pdf.setDrawColor(200);
-          pdf.setLineWidth(0.2);
+          pdf.setDrawColor(210);
+          pdf.setLineWidth(0.15);
           pdf.line(x + 1, headerBottom, x + cellW - 1, headerBottom);
 
-          // ── FOOTER: "Precio modificado: DD/MM/YYYY" ──
-          pdf.setDrawColor(200);
-          pdf.setLineWidth(0.15);
-          pdf.line(x + 1, footerTop, x + cellW - 1, footerTop);
+          // ── FOOTER: "Ult. modificacion: DD/MM/YYYY" right-aligned, small ──
           const prodDate = product.fechaActualizacion
             ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
             : today;
           pdf.setFont("helvetica", "italic");
-          pdf.setFontSize(7);
-          pdf.setTextColor(110);
-          pdf.text(`Ult. modificacion: ${prodDate}`, centerX, footerTop + 3, { align: "center" });
+          pdf.setFontSize(5.5);
+          pdf.setTextColor(140);
+          pdf.text(`Ult. modificacion: ${prodDate}`, x + cellW - pad, footerTop + 2.5, { align: "right" });
           pdf.setTextColor(0);
 
           // ── Measure name (allow up to 3 lines for long names) ──
@@ -1479,7 +1476,6 @@ export default function ListaPreciosPage() {
             pdf.setFontSize(nfs);
             nLines = pdf.splitTextToSize(product.nombre, nameMaxW);
           }
-          // If still >2 lines but fits in 2 with smaller font, prefer 2 lines
           if (nLines.length > 2 && nfs > 9) {
             let tryFs = nfs;
             while (nLines.length > 2 && tryFs > 9) {
@@ -1489,7 +1485,6 @@ export default function ListaPreciosPage() {
             }
             if (nLines.length <= 2) nfs = tryFs;
             else {
-              // Revert to 3 lines
               pdf.setFontSize(nfs);
               nLines = pdf.splitTextToSize(product.nombre, nameMaxW);
             }
@@ -1498,13 +1493,13 @@ export default function ListaPreciosPage() {
           const maxNL = Math.min(nLines.length, 3);
           const nameTextH = maxNL * nlh;
 
-          // ── Measure total content block to center vertically ──
-          const priceFontSize = 28;
+          // ── Measure total content block ──
+          const priceFontSize = hasBox ? 28 : 32;
           const priceTextH = priceFontSize * 0.35;
-          const bandH = priceTextH + 5;
-          const gap1 = 1.5;  // after name
-          const boxLineH = hasBox ? 5 : 0;
-          const gap2 = hasBox ? 1.5 : 0;  // after price band
+          const bandH = priceTextH + 6;
+          const gap1 = 2;
+          const boxLineH = hasBox ? 6 : 0;
+          const gap2 = hasBox ? 2 : 0;
           const totalBlockH = nameTextH + gap1 + bandH + gap2 + boxLineH;
 
           // Center everything in content area
@@ -1524,7 +1519,7 @@ export default function ListaPreciosPage() {
           }
           cursor += nameTextH + gap1;
 
-          // ── PRICE (gray band, text centered in band) ──
+          // ── PRICE (gray band with more breathing room) ──
           pdf.setFillColor(235, 235, 235);
           pdf.rect(x + 0.5, cursor, cellW - 1, bandH, "F");
           pdf.setFont("helvetica", "bold");
@@ -1542,7 +1537,6 @@ export default function ListaPreciosPage() {
             const boxMainText = `${presLabel}  ·  ${formatCurrency(boxPrice)}`;
             const boxUnitText = `(${formatCurrency(unitInBox)} c/u)`;
 
-            // Measure widths to place them side by side
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(11);
             const mainW = pdf.getTextWidth(boxMainText);
@@ -1552,17 +1546,15 @@ export default function ListaPreciosPage() {
             const totalW = mainW + 2 + unitW;
             const startX = centerX - totalW / 2;
 
-            // Bold part
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(11);
             pdf.setTextColor(40);
-            pdf.text(boxMainText, startX, cursor + 3.5);
+            pdf.text(boxMainText, startX, cursor + 4);
 
-            // Italic gray part
             pdf.setFont("helvetica", "italic");
             pdf.setFontSize(9);
             pdf.setTextColor(130);
-            pdf.text(boxUnitText, startX + mainW + 2, cursor + 3.5);
+            pdf.text(boxUnitText, startX + mainW + 2, cursor + 4);
             pdf.setTextColor(0);
           }
         });
