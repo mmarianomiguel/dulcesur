@@ -7,10 +7,13 @@ import { showAdminToast } from "@/components/admin-toast";
 import {
   Plus, Link2, Copy, Check, ChevronDown, ChevronUp,
   Loader2, AlertCircle, CheckCircle2, MapPin,
-  Truck, CreditCard
+  Truck, RefreshCw, Calendar, DollarSign, CheckCircle,
+  Eye, Banknote, Landmark, FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -25,6 +28,9 @@ interface VentaRow {
   fecha: string;
   cliente_id: string | null;
   metodo_entrega?: string | null;
+  estado?: string;
+  observacion?: string | null;
+  origen?: string | null;
   clientes: { nombre: string; domicilio: string | null; localidad: string | null; telefono: string | null; saldo: number; } | null;
 }
 
@@ -86,12 +92,16 @@ export default function HojaRutaPage() {
 
   // ─── Historial tab ───
   const [historialVentas, setHistorialVentas] = useState<VentaRow[]>([]);
-  const [historialFechaDesde, setHistorialFechaDesde] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
-  const [historialFechaHasta, setHistorialFechaHasta] = useState(() => new Date().toISOString().split("T")[0]);
+  const [historialFechaDesde, setHistorialFechaDesde] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }));
+  const [historialFechaHasta, setHistorialFechaHasta] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }));
   const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [historialPagos, setHistorialPagos] = useState<Record<string, { monto: number; metodo: string; cuenta_bancaria?: string; fecha_hora?: string }[]>>({});
+  const [historialSearch, setHistorialSearch] = useState("");
+  const [historialFilterEntrega, setHistorialFilterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
+  const [detailVenta, setDetailVenta] = useState<VentaRow | null>(null);
 
   function argToday() {
     return new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -261,19 +271,126 @@ export default function HojaRutaPage() {
   // ─── Load historial ───
   const fetchHistorial = useCallback(async () => {
     setLoadingHistorial(true);
+    const nextDay = new Date(historialFechaHasta + "T12:00:00");
+    nextDay.setDate(nextDay.getDate() + 1);
+    const endDate = nextDay.toISOString().split("T")[0];
+
     const { data } = await supabase
       .from("ventas")
-      .select("id, numero, tipo_comprobante, total, forma_pago, monto_pagado, fecha, cliente_id, clientes ( nombre, saldo )")
+      .select("id, numero, tipo_comprobante, fecha, forma_pago, total, estado, cliente_id, metodo_entrega, clientes ( nombre, domicilio, localidad, telefono, saldo )")
       .eq("entregado", true)
       .gte("fecha", historialFechaDesde)
-      .lte("fecha", historialFechaHasta)
+      .lt("fecha", endDate)
+      .neq("estado", "anulada")
       .not("tipo_comprobante", "ilike", "Nota de Crédito%")
       .order("fecha", { ascending: false });
-    setHistorialVentas((data || []) as unknown as VentaRow[]);
+
+    const rows = (data || []) as unknown as VentaRow[];
+    setHistorialVentas(rows);
+
+    if (rows.length > 0) {
+      const ventaIds = rows.map(v => v.id);
+      const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
+        supabase.from("caja_movimientos").select("referencia_id, monto, metodo_pago, cuenta_bancaria, created_at").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", ventaIds),
+        supabase.from("ventas").select("remito_origen_id, total").in("remito_origen_id", ventaIds).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+        supabase.from("ventas").select("id, remito_origen_id").in("remito_origen_id", ventaIds).ilike("tipo_comprobante", "Factura%"),
+      ]);
+
+      const facturaToVenta: Record<string, string> = {};
+      (facturas || []).forEach((f: any) => { if (f.remito_origen_id) facturaToVenta[f.id] = f.remito_origen_id; });
+      const facturaIds = Object.keys(facturaToVenta);
+      let ncViaFactura: any[] = [];
+      if (facturaIds.length > 0) {
+        const { data: ncF } = await supabase.from("ventas").select("remito_origen_id, total").in("remito_origen_id", facturaIds).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada");
+        ncViaFactura = ncF || [];
+      }
+
+      const pagosMap: Record<string, { monto: number; metodo: string; cuenta_bancaria?: string; fecha_hora?: string }[]> = {};
+      (movs || []).forEach((m: any) => {
+        if (!pagosMap[m.referencia_id]) pagosMap[m.referencia_id] = [];
+        pagosMap[m.referencia_id].push({ monto: m.monto, metodo: m.metodo_pago, cuenta_bancaria: m.cuenta_bancaria || undefined, fecha_hora: m.created_at || undefined });
+      });
+      (ncDirect || []).forEach((nc: any) => {
+        if (nc.remito_origen_id && nc.total > 0) {
+          if (!pagosMap[nc.remito_origen_id]) pagosMap[nc.remito_origen_id] = [];
+          pagosMap[nc.remito_origen_id].push({ monto: nc.total, metodo: "Nota de Crédito" });
+        }
+      });
+      ncViaFactura.forEach((nc: any) => {
+        const originalVentaId = facturaToVenta[nc.remito_origen_id];
+        if (originalVentaId && nc.total > 0) {
+          if (!pagosMap[originalVentaId]) pagosMap[originalVentaId] = [];
+          pagosMap[originalVentaId].push({ monto: nc.total, metodo: "Nota de Crédito" });
+        }
+      });
+      setHistorialPagos(pagosMap);
+    } else {
+      setHistorialPagos({});
+    }
     setLoadingHistorial(false);
   }, [historialFechaDesde, historialFechaHasta]);
 
   useEffect(() => { if (tab === "historial") fetchHistorial(); }, [tab, fetchHistorial]);
+
+  // ─── Historial computed values ───
+  const filteredHistorial = historialVentas.filter(v => {
+    if (historialSearch) {
+      const s = historialSearch.toLowerCase();
+      if (!v.numero.toLowerCase().includes(s) && !(v.clientes?.nombre || "").toLowerCase().includes(s)) return false;
+    }
+    if (historialFilterEntrega === "envio" && v.metodo_entrega !== "envio") return false;
+    if (historialFilterEntrega === "retiro" && v.metodo_entrega === "envio") return false;
+    return true;
+  });
+  const historialTotalVentas = filteredHistorial.reduce((s, v) => s + v.total, 0);
+  const historialTotalCobrado = filteredHistorial.reduce((s, v) => {
+    return s + (historialPagos[v.id] || []).filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+  }, 0);
+  const historialTotalNC = filteredHistorial.reduce((s, v) => {
+    return s + (historialPagos[v.id] || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+  }, 0);
+  const historialBreakdown = (() => {
+    let efectivo = 0, cuentaCorriente = 0;
+    const transferencias: Record<string, number> = {};
+    const deudores: { nombre: string; monto: number }[] = [];
+    for (const v of filteredHistorial) {
+      const pagos = historialPagos[v.id] || [];
+      const cobradoSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+      const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+      const debe = (v.total - ncMonto) - cobradoSinNC;
+      if (debe > 0) deudores.push({ nombre: v.clientes?.nombre || "Sin cliente", monto: debe });
+      for (const p of pagos) {
+        if (p.metodo.includes("Nota de Cr")) continue;
+        if (p.metodo === "Efectivo") efectivo += p.monto;
+        else if (p.metodo === "Cuenta Corriente") cuentaCorriente += p.monto;
+        else if (p.metodo === "Transferencia") {
+          const key = p.cuenta_bancaria || "Sin cuenta";
+          transferencias[key] = (transferencias[key] || 0) + p.monto;
+        } else { efectivo += p.monto; }
+      }
+    }
+    return { efectivo, totalTransferencias: Object.values(transferencias).reduce((s, v) => s + v, 0), transferencias, cuentaCorriente, deudores };
+  })();
+  const historialByDay = (() => {
+    const map: Record<string, VentaRow[]> = {};
+    for (const v of filteredHistorial) {
+      if (!map[v.fecha]) map[v.fecha] = [];
+      map[v.fecha].push(v);
+    }
+    return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
+  })();
+
+  const handleViewDetail = async (venta: VentaRow) => {
+    setDetailVenta(venta);
+    setDetailPagos([]);
+    setDetailDialogOpen(true);
+    const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, cuenta_bancaria").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+    if (movs && movs.length > 0) {
+      setDetailPagos(movs.map((m: any) => ({ metodo: m.metodo_pago, monto: m.monto, cuenta_bancaria: m.cuenta_bancaria })));
+    } else if (venta.forma_pago) {
+      setDetailPagos([{ metodo: venta.forma_pago, monto: venta.total }]);
+    }
+  };
 
   // ─── Render ───
   return (
@@ -476,65 +593,292 @@ export default function HojaRutaPage() {
 
       {/* ─── TAB: Historial ─── */}
       {tab === "historial" && (
-        <div>
-          <div className="flex gap-2 mb-4">
-            <Input type="date" value={historialFechaDesde} onChange={e => setHistorialFechaDesde(e.target.value)} className="h-9 text-sm" />
-            <Input type="date" value={historialFechaHasta} onChange={e => setHistorialFechaHasta(e.target.value)} className="h-9 text-sm" />
-            <Button variant="outline" size="sm" onClick={fetchHistorial}>Buscar</Button>
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-500">Desde</span>
+              <Input type="date" value={historialFechaDesde} onChange={e => setHistorialFechaDesde(e.target.value)} className="w-40 h-9" />
+              <span className="text-sm text-gray-500">Hasta</span>
+              <Input type="date" value={historialFechaHasta} onChange={e => setHistorialFechaHasta(e.target.value)} className="w-40 h-9" />
+            </div>
+            <input type="text" placeholder="Buscar por N° o cliente..." value={historialSearch} onChange={e => setHistorialSearch(e.target.value)}
+              className="flex-1 max-w-xs h-9 px-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+            <div className="flex items-center rounded-lg border overflow-hidden">
+              {([["todos", "Todos"], ["envio", "Envío"], ["retiro", "Retiro"]] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setHistorialFilterEntrega(val)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${historialFilterEntrega === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Stats cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary/20 ${expandedCard === "entregas" ? "ring-2 ring-primary/40" : ""}`} onClick={() => setExpandedCard(expandedCard === "entregas" ? null : "entregas")}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><CheckCircle className="w-4 h-4" />Entregas</div>
+                <div className="text-2xl font-bold">{filteredHistorial.length}</div>
+              </CardContent>
+            </Card>
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary/20 ${expandedCard === "total" ? "ring-2 ring-primary/40" : ""}`} onClick={() => setExpandedCard(expandedCard === "total" ? null : "total")}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1"><DollarSign className="w-4 h-4" />Total</div>
+                <div className="text-2xl font-bold">{formatCurrency(historialTotalVentas - historialTotalNC)}</div>
+                {historialTotalNC > 0 && <p className="text-xs text-amber-600 mt-1">NC: -{formatCurrency(historialTotalNC)}</p>}
+              </CardContent>
+            </Card>
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-green-200 ${expandedCard === "efectivo" ? "ring-2 ring-green-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "efectivo" ? null : "efectivo")}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-green-600 text-xs mb-1"><Banknote className="w-4 h-4" />Efectivo</div>
+                <div className="text-2xl font-bold text-green-600">{formatCurrency(historialBreakdown.efectivo)}</div>
+              </CardContent>
+            </Card>
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-blue-200 ${expandedCard === "transferencias" ? "ring-2 ring-blue-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "transferencias" ? null : "transferencias")}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-blue-600 text-xs mb-1"><Landmark className="w-4 h-4" />Transferencias</div>
+                <div className="text-2xl font-bold text-blue-600">{formatCurrency(historialBreakdown.totalTransferencias)}</div>
+              </CardContent>
+            </Card>
+            {historialBreakdown.cuentaCorriente > 0 && (
+              <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-orange-200 ${expandedCard === "cc" ? "ring-2 ring-orange-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "cc" ? null : "cc")}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-orange-600 text-xs mb-1"><FileText className="w-4 h-4" />Cta. Cte.</div>
+                  <div className="text-2xl font-bold text-orange-600">{formatCurrency(historialBreakdown.cuentaCorriente)}</div>
+                </CardContent>
+              </Card>
+            )}
+            {historialBreakdown.deudores.length > 0 && (
+              <Card className={`cursor-pointer transition-all border-orange-200 bg-orange-50/50 hover:ring-2 hover:ring-orange-300 ${expandedCard === "deudores" ? "ring-2 ring-orange-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "deudores" ? null : "deudores")}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-orange-700 text-xs mb-1"><AlertCircle className="w-4 h-4" />Deudores</div>
+                  <div className="text-2xl font-bold text-orange-700">{historialBreakdown.deudores.length}</div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Expanded card detail */}
+          {expandedCard && (
+            <Card className="border-primary/20 bg-muted/30">
+              <CardContent className="p-4 text-sm">
+                {expandedCard === "total" && (
+                  <div className="space-y-1">
+                    <p className="font-semibold mb-2">Desglose del total</p>
+                    <p>Ventas brutas: <span className="font-bold">{formatCurrency(historialTotalVentas)}</span></p>
+                    {historialTotalNC > 0 && <p className="text-amber-600">Notas de crédito: <span className="font-bold">-{formatCurrency(historialTotalNC)}</span></p>}
+                    <p className="border-t pt-1 mt-1">Neto: <span className="font-bold">{formatCurrency(historialTotalVentas - historialTotalNC)}</span></p>
+                    <p className="text-green-600">Cobrado: <span className="font-bold">{formatCurrency(historialTotalCobrado)}</span></p>
+                    {historialTotalVentas - historialTotalNC - historialTotalCobrado > 0 && <p className="text-orange-600">Pendiente: <span className="font-bold">{formatCurrency(historialTotalVentas - historialTotalNC - historialTotalCobrado)}</span></p>}
+                  </div>
+                )}
+                {expandedCard === "transferencias" && (
+                  <div className="space-y-1">
+                    <p className="font-semibold mb-2">Transferencias por cuenta</p>
+                    {Object.entries(historialBreakdown.transferencias).length > 0 ? Object.entries(historialBreakdown.transferencias).map(([cuenta, monto]) => (
+                      <div key={cuenta} className="flex justify-between py-1 border-b last:border-0">
+                        <span className="text-blue-700">{cuenta}</span>
+                        <span className="font-bold text-blue-700">{formatCurrency(monto)}</span>
+                      </div>
+                    )) : <p className="text-muted-foreground">Sin transferencias</p>}
+                    <div className="flex justify-between pt-2 border-t mt-2">
+                      <span className="font-semibold">Total</span>
+                      <span className="font-bold text-blue-700">{formatCurrency(historialBreakdown.totalTransferencias)}</span>
+                    </div>
+                  </div>
+                )}
+                {expandedCard === "cc" && (
+                  <div className="space-y-1">
+                    <p className="font-semibold mb-2">Cargado a cuenta corriente</p>
+                    {filteredHistorial.filter(v => (historialPagos[v.id] || []).some(p => p.metodo === "Cuenta Corriente")).map(v => {
+                      const ccMonto = (historialPagos[v.id] || []).filter(p => p.metodo === "Cuenta Corriente").reduce((s, p) => s + p.monto, 0);
+                      return (
+                        <div key={v.id} className="flex justify-between py-1 border-b last:border-0">
+                          <span>{v.clientes?.nombre} <span className="text-muted-foreground text-xs">#{v.numero}</span></span>
+                          <span className="font-bold text-orange-600">{formatCurrency(ccMonto)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {expandedCard === "deudores" && (
+                  <div className="space-y-1">
+                    <p className="font-semibold mb-2">Clientes con saldo pendiente</p>
+                    {historialBreakdown.deudores.map((d, i) => (
+                      <div key={i} className="flex justify-between py-1 border-b last:border-0">
+                        <span className="text-orange-700">{d.nombre}</span>
+                        <span className="font-bold text-orange-700">{formatCurrency(d.monto)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-2 border-t mt-2 font-semibold">
+                      <span>Total deuda</span>
+                      <span className="text-orange-700">{formatCurrency(historialBreakdown.deudores.reduce((s, d) => s + d.monto, 0))}</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Historial list */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Historial de Entregas</h2>
+            <Button variant="outline" size="sm" onClick={fetchHistorial} disabled={loadingHistorial}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loadingHistorial ? "animate-spin" : ""}`} />
+              Actualizar
+            </Button>
+          </div>
+
           {loadingHistorial ? (
             <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+          ) : filteredHistorial.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <CheckCircle2 className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p>No hay entregas en este período</p>
+            </div>
           ) : (
-            <div className="space-y-3">
-              {historialVentas.length > 0 && (() => {
-                const totalCobrado = historialVentas.reduce((s, v) => s + (v.monto_pagado || 0), 0);
-                const enCC = historialVentas.filter(v => v.forma_pago === "Cuenta Corriente").reduce((s, v) => s + v.total, 0);
-                const conSaldoPendiente = historialVentas.filter(v => ((v as any).clientes?.saldo || 0) > 0);
+            <div className="space-y-4">
+              {historialByDay.map(([day, dayVentas]) => {
+                const dayTotal = dayVentas.reduce((s, v) => {
+                  const ncMonto = (historialPagos[v.id] || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                  return s + v.total - ncMonto;
+                }, 0);
+                const dayCobrado = dayVentas.reduce((s, v) => s + (historialPagos[v.id] || []).filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0), 0);
+                const dayPendiente = dayTotal - dayCobrado;
+                const dayLabel = new Date(day + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
+                const clientesDeudores = dayVentas.filter(v => {
+                  const pagos = historialPagos[v.id] || [];
+                  const cobrado = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                  const nc = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                  return (v.total - nc) - cobrado > 0;
+                });
+
                 return (
-                  <div className="bg-gray-50 border rounded-xl p-4 mb-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-                    <div><p className="text-xs text-gray-500">Entregas</p><p className="font-bold text-lg">{historialVentas.length}</p></div>
-                    <div><p className="text-xs text-gray-500">Total cobrado</p><p className="font-bold text-lg text-emerald-700">{formatCurrency(totalCobrado)}</p></div>
-                    <div><p className="text-xs text-gray-500">En cta. cte.</p><p className="font-bold text-lg text-blue-700">{formatCurrency(enCC)}</p></div>
-                    <div><p className="text-xs text-gray-500">Con saldo pendiente</p><p className="font-bold text-lg text-orange-600">{conSaldoPendiente.length}</p></div>
-                  </div>
-                );
-              })()}
-              {historialVentas.map(v => (
-                <div key={v.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-sm text-gray-900">{(v as any).clientes?.nombre}</p>
-                      <p className="text-xs text-gray-400">{v.tipo_comprobante} #{v.numero} — {new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR")}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                        <CreditCard className="w-3 h-3" /> {v.forma_pago}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-bold text-gray-800">{formatCurrency(v.total)}</p>
-                      {(v.monto_pagado || 0) < v.total && (
-                        <p className="text-xs text-orange-600 font-medium">Quedó debiendo {formatCurrency(v.total - (v.monto_pagado || 0))}</p>
+                  <Card key={day}>
+                    <CardContent className="p-4">
+                      {/* Day header */}
+                      <div className="flex items-center justify-between mb-3 pb-3 border-b">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+                            <Calendar className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <p className="font-semibold capitalize">{dayLabel}</p>
+                            <p className="text-xs text-muted-foreground">{dayVentas.length} entrega{dayVentas.length !== 1 ? "s" : ""}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6 text-sm">
+                          <div className="text-right"><p className="text-xs text-muted-foreground">Total</p><p className="font-bold">{formatCurrency(dayTotal)}</p></div>
+                          <div className="text-right"><p className="text-xs text-muted-foreground">Cobrado</p><p className="font-bold text-green-600">{formatCurrency(dayCobrado)}</p></div>
+                          {dayPendiente > 0 && <div className="text-right"><p className="text-xs text-muted-foreground">Pendiente</p><p className="font-bold text-orange-600">{formatCurrency(dayPendiente)}</p></div>}
+                        </div>
+                      </div>
+
+                      {clientesDeudores.length > 0 && (
+                        <div className="mb-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-700">
+                          <span className="font-semibold">Saldo pendiente: </span>
+                          {clientesDeudores.map(v => {
+                            const pagos = historialPagos[v.id] || [];
+                            const cobrado = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                            const nc = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                            return `${v.clientes?.nombre || "Sin cliente"} (${formatCurrency((v.total - nc) - cobrado)})`;
+                          }).join(", ")}
+                        </div>
                       )}
-                    </div>
-                  </div>
-                  {(v as any).clientes?.saldo > 0 && (
-                    <div className="mt-2 flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
-                      <AlertCircle className="w-3 h-3 shrink-0" />
-                      Saldo pendiente actual: {formatCurrency((v as any).clientes.saldo)} — no abonado
-                    </div>
-                  )}
-                  {(v as any).clientes?.saldo === 0 && v.forma_pago !== "Cuenta Corriente" && (
-                    <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1">
-                      <CheckCircle2 className="w-3 h-3 shrink-0" />
-                      Sin saldo pendiente
-                    </div>
-                  )}
-                </div>
-              ))}
-              {historialVentas.length === 0 && <p className="text-center text-gray-400 py-8">Sin entregas en este período</p>}
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground text-xs">
+                              <th className="pb-2 px-2">Nro.</th>
+                              <th className="pb-2 px-2">Cliente</th>
+                              <th className="pb-2 px-2">Entrega</th>
+                              <th className="pb-2 px-2 text-right">Total</th>
+                              <th className="pb-2 px-2 text-right">Cobrado</th>
+                              <th className="pb-2 px-2">Pago</th>
+                              <th className="pb-2 px-2 text-right"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dayVentas.map(venta => {
+                              const pagos = historialPagos[venta.id] || [];
+                              const cobradoReal = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                              const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                              const totalNeto = venta.total - ncMonto;
+                              const debe = totalNeto - cobradoReal;
+                              const metodos = [...new Set(pagos.filter(p => !p.metodo.includes("Nota de Cr")).map(p => p.metodo))].join(", ") || venta.forma_pago;
+
+                              return (
+                                <tr key={venta.id} className="border-b last:border-b-0 hover:bg-muted/50 transition-colors">
+                                  <td className="py-2 px-2">
+                                    <p className="font-mono text-xs font-semibold">{venta.numero}</p>
+                                    <p className="text-xs text-muted-foreground">{venta.tipo_comprobante}</p>
+                                  </td>
+                                  <td className="py-2 px-2 font-medium">{venta.clientes?.nombre || "Sin cliente"}</td>
+                                  <td className="py-2 px-2">
+                                    <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground"}`}>
+                                      {venta.metodo_entrega === "envio" ? "Envío" : "Retiro"}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 px-2 text-right font-semibold">{formatCurrency(ncMonto > 0 ? totalNeto : venta.total)}</td>
+                                  <td className={`py-2 px-2 text-right font-medium ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
+                                    {cobradoReal > 0 ? formatCurrency(cobradoReal) : "$0"}
+                                    {ncMonto > 0 && <span className="block text-xs text-amber-600">NC -{formatCurrency(ncMonto)}</span>}
+                                    {debe > 0 && <span className="block text-xs text-orange-500">Debe {formatCurrency(debe)}</span>}
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    {pagos.filter(p => !p.metodo.includes("Nota de Cr")).map((p, pi) => (
+                                      <div key={pi} className="text-xs">
+                                        <span className="font-medium">{p.metodo}</span>{" "}
+                                        <span className="text-muted-foreground">{formatCurrency(p.monto)}</span>
+                                        {p.cuenta_bancaria && <span className="text-blue-600 ml-1">→ {p.cuenta_bancaria}</span>}
+                                      </div>
+                                    ))}
+                                    {pagos.length === 0 && <span className="text-xs text-muted-foreground">{metodos || "—"}</span>}
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewDetail(venta)}>
+                                      <Eye className="w-4 h-4 text-muted-foreground" />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
       )}
+
+      {/* Detail dialog */}
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalle — {detailVenta?.clientes?.nombre}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p className="text-muted-foreground">{detailVenta?.tipo_comprobante} #{detailVenta?.numero} — {detailVenta?.fecha}</p>
+            <p className="font-semibold">Total: {formatCurrency(detailVenta?.total || 0)}</p>
+            <div className="mt-3">
+              <p className="font-medium mb-2">Cobros registrados:</p>
+              {detailPagos.length > 0 ? detailPagos.map((p, i) => (
+                <div key={i} className="flex justify-between py-1.5 border-b last:border-0">
+                  <span>{p.metodo}{p.cuenta_bancaria ? ` → ${p.cuenta_bancaria}` : ""}</span>
+                  <span className="font-semibold">{formatCurrency(p.monto)}</span>
+                </div>
+              )) : <p className="text-muted-foreground">Sin cobros registrados</p>}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ─── DIALOG: Crear hoja de ruta ─── */}
       <Dialog open={showCrear} onOpenChange={setShowCrear}>
