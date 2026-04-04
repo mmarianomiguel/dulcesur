@@ -180,41 +180,32 @@ export default function PedidosPage() {
         }
       }
 
-      // Build saldo map: total - monto_pagado for ventas with CC debt
-      // monto_pagado includes non-CC portion (efectivo/transfer) set at creation + FIFO cobros
-      const saldoMap: Record<string, number> = {};
-      const hasCC: Record<string, boolean> = {};
-      for (const v of allVentas) {
-        const fp = (v.forma_pago || "").toLowerCase();
-        if (fp.includes("cuenta") || fp === "mixto" || fp === "pendiente") {
-          saldoMap[v.id] = Math.max(0, v.total - (v.monto_pagado || 0));
-          hasCC[v.id] = true;
-        } else {
-          saldoMap[v.id] = 0;
-        }
-      }
-
-      // Fetch CC haber entries linked to these ventas (FIFO cobros, clientes page payments)
+      // Query CC entries for these ventas to detect which ones had CC debt
+      // (forma_pago can be changed by cobrar, so we use cuenta_corriente as source of truth)
+      const ccDebeMap: Record<string, number> = {};
       let ccHabersByVenta: Record<string, { haber: number; forma_pago: string; created_at: string }[]> = {};
       if (ventaIds.length > 0) {
-        const { data: ccHabers } = await supabase
+        const { data: ccEntries } = await supabase
           .from("cuenta_corriente")
-          .select("venta_id, haber, forma_pago, created_at")
-          .in("venta_id", ventaIds)
-          .gt("haber", 0)
-          .eq("debe", 0);
-        for (const cc of ccHabers || []) {
+          .select("venta_id, debe, haber, forma_pago, created_at")
+          .in("venta_id", ventaIds);
+        for (const cc of ccEntries || []) {
           if (!cc.venta_id) continue;
-          if (!ccHabersByVenta[cc.venta_id]) ccHabersByVenta[cc.venta_id] = [];
-          ccHabersByVenta[cc.venta_id].push({
-            haber: cc.haber,
-            forma_pago: cc.forma_pago || "Pago",
-            created_at: cc.created_at,
-          });
+          if ((cc.debe || 0) > 0) {
+            ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + (cc.debe || 0);
+          }
+          if ((cc.haber || 0) > 0 && (cc.debe || 0) === 0) {
+            if (!ccHabersByVenta[cc.venta_id]) ccHabersByVenta[cc.venta_id] = [];
+            ccHabersByVenta[cc.venta_id].push({
+              haber: cc.haber,
+              forma_pago: cc.forma_pago || "Pago",
+              created_at: cc.created_at,
+            });
+          }
         }
       }
 
-      // Fetch cobro_items for payments from the cobros feature
+      // Also detect CC ventas by cobro_items (cobros registered against a venta)
       let cobroItemsByVenta: Record<string, { monto: number; forma_pago: string; fecha: string }[]> = {};
       if (ventaIds.length > 0) {
         const { data: cobroItems } = await supabase
@@ -232,8 +223,25 @@ export default function PedidosPage() {
         }
       }
 
+      // Determine which ventas had CC debt: CC entries in cuenta_corriente OR cobro_items exist
+      const hadCCDebt: Record<string, boolean> = {};
+      for (const ventaId of ventaIds) {
+        if ((ccDebeMap[ventaId] || 0) > 0 || (cobroItemsByVenta[ventaId] || []).length > 0) {
+          hadCCDebt[ventaId] = true;
+        }
+      }
+
+      // Build saldo map using total - monto_pagado for ventas that had CC debt
+      const saldoMap: Record<string, number> = {};
+      for (const v of allVentas) {
+        if (hadCCDebt[v.id]) {
+          saldoMap[v.id] = Math.max(0, v.total - (v.monto_pagado || 0));
+        } else {
+          saldoMap[v.id] = 0;
+        }
+      }
+
       // For gap payments (cobro_saldo linked to different venta), fetch ALL client CC habers
-      // sorted by date so we can match unlinked payments via FIFO
       let clientCCHabers: { haber: number; forma_pago: string; created_at: string; venta_id: string | null }[] = [];
       if (clienteId) {
         const { data: allHabers } = await supabase
@@ -243,10 +251,9 @@ export default function PedidosPage() {
           .gt("haber", 0)
           .eq("debe", 0)
           .order("created_at", { ascending: true });
-        // Keep habers that are unlinked, linked to ventas outside our list,
-        // or linked to non-CC ventas (cobro_saldo from Efectivo/Transfer sales)
+        // Keep habers not already attributed to a CC venta's ccHabersByVenta
         clientCCHabers = (allHabers || []).filter((h: any) =>
-          !h.venta_id || !ventaIds.includes(h.venta_id) || !hasCC[h.venta_id]
+          !h.venta_id || !ventaIds.includes(h.venta_id) || !hadCCDebt[h.venta_id]
         );
       }
 
@@ -258,9 +265,9 @@ export default function PedidosPage() {
         setClienteSaldo(clienteSaldoReal);
       }
 
-      // Build payment details for CC ventas
+      // Build payment details for ventas that had CC debt
       for (const ventaId of ventaIds) {
-        if (!hasCC[ventaId]) continue;
+        if (!hadCCDebt[ventaId]) continue;
         if (!pagosMap[ventaId]) pagosMap[ventaId] = [];
 
         const saldo = saldoMap[ventaId] || 0;
