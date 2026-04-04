@@ -1463,7 +1463,7 @@ export default function ListaPreciosPage() {
           pdf.setLineWidth(0.1);
           pdf.line(x + 1, footerTop, x + cellW - 1, footerTop);
           pdf.setFont("helvetica", "italic");
-          pdf.setFontSize(6);
+          pdf.setFontSize(7);
           pdf.setTextColor(130);
           pdf.text(`Ult. modificacion: ${prodDate}`, x + cellW - pad, footerTop + 2.8, { align: "right" });
           pdf.setTextColor(0);
