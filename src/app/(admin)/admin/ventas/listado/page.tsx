@@ -2510,7 +2510,7 @@ export default function ListadoVentasPage() {
                         </div>
                       )}
                       {/* Cambiar método de pago — solo si no hay cobro confirmado y la orden está activa */}
-                      {!isCancelled && !isDelivered && (poSelectedPedido.isOnline || poSelectedPedido.metodo_entrega === "envio") && detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Cr")).length === 0 && (
+                      {!isCancelled && !isDelivered && (poSelectedPedido.isOnline || poSelectedPedido.metodo_entrega === "envio") && detailPagos.filter(p => !(p.metodo || "").includes("(a cobrar)") && !(p.metodo || "").includes("Nota de Cr")).length === 0 && (
                         <div className="pt-1 border-t">
                           {!editandoPago ? (
                             <button onClick={() => setEditandoPago(true)} className="text-xs text-primary hover:underline font-medium">
