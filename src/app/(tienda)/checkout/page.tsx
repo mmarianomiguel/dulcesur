@@ -297,7 +297,7 @@ export default function CheckoutPage() {
 
             // Fetch client profile
             if (!authRec?.cliente_id) return;
-            const { data: cli } = await supabase.from("clientes").select("nombre, email, telefono, domicilio, localidad, provincia, codigo_postal, saldo, dias_entrega").eq("id", authRec.cliente_id).single();
+            const { data: cli } = await supabase.from("clientes").select("nombre, email, telefono, domicilio, localidad, provincia, codigo_postal, saldo, dias_entrega, zona_entrega").eq("id", authRec.cliente_id).single();
             if (cli) {
               // Pre-fill contact fields from clientes table (more reliable than localStorage)
               if (cli.nombre) {
@@ -333,14 +333,17 @@ export default function CheckoutPage() {
                 }
               }
             }
-            // Override delivery dates with client-specific days if available
-            const clientDias = cli?.dias_entrega;
-            if (clientDias && clientDias.length > 0) {
-              // Use config from ref (already loaded in parallel) instead of re-fetching
+            // Override delivery dates: use client-specific days, else zone days, else global config
+            let effectiveDias: string[] | null = cli?.dias_entrega?.length > 0 ? cli.dias_entrega : null;
+            if (!effectiveDias && cli?.zona_entrega) {
+              const { data: zona } = await supabase.from("zonas_entrega").select("dias").eq("id", cli.zona_entrega).single();
+              if (zona?.dias && zona.dias.length > 0) effectiveDias = zona.dias;
+            }
+            if (effectiveDias) {
               const cfg = configRef.current || await configPromise;
               const maxDias = cfg?.dias_max_programacion ?? 14;
               const horaCorte = cfg?.hora_corte ?? "12:30";
-              const clientDates = getAvailableDates(clientDias, maxDias, horaCorte);
+              const clientDates = getAvailableDates(effectiveDias, maxDias, horaCorte);
               setAvailableDates(clientDates);
               if (clientDates.length > 0) setFechaEntrega(clientDates[0].value);
             }
