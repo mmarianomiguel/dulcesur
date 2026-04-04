@@ -187,6 +187,7 @@ export default function VentasPage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<"pickup" | "delivery">("pickup");
+  const [cobrarEnEntrega, setCobrarEnEntrega] = useState(false);
   const [clientAddresses, setClientAddresses] = useState<ClienteDireccion[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
@@ -1210,6 +1211,7 @@ export default function VentasPage() {
     setMixtoToggleCuentaCorriente(false);
     setDespacho("Retira en local");
     setDeliveryMethod("pickup");
+    setCobrarEnEntrega(false);
     setSelectedAddressId("");
     setClientAddresses([]);
     setSelectedItemIdx(-1);
@@ -1542,14 +1544,14 @@ export default function VentasPage() {
         descuento_porcentaje: descuento,
         recargo_porcentaje: recargo,
         total,
-        estado: formaPago === "Pendiente" || deliveryMethod === "delivery" ? "pendiente" : "cerrada",
-        entregado: formaPago === "Pendiente" || deliveryMethod === "delivery" ? false : undefined,
+        estado: formaPago === "Pendiente" || cobrarEnEntrega ? "pendiente" : "cerrada",
+        entregado: formaPago === "Pendiente" || cobrarEnEntrega ? false : undefined,
         observacion: despacho,
         metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
         lista_precio_id: listaPrecioId || null,
         // monto_pagado: track how much was paid at POS (for pending invoice tracking)
-        // Envío sales: 0 — cobro confirmed from venta detail
-        monto_pagado: deliveryMethod === "delivery"
+        // cobrarEnEntrega: 0 — cobro confirmed later from venta detail
+        monto_pagado: cobrarEnEntrega
           ? 0
           : formaPago === "Efectivo" || formaPago === "Transferencia"
             ? total  // fully paid at POS
@@ -1802,8 +1804,8 @@ export default function VentasPage() {
             });
           }
           // Handle non-CC entries (Efectivo, Transferencia) → caja
-          // Skip caja for envío — cobro confirmed from venta detail
-          if (deliveryMethod !== "delivery") {
+          // Skip caja for envío when cobrarEnEntrega — cobro confirmed from venta detail
+          if (!cobrarEnEntrega) {
             // When cobrarSaldo is active, split caja entries: venta portion vs saldo cobro portion
             const totalNonCC = mixtoEntries.filter(e => e.metodo !== "Cuenta Corriente").reduce((s, e) => s + e.monto, 0);
             const ventaPortion = cobrarSaldoInMixto ? Math.min(totalNonCC, baseTotal) : totalNonCC;
@@ -1840,8 +1842,8 @@ export default function VentasPage() {
               }
             }
           }
-        } else if (deliveryMethod !== "delivery") {
-          // Single payment — skip caja for envío
+        } else if (!cobrarEnEntrega) {
+          // Single payment — skip caja when cobrarEnEntrega
           const selectedCuenta = formaPago === "Transferencia" && cuentaBancariaId
             ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
             : null;
@@ -1861,7 +1863,7 @@ export default function VentasPage() {
         // Collect pending balance if toggled
         // For Mixto: already handled above in the combined flow — skip here
         // Collect ONLY the pre-existing debt (not what was just added by this sale's CC)
-        if (formaPago !== "Pendiente" && formaPago !== "Mixto" && deliveryMethod !== "delivery" && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
+        if (formaPago !== "Pendiente" && formaPago !== "Mixto" && !cobrarEnEntrega && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
           const saldoActualDB = saldoRealAntesDeTodo;
           if (saldoActualDB > 0) {
             const saldoPendiente = saldoActualDB;
@@ -2121,6 +2123,7 @@ export default function VentasPage() {
                           setClientAddresses([]);
                           setSelectedAddressId("");
                           setDeliveryMethod("pickup");
+                          setCobrarEnEntrega(false);
                           if (codigoClienteRef.current) codigoClienteRef.current.value = "";
                         },
                       });
@@ -2130,6 +2133,7 @@ export default function VentasPage() {
                     setClientAddresses([]);
                     setSelectedAddressId("");
                     setDeliveryMethod("pickup");
+                    setCobrarEnEntrega(false);
                     if (codigoClienteRef.current) codigoClienteRef.current.value = "";
                   }}
                   className="px-2.5 h-9 flex items-center hover:bg-muted cursor-pointer border-l"
@@ -2826,6 +2830,24 @@ export default function VentasPage() {
             </CardContent>
           </Card>
 
+          {/* Cobrar en entrega toggle — only for delivery orders */}
+          {deliveryMethod === "delivery" && (
+            <button
+              type="button"
+              onClick={() => setCobrarEnEntrega(v => !v)}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
+                cobrarEnEntrega
+                  ? "border-sky-400 bg-sky-50 text-sky-800"
+                  : "border-emerald-400 bg-emerald-50 text-emerald-800"
+              }`}
+            >
+              <span className={`w-8 h-5 rounded-full flex items-center transition-all ${cobrarEnEntrega ? "bg-sky-400" : "bg-emerald-500"}`}>
+                <span className={`w-4 h-4 rounded-full bg-white shadow transition-all mx-0.5 ${cobrarEnEntrega ? "" : "translate-x-3"}`} />
+              </span>
+              {cobrarEnEntrega ? "Cobrar al momento de entrega" : "Cobrar ahora"}
+            </button>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-col gap-1.5 mt-auto">
             <Button
@@ -3515,6 +3537,7 @@ export default function VentasPage() {
             <button
               onClick={() => {
                 setDeliveryMethod("pickup");
+                setCobrarEnEntrega(false);
                 setDespacho("Retira en local");
               }}
               className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
@@ -3556,6 +3579,7 @@ export default function VentasPage() {
                     key={addr.id}
                     onClick={() => {
                       setDeliveryMethod("delivery");
+                      setCobrarEnEntrega(true);
                       setDespacho("Envio a domicilio");
                       setSelectedAddressId(addr.id);
                     }}
@@ -3695,6 +3719,7 @@ export default function VentasPage() {
                           await fetchClientAddresses(clientId);
                           setSelectedAddressId("domicilio-principal");
                           setDeliveryMethod("delivery");
+                          setCobrarEnEntrega(true);
                           setDespacho("Envio a domicilio");
                           setShowNewAddressForm(false);
                           setSavingAddress(false);
@@ -3719,6 +3744,7 @@ export default function VentasPage() {
                         if (data) {
                           setSelectedAddressId(data.id);
                           setDeliveryMethod("delivery");
+                          setCobrarEnEntrega(true);
                           setDespacho("Envio a domicilio");
                         }
                         setShowNewAddressForm(false);
