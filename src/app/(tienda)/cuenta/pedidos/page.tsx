@@ -257,21 +257,10 @@ export default function PedidosPage() {
         }
       }
 
-      // Build saldo map: only show pending for ventas with positive net CC debt
-      // Use clienteSaldoReal as cap — if net debts exceed client saldo, oldest are paid
+      // Build saldo map: use net CC debt per venta directly (debe - haber per venta_id)
       const saldoMap: Record<string, number> = {};
-      const ventasWithCCDebt = allVentas
-        .filter((v: any) => (ccNetMap[v.id] || 0) > 0)
-        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      let remainingSaldo = clienteSaldoReal;
-      for (const v of ventasWithCCDebt) {
-        const netDebt = Math.max(0, ccNetMap[v.id] || 0);
-        const assign = Math.min(remainingSaldo, netDebt);
-        saldoMap[v.id] = assign;
-        remainingSaldo = Math.round((remainingSaldo - assign) * 100) / 100;
-      }
       for (const v of allVentas) {
-        if (saldoMap[v.id] === undefined) saldoMap[v.id] = 0;
+        saldoMap[v.id] = Math.max(0, ccNetMap[v.id] || 0);
       }
 
       // Build venta records with NCs and payment info
@@ -472,14 +461,14 @@ export default function PedidosPage() {
     const deudasPedidos = pedidos.filter((p) => p.venta && p.venta.saldo_pendiente > 0 && p.venta.estado !== "anulada").map((p) => ({ numero: p.venta!.numero, tipo: p.venta!.tipo_comprobante, monto: p.venta!.saldo_pendiente }));
     const deudasPOS = ventasPOS.filter((v) => v.saldo_pendiente > 0 && v.estado !== "anulada").map((v) => ({ numero: v.numero, tipo: v.tipo_comprobante, monto: v.saldo_pendiente }));
     const deudas = [...deudasPedidos, ...deudasPOS];
-    // Use client's real saldo as the header total (source of truth)
-    const totalDeuda = clienteSaldo;
-    if (totalDeuda <= 0) return null;
+    const totalDeuda = deudas.reduce((s, d) => s + d.monto, 0);
+    if (totalDeuda <= 0 && clienteSaldo <= 0) return null;
+    const displayTotal = totalDeuda > 0 ? totalDeuda : clienteSaldo;
     return (
       <div className="mb-6 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <DollarSign className="w-5 h-5 text-orange-600" />
-          <span className="font-bold text-orange-800">Saldo pendiente: {formatCurrency(totalDeuda)}</span>
+          <span className="font-bold text-orange-800">Saldo pendiente: {formatCurrency(displayTotal)}</span>
         </div>
         <div className="space-y-1.5">
           {deudas.map((d) => (
