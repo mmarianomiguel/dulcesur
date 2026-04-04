@@ -1710,7 +1710,7 @@ export default function HojaDeRutaPage() {
                         })}
                       </div>
                     )}
-                    <p className="text-xs text-amber-700">Se cargará a su cuenta corriente como deuda.</p>
+                    <p className="text-xs text-amber-700">Podés cobrar ahora o cargar a cuenta corriente como deuda.</p>
                   </div>
                 )}
                 {dlvConfirm.type === "no_client" && (
@@ -1725,10 +1725,25 @@ export default function HojaDeRutaPage() {
                   <Button variant="outline" onClick={() => setDlvConfirm({ open: false, ids: [], pendiente: 0, type: "paid" })}>
                     Cancelar
                   </Button>
-                  {dlvConfirm.type !== "no_client" && (
+                  {dlvConfirm.type === "unpaid" && (
+                    <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50" onClick={executeDlvConfirm}>
+                      <FileText className="w-4 h-4 mr-1.5" />
+                      Cargar a CC
+                    </Button>
+                  )}
+                  {dlvConfirm.type === "unpaid" && (
+                    <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => {
+                      setDlvConfirm({ open: false, ids: [], pendiente: 0, type: "paid" });
+                      openPayDialog(groupVentas[0], groupVentas);
+                    }}>
+                      <DollarSign className="w-4 h-4 mr-1.5" />
+                      Cobrar y entregar
+                    </Button>
+                  )}
+                  {dlvConfirm.type === "paid" && (
                     <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={executeDlvConfirm}>
                       <CheckCircle className="w-4 h-4 mr-1.5" />
-                      {dlvConfirm.type === "unpaid" ? "Cargar a CC y entregar" : "Marcar entregado"}
+                      Marcar entregado
                     </Button>
                   )}
                 </div>
