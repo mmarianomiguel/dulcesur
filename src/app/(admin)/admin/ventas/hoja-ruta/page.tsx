@@ -49,6 +49,9 @@ import {
   List,
   Route,
   AlertCircle,
+  Banknote,
+  Landmark,
+  FileText,
 } from "lucide-react";
 
 interface ClienteInfo {
@@ -362,6 +365,36 @@ export default function HojaDeRutaPage() {
     const pagos = historialPagos[v.id] || [];
     return s + pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
   }, 0);
+
+  // Breakdown by payment method + bank account
+  const historialBreakdown = (() => {
+    let efectivo = 0;
+    let cuentaCorriente = 0;
+    const transferencias: Record<string, number> = {};
+    let deudores: { nombre: string; monto: number }[] = [];
+
+    for (const v of filteredHistorial) {
+      const pagos = historialPagos[v.id] || [];
+      const cobradoSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+      const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+      const debe = (v.total - ncMonto) - cobradoSinNC;
+      if (debe > 0) deudores.push({ nombre: v.clientes?.nombre || "Sin cliente", monto: debe });
+
+      for (const p of pagos) {
+        if (p.metodo.includes("Nota de Cr")) continue;
+        if (p.metodo === "Efectivo") efectivo += p.monto;
+        else if (p.metodo === "Cuenta Corriente") cuentaCorriente += p.monto;
+        else if (p.metodo === "Transferencia") {
+          const key = (p as any).cuenta_bancaria || "Sin cuenta";
+          transferencias[key] = (transferencias[key] || 0) + p.monto;
+        } else {
+          efectivo += p.monto; // Other methods count as cash
+        }
+      }
+    }
+    const totalTransferencias = Object.values(transferencias).reduce((s, v) => s + v, 0);
+    return { efectivo, totalTransferencias, transferencias, cuentaCorriente, deudores };
+  })();
 
   // Group historial by day
   const historialByDay = (() => {
@@ -878,12 +911,12 @@ export default function HojaDeRutaPage() {
           </div>
 
           {/* Historial stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                   <CheckCircle className="w-4 h-4" />
-                  Entregas Realizadas
+                  Entregas
                 </div>
                 <div className="text-2xl font-bold">{filteredHistorial.length}</div>
               </CardContent>
@@ -892,23 +925,62 @@ export default function HojaDeRutaPage() {
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                   <DollarSign className="w-4 h-4" />
-                  Total Ventas
+                  Total
                 </div>
                 <div className="text-2xl font-bold">{formatCurrency(historialTotalVentas - historialTotalNC)}</div>
                 {historialTotalNC > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">NC devoluciones: -{formatCurrency(historialTotalNC)}</p>
+                  <p className="text-xs text-amber-600 mt-1">NC: -{formatCurrency(historialTotalNC)}</p>
                 )}
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-green-500 text-sm mb-1">
-                  <CheckCircle className="w-4 h-4" />
-                  Total Cobrado
+                <div className="flex items-center gap-2 text-green-600 text-sm mb-1">
+                  <Banknote className="w-4 h-4" />
+                  Efectivo
                 </div>
-                <div className="text-2xl font-bold text-green-600">{formatCurrency(historialTotalCobrado)}</div>
+                <div className="text-2xl font-bold text-green-600">{formatCurrency(historialBreakdown.efectivo)}</div>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-blue-600 text-sm mb-1">
+                  <Landmark className="w-4 h-4" />
+                  Transferencias
+                </div>
+                <div className="text-2xl font-bold text-blue-600">{formatCurrency(historialBreakdown.totalTransferencias)}</div>
+                {Object.entries(historialBreakdown.transferencias).map(([cuenta, monto]) => (
+                  <p key={cuenta} className="text-xs text-blue-500 mt-0.5">{cuenta}: {formatCurrency(monto)}</p>
+                ))}
+              </CardContent>
+            </Card>
+            {historialBreakdown.cuentaCorriente > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-orange-600 text-sm mb-1">
+                    <FileText className="w-4 h-4" />
+                    Cuenta Corriente
+                  </div>
+                  <div className="text-2xl font-bold text-orange-600">{formatCurrency(historialBreakdown.cuentaCorriente)}</div>
+                </CardContent>
+              </Card>
+            )}
+            {historialBreakdown.deudores.length > 0 && (
+              <Card className="border-orange-200 bg-orange-50/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-orange-700 text-sm mb-1">
+                    <AlertCircle className="w-4 h-4" />
+                    Deudores
+                  </div>
+                  <div className="text-2xl font-bold text-orange-700">{historialBreakdown.deudores.length}</div>
+                  <div className="mt-1 space-y-0.5">
+                    {historialBreakdown.deudores.map((d, i) => (
+                      <p key={i} className="text-xs text-orange-600">{d.nombre}: {formatCurrency(d.monto)}</p>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Historial grouped by day */}
