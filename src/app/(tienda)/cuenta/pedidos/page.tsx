@@ -243,8 +243,10 @@ export default function PedidosPage() {
           .gt("haber", 0)
           .eq("debe", 0)
           .order("created_at", { ascending: true });
+        // Keep habers that are unlinked, linked to ventas outside our list,
+        // or linked to non-CC ventas (cobro_saldo from Efectivo/Transfer sales)
         clientCCHabers = (allHabers || []).filter((h: any) =>
-          !h.venta_id || !ventaIds.includes(h.venta_id)
+          !h.venta_id || !ventaIds.includes(h.venta_id) || !hasCC[h.venta_id]
         );
       }
 
