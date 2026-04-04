@@ -1807,20 +1807,37 @@ export default function VentasPage() {
           // Handle non-CC entries (Efectivo, Transferencia) → caja
           // Skip caja for envío — cobro confirmed from venta detail
           if (deliveryMethod !== "delivery") {
+            // When cobrarSaldo is active, split caja entries: venta portion vs saldo cobro portion
+            const totalNonCC = mixtoEntries.filter(e => e.metodo !== "Cuenta Corriente").reduce((s, e) => s + e.monto, 0);
+            const ventaPortion = cobrarSaldoInMixto ? Math.min(totalNonCC, baseTotal) : totalNonCC;
+            const saldoPortion = cobrarSaldoInMixto ? Math.max(0, totalNonCC - baseTotal) : 0;
+            let portionRemaining = ventaPortion;
+
             for (const entry of mixtoEntries) {
-              if (entry.metodo !== "Cuenta Corriente") {
-                const mixCuenta = entry.metodo === "Transferencia" && cuentaBancariaId
-                  ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
-                  : null;
+              if (entry.metodo === "Cuenta Corriente") continue;
+              const mixCuenta = entry.metodo === "Transferencia" && cuentaBancariaId
+                ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
+                : null;
+              // Cap this entry to the venta portion
+              const ventaAmt = Math.min(entry.monto, portionRemaining);
+              const saldoAmt = entry.monto - ventaAmt;
+              portionRemaining -= ventaAmt;
+
+              if (ventaAmt > 0) {
                 await supabase.from("caja_movimientos").insert({
-                  fecha: hoy,
-                  hora,
-                  tipo: "ingreso",
+                  fecha: hoy, hora, tipo: "ingreso",
                   descripcion: `Venta #${numero} (${entry.metodo})${mixCuenta ? ` → ${mixCuenta.nombre}` : ""}`,
-                  metodo_pago: entry.metodo,
-                  monto: entry.monto,
-                  referencia_id: venta.id,
-                  referencia_tipo: "venta",
+                  metodo_pago: entry.metodo, monto: ventaAmt,
+                  referencia_id: venta.id, referencia_tipo: "venta",
+                  ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
+                });
+              }
+              if (saldoAmt > 0) {
+                await supabase.from("caja_movimientos").insert({
+                  fecha: hoy, hora, tipo: "ingreso",
+                  descripcion: `Cobro saldo anterior — ${selectedClient?.nombre || ""} (Venta #${numero})`,
+                  metodo_pago: entry.metodo, monto: saldoAmt,
+                  referencia_tipo: "cobro_saldo",
                   ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
                 });
               }
