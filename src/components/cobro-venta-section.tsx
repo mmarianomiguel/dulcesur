@@ -61,6 +61,7 @@ export interface CobroVentaResult {
   cuentaBancariaId: string;
   cobrarSaldo: boolean;
   saldoAllocations: FIFOAllocation[];
+  cobrarEnEntrega?: boolean;
 }
 
 interface Props {
@@ -77,6 +78,7 @@ interface Props {
   defaultEfectivo?: number;
   defaultTransferencia?: number;
   defaultCuentaAlias?: string;
+  isEnvio?: boolean;
   onConfirmar: (result: CobroVentaResult) => Promise<void>;
 }
 
@@ -86,13 +88,14 @@ export function CobroVentaSection({
   ventaId, clienteId, clienteNombre, clienteSaldo, montoVenta,
   subtotalItems, costoEnvio, recargoTransferencia, cuentasBancarias,
   defaultMetodo, defaultEfectivo, defaultTransferencia, defaultCuentaAlias,
-  onConfirmar,
+  isEnvio, onConfirmar,
 }: Props) {
   // ─── State ───
   const [metodo, setMetodo] = useState<MetodoPago>("Efectivo");
   const [cuentaBancariaId, setCuentaBancariaId] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [cobrarEnEntrega, setCobrarEnEntrega] = useState(isEnvio ?? false);
   const submittingRef = useRef(false);
 
   // Mixto toggles (like POS)
@@ -282,6 +285,7 @@ export function CobroVentaSection({
         cuentaBancariaId,
         cobrarSaldo,
         saldoAllocations: cobrarSaldo ? saldoAllocations.filter((a) => a.aplicar > 0) : [],
+        cobrarEnEntrega,
       });
       setDone(true);
     } catch (err: any) {
@@ -310,6 +314,26 @@ export function CobroVentaSection({
         </div>
         <h3 className="text-sm font-semibold text-gray-900">Registrar cobro</h3>
       </div>
+
+      {/* Envío toggle: cobrar ahora vs en entrega */}
+      {isEnvio && (
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => setCobrarEnEntrega(true)}
+            className={`flex-1 py-2 transition-colors ${cobrarEnEntrega ? "bg-sky-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+          >
+            Cobrar en entrega
+          </button>
+          <button
+            type="button"
+            onClick={() => setCobrarEnEntrega(false)}
+            className={`flex-1 py-2 transition-colors ${!cobrarEnEntrega ? "bg-emerald-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+          >
+            Ya cobrado / Cobrar ahora
+          </button>
+        </div>
+      )}
 
       {/* Payment method selector */}
       <div>
@@ -702,7 +726,9 @@ export function CobroVentaSection({
       {/* Confirm button */}
       <Button
         className={`w-full py-3 h-auto gap-2 text-sm font-semibold shadow-sm ${
-          metodo === "Cuenta Corriente"
+          cobrarEnEntrega
+            ? "bg-sky-600 hover:bg-sky-700 shadow-sky-200"
+            : metodo === "Cuenta Corriente"
             ? "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
             : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
         }`}
@@ -711,6 +737,11 @@ export function CobroVentaSection({
       >
         {saving ? (
           <Loader2 className="w-5 h-5 animate-spin" />
+        ) : cobrarEnEntrega ? (
+          <>
+            <IconCheck className="w-5 h-5" />
+            Registrar — cobro en entrega ({metodo})
+          </>
         ) : metodo === "Cuenta Corriente" ? (
           <>
             <IconBook className="w-5 h-5" />
@@ -725,7 +756,9 @@ export function CobroVentaSection({
       </Button>
 
       <p className="text-[10px] text-gray-400 text-center">
-        {metodo === "Cuenta Corriente"
+        {cobrarEnEntrega
+          ? "Solo actualiza el método de pago. El cobro se registra en caja al confirmar la entrega (Hoja de ruta)."
+          : metodo === "Cuenta Corriente"
           ? "Se registra en caja diaria, actualiza el saldo del cliente y se registra en cuenta corriente"
           : "Se registra en caja, actualiza saldo del cliente y marca los comprobantes como pagados"
         }

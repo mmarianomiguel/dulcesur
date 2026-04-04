@@ -2557,6 +2557,7 @@ export default function ListadoVentasPage() {
                       costoEnvio={poSelectedPedido.costo_envio || 0}
                       recargoTransferencia={recargoTransferencia}
                       cuentasBancarias={cuentasBancarias}
+                      isEnvio={poSelectedPedido.metodo_entrega === "envio"}
                       defaultMetodo={(poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago}
                       defaultEfectivo={(poSelectedPedido as any).monto_efectivo}
                       defaultTransferencia={(poSelectedPedido as any).monto_transferencia}
@@ -2571,6 +2572,15 @@ export default function ListadoVentasPage() {
                         }
                         if (!ventaId) {
                           showAdminToast("Error: no se encontró la venta vinculada", "error");
+                          return;
+                        }
+
+                        // If "cobrar en entrega": only update forma_pago, no caja entry
+                        if (result.cobrarEnEntrega) {
+                          await supabase.from("ventas").update({ forma_pago: result.metodo }).eq("id", ventaId);
+                          if (poSelectedPedido.numero) await supabase.from("pedidos_tienda").update({ metodo_pago: result.metodo.toLowerCase().replace(" ", "_") }).eq("numero", poSelectedPedido.numero);
+                          showAdminToast(`Método de pago actualizado a ${result.metodo}. Se cobrará en entrega.`, "success");
+                          setPoSelectedPedido(null);
                           return;
                         }
 
