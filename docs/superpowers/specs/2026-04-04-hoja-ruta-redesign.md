@@ -93,7 +93,17 @@ Rediseñar la hoja de ruta para que sea más cómoda de usar, persista el orden 
   - Selector de tipo: Link fijo (persistente) o Link temporal (expira en X horas)
   - Botón copiar link
 
-**Tab "Historial" (sin cambios funcionales, solo layout mejorado)**
+**Tab "Historial" (rediseñado):**
+- Lista de hojas de ruta completadas por fecha
+- Por cada hoja: resumen expandible con:
+  - Total entregas realizadas / no realizadas
+  - Total cobrado desglosado: Efectivo / Transferencia / CC
+  - Total que quedó en Cuenta Corriente (nuevo saldo generado)
+- Por cada entrega dentro de la hoja:
+  - ✅ Cobrado — monto y método de pago
+  - ⚠️ Quedó debiendo — monto pendiente que pasó a CC
+  - 💚 Abonó saldo anterior — cliente pagó deuda de comprobantes viejos (monto)
+  - 🔴 No abonó saldo anterior — cliente sigue debiendo de antes (monto)
 
 ### 2. API route — `/api/ruta/[token]/route.ts`
 
