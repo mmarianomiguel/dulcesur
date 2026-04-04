@@ -244,6 +244,19 @@ export default function PedidosPage() {
         }
       }
 
+      // Fix CC amounts in pagosMap: use net (debe - haber) instead of raw debe
+      for (const ventaId of ventaIds) {
+        const ccIdx = (pagosMap[ventaId] || []).findIndex((p) => p.metodo_pago === "Cuenta Corriente");
+        if (ccIdx >= 0) {
+          const net = Math.max(0, ccNetMap[ventaId] || 0);
+          if (net <= 0) {
+            pagosMap[ventaId].splice(ccIdx, 1); // fully paid, remove CC entry
+          } else {
+            pagosMap[ventaId][ccIdx].monto = net; // update to net pending amount
+          }
+        }
+      }
+
       // Build saldo map: only show pending for ventas with positive net CC debt
       // Use clienteSaldoReal as cap — if net debts exceed client saldo, oldest are paid
       const saldoMap: Record<string, number> = {};
