@@ -334,7 +334,7 @@ export default function CheckoutPage() {
               }
             }
             // Override delivery dates: use client-specific days, else zone days, else global config
-            let effectiveDias: string[] | null = cli?.dias_entrega?.length > 0 ? cli.dias_entrega : null;
+            let effectiveDias: string[] | null = cli?.dias_entrega && cli.dias_entrega.length > 0 ? cli.dias_entrega : null;
             if (!effectiveDias && cli?.zona_entrega) {
               const { data: zona } = await supabase.from("zonas_entrega").select("dias").eq("id", cli.zona_entrega).single();
               if (zona?.dias && zona.dias.length > 0) effectiveDias = zona.dias;
