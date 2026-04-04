@@ -401,6 +401,41 @@ export default function ComprasPage() {
 
   // F1 product search dialog
   const [productSearchOpen, setProductSearchOpen] = useState(false);
+
+  // Inline product creation
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [newProdNombre, setNewProdNombre] = useState("");
+  const [newProdCodigo, setNewProdCodigo] = useState("");
+  const [newProdCosto, setNewProdCosto] = useState(0);
+  const [newProdPrecio, setNewProdPrecio] = useState(0);
+  const [newProdSaving, setNewProdSaving] = useState(false);
+
+  const handleCreateProduct = async () => {
+    if (!newProdNombre.trim()) return;
+    setNewProdSaving(true);
+    const { data: prod, error } = await supabase.from("productos").insert({
+      nombre: newProdNombre.trim(),
+      codigo: newProdCodigo.trim() || null,
+      costo: newProdCosto || 0,
+      precio: newProdPrecio || 0,
+      stock: 0,
+      activo: true,
+      visibilidad: "oculto",
+    }).select("id, codigo, nombre, stock, costo, precio, imagen_url").single();
+    if (error || !prod) {
+      showAdminToast("Error al crear producto: " + (error?.message || ""), "error");
+      setNewProdSaving(false);
+      return;
+    }
+    showAdminToast(`Producto "${prod.nombre}" creado`, "success");
+    addProduct(prod);
+    setCreatingProduct(false);
+    setNewProdNombre("");
+    setNewProdCodigo("");
+    setNewProdCosto(0);
+    setNewProdPrecio(0);
+    setNewProdSaving(false);
+  };
   const [searchHighlight, setSearchHighlight] = useState(0);
 
   // Keyboard navigation for items table
@@ -1461,7 +1496,46 @@ export default function ComprasPage() {
                 );
               })}
               {productSearch.length >= 2 && productResults.length === 0 && !searchingProducts && (
-                <p className="text-center py-8 text-sm text-muted-foreground">Sin resultados para &quot;{productSearch}&quot;</p>
+                <p className="text-center py-4 text-sm text-muted-foreground">Sin resultados para &quot;{productSearch}&quot;</p>
+              )}
+              {/* Create product inline */}
+              {!creatingProduct ? (
+                <button
+                  onClick={() => { setCreatingProduct(true); setNewProdNombre(productSearch); }}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-muted-foreground/20 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors mt-2"
+                >
+                  <Plus className="w-4 h-4" /> Crear producto nuevo
+                </button>
+              ) : (
+                <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3 mt-2">
+                  <p className="text-sm font-semibold">Nuevo producto</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-xs text-muted-foreground mb-1 block">Nombre *</label>
+                      <Input value={newProdNombre} onChange={(e) => setNewProdNombre(e.target.value)} autoFocus placeholder="Nombre del producto" className="h-9" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Código</label>
+                      <Input value={newProdCodigo} onChange={(e) => setNewProdCodigo(e.target.value)} placeholder="SKU (opcional)" className="h-9" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Costo</label>
+                      <Input type="number" min={0} value={newProdCosto || ""} onChange={(e) => setNewProdCosto(Number(e.target.value))} placeholder="0" className="h-9" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Precio venta</label>
+                      <Input type="number" min={0} value={newProdPrecio || ""} onChange={(e) => setNewProdPrecio(Number(e.target.value))} placeholder="0" className="h-9" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => setCreatingProduct(false)}>Cancelar</Button>
+                    <Button size="sm" onClick={handleCreateProduct} disabled={!newProdNombre.trim() || newProdSaving}>
+                      {newProdSaving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                      Crear y agregar
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">El producto se crea como oculto en la tienda. Podés editarlo después desde Productos.</p>
+                </div>
               )}
             </div>
           </DialogContent>
@@ -1728,7 +1802,11 @@ export default function ComprasPage() {
                             )}
                           </td>
                           <td className="py-2 px-2 text-center">
-                            {costoChanged && item.costo_original > 0 ? (
+                            {costoChanged && item.costo_original > 0 ? (() => {
+                              const margenActual = item.costo_original > 0 ? Math.round(((item.precio_original - item.costo_original) / item.costo_original) * 100) : 0;
+                              const nuevoPrecio = roundPrice(item.costo_unitario * (item.precio_original / item.costo_original));
+                              const nuevoMargen = item.costo_unitario > 0 ? Math.round(((nuevoPrecio - item.costo_unitario) / item.costo_unitario) * 100) : 0;
+                              return (
                               <div className="flex flex-col items-center gap-0.5">
                                 <label className="flex items-center gap-1.5 cursor-pointer">
                                   <input
@@ -1741,14 +1819,21 @@ export default function ComprasPage() {
                                   />
                                   <span className="text-[10px] text-muted-foreground">
                                     {item.actualizarPrecio ? (
-                                      <>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original)}</span></>
+                                      <span className="text-primary font-semibold">{formatCurrency(nuevoPrecio)}</span>
                                     ) : (
-                                      <span>Mantener {formatCurrency(item.precio_original)}</span>
+                                      <span>Mantener</span>
                                     )}
                                   </span>
                                 </label>
+                                <div className="text-[9px] leading-tight text-muted-foreground">
+                                  <span>Costo: {formatCurrency(item.costo_original)} → <span className="font-medium text-foreground">{formatCurrency(item.costo_unitario)}</span></span>
+                                  <br />
+                                  <span>Margen: {margenActual}% → <span className={`font-medium ${nuevoMargen >= margenActual ? "text-emerald-600" : "text-red-500"}`}>{nuevoMargen}%</span></span>
+                                  {item.actualizarPrecio && <><br /><span>PVP: {formatCurrency(item.precio_original)} → <span className="font-medium text-primary">{formatCurrency(nuevoPrecio)}</span></span></>}
+                                </div>
                               </div>
-                            ) : (
+                              );
+                            })() : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
@@ -2116,6 +2201,17 @@ export default function ComprasPage() {
                   // Update estado
                   await supabase.from("compras").update({ estado: "Confirmada" }).eq("id", detailCompra.id);
                   setDetailCompra({ ...detailCompra, estado: "Confirmada" } as any);
+                  // Mark linked pedido as "Ingresado" if this compra was generated from one
+                  if (detailCompra.observacion) {
+                    const pedMatch = detailCompra.observacion.match(/pedido\s+(PED-[a-f0-9]+)/i);
+                    if (pedMatch) {
+                      const pedShortId = pedMatch[1].replace("PED-", "");
+                      const { data: pedidos } = await supabase.from("pedidos_proveedor").select("id").ilike("id", `${pedShortId}%`).limit(1);
+                      if (pedidos && pedidos.length > 0) {
+                        await supabase.from("pedidos_proveedor").update({ estado: "Ingresado" }).eq("id", pedidos[0].id);
+                      }
+                    }
+                  }
                   showAdminToast("Compra ingresada al stock", "success");
                   // Check hidden products
                   const itemIds = detailItems.map((i: any) => i.producto_id).filter(Boolean);

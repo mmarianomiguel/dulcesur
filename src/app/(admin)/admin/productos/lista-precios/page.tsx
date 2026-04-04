@@ -221,34 +221,56 @@ export default function ListaPreciosPage() {
   const itemsPerPage = 50;
 
   // Load logo from localStorage on mount
+  // Load logo: white-label (empresa) > localStorage > hardcoded fallback
   useEffect(() => {
+    const loadLogoFromUrl = (url: string) => {
+      fetch(url)
+        .then((r) => r.blob())
+        .then((blob) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (reader.result) {
+              const src = reader.result as string;
+              setLogoBase64(src);
+              localStorage.setItem("listaPreciosLogo", src);
+              const img = new window.Image();
+              img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
+              img.src = src;
+            }
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => {});
+    };
+
     try {
+      // 1. Check localStorage cache
       const savedLogo = localStorage.getItem("listaPreciosLogo");
       if (savedLogo) {
         setLogoBase64(savedLogo);
         const img = new window.Image();
         img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
         img.src = savedLogo;
-      } else {
-        // Auto-load default logo
-        fetch("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png")
-          .then((r) => r.blob())
-          .then((blob) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (reader.result) {
-                const src = reader.result as string;
-                setLogoBase64(src);
-                const img = new window.Image();
-                img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
-                img.src = src;
-              }
-            };
-            reader.readAsDataURL(blob);
-          })
-          .catch(() => {});
       }
-    } catch (err) { console.error("Parse error:", err); }
+
+      // 2. Always try to refresh from white-label (empresa) config
+      const wlStored = localStorage.getItem("white_label_config");
+      const wlLogo = wlStored ? JSON.parse(wlStored)?.logo_url : null;
+      if (wlLogo) {
+        loadLogoFromUrl(wlLogo);
+      } else {
+        // Fetch from DB
+        supabase.from("empresa").select("white_label").limit(1).single().then(({ data }) => {
+          const dbLogo = (data?.white_label as any)?.logo_url;
+          if (dbLogo) {
+            loadLogoFromUrl(dbLogo);
+          } else if (!savedLogo) {
+            // 3. Fallback: hardcoded default
+            loadLogoFromUrl("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png");
+          }
+        });
+      }
+    } catch (err) { console.error("Logo load error:", err); }
   }, []);
 
   // Save config to localStorage on change

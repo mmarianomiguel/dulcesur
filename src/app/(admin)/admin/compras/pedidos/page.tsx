@@ -980,7 +980,7 @@ export default function PedidosProveedorPage() {
   if (mode === "detail" && detailPedido) {
     const isParcial = detailPedido.estado === "Recibido Parcial";
     const canReceive = detailPedido.estado === "Borrador" || detailPedido.estado === "Enviado" || isParcial;
-    const canEdit = detailPedido.estado === "Borrador";
+    const canEdit = detailPedido.estado === "Borrador" || detailPedido.estado === "Enviado";
     const canDelete = detailPedido.estado === "Borrador" || detailPedido.estado === "Enviado";
     const detailTotal = detailItems.reduce((a, i) => a + i.subtotal, 0);
     const cfg = estadoConfig(detailPedido.estado);
