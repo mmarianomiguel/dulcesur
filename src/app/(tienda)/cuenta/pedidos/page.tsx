@@ -230,37 +230,43 @@ export default function PedidosPage() {
         setClienteSaldo(clienteSaldoReal);
       }
 
-      // Get NET CC debt per venta (debe - haber for each venta_id)
-      // This accounts for partial cobros that were linked to the venta
-      const ccNetMap: Record<string, number> = {};
+      // Get CC debt per venta (debe total from cuenta_corriente)
+      const ccDebeMap: Record<string, number> = {};
       if (ventaIds.length > 0) {
         const { data: ccEntries } = await supabase
           .from("cuenta_corriente")
-          .select("venta_id, debe, haber")
-          .in("venta_id", ventaIds);
+          .select("venta_id, debe")
+          .in("venta_id", ventaIds)
+          .gt("debe", 0);
         for (const cc of ccEntries || []) {
           if (!cc.venta_id) continue;
-          ccNetMap[cc.venta_id] = (ccNetMap[cc.venta_id] || 0) + (cc.debe || 0) - (cc.haber || 0);
+          ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + (cc.debe || 0);
         }
       }
 
-      // Fix CC amounts in pagosMap: use net (debe - haber) instead of raw debe
+      // Build saldo map using monto_pagado from venta (maintained by FIFO cobro logic)
+      // This is more reliable than CC haber entries which may be linked to a different venta_id
+      const saldoMap: Record<string, number> = {};
+      for (const v of allVentas) {
+        const ccDebe = ccDebeMap[v.id] || 0;
+        if (ccDebe > 0) {
+          saldoMap[v.id] = Math.max(0, ccDebe - (v.monto_pagado || 0));
+        } else {
+          saldoMap[v.id] = 0;
+        }
+      }
+
+      // Fix CC amounts in pagosMap: use actual pending saldo
       for (const ventaId of ventaIds) {
         const ccIdx = (pagosMap[ventaId] || []).findIndex((p) => p.metodo_pago === "Cuenta Corriente");
         if (ccIdx >= 0) {
-          const net = Math.max(0, ccNetMap[ventaId] || 0);
+          const net = saldoMap[ventaId] || 0;
           if (net <= 0) {
             pagosMap[ventaId].splice(ccIdx, 1); // fully paid, remove CC entry
           } else {
             pagosMap[ventaId][ccIdx].monto = net; // update to net pending amount
           }
         }
-      }
-
-      // Build saldo map: use net CC debt per venta directly (debe - haber per venta_id)
-      const saldoMap: Record<string, number> = {};
-      for (const v of allVentas) {
-        saldoMap[v.id] = Math.max(0, ccNetMap[v.id] || 0);
       }
 
       // Build venta records with NCs and payment info
