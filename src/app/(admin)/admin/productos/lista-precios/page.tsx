@@ -1410,6 +1410,13 @@ export default function ListaPreciosPage() {
         const cellH = (pageH - margin * 2) / rows;  // ~40mm
         const pad = 3;
 
+        // Fixed zone heights (mm) — SAME for all cards
+        const headerH = 6;   // logo + web
+        const nameH = 9;     // product name
+        const priceH = 13;   // main price
+        const boxH = 8;      // presentation/box row (always reserved)
+        const footerH = 4;   // date
+
         selectedProducts.forEach((product, idx) => {
           if (idx > 0 && idx % perPage === 0) pdf.addPage();
           const posInPage = idx % perPage;
@@ -1429,33 +1436,27 @@ export default function ListaPreciosPage() {
           pdf.rect(x, y, cellW, cellH);
           pdf.setLineDashPattern([], 0);
 
-          // ── Fixed mm offsets from top ──
-          const headerH = 7;       // logo + web row
-          const nameTop = y + headerH;
-          const nameH = 10;        // product name
-          const priceTop = nameTop + nameH;
-          const bottomH = hasBox ? 10 : 0;
-          const footerH = 5;       // "Actualizado: ..." row
-          const priceBottom = y + cellH - bottomH - footerH;
-          const priceH = priceBottom - priceTop;
+          // ── Zone Y positions (anchored from bottom) ──
+          const footerTop = y + cellH - footerH;
+          const boxTop = footerTop - boxH;
+          const priceTop = boxTop - priceH;
+          const nameTop = priceTop - nameH;
 
           // ═══════════════════════════════════════
           // 1. HEADER: logo left, web right
           // ═══════════════════════════════════════
           if (logoBase64) {
-            const lH = headerH - 1.5;
+            const lH = headerH - 1;
             const lW = lH * logoAspectRatio;
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + 0.8, lW, lH); } catch {}
+            try { pdf.addImage(logoBase64, "PNG", x + pad, y + 0.5, lW, lH); } catch {}
           }
           if (config.webUrl) {
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7.5);
+            pdf.setFontSize(7);
             pdf.setTextColor(80);
-            pdf.text(config.webUrl, x + cellW - pad, y + headerH * 0.62, { align: "right" });
+            pdf.text(config.webUrl, x + cellW - pad, y + headerH * 0.65, { align: "right" });
             pdf.setTextColor(0);
           }
-
-          // Header line
           pdf.setDrawColor(200);
           pdf.setLineWidth(0.25);
           pdf.line(x + 1, y + headerH, x + cellW - 1, y + headerH);
@@ -1464,11 +1465,11 @@ export default function ListaPreciosPage() {
           // 2. PRODUCT NAME — centered, bold
           // ═══════════════════════════════════════
           const nameMaxW = cellW - pad * 2 - 2;
-          let nfs = 12;
+          let nfs = 11;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(nfs);
           let nLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
-          while (nLines.length > 2 && nfs > 8) {
+          while (nLines.length > 2 && nfs > 7.5) {
             nfs -= 0.5;
             pdf.setFontSize(nfs);
             nLines = pdf.splitTextToSize(product.nombre, nameMaxW);
@@ -1495,48 +1496,45 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(28);
           pdf.setTextColor(0);
-          pdf.text(formatCurrency(displayPrice), x + cellW / 2, priceTop + priceH / 2 + 3.5, { align: "center" });
+          pdf.text(formatCurrency(displayPrice), x + cellW / 2, priceTop + priceH / 2 + 3, { align: "center" });
 
           // ═══════════════════════════════════════
-          // 4. BOX / PRESENTATION (if applicable)
+          // 4. BOX / PRESENTATION (always same zone)
           // ═══════════════════════════════════════
-          const boxTop = y + cellH - bottomH - footerH;
+          pdf.setDrawColor(200);
+          pdf.setLineWidth(0.2);
+          pdf.line(x + 1, boxTop, x + cellW - 1, boxTop);
+
           if (hasBox) {
-            // Separator line
-            pdf.setDrawColor(200);
-            pdf.setLineWidth(0.25);
-            pdf.line(x + 1, boxTop, x + cellW - 1, boxTop);
-
             // Presentation label — avoid duplicating quantity
             const pn = product.nombrePresentacion;
             const hasQty = /x\s*\d|×\s*\d|\d+\s*u/.test(pn);
             const presLabel = hasQty ? pn : `${pn} x${product.unidadesCaja}`;
 
-            // Left: label
+            // Label + price on same baseline, close together
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(10);
-            pdf.setTextColor(40);
-            pdf.text(presLabel, x + pad, boxTop + 5);
+            pdf.setFontSize(9);
+            pdf.setTextColor(60);
+            pdf.text(presLabel, x + pad, boxTop + 4.5);
 
-            // Right: box price
+            // Box price right after label
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(14);
+            pdf.setFontSize(13);
             pdf.setTextColor(0);
-            pdf.text(formatCurrency(boxPrice), x + cellW - pad, boxTop + 5, { align: "right" });
+            pdf.text(formatCurrency(boxPrice), x + cellW - pad, boxTop + 4.5, { align: "right" });
 
-            // Unit price within box
+            // Unit price (c/u) just below, right-aligned
             const unitInBox = boxPrice / product.unidadesCaja;
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7.5);
-            pdf.setTextColor(90);
-            pdf.text(`(${formatCurrency(unitInBox)} c/u)`, x + cellW - pad, boxTop + 9, { align: "right" });
+            pdf.setFontSize(7);
+            pdf.setTextColor(100);
+            pdf.text(`${formatCurrency(unitInBox)} c/u`, x + cellW - pad, boxTop + 7.5, { align: "right" });
             pdf.setTextColor(0);
           }
 
           // ═══════════════════════════════════════
-          // 5. FOOTER — "Actualizado: DD/MM/YYYY"
+          // 5. FOOTER — "Precio modificado: ..."
           // ═══════════════════════════════════════
-          const footerTop = y + cellH - footerH;
           pdf.setDrawColor(215);
           pdf.setLineWidth(0.15);
           pdf.line(x + 1, footerTop, x + cellW - 1, footerTop);
@@ -1545,9 +1543,9 @@ export default function ListaPreciosPage() {
             ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
             : today;
           pdf.setFont("helvetica", "italic");
-          pdf.setFontSize(6.5);
+          pdf.setFontSize(6);
           pdf.setTextColor(110);
-          pdf.text(`Precio modificado: ${prodDate}`, x + cellW / 2, footerTop + 3.2, { align: "center" });
+          pdf.text(`Precio modificado: ${prodDate}`, x + cellW / 2, footerTop + 2.8, { align: "center" });
           pdf.setTextColor(0);
         });
       }
