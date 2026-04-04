@@ -2606,6 +2606,16 @@ export default function ListadoVentasPage() {
                           }
                           const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
                           if (totalAllocated > 0 && clienteId) {
+                            // Register in caja — the money was received
+                            const clienteNombreCobro = poSelectedPedido.nombre_cliente || "";
+                            await supabase.from("caja_movimientos").insert({
+                              fecha: hoy, hora, tipo: "ingreso",
+                              descripcion: `Cobro saldo adeudado — ${clienteNombreCobro} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
+                              metodo_pago: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
+                              monto: totalAllocated,
+                              referencia_tipo: "cobro_saldo",
+                            });
+
                             const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: -totalAllocated });
                             const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
                             // Create per-venta CC haber entries (so each venta shows the cobro in client's Mis Pedidos)

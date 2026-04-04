@@ -1850,7 +1850,7 @@ export default function HojaDeRutaPage() {
                       }
                     }
 
-                    // FIFO saldo allocation (pay old debts) — atomic saldo + per-venta CC entries
+                    // FIFO saldo allocation (pay old debts) — atomic saldo + caja + per-venta CC entries
                     if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
                       for (const alloc of result.saldoAllocations) {
                         if (alloc.aplicar <= 0) continue;
@@ -1859,6 +1859,15 @@ export default function HojaDeRutaPage() {
                       }
                       const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
                       if (totalAllocated > 0 && payVenta.cliente_id) {
+                        // Register in caja — the collector received this money
+                        await supabase.from("caja_movimientos").insert({
+                          fecha: hoy, hora, tipo: "ingreso",
+                          descripcion: `Cobro saldo adeudado — ${clienteNombre} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
+                          metodo_pago: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
+                          monto: totalAllocated,
+                          referencia_tipo: "cobro_saldo",
+                        });
+
                         const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: -totalAllocated });
                         const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
                         // Create per-venta CC haber entries (so each venta shows the cobro)
