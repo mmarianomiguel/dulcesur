@@ -1402,12 +1402,12 @@ export default function ListaPreciosPage() {
       }
 
       if (style === "gondola") {
-        // Landscape A4: 297×210mm — grid of shelf labels
+        // Landscape A4: 297×210mm — 3 cols x 5 rows = 15 labels per page
         const cols = 3;
-        const rows = 6;
-        const perPage = cols * rows; // 18 labels per page
-        const cellW = (pageW - margin * 2) / cols;
-        const cellH = (pageH - margin * 2) / rows;
+        const rows = 5;
+        const perPage = cols * rows;
+        const cellW = (pageW - margin * 2) / cols;  // ~96mm
+        const cellH = (pageH - margin * 2) / rows;  // ~40mm
         const pad = 3;
 
         selectedProducts.forEach((product, idx) => {
@@ -1423,111 +1423,132 @@ export default function ListaPreciosPage() {
           const hasBox = product.unidadesCaja > 0 && boxPrice > 0;
 
           // ── Cell border (dashed cut lines) ──
-          pdf.setDrawColor(180);
-          pdf.setLineWidth(0.15);
-          pdf.setLineDashPattern([1.5, 1.5], 0);
+          pdf.setDrawColor(170);
+          pdf.setLineWidth(0.2);
+          pdf.setLineDashPattern([2, 2], 0);
           pdf.rect(x, y, cellW, cellH);
           pdf.setLineDashPattern([], 0);
 
-          // ── Layout zones ──
-          const topH = cellH * 0.18;
-          const nameZoneY = y + topH;
-          const nameH = cellH * 0.22;
-          const priceZoneY = nameZoneY + nameH;
-          const priceH = hasBox ? cellH * 0.32 : cellH * 0.60;
-          const boxZoneY = priceZoneY + priceH;
-          const boxH = hasBox ? cellH * 0.28 : 0;
+          // ── Fixed mm offsets from top ──
+          const headerH = 7;       // logo + web row
+          const nameTop = y + headerH;
+          const nameH = 10;        // product name
+          const priceTop = nameTop + nameH;
+          const bottomH = hasBox ? 10 : 0;
+          const footerH = 5;       // "Actualizado: ..." row
+          const priceBottom = y + cellH - bottomH - footerH;
+          const priceH = priceBottom - priceTop;
 
-          // ── 1. TOP STRIP: logo (left) + web + date (right) ──
+          // ═══════════════════════════════════════
+          // 1. HEADER: logo left, web right
+          // ═══════════════════════════════════════
           if (logoBase64) {
-            const logoH = topH - 1.5;
-            const logoW = logoH * logoAspectRatio;
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + 0.8, logoW, logoH); } catch {}
+            const lH = headerH - 1.5;
+            const lW = lH * logoAspectRatio;
+            try { pdf.addImage(logoBase64, "PNG", x + pad, y + 0.8, lW, lH); } catch {}
           }
-          // Web URL + date on same line, right-aligned
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(7);
-          pdf.setTextColor(100);
-          const prodDate = product.fechaActualizacion
-            ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
-            : today;
-          const topText = config.webUrl ? `${config.webUrl}    ${prodDate}` : prodDate;
-          pdf.text(topText, x + cellW - pad, y + topH * 0.55, { align: "right" });
-          pdf.setTextColor(0);
+          if (config.webUrl) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(80);
+            pdf.text(config.webUrl, x + cellW - pad, y + headerH * 0.62, { align: "right" });
+            pdf.setTextColor(0);
+          }
 
-          // Separator after top strip
-          pdf.setDrawColor(190);
-          pdf.setLineWidth(0.3);
-          pdf.line(x, y + topH, x + cellW, y + topH);
+          // Header line
+          pdf.setDrawColor(200);
+          pdf.setLineWidth(0.25);
+          pdf.line(x + 1, y + headerH, x + cellW - 1, y + headerH);
 
-          // ── 2. PRODUCT NAME (centered, bold, up to 2 lines) ──
-          const nameMaxW = cellW - pad * 2;
-          let nameFontSize = 12;
+          // ═══════════════════════════════════════
+          // 2. PRODUCT NAME — centered, bold
+          // ═══════════════════════════════════════
+          const nameMaxW = cellW - pad * 2 - 2;
+          let nfs = 12;
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(nameFontSize);
-          let nameLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
-          const minNameFont = 8;
-          while (nameLines.length > 2 && nameFontSize > minNameFont) {
-            nameFontSize -= 0.5;
-            pdf.setFontSize(nameFontSize);
-            nameLines = pdf.splitTextToSize(product.nombre, nameMaxW);
+          pdf.setFontSize(nfs);
+          let nLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
+          while (nLines.length > 2 && nfs > 8) {
+            nfs -= 0.5;
+            pdf.setFontSize(nfs);
+            nLines = pdf.splitTextToSize(product.nombre, nameMaxW);
           }
-          const nameLineH = nameFontSize * 0.45;
-          const maxNameLines = Math.min(nameLines.length, 2);
-          const totalNameTextH = maxNameLines * nameLineH;
-          const nameStartY = nameZoneY + (nameH - totalNameTextH) / 2 + nameLineH * 0.7;
-          for (let li = 0; li < maxNameLines; li++) {
-            let lineText = String(nameLines[li]);
-            if (li === maxNameLines - 1 && nameLines.length > maxNameLines) {
-              while (pdf.getTextWidth(lineText + "...") > nameMaxW && lineText.length > 0) lineText = lineText.slice(0, -1);
-              lineText += "...";
+          const nlh = nfs * 0.42;
+          const maxNL = Math.min(nLines.length, 2);
+          const totalNH = maxNL * nlh;
+          const nStartY = nameTop + (nameH - totalNH) / 2 + nlh * 0.75;
+          for (let li = 0; li < maxNL; li++) {
+            let lt = String(nLines[li]);
+            if (li === maxNL - 1 && nLines.length > maxNL) {
+              while (pdf.getTextWidth(lt + "...") > nameMaxW && lt.length > 0) lt = lt.slice(0, -1);
+              lt += "...";
             }
-            pdf.text(lineText, x + cellW / 2, nameStartY + li * nameLineH, { align: "center" });
+            pdf.text(lt, x + cellW / 2, nStartY + li * nlh, { align: "center" });
           }
 
-          // ── 3. PRICE ZONE ──
-          // Background highlight
-          pdf.setFillColor(240, 240, 240);
-          pdf.rect(x + 0.15, priceZoneY, cellW - 0.3, priceH, "F");
+          // ═══════════════════════════════════════
+          // 3. PRICE — big, centered, gray bg
+          // ═══════════════════════════════════════
+          pdf.setFillColor(238, 238, 238);
+          pdf.rect(x + 0.5, priceTop, cellW - 1, priceH, "F");
 
-          // Big price (centered, large)
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(28);
           pdf.setTextColor(0);
-          pdf.text(formatCurrency(displayPrice), x + cellW / 2, priceZoneY + priceH * 0.58, { align: "center" });
+          pdf.text(formatCurrency(displayPrice), x + cellW / 2, priceTop + priceH / 2 + 3.5, { align: "center" });
 
-          // ── 4. PRESENTATION / BOX INFO ──
+          // ═══════════════════════════════════════
+          // 4. BOX / PRESENTATION (if applicable)
+          // ═══════════════════════════════════════
+          const boxTop = y + cellH - bottomH - footerH;
           if (hasBox) {
-            // Separator
-            pdf.setDrawColor(190);
-            pdf.setLineWidth(0.3);
-            pdf.line(x, boxZoneY, x + cellW, boxZoneY);
+            // Separator line
+            pdf.setDrawColor(200);
+            pdf.setLineWidth(0.25);
+            pdf.line(x + 1, boxTop, x + cellW - 1, boxTop);
 
-            // Build presentation label — avoid duplicating quantity
-            const presName = product.nombrePresentacion;
-            const hasQtyInName = /x\s*\d|×\s*\d|\d+\s*u/.test(presName);
-            const presLabel = hasQtyInName ? presName : `${presName} x${product.unidadesCaja}`;
+            // Presentation label — avoid duplicating quantity
+            const pn = product.nombrePresentacion;
+            const hasQty = /x\s*\d|×\s*\d|\d+\s*u/.test(pn);
+            const presLabel = hasQty ? pn : `${pn} x${product.unidadesCaja}`;
 
-            // Left: presentation label
+            // Left: label
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(10);
             pdf.setTextColor(40);
-            pdf.text(presLabel, x + pad, boxZoneY + boxH * 0.42);
+            pdf.text(presLabel, x + pad, boxTop + 5);
 
-            // Right: box price (big)
+            // Right: box price
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(14);
             pdf.setTextColor(0);
-            pdf.text(formatCurrency(boxPrice), x + cellW - pad, boxZoneY + boxH * 0.42, { align: "right" });
+            pdf.text(formatCurrency(boxPrice), x + cellW - pad, boxTop + 5, { align: "right" });
 
-            // Unit price within box (below box price)
+            // Unit price within box
             const unitInBox = boxPrice / product.unidadesCaja;
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(8);
-            pdf.setTextColor(100);
-            pdf.text(`(${formatCurrency(unitInBox)} c/u)`, x + cellW - pad, boxZoneY + boxH * 0.78, { align: "right" });
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(90);
+            pdf.text(`(${formatCurrency(unitInBox)} c/u)`, x + cellW - pad, boxTop + 9, { align: "right" });
             pdf.setTextColor(0);
           }
+
+          // ═══════════════════════════════════════
+          // 5. FOOTER — "Actualizado: DD/MM/YYYY"
+          // ═══════════════════════════════════════
+          const footerTop = y + cellH - footerH;
+          pdf.setDrawColor(215);
+          pdf.setLineWidth(0.15);
+          pdf.line(x + 1, footerTop, x + cellW - 1, footerTop);
+
+          const prodDate = product.fechaActualizacion
+            ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
+            : today;
+          pdf.setFont("helvetica", "italic");
+          pdf.setFontSize(6.5);
+          pdf.setTextColor(110);
+          pdf.text(`Precio modificado: ${prodDate}`, x + cellW / 2, footerTop + 3.2, { align: "center" });
+          pdf.setTextColor(0);
         });
       }
 
