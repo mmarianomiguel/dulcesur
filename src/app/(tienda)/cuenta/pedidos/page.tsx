@@ -180,35 +180,41 @@ export default function PedidosPage() {
         }
       }
 
-      // Fetch CC entries for these ventas (both debe for debt and haber for payments)
-      let ccDebeMap: Record<string, number> = {};
-      let ccHabersByVenta: Record<string, { haber: number; forma_pago: string; fecha: string; created_at: string; descripcion: string }[]> = {};
-      if (ventaIds.length > 0) {
-        const { data: ccEntries } = await supabase
-          .from("cuenta_corriente")
-          .select("venta_id, debe, haber, forma_pago, fecha, created_at, descripcion")
-          .in("venta_id", ventaIds);
-        for (const cc of ccEntries || []) {
-          if (!cc.venta_id) continue;
-          if ((cc.debe || 0) > 0 && (cc.haber || 0) === 0) {
-            // Pure debt entry
-            ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + cc.debe;
-          }
-          if ((cc.haber || 0) > 0 && (cc.debe || 0) === 0) {
-            // Pure payment entry (cobro toward this venta's debt)
-            if (!ccHabersByVenta[cc.venta_id]) ccHabersByVenta[cc.venta_id] = [];
-            ccHabersByVenta[cc.venta_id].push({
-              haber: cc.haber,
-              forma_pago: cc.forma_pago || "Pago",
-              fecha: cc.fecha,
-              created_at: cc.created_at,
-              descripcion: cc.descripcion || "",
-            });
-          }
+      // Build saldo map: total - monto_pagado for ventas with CC debt
+      // monto_pagado includes non-CC portion (efectivo/transfer) set at creation + FIFO cobros
+      const saldoMap: Record<string, number> = {};
+      const hasCC: Record<string, boolean> = {};
+      for (const v of allVentas) {
+        const fp = (v.forma_pago || "").toLowerCase();
+        if (fp.includes("cuenta") || fp === "mixto" || fp === "pendiente") {
+          saldoMap[v.id] = Math.max(0, v.total - (v.monto_pagado || 0));
+          hasCC[v.id] = true;
+        } else {
+          saldoMap[v.id] = 0;
         }
       }
 
-      // Also check cobro_items for payments from the cobros feature
+      // Fetch CC haber entries linked to these ventas (FIFO cobros, clientes page payments)
+      let ccHabersByVenta: Record<string, { haber: number; forma_pago: string; created_at: string }[]> = {};
+      if (ventaIds.length > 0) {
+        const { data: ccHabers } = await supabase
+          .from("cuenta_corriente")
+          .select("venta_id, haber, forma_pago, created_at")
+          .in("venta_id", ventaIds)
+          .gt("haber", 0)
+          .eq("debe", 0);
+        for (const cc of ccHabers || []) {
+          if (!cc.venta_id) continue;
+          if (!ccHabersByVenta[cc.venta_id]) ccHabersByVenta[cc.venta_id] = [];
+          ccHabersByVenta[cc.venta_id].push({
+            haber: cc.haber,
+            forma_pago: cc.forma_pago || "Pago",
+            created_at: cc.created_at,
+          });
+        }
+      }
+
+      // Fetch cobro_items for payments from the cobros feature
       let cobroItemsByVenta: Record<string, { monto: number; forma_pago: string; fecha: string }[]> = {};
       if (ventaIds.length > 0) {
         const { data: cobroItems } = await supabase
@@ -226,15 +232,20 @@ export default function PedidosPage() {
         }
       }
 
-      // Build saldo map using monto_pagado from venta (maintained by FIFO cobro logic)
-      const saldoMap: Record<string, number> = {};
-      for (const v of allVentas) {
-        const ccDebe = ccDebeMap[v.id] || 0;
-        if (ccDebe > 0) {
-          saldoMap[v.id] = Math.max(0, ccDebe - (v.monto_pagado || 0));
-        } else {
-          saldoMap[v.id] = 0;
-        }
+      // For gap payments (cobro_saldo linked to different venta), fetch ALL client CC habers
+      // sorted by date so we can match unlinked payments via FIFO
+      let clientCCHabers: { haber: number; forma_pago: string; created_at: string; venta_id: string | null }[] = [];
+      if (clienteId) {
+        const { data: allHabers } = await supabase
+          .from("cuenta_corriente")
+          .select("haber, forma_pago, created_at, venta_id")
+          .eq("cliente_id", clienteId)
+          .gt("haber", 0)
+          .eq("debe", 0)
+          .order("created_at", { ascending: true });
+        clientCCHabers = (allHabers || []).filter((h: any) =>
+          !h.venta_id || !ventaIds.includes(h.venta_id)
+        );
       }
 
       // Get client saldo
@@ -245,19 +256,22 @@ export default function PedidosPage() {
         setClienteSaldo(clienteSaldoReal);
       }
 
-      // Build payment details for CC ventas: add cobro entries and handle CC display
+      // Build payment details for CC ventas
       for (const ventaId of ventaIds) {
-        const ccDebe = ccDebeMap[ventaId] || 0;
-        if (ccDebe <= 0) continue;
+        if (!hasCC[ventaId]) continue;
         if (!pagosMap[ventaId]) pagosMap[ventaId] = [];
 
         const saldo = saldoMap[ventaId] || 0;
-        const ccPaid = ccDebe - saldo; // amount of CC debt that was paid
+        const venta = allVentas.find((v: any) => v.id === ventaId);
+        // At this point pagosMap only has caja_movimientos (sale-time payments like efectivo/transfer)
+        const paidAtSale = (pagosMap[ventaId] || []).reduce((s, p) => s + p.monto, 0);
+        const totalPaid = venta?.monto_pagado || 0;
+        const cobrosApplied = Math.max(0, totalPaid - paidAtSale); // cobro payments toward CC debt
 
-        // Collect all known cobro payments for this venta
+        // Collect all known cobro payment entries for this venta
         const cobroPayments: PagoDetalle[] = [];
 
-        // From cobro_items (cobros feature)
+        // From cobro_items
         for (const ci of cobroItemsByVenta[ventaId] || []) {
           cobroPayments.push({
             metodo_pago: ci.forma_pago,
@@ -267,34 +281,45 @@ export default function PedidosPage() {
           });
         }
 
-        // From CC haber entries (FIFO payments, clientes "pagar movimiento")
+        // From CC haber entries linked to this venta (FIFO, clientes page)
         // Deduplicate: skip CC habers that match a cobro_items entry (same amount)
-        const usedCobroAmounts = cobroPayments.map((p) => p.monto);
+        const usedAmounts = cobroPayments.map((p) => p.monto);
         for (const ccH of ccHabersByVenta[ventaId] || []) {
-          const matchIdx = usedCobroAmounts.indexOf(ccH.haber);
+          const matchIdx = usedAmounts.indexOf(ccH.haber);
           if (matchIdx >= 0) {
-            usedCobroAmounts.splice(matchIdx, 1); // already counted via cobro_items
+            usedAmounts.splice(matchIdx, 1);
             continue;
           }
           cobroPayments.push({
             metodo_pago: ccH.forma_pago,
             monto: ccH.haber,
-            fecha: ccH.created_at || ccH.fecha || undefined,
+            fecha: ccH.created_at || undefined,
             descripcion: "Cobro posterior",
           });
         }
 
-        // Add cobro payments to pagosMap
-        for (const cp of cobroPayments) {
-          pagosMap[ventaId].push(cp);
-        }
-
-        // Check if there's a payment gap (monto_pagado > tracked payments)
-        const totalTrackedCobros = cobroPayments.reduce((s, p) => s + p.monto, 0);
-        if (ccPaid > 0 && totalTrackedCobros < ccPaid) {
-          const gap = Math.round((ccPaid - totalTrackedCobros) * 100) / 100;
-          if (gap > 0) {
-            pagosMap[ventaId].push({
+        // Check for payment gap (cobro_saldo entries linked to other ventas)
+        const totalTracked = cobroPayments.reduce((s, p) => s + p.monto, 0);
+        if (cobrosApplied > 0 && totalTracked < cobrosApplied) {
+          let gap = Math.round((cobrosApplied - totalTracked) * 100) / 100;
+          // Try to find matching payment from client's unlinked CC habers
+          for (let i = 0; i < clientCCHabers.length && gap > 0.5; i++) {
+            const h = clientCCHabers[i];
+            if (h.haber <= gap + 0.5) {
+              cobroPayments.push({
+                metodo_pago: h.forma_pago || "Pago",
+                monto: Math.min(h.haber, gap),
+                fecha: h.created_at || undefined,
+                descripcion: "Cobro posterior",
+              });
+              gap = Math.round((gap - h.haber) * 100) / 100;
+              clientCCHabers.splice(i, 1);
+              i--;
+            }
+          }
+          // If still a gap, add generic entry as last resort
+          if (gap > 0.5) {
+            cobroPayments.push({
               metodo_pago: "Pago",
               monto: gap,
               descripcion: "Cobro posterior",
@@ -302,13 +327,16 @@ export default function PedidosPage() {
           }
         }
 
+        // Add cobro payments to pagosMap
+        for (const cp of cobroPayments) {
+          pagosMap[ventaId].push(cp);
+        }
+
         // Update or remove CC entry in pagosMap
         const ccIdx = pagosMap[ventaId].findIndex((p) => p.metodo_pago === "Cuenta Corriente");
         if (saldo <= 0) {
-          // Fully paid: remove CC debt entry
           if (ccIdx >= 0) pagosMap[ventaId].splice(ccIdx, 1);
         } else {
-          // Still pending: show CC with pending amount
           if (ccIdx >= 0) {
             pagosMap[ventaId][ccIdx].monto = saldo;
           } else {
