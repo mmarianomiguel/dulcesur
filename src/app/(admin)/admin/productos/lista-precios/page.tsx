@@ -1540,24 +1540,24 @@ export default function ListaPreciosPage() {
             const presLabel = hasQty ? pn : `${pn} x${product.unidadesCaja}`;
             const unitInBox = boxPrice / product.unidadesCaja;
             const boxMainText = `${presLabel}  ·  ${formatCurrency(boxPrice)}`;
-            const boxUnitText = `(${formatCurrency(unitInBox)} c/u)`;
+            const boxUnitText = `(${formatCurrency(unitInBox, true)} c/u)`;
 
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(11);
+            pdf.setFontSize(13);
             const mainW = pdf.getTextWidth(boxMainText);
             pdf.setFont("helvetica", "italic");
-            pdf.setFontSize(9);
+            pdf.setFontSize(10);
             const unitW = pdf.getTextWidth(boxUnitText);
             const totalW = mainW + 2 + unitW;
             const startX = centerX - totalW / 2;
 
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(11);
+            pdf.setFontSize(13);
             pdf.setTextColor(40);
             pdf.text(boxMainText, startX, cursor + 3.5);
 
             pdf.setFont("helvetica", "italic");
-            pdf.setFontSize(9);
+            pdf.setFontSize(10);
             pdf.setTextColor(130);
             pdf.text(boxUnitText, startX + mainW + 2, cursor + 3.5);
             pdf.setTextColor(0);
