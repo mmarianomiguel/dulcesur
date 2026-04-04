@@ -1465,22 +1465,37 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "italic");
           pdf.setFontSize(7);
           pdf.setTextColor(110);
-          pdf.text(`Precio modificado: ${prodDate}`, centerX, footerTop + 3, { align: "center" });
+          pdf.text(`Ult. modificacion: ${prodDate}`, centerX, footerTop + 3, { align: "center" });
           pdf.setTextColor(0);
 
-          // ── Measure name ──
+          // ── Measure name (allow up to 3 lines for long names) ──
           const nameMaxW = cellW - pad * 2 - 2;
           let nfs = 13;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(nfs);
           let nLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
-          while (nLines.length > 2 && nfs > 8) {
+          while (nLines.length > 3 && nfs > 7) {
             nfs -= 0.5;
             pdf.setFontSize(nfs);
             nLines = pdf.splitTextToSize(product.nombre, nameMaxW);
           }
+          // If still >2 lines but fits in 2 with smaller font, prefer 2 lines
+          if (nLines.length > 2 && nfs > 9) {
+            let tryFs = nfs;
+            while (nLines.length > 2 && tryFs > 9) {
+              tryFs -= 0.5;
+              pdf.setFontSize(tryFs);
+              nLines = pdf.splitTextToSize(product.nombre, nameMaxW);
+            }
+            if (nLines.length <= 2) nfs = tryFs;
+            else {
+              // Revert to 3 lines
+              pdf.setFontSize(nfs);
+              nLines = pdf.splitTextToSize(product.nombre, nameMaxW);
+            }
+          }
           const nlh = nfs * 0.42;
-          const maxNL = Math.min(nLines.length, 2);
+          const maxNL = Math.min(nLines.length, 3);
           const nameTextH = maxNL * nlh;
 
           // ── Measure total content block to center vertically ──
@@ -1488,7 +1503,7 @@ export default function ListaPreciosPage() {
           const priceTextH = priceFontSize * 0.35;
           const bandH = priceTextH + 5;
           const gap1 = 1.5;  // after name
-          const boxLineH = hasBox ? 5 : 0;  // "Caja x21 · $24.990 ($1.190 c/u)"
+          const boxLineH = hasBox ? 5 : 0;
           const gap2 = hasBox ? 1.5 : 0;  // after price band
           const totalBlockH = nameTextH + gap1 + bandH + gap2 + boxLineH;
 
@@ -1518,18 +1533,36 @@ export default function ListaPreciosPage() {
           pdf.text(formatCurrency(displayPrice), centerX, cursor + bandH / 2 + priceFontSize * 0.13, { align: "center" });
           cursor += bandH + gap2;
 
-          // ── BOX INFO (single line: "Caja x21 · $24.990 ($1.190 c/u)") ──
+          // ── BOX INFO: "Caja x21 · $24.990" bold + "($1.190 c/u)" italic gray ──
           if (hasBox) {
             const pn = product.nombrePresentacion;
             const hasQty = /x\s*\d|×\s*\d|\d+\s*u/.test(pn);
             const presLabel = hasQty ? pn : `${pn} x${product.unidadesCaja}`;
             const unitInBox = boxPrice / product.unidadesCaja;
+            const boxMainText = `${presLabel}  ·  ${formatCurrency(boxPrice)}`;
+            const boxUnitText = `(${formatCurrency(unitInBox)} c/u)`;
 
+            // Measure widths to place them side by side
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(10);
+            pdf.setFontSize(11);
+            const mainW = pdf.getTextWidth(boxMainText);
+            pdf.setFont("helvetica", "italic");
+            pdf.setFontSize(9);
+            const unitW = pdf.getTextWidth(boxUnitText);
+            const totalW = mainW + 2 + unitW;
+            const startX = centerX - totalW / 2;
+
+            // Bold part
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(11);
             pdf.setTextColor(40);
-            const boxText = `${presLabel}  ·  ${formatCurrency(boxPrice)}  (${formatCurrency(unitInBox)} c/u)`;
-            pdf.text(boxText, centerX, cursor + 3.5, { align: "center" });
+            pdf.text(boxMainText, startX, cursor + 3.5);
+
+            // Italic gray part
+            pdf.setFont("helvetica", "italic");
+            pdf.setFontSize(9);
+            pdf.setTextColor(130);
+            pdf.text(boxUnitText, startX + mainW + 2, cursor + 3.5);
             pdf.setTextColor(0);
           }
         });
