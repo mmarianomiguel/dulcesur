@@ -1713,62 +1713,32 @@ export default function VentasPage() {
           const cobrarSaldoInMixto = cobrarSaldo && clientId && saldoRealAntesDeTodo > 0;
 
           if (cobrarSaldoInMixto && clientId) {
-            // ─── Combined flow: sale + cobro saldo in one operation ───
-            // The user chose: efectivo+transferencia = totalPaid, CC = mixtoCuentaCorriente
-            // totalPaid covers the sale + part of old debt. CC is the remaining old debt.
-            const totalPaid = mixtoEfectivo + mixtoTransferencia; // actual cash+transfer received
-            // How much of the sale is NOT covered by cash+transfer (goes to CC as new debt)
-            const saleNotCovered = Math.max(0, Math.round((baseTotal - totalPaid) * 100) / 100);
-            // How much of the old debt was paid (excess cash over the sale amount)
-            const oldDebtCollected = Math.max(0, Math.round((saldoRealAntesDeTodo - mixtoCuentaCorriente) * 100) / 100);
-            // CC portion of the sale itself
-            const saleCCPortion = saleNotCovered;
+            // ─── Combined flow: cobro saldo FIRST, then sale ───
+            // Order matters for the libro diario: old debt cobro appears before new sale.
+            const oldDebtCollected = saldoRealAntesDeTodo; // pay off ALL old debt first
+            const totalPaid = mixtoEfectivo + mixtoTransferencia;
+            const paidForSale = totalPaid - oldDebtCollected; // what's left for this sale
+            const saleCCPortion = Math.max(0, Math.round((baseTotal - paidForSale) * 100) / 100); // unpaid portion of new sale
 
-            // Atomic saldo update via RPC: net change = +saleCCPortion - oldDebtCollected
-            const netChange = Math.round((saleCCPortion - oldDebtCollected) * 100) / 100;
-            const { data: newSaldoMixto } = await supabase.rpc("atomic_update_client_saldo", {
-              p_client_id: clientId,
-              p_change: netChange,
-            });
-            const saldoActualMixto = (newSaldoMixto ?? 0) - netChange; // reconstruct pre-update saldo
-
-            // CC entry for the sale portion (new debt)
-            if (saleCCPortion > 0) {
-              await supabase.from("cuenta_corriente").insert({
-                cliente_id: clientId,
-                fecha: hoy,
-                comprobante: `Venta #${numero}`,
-                descripcion: `Venta - Cuenta Corriente (parcial)`,
-                debe: saleCCPortion,
-                haber: 0,
-                saldo: saldoActualMixto + saleCCPortion,
-                forma_pago: "Cuenta Corriente",
-                venta_id: venta.id,
-              });
-            }
-            // CC entry for old debt collection (cobro)
+            // 1. COBRO SALDO VIEJO — FIFO per-venta CC haber entries
             if (oldDebtCollected > 0) {
-              await supabase.from("cuenta_corriente").insert({
-                cliente_id: clientId,
-                fecha: hoy,
-                comprobante: `Cobro saldo - Venta #${numero}`,
-                descripcion: `Cobro saldo anterior (Mixto)`,
-                debe: 0,
-                haber: oldDebtCollected,
-                saldo: newSaldoMixto,
-                forma_pago: "Efectivo",
-                venta_id: venta.id,
-              });
-              // FIFO update monto_pagado on old CC ventas
               const { data: pendingVentasMixto } = await supabase
                 .from("ventas")
-                .select("id, total, monto_pagado")
+                .select("id, numero, total, monto_pagado")
                 .eq("cliente_id", clientId)
                 .in("forma_pago", ["Cuenta Corriente", "Mixto", "Pendiente"])
                 .neq("estado", "anulada")
-                .neq("id", venta.id) // exclude current sale
+                .neq("id", venta.id)
                 .order("fecha", { ascending: true })
                 .order("created_at", { ascending: true });
+
+              // Reduce client saldo by old debt amount
+              const { data: saldoAfterCobro } = await supabase.rpc("atomic_update_client_saldo", {
+                p_client_id: clientId,
+                p_change: -oldDebtCollected,
+              });
+              let runningSaldo = (saldoAfterCobro ?? 0) + oldDebtCollected; // reconstruct pre-cobro
+
               let remMixto = oldDebtCollected;
               for (const pv of pendingVentasMixto || []) {
                 if (remMixto <= 0) break;
@@ -1776,11 +1746,38 @@ export default function VentasPage() {
                 if (pvPend <= 0) continue;
                 const apl = Math.min(remMixto, pvPend);
                 remMixto = Math.round((remMixto - apl) * 100) / 100;
+                runningSaldo -= apl;
+                // CC haber entry linked to old venta
+                await supabase.from("cuenta_corriente").insert({
+                  cliente_id: clientId, fecha: hoy,
+                  comprobante: `Cobro saldo #${pv.numero}`,
+                  descripcion: `Cobro deuda anterior`,
+                  debe: 0, haber: apl, saldo: Math.max(0, runningSaldo),
+                  forma_pago: "Efectivo", venta_id: pv.id,
+                });
                 await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + apl }).eq("id", pv.id);
               }
             }
-            // Update local state
-            setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoMixto } : c));
+
+            // 2. NEW SALE CC PORTION — if the sale wasn't fully covered
+            if (saleCCPortion > 0) {
+              const { data: saldoAfterCC } = await supabase.rpc("atomic_update_client_saldo", {
+                p_client_id: clientId,
+                p_change: saleCCPortion,
+              });
+              await supabase.from("cuenta_corriente").insert({
+                cliente_id: clientId, fecha: hoy,
+                comprobante: `Venta #${numero}`,
+                descripcion: `Saldo pendiente de venta`,
+                debe: saleCCPortion, haber: 0, saldo: saldoAfterCC,
+                forma_pago: "Cuenta Corriente", venta_id: venta.id,
+              });
+              setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: saldoAfterCC } : c));
+            } else {
+              // Re-read saldo for local state
+              const { data: postCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+              setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: postCli?.saldo ?? 0 } : c));
+            }
           } else if (ccEntry && clientId) {
             // ─── Standard flow: no cobrar saldo, just CC portion of the sale ───
             // Atomic saldo update via RPC (positive = increase debt)
