@@ -180,72 +180,53 @@ export default function PedidosPage() {
         }
       }
 
-      // Also check cobros allocated to these ventas (cobro_items track per-venta payment from cobros)
-      // These are ADDITIONAL payments on top of caja_movimientos (e.g. paying CC debt later)
+      // Fetch CC entries for these ventas (both debe for debt and haber for payments)
+      let ccDebeMap: Record<string, number> = {};
+      let ccHabersByVenta: Record<string, { haber: number; forma_pago: string; fecha: string; created_at: string; descripcion: string }[]> = {};
       if (ventaIds.length > 0) {
-        const { data: cobroItems } = await supabase
-          .from("cobro_items")
-          .select("venta_id, cobro_id, monto_aplicado, cobros(forma_pago, fecha, hora)")
-          .in("venta_id", ventaIds);
-        for (const ci of cobroItems || []) {
-          const key = ci.venta_id;
-          if (!pagosMap[key]) pagosMap[key] = [];
-          const cobro = (ci as any).cobros;
-          // Check if this cobro is already tracked via caja_movimientos (same cobro_id as referencia_id)
-          // Cobros create caja entries with referencia_tipo='cobro', not 'venta', so they won't overlap
-          pagosMap[key].push({
-            metodo_pago: cobro?.forma_pago || "Cobro",
-            monto: ci.monto_aplicado,
-            fecha: cobro?.fecha || undefined,
-            descripcion: "Cobro posterior",
-          });
-        }
-      }
-
-      // Also check cuenta_corriente for CC debt entries
-      if (ventaIds.length > 0) {
-        const { data: ccMovs } = await supabase
+        const { data: ccEntries } = await supabase
           .from("cuenta_corriente")
-          .select("venta_id, debe, forma_pago")
-          .in("venta_id", ventaIds)
-          .gt("debe", 0);
-        for (const cc of ccMovs || []) {
-          const key = cc.venta_id;
-          if (!pagosMap[key]) pagosMap[key] = [];
-          // Only add CC debt if not already tracked
-          const hasCC = pagosMap[key].some((p) => p.metodo_pago === "Cuenta Corriente");
-          if (!hasCC) {
-            pagosMap[key].push({ metodo_pago: "Cuenta Corriente", monto: cc.debe });
+          .select("venta_id, debe, haber, forma_pago, fecha, created_at, descripcion")
+          .in("venta_id", ventaIds);
+        for (const cc of ccEntries || []) {
+          if (!cc.venta_id) continue;
+          if ((cc.debe || 0) > 0 && (cc.haber || 0) === 0) {
+            // Pure debt entry
+            ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + cc.debe;
+          }
+          if ((cc.haber || 0) > 0 && (cc.debe || 0) === 0) {
+            // Pure payment entry (cobro toward this venta's debt)
+            if (!ccHabersByVenta[cc.venta_id]) ccHabersByVenta[cc.venta_id] = [];
+            ccHabersByVenta[cc.venta_id].push({
+              haber: cc.haber,
+              forma_pago: cc.forma_pago || "Pago",
+              fecha: cc.fecha,
+              created_at: cc.created_at,
+              descripcion: cc.descripcion || "",
+            });
           }
         }
       }
 
-      // Compute pending balance per venta using clientes.saldo as source of truth.
-      // Approach: find ventas with CC debt (debe entries in cuenta_corriente), then check
-      // which ones are still outstanding by matching against the client's real saldo.
-      let clienteSaldoReal = 0;
-      if (clienteId) {
-        const { data: cli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-        clienteSaldoReal = Math.max(0, cli?.saldo || 0);
-        setClienteSaldo(clienteSaldoReal);
-      }
-
-      // Get CC debt per venta (debe total from cuenta_corriente)
-      const ccDebeMap: Record<string, number> = {};
+      // Also check cobro_items for payments from the cobros feature
+      let cobroItemsByVenta: Record<string, { monto: number; forma_pago: string; fecha: string }[]> = {};
       if (ventaIds.length > 0) {
-        const { data: ccEntries } = await supabase
-          .from("cuenta_corriente")
-          .select("venta_id, debe")
-          .in("venta_id", ventaIds)
-          .gt("debe", 0);
-        for (const cc of ccEntries || []) {
-          if (!cc.venta_id) continue;
-          ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + (cc.debe || 0);
+        const { data: cobroItems } = await supabase
+          .from("cobro_items")
+          .select("venta_id, monto_aplicado, cobros(forma_pago, fecha)")
+          .in("venta_id", ventaIds);
+        for (const ci of cobroItems || []) {
+          if (!cobroItemsByVenta[ci.venta_id]) cobroItemsByVenta[ci.venta_id] = [];
+          const cobro = (ci as any).cobros;
+          cobroItemsByVenta[ci.venta_id].push({
+            monto: ci.monto_aplicado,
+            forma_pago: cobro?.forma_pago || "Cobro",
+            fecha: cobro?.fecha || "",
+          });
         }
       }
 
       // Build saldo map using monto_pagado from venta (maintained by FIFO cobro logic)
-      // This is more reliable than CC haber entries which may be linked to a different venta_id
       const saldoMap: Record<string, number> = {};
       for (const v of allVentas) {
         const ccDebe = ccDebeMap[v.id] || 0;
@@ -256,15 +237,82 @@ export default function PedidosPage() {
         }
       }
 
-      // Fix CC amounts in pagosMap: use actual pending saldo
+      // Get client saldo
+      let clienteSaldoReal = 0;
+      if (clienteId) {
+        const { data: cli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+        clienteSaldoReal = Math.max(0, cli?.saldo || 0);
+        setClienteSaldo(clienteSaldoReal);
+      }
+
+      // Build payment details for CC ventas: add cobro entries and handle CC display
       for (const ventaId of ventaIds) {
-        const ccIdx = (pagosMap[ventaId] || []).findIndex((p) => p.metodo_pago === "Cuenta Corriente");
-        if (ccIdx >= 0) {
-          const net = saldoMap[ventaId] || 0;
-          if (net <= 0) {
-            pagosMap[ventaId].splice(ccIdx, 1); // fully paid, remove CC entry
+        const ccDebe = ccDebeMap[ventaId] || 0;
+        if (ccDebe <= 0) continue;
+        if (!pagosMap[ventaId]) pagosMap[ventaId] = [];
+
+        const saldo = saldoMap[ventaId] || 0;
+        const ccPaid = ccDebe - saldo; // amount of CC debt that was paid
+
+        // Collect all known cobro payments for this venta
+        const cobroPayments: PagoDetalle[] = [];
+
+        // From cobro_items (cobros feature)
+        for (const ci of cobroItemsByVenta[ventaId] || []) {
+          cobroPayments.push({
+            metodo_pago: ci.forma_pago,
+            monto: ci.monto,
+            fecha: ci.fecha || undefined,
+            descripcion: "Cobro posterior",
+          });
+        }
+
+        // From CC haber entries (FIFO payments, clientes "pagar movimiento")
+        // Deduplicate: skip CC habers that match a cobro_items entry (same amount)
+        const usedCobroAmounts = cobroPayments.map((p) => p.monto);
+        for (const ccH of ccHabersByVenta[ventaId] || []) {
+          const matchIdx = usedCobroAmounts.indexOf(ccH.haber);
+          if (matchIdx >= 0) {
+            usedCobroAmounts.splice(matchIdx, 1); // already counted via cobro_items
+            continue;
+          }
+          cobroPayments.push({
+            metodo_pago: ccH.forma_pago,
+            monto: ccH.haber,
+            fecha: ccH.created_at || ccH.fecha || undefined,
+            descripcion: "Cobro posterior",
+          });
+        }
+
+        // Add cobro payments to pagosMap
+        for (const cp of cobroPayments) {
+          pagosMap[ventaId].push(cp);
+        }
+
+        // Check if there's a payment gap (monto_pagado > tracked payments)
+        const totalTrackedCobros = cobroPayments.reduce((s, p) => s + p.monto, 0);
+        if (ccPaid > 0 && totalTrackedCobros < ccPaid) {
+          const gap = Math.round((ccPaid - totalTrackedCobros) * 100) / 100;
+          if (gap > 0) {
+            pagosMap[ventaId].push({
+              metodo_pago: "Pago",
+              monto: gap,
+              descripcion: "Cobro posterior",
+            });
+          }
+        }
+
+        // Update or remove CC entry in pagosMap
+        const ccIdx = pagosMap[ventaId].findIndex((p) => p.metodo_pago === "Cuenta Corriente");
+        if (saldo <= 0) {
+          // Fully paid: remove CC debt entry
+          if (ccIdx >= 0) pagosMap[ventaId].splice(ccIdx, 1);
+        } else {
+          // Still pending: show CC with pending amount
+          if (ccIdx >= 0) {
+            pagosMap[ventaId][ccIdx].monto = saldo;
           } else {
-            pagosMap[ventaId][ccIdx].monto = net; // update to net pending amount
+            pagosMap[ventaId].push({ metodo_pago: "Cuenta Corriente", monto: saldo });
           }
         }
       }
@@ -697,9 +745,7 @@ export default function PedidosPage() {
 
             {/* Payment breakdown */}
             {pedido.venta && pedido.venta.pagos.length > 0 && (() => {
-              const pagos = pedido.venta.saldo_pendiente <= 0
-                ? pedido.venta.pagos.filter((p) => p.metodo_pago !== "Cuenta Corriente")
-                : pedido.venta.pagos;
+              const pagos = pedido.venta.pagos;
               if (pagos.length === 0) return null;
               return (
               <div className="mt-3 bg-gray-50 rounded-xl p-4">
@@ -996,9 +1042,7 @@ export default function PedidosPage() {
 
             {/* Payment breakdown */}
             {v.pagos.length > 0 && (() => {
-              const pagos = v.saldo_pendiente <= 0
-                ? v.pagos.filter((p) => p.metodo_pago !== "Cuenta Corriente")
-                : v.pagos;
+              const pagos = v.pagos;
               if (pagos.length === 0) return null;
               return (
               <div className="mt-3 bg-gray-50 rounded-xl p-4">
