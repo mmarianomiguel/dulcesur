@@ -1554,7 +1554,7 @@ export default function VentasPage() {
           : formaPago === "Efectivo" || formaPago === "Transferencia"
             ? total  // fully paid at POS
             : formaPago === "Mixto"
-              ? Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100  // non-CC portion paid at POS
+              ? Math.min(total, Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100)  // non-CC portion paid at POS, capped at venta total
               : 0,  // CC or Pendiente — nothing paid yet
         ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
           cuenta_transferencia_id: cuentaBancariaId,
@@ -1714,12 +1714,15 @@ export default function VentasPage() {
 
           if (cobrarSaldoInMixto && clientId) {
             // ─── Combined flow: sale + cobro saldo in one operation ───
-            // The Mixto total includes saldo pendiente. The CC portion is the NET remaining debt.
-            // We need to split it into: new sale debt (debe) and old debt collection (haber).
+            // The user chose: efectivo+transferencia = totalPaid, CC = mixtoCuentaCorriente
+            // totalPaid covers the sale + part of old debt. CC is the remaining old debt.
             const totalPaid = mixtoEfectivo + mixtoTransferencia; // actual cash+transfer received
-            // Subtract transferSurcharge from baseTotal since totalPaid doesn't include it (surcharge is added on top)
-            const saleCCPortion = Math.max(0, Math.round((baseTotal - transferSurcharge - totalPaid) * 100) / 100); // unpaid portion of this sale
-            const oldDebtCollected = Math.min(saldoRealAntesDeTodo, Math.max(0, Math.round((totalPaid - baseTotal) * 100) / 100)); // excess payment applied to old debt
+            // How much of the sale is NOT covered by cash+transfer (goes to CC as new debt)
+            const saleNotCovered = Math.max(0, Math.round((baseTotal - totalPaid) * 100) / 100);
+            // How much of the old debt was paid (excess cash over the sale amount)
+            const oldDebtCollected = Math.max(0, Math.round((saldoRealAntesDeTodo - mixtoCuentaCorriente) * 100) / 100);
+            // CC portion of the sale itself
+            const saleCCPortion = saleNotCovered;
 
             // Atomic saldo update via RPC: net change = +saleCCPortion - oldDebtCollected
             const netChange = Math.round((saleCCPortion - oldDebtCollected) * 100) / 100;
