@@ -1403,12 +1403,12 @@ export default function ListaPreciosPage() {
 
       if (style === "gondola") {
         // Landscape A4: 297×210mm — grid of shelf labels
-        const cols = 4;
+        const cols = 3;
         const rows = 6;
-        const perPage = cols * rows; // 24 labels per page
+        const perPage = cols * rows; // 18 labels per page
         const cellW = (pageW - margin * 2) / cols;
         const cellH = (pageH - margin * 2) / rows;
-        const pad = 2;
+        const pad = 2.5;
 
         selectedProducts.forEach((product, idx) => {
           if (idx > 0 && idx % perPage === 0) pdf.addPage();
@@ -1419,7 +1419,6 @@ export default function ListaPreciosPage() {
           const y = margin + row * cellH;
 
           const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
-          const transferPrice = displayPrice * (1 + config.porcentajeTransferencia / 100);
           const boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
           const hasBox = product.unidadesCaja > 0 && boxPrice > 0;
 
@@ -1430,61 +1429,59 @@ export default function ListaPreciosPage() {
           pdf.rect(x, y, cellW, cellH);
           pdf.setLineDashPattern([], 0);
 
-          // ── Layout zones (percentages of cellH) ──
-          // Top strip: logo + web + date (10%)
-          // Name zone: product name (22%)
-          // Price zone: big price + transfer (40%)
-          // Bottom zone: presentation info (18%)
-          // Footer line (10%)
-          const topH = cellH * 0.10;
-          const nameY = y + topH;
-          const nameH = cellH * 0.22;
-          const priceY = nameY + nameH;
+          // ── Layout zones ──
+          // Top strip: logo + web + date (15%)
+          // Name zone: product name (25%)
+          // Price zone: big price (35%)
+          // Bottom zone: presentation/box info (25%)
+          const topH = cellH * 0.15;
+          const nameZoneY = y + topH;
+          const nameH = cellH * 0.25;
+          const priceZoneY = nameZoneY + nameH;
           const priceH = cellH * 0.35;
-          const boxY = priceY + priceH;
-          const boxH = cellH * 0.22;
-          const footerY = boxY + boxH;
+          const boxZoneY = priceZoneY + priceH;
+          const boxH = cellH * 0.25;
 
           // ── 1. TOP STRIP: logo (left) + web + date (right) ──
           if (logoBase64) {
-            const logoH = topH * 0.85;
+            const logoH = topH - 2;
             const logoW = logoH * logoAspectRatio;
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + (topH - logoH) / 2, logoW, logoH); } catch {}
+            try { pdf.addImage(logoBase64, "PNG", x + pad, y + 1, logoW, logoH); } catch {}
           }
           pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(4.5);
-          pdf.setTextColor(140);
+          pdf.setFontSize(6.5);
+          pdf.setTextColor(120);
+          if (config.webUrl) {
+            pdf.text(config.webUrl, x + cellW - pad, y + topH * 0.45, { align: "right" });
+          }
           const prodDate = product.fechaActualizacion
             ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
             : today;
-          pdf.text(prodDate, x + cellW - pad, y + topH * 0.65, { align: "right" });
-          if (config.webUrl) {
-            const dateW = pdf.getTextWidth(prodDate);
-            pdf.text(config.webUrl, x + cellW - pad - dateW - 2, y + topH * 0.65, { align: "right" });
-          }
+          pdf.setFontSize(6);
+          pdf.text(prodDate, x + cellW - pad, y + topH * 0.82, { align: "right" });
           pdf.setTextColor(0);
 
-          // Thin separator after top strip
-          pdf.setDrawColor(210);
-          pdf.setLineWidth(0.15);
+          // Separator after top strip
+          pdf.setDrawColor(200);
+          pdf.setLineWidth(0.2);
           pdf.line(x + pad, y + topH, x + cellW - pad, y + topH);
 
           // ── 2. PRODUCT NAME (centered, bold, up to 2 lines) ──
           const nameMaxW = cellW - pad * 2;
-          let nameFontSize = 8;
+          let nameFontSize = 11;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(nameFontSize);
           let nameLines: string[] = pdf.splitTextToSize(product.nombre, nameMaxW);
-          const minNameFont = 5.5;
+          const minNameFont = 7;
           while (nameLines.length > 2 && nameFontSize > minNameFont) {
             nameFontSize -= 0.5;
             pdf.setFontSize(nameFontSize);
             nameLines = pdf.splitTextToSize(product.nombre, nameMaxW);
           }
-          const nameLineH = nameFontSize * 0.42;
+          const nameLineH = nameFontSize * 0.45;
           const maxNameLines = Math.min(nameLines.length, 2);
-          const totalNameH = maxNameLines * nameLineH;
-          const nameStartY = nameY + (nameH - totalNameH) / 2 + nameLineH * 0.7;
+          const totalNameTextH = maxNameLines * nameLineH;
+          const nameStartY = nameZoneY + (nameH - totalNameTextH) / 2 + nameLineH * 0.7;
           for (let li = 0; li < maxNameLines; li++) {
             let lineText = String(nameLines[li]);
             if (li === maxNameLines - 1 && nameLines.length > maxNameLines) {
@@ -1495,60 +1492,45 @@ export default function ListaPreciosPage() {
           }
 
           // ── 3. PRICE ZONE ──
-          // Background highlight for price
-          pdf.setFillColor(245, 245, 245);
-          pdf.rect(x + 0.15, priceY, cellW - 0.3, priceH, "F");
+          // Background highlight
+          pdf.setFillColor(242, 242, 242);
+          pdf.rect(x + 0.15, priceZoneY, cellW - 0.3, priceH, "F");
 
-          // Big price (centered)
-          const mainPriceFontSize = Math.min(18, cellW * 0.26);
+          // Big price (centered, large)
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(mainPriceFontSize);
+          pdf.setFontSize(26);
           pdf.setTextColor(0);
           const priceText = formatCurrency(displayPrice);
-          const priceCenterY = priceY + priceH * 0.45 + mainPriceFontSize * 0.13;
+          const priceCenterY = priceZoneY + priceH * 0.55;
           pdf.text(priceText, x + cellW / 2, priceCenterY, { align: "center" });
-
-          // Transfer price below (smaller, gray)
-          if (config.porcentajeTransferencia > 0) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(5.5);
-            pdf.setTextColor(120);
-            pdf.text(`Transf. ${formatCurrency(transferPrice)}`, x + cellW / 2, priceCenterY + mainPriceFontSize * 0.32, { align: "center" });
-            pdf.setTextColor(0);
-          }
 
           // ── 4. PRESENTATION / BOX INFO ──
           if (hasBox) {
             // Separator
-            pdf.setDrawColor(210);
-            pdf.setLineWidth(0.15);
-            pdf.line(x + pad, boxY, x + cellW - pad, boxY);
+            pdf.setDrawColor(200);
+            pdf.setLineWidth(0.2);
+            pdf.line(x + pad, boxZoneY, x + cellW - pad, boxZoneY);
 
-            // Left: "Caja x12" label
+            // Left: presentation label
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(6);
-            pdf.setTextColor(80);
+            pdf.setFontSize(9);
+            pdf.setTextColor(60);
             const presLabel = `${product.nombrePresentacion} x${product.unidadesCaja}`;
-            pdf.text(presLabel, x + pad + 1, boxY + boxH * 0.45);
+            pdf.text(presLabel, x + pad + 1, boxZoneY + boxH * 0.45);
 
-            // Right: box price
+            // Right: box price (big)
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(8);
+            pdf.setFontSize(13);
             pdf.setTextColor(0);
-            pdf.text(formatCurrency(boxPrice), x + cellW - pad - 1, boxY + boxH * 0.45, { align: "right" });
+            pdf.text(formatCurrency(boxPrice), x + cellW - pad - 1, boxZoneY + boxH * 0.45, { align: "right" });
 
-            // Unit price within box (smaller, below)
+            // Unit price within box
             const unitInBox = boxPrice / product.unidadesCaja;
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(4.5);
-            pdf.setTextColor(120);
-            pdf.text(`(${formatCurrency(unitInBox)} c/u)`, x + cellW - pad - 1, boxY + boxH * 0.78, { align: "right" });
+            pdf.setFontSize(7);
+            pdf.setTextColor(100);
+            pdf.text(`(${formatCurrency(unitInBox)} c/u)`, x + cellW - pad - 1, boxZoneY + boxH * 0.82, { align: "right" });
             pdf.setTextColor(0);
-          } else {
-            // No box — show a subtle separator only
-            pdf.setDrawColor(230);
-            pdf.setLineWidth(0.1);
-            pdf.line(x + pad, boxY, x + cellW - pad, boxY);
           }
         });
       }
