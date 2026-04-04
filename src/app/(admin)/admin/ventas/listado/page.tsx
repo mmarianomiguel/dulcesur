@@ -2060,6 +2060,8 @@ export default function ListadoVentasPage() {
             const pago = formatPago(order.forma_pago || order.metodo_pago);
             const entrega = formatEntrega(order.metodo_entrega);
             const isNC = order._tipo_comprobante?.includes("Nota de Crédito");
+            const orderDelivered = order.estado === "entregado";
+            const orderCancelled = order.estado === "cancelado";
             const estadoSteps = ["pendiente", "armado", "entregado"];
             const currentStep = order.estado === "cancelado" ? -1 : estadoSteps.indexOf(order.estado);
 
@@ -2105,7 +2107,22 @@ export default function ListadoVentasPage() {
 
                       {/* Delivery & payment info */}
                       <div className="flex flex-wrap items-center gap-2 text-xs">
-                        {entrega && (
+                        {entrega && !orderDelivered && !orderCancelled && (
+                          <button onClick={async (e) => {
+                            e.stopPropagation();
+                            const newMethod = order.metodo_entrega === "envio" ? "retiro" : "envio";
+                            const ventaId = (order as any)._ventaId || (order as any).venta_id;
+                            if (ventaId) await supabase.from("ventas").update({ metodo_entrega: newMethod }).eq("id", ventaId);
+                            if (order.numero) await supabase.from("pedidos_tienda").update({ metodo_entrega: newMethod === "envio" ? "envio" : "retiro_local" }).eq("numero", order.numero);
+                            setPoSelectedPedido({ ...poSelectedPedido!, metodo_entrega: newMethod } as any);
+                            showAdminToast(`Cambiado a ${newMethod === "envio" ? "Envío" : "Retiro"}`, "success");
+                          }} title="Click para cambiar">
+                            <Badge variant="outline" className={`font-normal cursor-pointer ${order.metodo_entrega === "envio" ? "border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100" : "border-gray-300 hover:bg-muted"}`}>
+                              {order.metodo_entrega === "envio" ? <><Truck className="w-3 h-3 mr-1" />{entrega}</> : <><Store className="w-3 h-3 mr-1" />{entrega}</>}
+                            </Badge>
+                          </button>
+                        )}
+                        {entrega && (orderDelivered || orderCancelled) && (
                           <Badge variant="outline" className={`font-normal ${order.metodo_entrega === "envio" ? "border-blue-300 text-blue-700 bg-blue-50" : "border-gray-300"}`}>
                             {order.metodo_entrega === "envio" ? <><Truck className="w-3 h-3 mr-1" />{entrega}</> : <><Store className="w-3 h-3 mr-1" />{entrega}</>}
                           </Badge>

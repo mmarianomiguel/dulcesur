@@ -111,7 +111,7 @@ export default function HojaDeRutaPage() {
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [dlvConfirm, setDlvConfirm] = useState<{ open: boolean; ids: string[]; pendiente: number; type: "paid" | "unpaid" | "no_client"; clienteNombre?: string }>({ open: false, ids: [], pendiente: 0, type: "paid" });
   const [orden, setOrden] = useState<Record<string, number>>({});
-  const [filterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
+  const [filterEntrega, setFilterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
   const [search, setSearch] = useState("");
   const [showAllPending, setShowAllPending] = useState(true);
 
@@ -123,6 +123,8 @@ export default function HojaDeRutaPage() {
   const [historialDateFrom, setHistorialDateFrom] = useState(getArgentinaToday());
   const [historialDateTo, setHistorialDateTo] = useState(getArgentinaToday());
   const [historialSearch, setHistorialSearch] = useState("");
+  const [historialFilterEntrega, setHistorialFilterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
 
   // Route view
@@ -353,6 +355,8 @@ export default function HojaDeRutaPage() {
       const s = historialSearch.toLowerCase();
       if (!v.numero.toLowerCase().includes(s) && !(v.clientes?.nombre || "").toLowerCase().includes(s)) return false;
     }
+    if (historialFilterEntrega === "envio" && v.metodo_entrega !== "envio") return false;
+    if (historialFilterEntrega === "retiro" && v.metodo_entrega !== "retiro" && v.metodo_entrega !== "retiro_local" && v.metodo_entrega !== null) return false;
     return true;
   });
 
@@ -908,80 +912,143 @@ export default function HojaDeRutaPage() {
                 className="w-full h-9 pl-3 pr-3 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+            <div className="flex items-center rounded-lg border overflow-hidden">
+              {([["todos", "Todos"], ["envio", "Envío"], ["retiro", "Retiro"]] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setHistorialFilterEntrega(val)} className={`px-3 py-1.5 text-xs font-medium transition-colors ${historialFilterEntrega === val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Historial stats */}
+          {/* Historial stats — interactive cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            <Card>
+            {/* Entregas */}
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary/20 ${expandedCard === "entregas" ? "ring-2 ring-primary/40" : ""}`} onClick={() => setExpandedCard(expandedCard === "entregas" ? null : "entregas")}>
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                  <CheckCircle className="w-4 h-4" />
-                  Entregas
-                </div>
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1"><CheckCircle className="w-4 h-4" />Entregas</div>
                 <div className="text-2xl font-bold">{filteredHistorial.length}</div>
+                <p className="text-[10px] text-muted-foreground mt-1">{filteredHistorial.filter(v => v.metodo_entrega === "envio").length} envíos · {filteredHistorial.filter(v => v.metodo_entrega !== "envio").length} retiros</p>
               </CardContent>
             </Card>
-            <Card>
+            {/* Total */}
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary/20 ${expandedCard === "total" ? "ring-2 ring-primary/40" : ""}`} onClick={() => setExpandedCard(expandedCard === "total" ? null : "total")}>
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                  <DollarSign className="w-4 h-4" />
-                  Total
-                </div>
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1"><DollarSign className="w-4 h-4" />Total</div>
                 <div className="text-2xl font-bold">{formatCurrency(historialTotalVentas - historialTotalNC)}</div>
-                {historialTotalNC > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">NC: -{formatCurrency(historialTotalNC)}</p>
-                )}
+                {historialTotalNC > 0 && <p className="text-xs text-amber-600 mt-1">NC: -{formatCurrency(historialTotalNC)}</p>}
               </CardContent>
             </Card>
-            <Card>
+            {/* Efectivo */}
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-green-200 ${expandedCard === "efectivo" ? "ring-2 ring-green-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "efectivo" ? null : "efectivo")}>
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-green-600 text-sm mb-1">
-                  <Banknote className="w-4 h-4" />
-                  Efectivo
-                </div>
+                <div className="flex items-center gap-2 text-green-600 text-sm mb-1"><Banknote className="w-4 h-4" />Efectivo</div>
                 <div className="text-2xl font-bold text-green-600">{formatCurrency(historialBreakdown.efectivo)}</div>
               </CardContent>
             </Card>
-            <Card>
+            {/* Transferencias */}
+            <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-blue-200 ${expandedCard === "transferencias" ? "ring-2 ring-blue-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "transferencias" ? null : "transferencias")}>
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-blue-600 text-sm mb-1">
-                  <Landmark className="w-4 h-4" />
-                  Transferencias
-                </div>
+                <div className="flex items-center gap-2 text-blue-600 text-sm mb-1"><Landmark className="w-4 h-4" />Transferencias</div>
                 <div className="text-2xl font-bold text-blue-600">{formatCurrency(historialBreakdown.totalTransferencias)}</div>
-                {Object.entries(historialBreakdown.transferencias).map(([cuenta, monto]) => (
-                  <p key={cuenta} className="text-xs text-blue-500 mt-0.5">{cuenta}: {formatCurrency(monto)}</p>
-                ))}
               </CardContent>
             </Card>
+            {/* CC */}
             {historialBreakdown.cuentaCorriente > 0 && (
-              <Card>
+              <Card className={`cursor-pointer transition-all hover:ring-2 hover:ring-orange-200 ${expandedCard === "cc" ? "ring-2 ring-orange-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "cc" ? null : "cc")}>
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-orange-600 text-sm mb-1">
-                    <FileText className="w-4 h-4" />
-                    Cuenta Corriente
-                  </div>
+                  <div className="flex items-center gap-2 text-orange-600 text-sm mb-1"><FileText className="w-4 h-4" />Cuenta Corriente</div>
                   <div className="text-2xl font-bold text-orange-600">{formatCurrency(historialBreakdown.cuentaCorriente)}</div>
                 </CardContent>
               </Card>
             )}
+            {/* Deudores */}
             {historialBreakdown.deudores.length > 0 && (
-              <Card className="border-orange-200 bg-orange-50/50">
+              <Card className={`cursor-pointer transition-all border-orange-200 bg-orange-50/50 hover:ring-2 hover:ring-orange-300 ${expandedCard === "deudores" ? "ring-2 ring-orange-400" : ""}`} onClick={() => setExpandedCard(expandedCard === "deudores" ? null : "deudores")}>
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-orange-700 text-sm mb-1">
-                    <AlertCircle className="w-4 h-4" />
-                    Deudores
-                  </div>
+                  <div className="flex items-center gap-2 text-orange-700 text-sm mb-1"><AlertCircle className="w-4 h-4" />Deudores</div>
                   <div className="text-2xl font-bold text-orange-700">{historialBreakdown.deudores.length}</div>
-                  <div className="mt-1 space-y-0.5">
-                    {historialBreakdown.deudores.map((d, i) => (
-                      <p key={i} className="text-xs text-orange-600">{d.nombre}: {formatCurrency(d.monto)}</p>
-                    ))}
-                  </div>
                 </CardContent>
               </Card>
             )}
           </div>
+          {/* Expanded card detail */}
+          {expandedCard && (
+            <Card className="border-primary/20 bg-muted/30">
+              <CardContent className="p-4">
+                {expandedCard === "entregas" && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold mb-2">Detalle de entregas</p>
+                    <p>Envíos a domicilio: <span className="font-bold">{filteredHistorial.filter(v => v.metodo_entrega === "envio").length}</span></p>
+                    <p>Retiros en local: <span className="font-bold">{filteredHistorial.filter(v => v.metodo_entrega !== "envio").length}</span></p>
+                    <p>Total entregas: <span className="font-bold">{filteredHistorial.length}</span></p>
+                    <p className="text-muted-foreground text-xs mt-2">Clientes atendidos: {new Set(filteredHistorial.map(v => v.cliente_id).filter(Boolean)).size}</p>
+                  </div>
+                )}
+                {expandedCard === "total" && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold mb-2">Desglose del total</p>
+                    <p>Ventas brutas: <span className="font-bold">{formatCurrency(historialTotalVentas)}</span></p>
+                    {historialTotalNC > 0 && <p className="text-amber-600">Notas de crédito: <span className="font-bold">-{formatCurrency(historialTotalNC)}</span></p>}
+                    <p className="border-t pt-1 mt-1">Neto: <span className="font-bold">{formatCurrency(historialTotalVentas - historialTotalNC)}</span></p>
+                    <p className="text-green-600">Cobrado: <span className="font-bold">{formatCurrency(historialTotalCobrado)}</span></p>
+                    {historialTotalVentas - historialTotalNC - historialTotalCobrado > 0 && <p className="text-orange-600">Pendiente: <span className="font-bold">{formatCurrency(historialTotalVentas - historialTotalNC - historialTotalCobrado)}</span></p>}
+                  </div>
+                )}
+                {expandedCard === "efectivo" && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold mb-2">Cobros en efectivo</p>
+                    <p>Total efectivo: <span className="font-bold text-green-600">{formatCurrency(historialBreakdown.efectivo)}</span></p>
+                    <p className="text-muted-foreground text-xs mt-2">Entregas con pago en efectivo: {filteredHistorial.filter(v => (historialPagos[v.id] || []).some(p => p.metodo === "Efectivo")).length}</p>
+                  </div>
+                )}
+                {expandedCard === "transferencias" && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold mb-2">Detalle de transferencias por cuenta</p>
+                    {Object.entries(historialBreakdown.transferencias).length > 0 ? Object.entries(historialBreakdown.transferencias).map(([cuenta, monto]) => (
+                      <div key={cuenta} className="flex justify-between py-1 border-b last:border-0">
+                        <span className="text-blue-700">{cuenta}</span>
+                        <span className="font-bold text-blue-700">{formatCurrency(monto)}</span>
+                      </div>
+                    )) : <p className="text-muted-foreground">Sin transferencias en este período</p>}
+                    <div className="flex justify-between pt-2 border-t mt-2">
+                      <span className="font-semibold">Total transferencias</span>
+                      <span className="font-bold text-blue-700">{formatCurrency(historialBreakdown.totalTransferencias)}</span>
+                    </div>
+                  </div>
+                )}
+                {expandedCard === "cc" && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold mb-2">Cargado a cuenta corriente</p>
+                    {filteredHistorial.filter(v => (historialPagos[v.id] || []).some(p => p.metodo === "Cuenta Corriente")).map(v => {
+                      const ccMonto = (historialPagos[v.id] || []).filter(p => p.metodo === "Cuenta Corriente").reduce((s, p) => s + p.monto, 0);
+                      return (
+                        <div key={v.id} className="flex justify-between py-1 border-b last:border-0">
+                          <span>{v.clientes?.nombre || "Sin cliente"} <span className="text-muted-foreground text-xs">#{v.numero}</span></span>
+                          <span className="font-bold text-orange-600">{formatCurrency(ccMonto)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {expandedCard === "deudores" && (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold mb-2">Clientes con saldo pendiente</p>
+                    {historialBreakdown.deudores.map((d, i) => (
+                      <div key={i} className="flex justify-between py-1 border-b last:border-0">
+                        <span className="text-orange-700">{d.nombre}</span>
+                        <span className="font-bold text-orange-700">{formatCurrency(d.monto)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-2 border-t mt-2">
+                      <span className="font-semibold">Total deuda</span>
+                      <span className="font-bold text-orange-700">{formatCurrency(historialBreakdown.deudores.reduce((s, d) => s + d.monto, 0))}</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Historial grouped by day */}
           <div className="flex items-center justify-between">
@@ -1107,9 +1174,21 @@ export default function HojaDeRutaPage() {
                                     {venta.clientes?.nombre ?? "Sin cliente"}
                                   </td>
                                   <td className="py-2.5 px-3">
-                                    <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : "bg-muted text-muted-foreground hover:bg-muted"}`}>
-                                      {venta.metodo_entrega === "envio" ? "Envio" : "Retiro"}
-                                    </Badge>
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        const newMethod = venta.metodo_entrega === "envio" ? "retiro" : "envio";
+                                        await supabase.from("ventas").update({ metodo_entrega: newMethod }).eq("id", venta.id);
+                                        if (venta.numero) await supabase.from("pedidos_tienda").update({ metodo_entrega: newMethod === "envio" ? "envio" : "retiro_local" }).eq("numero", venta.numero);
+                                        setVentas(prev => prev.map(v => v.id === venta.id ? { ...v, metodo_entrega: newMethod } : v));
+                                        // Toast feedback handled by state update
+                                      }}
+                                      title="Click para cambiar método de entrega"
+                                    >
+                                      <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-xs cursor-pointer ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-200" : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"}`}>
+                                        {venta.metodo_entrega === "envio" ? "Envio" : "Retiro"}
+                                      </Badge>
+                                    </button>
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-semibold text-foreground">
                                     {formatCurrency(ncMonto > 0 ? venta.total - ncMonto : venta.total)}
