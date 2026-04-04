@@ -1431,38 +1431,38 @@ export default function ListaPreciosPage() {
           pdf.setLineDashPattern([], 0);
 
           // ── Fixed zones ──
-          const headerH = 5;
-          const footerH = 3.5;
+          const headerH = 7;
+          const footerH = 3;
           const headerBottom = y + headerH;
           const footerTop = y + cellH - footerH;
-          const contentTop = headerBottom + 0.5;
-          const contentH = footerTop - contentTop - 0.5;
+          const contentTop = headerBottom + 1;
+          const contentH = footerTop - contentTop - 1;
 
-          // ── HEADER: logo left, web right (compact strip) ──
+          // ── HEADER: logo left, web right ──
           if (logoBase64) {
-            const lH = 6;
+            const lH = headerH - 1;
             const lW = lH * logoAspectRatio;
-            try { pdf.addImage(logoBase64, "PNG", x + pad, y + 0.3, lW, lH); } catch {}
+            try { pdf.addImage(logoBase64, "PNG", x + pad, y + 0.5, lW, lH); } catch {}
           }
           if (config.webUrl) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(7);
             pdf.setTextColor(100);
-            pdf.text(config.webUrl, x + cellW - pad, y + 3.5, { align: "right" });
+            pdf.text(config.webUrl, x + cellW - pad, y + headerH * 0.6, { align: "right" });
             pdf.setTextColor(0);
           }
           pdf.setDrawColor(210);
           pdf.setLineWidth(0.15);
           pdf.line(x + 1, headerBottom, x + cellW - 1, headerBottom);
 
-          // ── FOOTER: "Ult. modificacion: DD/MM/YYYY" right-aligned, small ──
+          // ── FOOTER: right-aligned date ──
           const prodDate = product.fechaActualizacion
             ? new Date(product.fechaActualizacion).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
             : today;
           pdf.setFont("helvetica", "italic");
-          pdf.setFontSize(5.5);
-          pdf.setTextColor(140);
-          pdf.text(`Ult. modificacion: ${prodDate}`, x + cellW - pad, footerTop + 2.5, { align: "right" });
+          pdf.setFontSize(5);
+          pdf.setTextColor(150);
+          pdf.text(prodDate, x + cellW - pad, y + cellH - 1, { align: "right" });
           pdf.setTextColor(0);
 
           // ── Measure name (allow up to 3 lines for long names) ──
@@ -1496,10 +1496,10 @@ export default function ListaPreciosPage() {
           // ── Measure total content block ──
           const priceFontSize = hasBox ? 28 : 32;
           const priceTextH = priceFontSize * 0.35;
-          const bandH = priceTextH + 6;
+          const bandH = priceTextH + 7;
           const gap1 = 2;
-          const boxLineH = hasBox ? 6 : 0;
-          const gap2 = hasBox ? 2 : 0;
+          const boxLineH = hasBox ? 5.5 : 0;
+          const gap2 = hasBox ? 1.5 : 0;
           const totalBlockH = nameTextH + gap1 + bandH + gap2 + boxLineH;
 
           // Center everything in content area
@@ -1519,13 +1519,13 @@ export default function ListaPreciosPage() {
           }
           cursor += nameTextH + gap1;
 
-          // ── PRICE (gray band with more breathing room) ──
+          // ── PRICE (gray band, with decimals) ──
           pdf.setFillColor(235, 235, 235);
           pdf.rect(x + 0.5, cursor, cellW - 1, bandH, "F");
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(priceFontSize);
           pdf.setTextColor(0);
-          pdf.text(formatCurrency(displayPrice), centerX, cursor + bandH / 2 + priceFontSize * 0.13, { align: "center" });
+          pdf.text(formatCurrency(displayPrice, true), centerX, cursor + bandH / 2 + priceFontSize * 0.13, { align: "center" });
           cursor += bandH + gap2;
 
           // ── BOX INFO: "Caja x21 · $24.990" bold + "($1.190 c/u)" italic gray ──
@@ -1549,12 +1549,12 @@ export default function ListaPreciosPage() {
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(11);
             pdf.setTextColor(40);
-            pdf.text(boxMainText, startX, cursor + 4);
+            pdf.text(boxMainText, startX, cursor + 3.5);
 
             pdf.setFont("helvetica", "italic");
             pdf.setFontSize(9);
             pdf.setTextColor(130);
-            pdf.text(boxUnitText, startX + mainW + 2, cursor + 4);
+            pdf.text(boxUnitText, startX + mainW + 2, cursor + 3.5);
             pdf.setTextColor(0);
           }
         });
