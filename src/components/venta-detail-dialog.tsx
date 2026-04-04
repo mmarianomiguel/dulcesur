@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +98,7 @@ export interface VentaDetailPago {
   metodo: string;
   monto: number;
   cuenta_bancaria?: string | null;
+  fecha_hora?: string | null;
 }
 
 export interface NCDetail {
@@ -395,7 +397,8 @@ export function VentaDetailDialog({
                       const isNC = p.metodo.includes("Nota de Cr");
                       const isPending = p.metodo === "Pendiente de cobro";
                       return (
-                        <div key={i} className="flex items-center justify-between text-xs">
+                        <React.Fragment key={i}>
+                        <div className="flex items-center justify-between text-xs">
                           <div className="flex items-center gap-1.5">
                             {p.metodo === "Efectivo" && <Banknote className="w-3 h-3 text-green-600" />}
                             {p.metodo === "Transferencia" && <Landmark className="w-3 h-3 text-blue-600" />}
@@ -411,6 +414,12 @@ export function VentaDetailDialog({
                             {isNC ? `-${formatCurrency(p.monto)}` : formatCurrency(p.monto)}
                           </span>
                         </div>
+                        {p.fecha_hora && (
+                          <p className="text-[10px] text-muted-foreground ml-5 -mt-0.5 mb-1">
+                            {(() => { const d = new Date(p.fecha_hora); return isNaN(d.getTime()) ? "" : `${d.toLocaleDateString("es-AR", { day: "numeric", month: "short" })}, ${d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`; })()}
+                          </p>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                     {pagos.length > 1 && (

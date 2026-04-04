@@ -116,7 +116,7 @@ export default function HojaDeRutaPage() {
   const [activeTab, setActiveTab] = useState<"pendientes" | "historial">("pendientes");
   const [historialLoading, setHistorialLoading] = useState(false);
   const [historialVentas, setHistorialVentas] = useState<VentaRow[]>([]);
-  const [historialPagos, setHistorialPagos] = useState<Record<string, { monto: number; metodo: string }[]>>({});
+  const [historialPagos, setHistorialPagos] = useState<Record<string, { monto: number; metodo: string; cuenta_bancaria?: string; fecha_hora?: string }[]>>({});
   const [historialDateFrom, setHistorialDateFrom] = useState(getArgentinaToday());
   const [historialDateTo, setHistorialDateTo] = useState(getArgentinaToday());
   const [historialSearch, setHistorialSearch] = useState("");
@@ -276,7 +276,7 @@ export default function HojaDeRutaPage() {
       const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
         supabase
           .from("caja_movimientos")
-          .select("referencia_id, monto, metodo_pago")
+          .select("referencia_id, monto, metodo_pago, cuenta_bancaria, created_at")
           .eq("tipo", "ingreso")
           .eq("referencia_tipo", "venta")
           .in("referencia_id", ventaIds),
@@ -311,10 +311,10 @@ export default function HojaDeRutaPage() {
         ncViaFactura = ncF || [];
       }
 
-      const pagosMap: Record<string, { monto: number; metodo: string }[]> = {};
-      (movs || []).forEach((m: { referencia_id: string; monto: number; metodo_pago: string }) => {
+      const pagosMap: Record<string, { monto: number; metodo: string; cuenta_bancaria?: string; fecha_hora?: string }[]> = {};
+      (movs || []).forEach((m: any) => {
         if (!pagosMap[m.referencia_id]) pagosMap[m.referencia_id] = [];
-        pagosMap[m.referencia_id].push({ monto: m.monto, metodo: m.metodo_pago });
+        pagosMap[m.referencia_id].push({ monto: m.monto, metodo: m.metodo_pago, cuenta_bancaria: m.cuenta_bancaria || undefined, fecha_hora: m.created_at || undefined });
       });
       // Add NC refunds as payments (direct)
       (ncDirect || []).forEach((nc: any) => {
@@ -440,7 +440,7 @@ export default function HojaDeRutaPage() {
     setDetailPagos([]);
     setDetailOpen(true);
     const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
-      supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+      supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria, created_at").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
       supabase.from("ventas").select("id, total").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       supabase.from("ventas").select("id, remito_origen_id").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Factura%"),
     ]);
@@ -451,9 +451,9 @@ export default function HojaDeRutaPage() {
       const { data: ncF } = await supabase.from("ventas").select("id, total").in("remito_origen_id", facturaIds).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada");
       ncViaFactura = ncF || [];
     }
-    const pagos: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
+    const pagos: { metodo: string; monto: number; cuenta_bancaria?: string | null; fecha_hora?: string | null }[] = [];
     if (movs && movs.length > 0) {
-      pagos.push(...movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria })));
+      pagos.push(...movs.map((m: any) => ({ metodo: m.metodo_pago, monto: Math.abs(m.monto), cuenta_bancaria: m.cuenta_bancaria, fecha_hora: m.created_at })));
     } else if (venta.forma_pago) {
       pagos.push({ metodo: venta.forma_pago, monto: venta.total });
     }
@@ -1011,7 +1011,8 @@ export default function HojaDeRutaPage() {
                               <th className="pb-2 px-3">Entrega</th>
                               <th className="pb-2 px-3 text-right">Total</th>
                               <th className="pb-2 px-3 text-right">Cobrado</th>
-                              <th className="pb-2 px-3">Metodo Pago</th>
+                              <th className="pb-2 px-3">Pago</th>
+                              <th className="pb-2 px-3">Hora</th>
                               <th className="pb-2 px-3 text-right">Acciones</th>
                             </tr>
                           </thead>
@@ -1047,7 +1048,22 @@ export default function HojaDeRutaPage() {
                                     {debe > 0 && <span className="block text-xs text-orange-500">Debe {formatCurrency(debe)}</span>}
                                   </td>
                                   <td className="py-2.5 px-3">
-                                    <Badge variant="secondary" className="text-xs">{metodos || "---"}</Badge>
+                                    {pagos.filter(p => !p.metodo.includes("Nota de Cr")).map((p, pi) => (
+                                      <div key={pi} className="text-xs">
+                                        <span className="font-medium">{p.metodo}</span>
+                                        {" "}<span className="text-muted-foreground">{formatCurrency(p.monto)}</span>
+                                        {(p as any).cuenta_bancaria && <span className="text-blue-600 ml-1">→ {(p as any).cuenta_bancaria}</span>}
+                                      </div>
+                                    ))}
+                                    {pagos.length === 0 && <Badge variant="secondary" className="text-xs">{venta.forma_pago || "---"}</Badge>}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-xs text-muted-foreground">
+                                    {(() => {
+                                      const firstPago = pagos.find(p => !p.metodo.includes("Nota de Cr") && (p as any).fecha_hora);
+                                      if (!firstPago || !(firstPago as any).fecha_hora) return "—";
+                                      const d = new Date((firstPago as any).fecha_hora);
+                                      return isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+                                    })()}
                                   </td>
                                   <td className="py-2.5 px-3">
                                     <div className="flex items-center justify-end">
