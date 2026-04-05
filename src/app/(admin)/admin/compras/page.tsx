@@ -1740,23 +1740,23 @@ export default function ComprasPage() {
               </div>
               {/* ── Desktop items table ── */}
               <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-xs">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground">
-                      <th className="text-left py-2 px-1 font-medium w-9"></th>
-                      <th className="text-left py-2 px-1.5 font-medium">Código</th>
-                      <th className="text-left py-2 px-1.5 font-medium">Producto</th>
-                      <th className="text-center py-2 px-1 font-medium">Stock</th>
-                      <th className="text-center py-2 px-1 font-medium">Cajas</th>
-                      <th className="text-center py-2 px-1 font-medium">Sueltas</th>
-                      <th className="text-center py-2 px-1 font-medium">Total</th>
-                      <th className="text-right py-2 px-1.5 font-medium">C. Unit.</th>
-                      <th className="text-right py-2 px-1.5 font-medium">C. Caja</th>
-                      <th className="text-center py-2 px-1 font-medium">Dto%</th>
-                      <th className="text-right py-2 px-1.5 font-medium">Subtotal</th>
-                      <th className="text-center py-2 px-1 font-medium">Mod.</th>
-                      <th className="text-center py-2 px-1.5 font-medium">Actualizar PVP</th>
-                      <th className="w-8"></th>
+                      <th className="text-left py-3 px-2 font-medium w-10"></th>
+                      <th className="text-left py-3 px-2 font-medium">Código</th>
+                      <th className="text-left py-3 px-2 font-medium">Producto</th>
+                      <th className="text-center py-3 px-2 font-medium">Stock</th>
+                      <th className="text-center py-3 px-2 font-medium">Cajas</th>
+                      <th className="text-center py-3 px-2 font-medium">Sueltas</th>
+                      <th className="text-center py-3 px-2 font-medium">Total un.</th>
+                      <th className="text-right py-3 px-2 font-medium">Costo Unit.</th>
+                      <th className="text-right py-3 px-2 font-medium">Costo Caja</th>
+                      <th className="text-center py-3 px-2 font-medium">Dto%</th>
+                      <th className="text-right py-3 px-2 font-medium">Subtotal</th>
+                      <th className="text-center py-3 px-2 font-medium">Mod.</th>
+                      <th className="text-center py-3 px-2 font-medium">Actualizar PVP</th>
+                      <th className="w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1769,23 +1769,23 @@ export default function ComprasPage() {
                           className={`border-b last:border-0 transition-colors cursor-pointer ${isSelected ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted/50"}`}
                           onClick={() => setSelectedItemIdx(idx)}
                         >
-                          <td className="py-1.5 px-1">
-                            <div className="w-7 h-7 rounded bg-muted flex items-center justify-center overflow-hidden">
+                          <td className="py-2.5 px-2">
+                            <div className="w-9 h-9 rounded bg-muted flex items-center justify-center overflow-hidden">
                               {item.imagen_url ? (
                                 <img src={item.imagen_url} alt="" className="w-full h-full object-cover" />
                               ) : (
-                                <ImageIcon className="w-3 h-3 text-muted-foreground/40" />
+                                <ImageIcon className="w-4 h-4 text-muted-foreground/40" />
                               )}
                             </div>
                           </td>
-                          <td className="py-1.5 px-1.5 font-mono text-[11px] text-muted-foreground">{item.codigo}</td>
-                          <td className="py-1.5 px-1.5 font-medium">{item.nombre}</td>
-                          <td className="py-1.5 px-1 text-center">
-                            <Badge variant={item.stock_actual <= 0 ? "destructive" : "secondary"} className="text-[10px] font-normal px-1.5 py-0">
+                          <td className="py-2.5 px-2 font-mono text-xs text-muted-foreground">{item.codigo}</td>
+                          <td className="py-2.5 px-2 font-medium">{item.nombre}</td>
+                          <td className="py-2.5 px-2 text-center">
+                            <Badge variant={item.stock_actual <= 0 ? "destructive" : "secondary"} className="text-xs font-normal">
                               {item.stock_actual}
                             </Badge>
                           </td>
-                          <td className="py-1.5 px-1 text-center">
+                          <td className="py-2.5 px-2 text-center">
                             {item.unidades_por_caja > 0 ? (
                               <Input
                                 type="number"
@@ -1796,13 +1796,13 @@ export default function ComprasPage() {
                                   const newTotal = newCajas * item.unidades_por_caja + item.sueltas;
                                   setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cajas: newCajas, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) } : it));
                                 }}
-                                className="w-14 mx-auto text-center h-7 text-xs"
+                                className="w-16 mx-auto text-center h-9"
                               />
                             ) : (
-                              <span className="text-muted-foreground">—</span>
+                              <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="py-1.5 px-1 text-center">
+                          <td className="py-2.5 px-2 text-center">
                             <Input
                               type="number"
                               min={0}
@@ -1816,31 +1816,31 @@ export default function ComprasPage() {
                                   setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: Math.max(1, val), sueltas: val, subtotal: calcSubtotal(it.costo_unitario, Math.max(1, val), it.descuento) } : it));
                                 }
                               }}
-                              className="w-14 mx-auto text-center h-7 text-xs"
+                              className="w-16 mx-auto text-center h-9"
                             />
                           </td>
-                          <td className="py-1.5 px-1 text-center">
-                            <span className="font-semibold">{item.cantidad}</span>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className="text-sm font-semibold">{item.cantidad}</span>
                             {item.unidades_por_caja > 0 && (
-                              <span className="text-[9px] text-muted-foreground block">{item.cajas}×{item.unidades_por_caja}+{item.sueltas}</span>
+                              <span className="text-[10px] text-muted-foreground block">{item.cajas}×{item.unidades_por_caja}+{item.sueltas}</span>
                             )}
                           </td>
-                          <td className="py-1.5 px-1.5 text-right">
+                          <td className="py-2.5 px-2 text-right">
                             <MoneyInput
                               min={0}
                               value={item.costo_unitario}
                               onValueChange={(val) => updateItemField(idx, "costo_unitario", val)}
-                              className="w-20 ml-auto text-right h-7 text-xs"
+                              className="w-24 ml-auto text-right h-9"
                             />
                           </td>
-                          <td className="py-1.5 px-1.5 text-right">
+                          <td className="py-2.5 px-2 text-right">
                             {item.unidades_por_caja > 0 ? (
-                              <span className="font-medium text-muted-foreground">{formatCurrency(item.costo_unitario * item.unidades_por_caja)}</span>
+                              <span className="text-sm font-medium text-muted-foreground">{formatCurrency(item.costo_unitario * item.unidades_por_caja)}</span>
                             ) : (
-                              <span className="text-muted-foreground">—</span>
+                              <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="py-1.5 px-1 text-center">
+                          <td className="py-2.5 px-2 text-center">
                             <Input
                               type="number"
                               min={0}
@@ -1848,47 +1848,47 @@ export default function ComprasPage() {
                               value={item.descuento || ""}
                               onChange={(e) => updateItemField(idx, "descuento", Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
                               placeholder="0"
-                              className="w-12 mx-auto text-center h-7 text-xs"
+                              className="w-14 mx-auto text-center h-9"
                             />
                           </td>
-                          <td className="py-1.5 px-1.5 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                          <td className="py-1.5 px-1 text-center">
+                          <td className="py-2.5 px-2 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                          <td className="py-2.5 px-2 text-center">
                             {costoChanged ? (
-                              <Badge variant="default" className="text-[10px] px-1.5 py-0">Si</Badge>
+                              <Badge variant="default" className="text-xs">Si</Badge>
                             ) : (
-                              <span className="text-muted-foreground">-</span>
+                              <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
-                          <td className="py-1.5 px-1.5 text-center">
+                          <td className="py-2.5 px-2 text-center">
                             {costoChanged && item.costo_original > 0 ? (() => {
                               const nuevoPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * (item.precio_original / item.costo_original));
                               return (
-                              <div className="flex items-center justify-center gap-1">
+                              <div className="flex items-center justify-center gap-1.5">
                                 <input
                                   type="checkbox"
                                   checked={item.actualizarPrecio}
                                   onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarPrecio: e.target.checked } : it))}
-                                  className="w-3 h-3 rounded border-gray-300 accent-primary"
+                                  className="w-3.5 h-3.5 rounded border-gray-300 accent-primary"
                                 />
-                                <span className="text-[11px]">
+                                <span className="text-xs">
                                   {item.actualizarPrecio ? (
                                     <span className="text-primary font-semibold">{formatCurrency(nuevoPrecio)}</span>
                                   ) : (
                                     <span className="text-muted-foreground">Mantener</span>
                                   )}
                                 </span>
-                                <button onClick={(e) => { e.stopPropagation(); setPvpEditIdx(idx); }} className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-                                  <Pencil className="w-3 h-3" />
+                                <button onClick={(e) => { e.stopPropagation(); setPvpEditIdx(idx); }} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                                  <Pencil className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                               );
                             })() : (
-                              <span className="text-muted-foreground">-</span>
+                              <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
-                          <td className="py-1.5 px-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500" onClick={() => removeItem(idx)}>
-                              <Trash2 className="w-3 h-3" />
+                          <td className="py-2.5 px-2">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => removeItem(idx)}>
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </td>
                         </tr>
