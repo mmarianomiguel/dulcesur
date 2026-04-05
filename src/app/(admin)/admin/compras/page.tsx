@@ -112,10 +112,117 @@ interface CompraItem {
   descuento: number;
   subtotal: number;
   actualizarPrecio: boolean;
+  precio_nuevo_custom?: number;
 }
 
 function calcSubtotal(costo: number, cantidad: number, descuento: number) {
   return Math.round(costo * cantidad * (1 - descuento / 100) * 100) / 100;
+}
+
+/* ───────── PVP Edit Dialog ───────── */
+function PvpEditDialog({ item, margenActual, suggestedPrice, roundPrice, onClose, onConfirm, onKeep }: {
+  item: CompraItem;
+  margenActual: number;
+  suggestedPrice: number;
+  roundPrice: (p: number) => number;
+  onClose: () => void;
+  onConfirm: (price: number) => void;
+  onKeep: () => void;
+}) {
+  const [pvpCustom, setPvpCustom] = useState(suggestedPrice);
+  const [editMode, setEditMode] = useState<"price" | "margin">("price");
+  const customMargen = item.costo_unitario > 0 ? Math.round(((pvpCustom - item.costo_unitario) / item.costo_unitario) * 100) : 0;
+
+  const setFromMargin = (margin: number) => {
+    const newPrice = roundPrice(item.costo_unitario * (1 + margin / 100));
+    setPvpCustom(newPrice);
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Actualizar precio — {item.nombre}</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          {/* Cost comparison */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Costo anterior</p>
+              <p className="text-lg font-semibold">{formatCurrency(item.costo_original)}</p>
+            </div>
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Costo nuevo</p>
+              <p className="text-lg font-semibold text-primary">{formatCurrency(item.costo_unitario)}</p>
+            </div>
+          </div>
+
+          {/* PVP actual */}
+          <div className="rounded-lg border p-3 space-y-1">
+            <p className="text-xs text-muted-foreground">PVP actual</p>
+            <div className="flex items-center justify-between">
+              <p className="text-lg font-semibold">{formatCurrency(item.precio_original)}</p>
+              <span className="text-sm text-muted-foreground">Margen: {margenActual}%</span>
+            </div>
+          </div>
+
+          {/* Editable new PVP */}
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
+            <p className="text-xs text-muted-foreground font-medium">Nuevo PVP</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Precio</Label>
+                <MoneyInput
+                  value={pvpCustom}
+                  onValueChange={(val) => { setPvpCustom(val); setEditMode("price"); }}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Margen %</Label>
+                <Input
+                  type="number"
+                  value={customMargen}
+                  onChange={(e) => { setEditMode("margin"); setFromMargin(Number(e.target.value) || 0); }}
+                  className="h-9"
+                />
+              </div>
+            </div>
+            {/* Quick margin buttons */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Margen rápido:</span>
+              {[15, 20, 25, 30, 35, 40, 50].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setFromMargin(m)}
+                  className={`px-2 py-0.5 rounded text-xs font-medium transition ${customMargen === m ? "bg-primary text-primary-foreground" : "bg-background border hover:border-primary/50"}`}
+                >
+                  {m}%
+                </button>
+              ))}
+            </div>
+            {/* Suggested price shortcut */}
+            {pvpCustom !== suggestedPrice && (
+              <button
+                onClick={() => setPvpCustom(suggestedPrice)}
+                className="text-xs text-primary hover:underline"
+              >
+                Usar precio sugerido: {formatCurrency(suggestedPrice)} (misma proporción)
+              </button>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={onKeep}>
+              Mantener PVP actual
+            </Button>
+            <Button className="flex-1" onClick={() => onConfirm(pvpCustom)}>
+              Actualizar a {formatCurrency(pvpCustom)}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 /* ───────── helpers ───────── */
@@ -900,7 +1007,7 @@ export default function ComprasPage() {
         if (item.costo_unitario !== item.costo_original) {
           if (item.actualizarPrecio && item.costo_original > 0) {
             const marginRatio = item.precio_original / item.costo_original;
-            const newPrecio = roundPrice(item.costo_unitario * marginRatio);
+            const newPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * marginRatio);
             await supabase
               .from("productos")
               .update({
@@ -1621,7 +1728,7 @@ export default function ComprasPage() {
                           />
                           <span className="text-muted-foreground">Actualizar PVP:</span>
                           {item.actualizarPrecio ? (
-                            <span>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original)}</span></span>
+                            <span>{formatCurrency(item.precio_original)} <span className="text-primary font-semibold">→ {formatCurrency(item.precio_nuevo_custom || (item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original))}</span></span>
                           ) : (
                             <span>Mantener {formatCurrency(item.precio_original)}</span>
                           )}
@@ -1633,23 +1740,23 @@ export default function ComprasPage() {
               </div>
               {/* ── Desktop items table ── */}
               <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b text-muted-foreground">
-                      <th className="text-left py-3 px-2 font-medium w-10"></th>
-                      <th className="text-left py-3 px-3 font-medium">Codigo</th>
-                      <th className="text-left py-3 px-3 font-medium">Producto</th>
-                      <th className="text-center py-3 px-3 font-medium">Stock</th>
-                      <th className="text-center py-3 px-3 font-medium">Cajas</th>
-                      <th className="text-center py-3 px-3 font-medium">Sueltas</th>
-                      <th className="text-center py-3 px-3 font-medium">Total un.</th>
-                      <th className="text-right py-3 px-3 font-medium">Costo Unit.</th>
-                      <th className="text-right py-3 px-3 font-medium">Costo Caja</th>
-                      <th className="text-center py-3 px-2 font-medium">Dto%</th>
-                      <th className="text-right py-3 px-3 font-medium">Subtotal</th>
-                      <th className="text-center py-3 px-3 font-medium">Mod.</th>
-                      <th className="text-center py-3 px-2 font-medium">Actualizar PVP</th>
-                      <th className="w-10"></th>
+                      <th className="text-left py-2 px-1 font-medium w-9"></th>
+                      <th className="text-left py-2 px-1.5 font-medium">Código</th>
+                      <th className="text-left py-2 px-1.5 font-medium">Producto</th>
+                      <th className="text-center py-2 px-1 font-medium">Stock</th>
+                      <th className="text-center py-2 px-1 font-medium">Cajas</th>
+                      <th className="text-center py-2 px-1 font-medium">Sueltas</th>
+                      <th className="text-center py-2 px-1 font-medium">Total</th>
+                      <th className="text-right py-2 px-1.5 font-medium">C. Unit.</th>
+                      <th className="text-right py-2 px-1.5 font-medium">C. Caja</th>
+                      <th className="text-center py-2 px-1 font-medium">Dto%</th>
+                      <th className="text-right py-2 px-1.5 font-medium">Subtotal</th>
+                      <th className="text-center py-2 px-1 font-medium">Mod.</th>
+                      <th className="text-center py-2 px-1.5 font-medium">Actualizar PVP</th>
+                      <th className="w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1662,23 +1769,23 @@ export default function ComprasPage() {
                           className={`border-b last:border-0 transition-colors cursor-pointer ${isSelected ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted/50"}`}
                           onClick={() => setSelectedItemIdx(idx)}
                         >
-                          <td className="py-2 px-2">
-                            <div className="w-8 h-8 rounded bg-muted flex items-center justify-center overflow-hidden">
+                          <td className="py-1.5 px-1">
+                            <div className="w-7 h-7 rounded bg-muted flex items-center justify-center overflow-hidden">
                               {item.imagen_url ? (
                                 <img src={item.imagen_url} alt="" className="w-full h-full object-cover" />
                               ) : (
-                                <ImageIcon className="w-3.5 h-3.5 text-muted-foreground/40" />
+                                <ImageIcon className="w-3 h-3 text-muted-foreground/40" />
                               )}
                             </div>
                           </td>
-                          <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.codigo}</td>
-                          <td className="py-2 px-3 font-medium">{item.nombre}</td>
-                          <td className="py-2 px-3 text-center">
-                            <Badge variant={item.stock_actual <= 0 ? "destructive" : "secondary"} className="text-xs font-normal">
+                          <td className="py-1.5 px-1.5 font-mono text-[11px] text-muted-foreground">{item.codigo}</td>
+                          <td className="py-1.5 px-1.5 font-medium">{item.nombre}</td>
+                          <td className="py-1.5 px-1 text-center">
+                            <Badge variant={item.stock_actual <= 0 ? "destructive" : "secondary"} className="text-[10px] font-normal px-1.5 py-0">
                               {item.stock_actual}
                             </Badge>
                           </td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-1.5 px-1 text-center">
                             {item.unidades_por_caja > 0 ? (
                               <Input
                                 type="number"
@@ -1689,13 +1796,13 @@ export default function ComprasPage() {
                                   const newTotal = newCajas * item.unidades_por_caja + item.sueltas;
                                   setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cajas: newCajas, cantidad: newTotal, subtotal: calcSubtotal(it.costo_unitario, newTotal, it.descuento) } : it));
                                 }}
-                                className="w-16 mx-auto text-center h-8"
+                                className="w-14 mx-auto text-center h-7 text-xs"
                               />
                             ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
+                              <span className="text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-1.5 px-1 text-center">
                             <Input
                               type="number"
                               min={0}
@@ -1709,31 +1816,31 @@ export default function ComprasPage() {
                                   setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: Math.max(1, val), sueltas: val, subtotal: calcSubtotal(it.costo_unitario, Math.max(1, val), it.descuento) } : it));
                                 }
                               }}
-                              className="w-16 mx-auto text-center h-8"
+                              className="w-14 mx-auto text-center h-7 text-xs"
                             />
                           </td>
-                          <td className="py-2 px-3 text-center">
-                            <span className="text-sm font-semibold">{item.cantidad}</span>
+                          <td className="py-1.5 px-1 text-center">
+                            <span className="font-semibold">{item.cantidad}</span>
                             {item.unidades_por_caja > 0 && (
-                              <span className="text-[10px] text-muted-foreground block">{item.cajas}×{item.unidades_por_caja}+{item.sueltas}</span>
+                              <span className="text-[9px] text-muted-foreground block">{item.cajas}×{item.unidades_por_caja}+{item.sueltas}</span>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-right">
+                          <td className="py-1.5 px-1.5 text-right">
                             <MoneyInput
                               min={0}
                               value={item.costo_unitario}
                               onValueChange={(val) => updateItemField(idx, "costo_unitario", val)}
-                              className="w-24 ml-auto text-right h-8"
+                              className="w-20 ml-auto text-right h-7 text-xs"
                             />
                           </td>
-                          <td className="py-2 px-3 text-right">
+                          <td className="py-1.5 px-1.5 text-right">
                             {item.unidades_por_caja > 0 ? (
-                              <span className="text-sm font-medium text-muted-foreground">{formatCurrency(item.costo_unitario * item.unidades_por_caja)}</span>
+                              <span className="font-medium text-muted-foreground">{formatCurrency(item.costo_unitario * item.unidades_por_caja)}</span>
                             ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
+                              <span className="text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="py-2 px-2 text-center">
+                          <td className="py-1.5 px-1 text-center">
                             <Input
                               type="number"
                               min={0}
@@ -1741,47 +1848,47 @@ export default function ComprasPage() {
                               value={item.descuento || ""}
                               onChange={(e) => updateItemField(idx, "descuento", Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
                               placeholder="0"
-                              className="w-14 mx-auto text-center h-8"
+                              className="w-12 mx-auto text-center h-7 text-xs"
                             />
                           </td>
-                          <td className="py-2 px-3 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-1.5 px-1.5 text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                          <td className="py-1.5 px-1 text-center">
                             {costoChanged ? (
-                              <Badge variant="default" className="text-xs">Si</Badge>
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0">Si</Badge>
                             ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
+                              <span className="text-muted-foreground">-</span>
                             )}
                           </td>
-                          <td className="py-2 px-2 text-center">
+                          <td className="py-1.5 px-1.5 text-center">
                             {costoChanged && item.costo_original > 0 ? (() => {
-                              const nuevoPrecio = roundPrice(item.costo_unitario * (item.precio_original / item.costo_original));
+                              const nuevoPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * (item.precio_original / item.costo_original));
                               return (
-                              <div className="flex items-center justify-center gap-1.5">
+                              <div className="flex items-center justify-center gap-1">
                                 <input
                                   type="checkbox"
                                   checked={item.actualizarPrecio}
                                   onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarPrecio: e.target.checked } : it))}
-                                  className="w-3.5 h-3.5 rounded border-gray-300 accent-primary"
+                                  className="w-3 h-3 rounded border-gray-300 accent-primary"
                                 />
-                                <span className="text-xs">
+                                <span className="text-[11px]">
                                   {item.actualizarPrecio ? (
                                     <span className="text-primary font-semibold">{formatCurrency(nuevoPrecio)}</span>
                                   ) : (
                                     <span className="text-muted-foreground">Mantener</span>
                                   )}
                                 </span>
-                                <button onClick={() => setPvpEditIdx(idx)} className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-                                  <Pencil className="w-3.5 h-3.5" />
+                                <button onClick={(e) => { e.stopPropagation(); setPvpEditIdx(idx); }} className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                                  <Pencil className="w-3 h-3" />
                                 </button>
                               </div>
                               );
                             })() : (
-                              <span className="text-xs text-muted-foreground">-</span>
+                              <span className="text-muted-foreground">-</span>
                             )}
                           </td>
-                          <td className="py-2 px-2">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => removeItem(idx)}>
-                              <Trash2 className="w-3.5 h-3.5" />
+                          <td className="py-1.5 px-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500" onClick={() => removeItem(idx)}>
+                              <Trash2 className="w-3 h-3" />
                             </Button>
                           </td>
                         </tr>
@@ -1888,73 +1995,24 @@ export default function ComprasPage() {
         {/* PVP Edit dialog */}
         {pvpEditIdx !== null && items[pvpEditIdx] && (() => {
           const item = items[pvpEditIdx];
-          const costoChanged = item.costo_unitario !== item.costo_original;
           const margenActual = item.costo_original > 0 ? Math.round(((item.precio_original - item.costo_original) / item.costo_original) * 100) : 0;
-          const nuevoPrecioAuto = costoChanged && item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original;
-          const nuevoMargen = item.costo_unitario > 0 ? Math.round(((nuevoPrecioAuto - item.costo_unitario) / item.costo_unitario) * 100) : 0;
+          const suggestedPrice = item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original;
           return (
-          <Dialog open={true} onOpenChange={() => setPvpEditIdx(null)}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader><DialogTitle>Actualizar precio — {item.nombre}</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                {/* Cost comparison */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">Costo anterior</p>
-                    <p className="text-lg font-semibold">{formatCurrency(item.costo_original)}</p>
-                  </div>
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">Costo nuevo</p>
-                    <p className="text-lg font-semibold text-primary">{formatCurrency(item.costo_unitario)}</p>
-                  </div>
-                </div>
-
-                {/* Margin info */}
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="text-muted-foreground">Margen:</span>
-                  <span>{margenActual}%</span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className={`font-semibold ${nuevoMargen >= margenActual ? "text-emerald-600" : "text-red-500"}`}>{nuevoMargen}%</span>
-                  <span className="text-muted-foreground text-xs">(manteniendo proporción)</span>
-                </div>
-
-                {/* Price comparison */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">PVP actual</p>
-                    <p className="text-lg font-semibold">{formatCurrency(item.precio_original)}</p>
-                  </div>
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1">
-                    <p className="text-xs text-muted-foreground">PVP sugerido</p>
-                    <p className="text-lg font-semibold text-primary">{formatCurrency(nuevoPrecioAuto)}</p>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      setItems((prev) => prev.map((it, i) => i === pvpEditIdx ? { ...it, actualizarPrecio: false } : it));
-                      setPvpEditIdx(null);
-                    }}
-                  >
-                    Mantener PVP actual
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={() => {
-                      setItems((prev) => prev.map((it, i) => i === pvpEditIdx ? { ...it, actualizarPrecio: true } : it));
-                      setPvpEditIdx(null);
-                    }}
-                  >
-                    Actualizar a {formatCurrency(nuevoPrecioAuto)}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <PvpEditDialog
+            item={item}
+            margenActual={margenActual}
+            suggestedPrice={suggestedPrice}
+            roundPrice={roundPrice}
+            onClose={() => setPvpEditIdx(null)}
+            onConfirm={(newPrice) => {
+              setItems((prev) => prev.map((it, i) => i === pvpEditIdx ? { ...it, actualizarPrecio: true, precio_nuevo_custom: newPrice } : it));
+              setPvpEditIdx(null);
+            }}
+            onKeep={() => {
+              setItems((prev) => prev.map((it, i) => i === pvpEditIdx ? { ...it, actualizarPrecio: false } : it));
+              setPvpEditIdx(null);
+            }}
+          />
           );
         })()}
 
