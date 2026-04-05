@@ -114,15 +114,15 @@ export default function CargaManualPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   const fetchData = useCallback(async () => {
-    const [{ data: cls }, { data: prods }, { data: sls }] = await Promise.all([
+    const [{ data: cls }, { data: prods }, { data: sls }, { data: allPres }] = await Promise.all([
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
       supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
       supabase.from("usuarios").select("*").eq("activo", true),
+      supabase.from("presentaciones").select("producto_id, sku").limit(10000),
     ]);
     setClients(cls || []);
     setProducts(prods || []);
     setSellers(sls || []);
-    const { data: allPres } = await supabase.from("presentaciones").select("producto_id, sku");
     if (allPres) {
       const map: Record<string, { codigo: string }[]> = {};
       for (const pr of allPres) { if (!map[pr.producto_id]) map[pr.producto_id] = []; map[pr.producto_id].push({ codigo: pr.sku || "" }); }

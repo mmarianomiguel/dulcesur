@@ -168,14 +168,13 @@ export default function AjustesStockPage() {
       ajQuery = ajQuery.gte("fecha", filterFrom).lte("fecha", filterTo);
     }
 
-    const [{ data: aj }, { data: prods }] = await Promise.all([
+    const [{ data: aj }, { data: prods }, { data: presData }] = await Promise.all([
       ajQuery,
       supabase.from("productos").select("id, codigo, nombre, stock, costo, unidad_medida, imagen_url").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, costo, precio").gt("cantidad", 1).limit(5000),
     ]);
     setAjustes((aj as Ajuste[]) || []);
     setProductos((prods as Producto[]) || []);
-    // Load presentations
-    const { data: presData } = await supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, costo, precio").gt("cantidad", 1);
     const pm: Record<string, PresData[]> = {};
     (presData || []).forEach((p: any) => { if (!pm[p.producto_id]) pm[p.producto_id] = []; pm[p.producto_id].push(p); });
     setPresMap(pm);

@@ -342,34 +342,17 @@ export default function ProductosPage() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
 
-    // Supabase limits to 1000 rows per request — paginate to get all
-    async function fetchAllPages(tableName: string, selectStr: string, filters?: (q: any) => any): Promise<any[]> {
-      const PAGE = 1000;
-      let all: any[] = [];
-      let from = 0;
-      while (true) {
-        let q = supabase.from(tableName).select(selectStr);
-        if (filters) q = filters(q);
-        const { data } = await q.range(from, from + PAGE - 1);
-        const rows = (data as any[]) || [];
-        all = all.concat(rows);
-        if (rows.length < PAGE) break;
-        from += PAGE;
-      }
-      return all;
-    }
-
-    const [allProdsRaw, allPres, allCI] = await Promise.all([
-      fetchAllPages("productos", "id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
-      fetchAllPages("presentaciones", "producto_id, sku, nombre, cantidad"),
-      fetchAllPages("combo_items", "combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)"),
+    const [{ data: allProdsRaw }, { data: allPres }, { data: allCI }] = await Promise.all([
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("presentaciones").select("producto_id, sku, nombre, cantidad").limit(10000),
+      supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)").limit(5000),
     ]);
-    const allProds = allProdsRaw as unknown as ProductoWithRelations[];
+    const allProds = (allProdsRaw || []) as unknown as ProductoWithRelations[];
     setProducts(allProds);
     setAllNonCombos(allProds.filter((p: any) => !p.es_combo).map((p: any) => ({
       id: p.id, codigo: p.codigo, nombre: p.nombre, precio: p.precio, costo: p.costo, stock: p.stock,
     })));
-    if (allPres) {
+    if (allPres && allPres.length > 0) {
       const map: Record<string, { codigo: string }[]> = {};
       const displayMap: Record<string, { nombre: string; cantidad: number }[]> = {};
       for (const pr of allPres) {
@@ -385,7 +368,7 @@ export default function ProductosPage() {
       setPresDisplayMap(displayMap);
     }
     // Build combo stock map: min(floor(componentStock / qty)) per combo
-    if (allCI) {
+    if (allCI && allCI.length > 0) {
       const byCombo: Record<string, { stock: number; cantidad: number }[]> = {};
       for (const ci of allCI as any[]) {
         const s = ci.productos?.stock ?? 0;

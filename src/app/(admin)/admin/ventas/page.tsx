@@ -289,14 +289,39 @@ export default function VentasPage() {
   };
 
   // ---------- data fetch ----------
+  // Light refresh: only products + presentaciones (for tab focus)
+  const refreshProducts = useCallback(async () => {
+    const [{ data: prods }, { data: presData }] = await Promise.all([
+      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("presentaciones").select("*").limit(5000),
+    ]);
+    setProducts(prods || []);
+    const map: Record<string, Presentacion[]> = {};
+    for (const raw of presData || []) {
+      const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
+      if (!map[pr.producto_id]) map[pr.producto_id] = [];
+      map[pr.producto_id].push(pr);
+    }
+    setPresentacionesMap(map);
+  }, []);
+
   const fetchData = useCallback(async () => {
-    const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData }] = await Promise.all([
-      supabase.from("productos").select("*").eq("activo", true).order("nombre").range(0, 9999),
+    // Single batch: all data in one Promise.all
+    const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData },
+           { data: allComboItems }, { data: descuentosData }, { data: presData },
+           { data: empData }, { data: tcData }] = await Promise.all([
+      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo").eq("activo", true).eq("rol", "vendedor"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
       supabase.from("zonas_entrega").select("id, nombre, dias").order("nombre"),
+      supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, costo)"),
+      supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", todayARG()),
+      supabase.from("presentaciones").select("*").limit(5000),
+      supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva, receipt_config").limit(1).single(),
+      supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
     ]);
+
     setProducts(prods || []);
     setClients((cls || []) as unknown as Cliente[]);
     setSellers((sls || []) as unknown as Usuario[]);
@@ -305,14 +330,6 @@ export default function VentasPage() {
     const defaultList = (listas || []).find((l: any) => l.es_default);
     if (defaultList) setListaPrecioId((defaultList as any).id);
     if (sls && sls.length > 0) setVendedorId(sls[0].id);
-
-    // Pre-load combo items, discounts, and presentaciones in parallel
-    const [{ data: allComboItems }, { data: descuentosData }, ...presBatches] = await Promise.all([
-      supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, costo)"),
-      supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", todayARG()),
-      supabase.from("presentaciones").select("*").range(0, 999),
-      supabase.from("presentaciones").select("*").range(1000, 1999),
-    ]);
 
     if (allComboItems) {
       const cmap: Record<string, ComboItemRef[]> = {};
@@ -328,48 +345,40 @@ export default function VentasPage() {
     setActiveDiscounts((descuentosData || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= todayARG()));
 
     const map: Record<string, Presentacion[]> = {};
-    for (const batch of presBatches) {
-      for (const raw of (batch as any).data || []) {
-        const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
-        if (!map[pr.producto_id]) map[pr.producto_id] = [];
-        map[pr.producto_id].push(pr);
-      }
+    for (const raw of presData || []) {
+      const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
+      if (!map[pr.producto_id]) map[pr.producto_id] = [];
+      map[pr.producto_id].push(pr);
     }
     setPresentacionesMap(map);
 
-    // Load receipt config from localStorage, then try DB for cross-device sync
+    // Receipt config: localStorage first, then DB
     try {
       const stored = localStorage.getItem("receipt_config");
       if (stored) {
         setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
-      } else {
-        // No localStorage — try loading from DB
-        const { data: empCfg } = await supabase.from("empresa").select("receipt_config").limit(1).single();
-        if (empCfg && (empCfg as any).receipt_config) {
-          const dbCfg = { ...defaultReceiptConfig, ...(empCfg as any).receipt_config };
-          setReceiptConfig(dbCfg);
-          localStorage.setItem("receipt_config", JSON.stringify(dbCfg));
-        }
+      } else if (empData && (empData as any).receipt_config) {
+        const dbCfg = { ...defaultReceiptConfig, ...(empData as any).receipt_config };
+        setReceiptConfig(dbCfg);
+        localStorage.setItem("receipt_config", JSON.stringify(dbCfg));
       }
     } catch (err) { console.error("Error in POS:", err); }
-    const { data: emp } = await supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva").limit(1).single();
-    if (emp) {
+
+    if (empData) {
       setReceiptConfig((prev) => ({
         ...prev,
-        empresaNombre: prev.empresaNombre || emp.nombre || "",
-        empresaDomicilio: prev.empresaDomicilio || emp.domicilio || "",
-        empresaTelefono: prev.empresaTelefono || emp.telefono || "",
-        empresaCuit: prev.empresaCuit || emp.cuit || "",
-        empresaIva: prev.empresaIva || emp.situacion_iva || "",
+        empresaNombre: prev.empresaNombre || (empData as any).nombre || "",
+        empresaDomicilio: prev.empresaDomicilio || (empData as any).domicilio || "",
+        empresaTelefono: prev.empresaTelefono || (empData as any).telefono || "",
+        empresaCuit: prev.empresaCuit || (empData as any).cuit || "",
+        empresaIva: prev.empresaIva || (empData as any).situacion_iva || "",
       }));
     }
-    // Load logo and web URL from tienda_config
-    const { data: tc } = await supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single();
-    if (tc) {
+    if (tcData) {
       setReceiptConfig((prev) => ({
         ...prev,
         logoUrl: prev.logoUrl || "https://res.cloudinary.com/dss3lnovd/image/upload/v1774505786/dulcesur/logo-dulcesur-negro.jpg",
-        empresaWeb: prev.empresaWeb || tc.url_tienda || "",
+        empresaWeb: prev.empresaWeb || (tcData as any).url_tienda || "",
       }));
     }
   }, []);
@@ -380,11 +389,11 @@ export default function VentasPage() {
     supabase.from("turnos_caja").select("id").eq("estado", "abierto").limit(1).then(({ data }) => {
       setCajaAbierta(data && data.length > 0);
     });
-    // Refresh products when tab regains focus (e.g. after creating product in another tab)
-    const onFocus = () => fetchData();
+    // Light refresh on tab focus: only products + presentaciones
+    const onFocus = () => refreshProducts();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [fetchData]);
+  }, [fetchData, refreshProducts]);
 
   // Load bank accounts from localStorage
   useEffect(() => {
