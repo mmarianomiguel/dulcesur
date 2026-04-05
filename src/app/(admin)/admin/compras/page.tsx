@@ -138,84 +138,92 @@ function PvpEditDialog({ item, margenActual, suggestedPrice, roundPrice, onClose
     setPvpCustom(newPrice);
   };
 
+  const costoDiff = item.costo_unitario - item.costo_original;
+  const costoPct = item.costo_original > 0 ? Math.round((costoDiff / item.costo_original) * 100) : 0;
+
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Actualizar precio — {item.nombre}</DialogTitle></DialogHeader>
-        <div className="space-y-4">
-          {/* Cost comparison */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border p-3 space-y-1">
-              <p className="text-xs text-muted-foreground">Costo anterior</p>
-              <p className="text-lg font-semibold">{formatCurrency(item.costo_original)}</p>
-            </div>
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1">
-              <p className="text-xs text-muted-foreground">Costo nuevo</p>
-              <p className="text-lg font-semibold text-primary">{formatCurrency(item.costo_unitario)}</p>
-            </div>
-          </div>
+      <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4">
+          <DialogHeader>
+            <DialogTitle className="text-base">{item.nombre}</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">Actualizar precio de venta</p>
+          </DialogHeader>
+        </div>
 
-          {/* PVP actual */}
-          <div className="rounded-lg border p-3 space-y-1">
-            <p className="text-xs text-muted-foreground">PVP actual</p>
-            <div className="flex items-center justify-between">
-              <p className="text-lg font-semibold">{formatCurrency(item.precio_original)}</p>
-              <span className="text-sm text-muted-foreground">Margen: {margenActual}%</span>
-            </div>
-          </div>
-
-          {/* Editable new PVP */}
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
-            <p className="text-xs text-muted-foreground font-medium">Nuevo PVP</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Precio</Label>
-                <MoneyInput
-                  value={pvpCustom}
-                  onValueChange={(val) => { setPvpCustom(val); setEditMode("price"); }}
-                  className="h-9"
-                />
+        <div className="px-6 pb-6 space-y-5">
+          {/* Cost change summary - single row */}
+          <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
+            <div className="flex-1">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Costo</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-sm text-muted-foreground line-through">{formatCurrency(item.costo_original)}</span>
+                <span className="text-sm font-semibold">{formatCurrency(item.costo_unitario)}</span>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Margen %</Label>
+            </div>
+            <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${costoDiff > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+              {costoDiff > 0 ? "+" : ""}{costoPct}%
+            </div>
+          </div>
+
+          {/* Current vs New - side by side */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Current */}
+            <div className="space-y-2">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Actual</p>
+              <div className="text-2xl font-bold">{formatCurrency(item.precio_original)}</div>
+              <p className="text-xs text-muted-foreground">Margen: {margenActual}%</p>
+            </div>
+
+            {/* New - editable */}
+            <div className="space-y-2">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Nuevo precio</p>
+              <MoneyInput
+                value={pvpCustom}
+                onValueChange={(val) => { setPvpCustom(val); setEditMode("price"); }}
+                className="h-11 text-lg font-bold"
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Margen:</span>
                 <Input
                   type="number"
                   value={customMargen}
                   onChange={(e) => { setEditMode("margin"); setFromMargin(Number(e.target.value) || 0); }}
-                  className="h-9"
+                  className="h-7 w-16 text-xs text-center"
                 />
+                <span className="text-xs text-muted-foreground">%</span>
               </div>
             </div>
-            {/* Quick margin buttons */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Margen rápido:</span>
-              {[15, 20, 25, 30, 35, 40, 50].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setFromMargin(m)}
-                  className={`px-2 py-0.5 rounded text-xs font-medium transition ${customMargen === m ? "bg-primary text-primary-foreground" : "bg-background border hover:border-primary/50"}`}
-                >
-                  {m}%
-                </button>
-              ))}
-            </div>
-            {/* Suggested price shortcut */}
+          </div>
+
+          {/* Quick margin buttons */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[15, 20, 25, 30, 35, 40, 50].map((m) => (
+              <button
+                key={m}
+                onClick={() => setFromMargin(m)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${customMargen === m ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+              >
+                {m}%
+              </button>
+            ))}
             {pvpCustom !== suggestedPrice && (
               <button
                 onClick={() => setPvpCustom(suggestedPrice)}
-                className="text-xs text-primary hover:underline"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition"
               >
-                Usar precio sugerido: {formatCurrency(suggestedPrice)} (misma proporción)
+                Sugerido: {formatCurrency(suggestedPrice)}
               </button>
             )}
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={onKeep}>
-              Mantener PVP actual
+          <div className="flex gap-3 pt-1">
+            <Button variant="outline" className="flex-1 h-10" onClick={onKeep}>
+              Mantener actual
             </Button>
-            <Button className="flex-1" onClick={() => onConfirm(pvpCustom)}>
+            <Button className="flex-1 h-10" onClick={() => onConfirm(pvpCustom)}>
               Actualizar a {formatCurrency(pvpCustom)}
             </Button>
           </div>
