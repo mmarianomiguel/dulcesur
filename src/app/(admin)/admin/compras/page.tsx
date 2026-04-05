@@ -648,6 +648,15 @@ export default function ComprasPage() {
     searchTimeout.current = setTimeout(() => searchProducts(term), 300);
   };
 
+  // Refresh search results when tab regains focus (e.g. after creating product in another tab)
+  useEffect(() => {
+    const onFocus = () => {
+      if (productSearchOpen) searchProducts(productSearch);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [productSearchOpen, productSearch, searchProducts]);
+
   /* ── add product to items ── */
   const [searchPresentaciones, setSearchPresentaciones] = useState<Record<string, { nombre: string; cantidad: number; costo: number; precio: number }[]>>({});
 
