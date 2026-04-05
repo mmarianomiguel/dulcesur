@@ -139,10 +139,13 @@ export default function ProductosPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  // Read ?buscar= from URL on mount
+  // Read URL params on mount
+  const openNewRef = useRef(false);
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("buscar");
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("buscar");
     if (q) { setSearch(q); setDebouncedSearch(q); }
+    if (params.get("crear") === "true") openNewRef.current = true;
   }, []);
   const [category, setCategory] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -438,6 +441,16 @@ export default function ProductosPage() {
       setProdProvMap(map);
     });
   }, [fetchProducts, fetchCategories, fetchSubcategories, fetchMarcas, fetchProveedores]);
+
+  // Auto-open create dialog if ?crear=true
+  useEffect(() => {
+    if (!loading && openNewRef.current) {
+      openNewRef.current = false;
+      openNew();
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [loading]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);

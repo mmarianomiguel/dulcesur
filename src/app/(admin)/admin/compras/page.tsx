@@ -402,64 +402,7 @@ export default function ComprasPage() {
   // F1 product search dialog
   const [productSearchOpen, setProductSearchOpen] = useState(false);
 
-  // Inline product creation
-  const [creatingProduct, setCreatingProduct] = useState(false);
-  const [newProd, setNewProd] = useState({ nombre: "", codigo: "", costo: 0, precio: 0, categoriaId: "", marcaId: "", stockMinimo: 0 });
-  const [newProdSaving, setNewProdSaving] = useState(false);
-  const [newProdCategorias, setNewProdCategorias] = useState<{ id: string; nombre: string }[]>([]);
-  const [newProdMarcas, setNewProdMarcas] = useState<{ id: string; nombre: string }[]>([]);
-
-  const openCreateProduct = () => {
-    setCreatingProduct(true);
-    setNewProd({ nombre: productSearch, codigo: "", costo: 0, precio: 0, categoriaId: "", marcaId: "", stockMinimo: 0 });
-    // Fetch categories and brands
-    Promise.all([
-      supabase.from("categorias").select("id, nombre").order("nombre"),
-      supabase.from("marcas").select("id, nombre").order("nombre"),
-    ]).then(([{ data: cats }, { data: mars }]) => {
-      setNewProdCategorias(cats || []);
-      setNewProdMarcas(mars || []);
-    });
-  };
-
-  const handleCreateProduct = async () => {
-    if (!newProd.nombre.trim()) return;
-    setNewProdSaving(true);
-    const margen = newProd.costo > 0 && newProd.precio > 0
-      ? Math.round(((newProd.precio - newProd.costo) / newProd.costo) * 100)
-      : 0;
-    const { data: prod, error } = await supabase.from("productos").insert({
-      nombre: newProd.nombre.trim(),
-      codigo: newProd.codigo.trim() || null,
-      costo: newProd.costo || 0,
-      precio: newProd.precio || 0,
-      stock: 0,
-      stock_minimo: newProd.stockMinimo || 0,
-      activo: true,
-      visibilidad: "oculto",
-      categoria_id: newProd.categoriaId || null,
-      marca_id: newProd.marcaId || null,
-    }).select("id, codigo, nombre, stock, costo, precio, imagen_url").single();
-    if (error || !prod) {
-      showAdminToast("Error al crear producto: " + (error?.message || ""), "error");
-      setNewProdSaving(false);
-      return;
-    }
-    // Link to current supplier if selected
-    if (selectedProveedorId) {
-      try {
-        await supabase.from("producto_proveedores").insert({
-          producto_id: prod.id,
-          proveedor_id: selectedProveedorId,
-          precio: newProd.costo || 0,
-        });
-      } catch { /* ignore if table doesn't exist */ }
-    }
-    showAdminToast(`Producto "${prod.nombre}" creado (margen ${margen}%)`, "success");
-    addProduct(prod);
-    setCreatingProduct(false);
-    setNewProdSaving(false);
-  };
+  // Product creation removed — now opens full dialog via /admin/productos?crear=true
   const [searchHighlight, setSearchHighlight] = useState(0);
 
   // Keyboard navigation for items table
@@ -1422,6 +1365,10 @@ export default function ComprasPage() {
             <Plus className="w-3.5 h-3.5" />
             Agregar producto <kbd className="ml-1 border rounded px-1 py-0.5 text-[10px] bg-background">F1</kbd>
           </Button>
+          <Button variant="outline" onClick={() => window.open("/admin/productos?crear=true", "_blank")} className="gap-1.5">
+            <Plus className="w-3.5 h-3.5" />
+            Crear producto nuevo
+          </Button>
         </div>
 
         {/* Product search dialog */}
@@ -1522,78 +1469,13 @@ export default function ComprasPage() {
               {productSearch.length >= 2 && productResults.length === 0 && !searchingProducts && (
                 <p className="text-center py-4 text-sm text-muted-foreground">Sin resultados para &quot;{productSearch}&quot;</p>
               )}
-              {/* Create product inline */}
-              {!creatingProduct ? (
-                <button
-                  onClick={openCreateProduct}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-muted-foreground/20 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors mt-2"
-                >
-                  <Plus className="w-4 h-4" /> Crear producto nuevo
-                </button>
-              ) : (() => {
-                const np = newProd;
-                const margenCalc = np.costo > 0 && np.precio > 0 ? Math.round(((np.precio - np.costo) / np.costo) * 100) : 0;
-                const set = (field: string, val: any) => setNewProd(prev => ({ ...prev, [field]: val }));
-                return (
-                <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3 mt-2">
-                  <p className="text-sm font-semibold">Nuevo producto</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <label className="text-xs text-muted-foreground mb-1 block">Nombre *</label>
-                      <Input value={np.nombre} onChange={(e) => set("nombre", e.target.value)} autoFocus placeholder="Nombre del producto" className="h-9" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Código / SKU</label>
-                      <Input value={np.codigo} onChange={(e) => set("codigo", e.target.value)} placeholder="Ej: 7790001" className="h-9" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Categoría</label>
-                      <select value={np.categoriaId} onChange={(e) => set("categoriaId", e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-                        <option value="">Sin categoría</option>
-                        {newProdCategorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Marca</label>
-                      <select value={np.marcaId} onChange={(e) => set("marcaId", e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-                        <option value="">Sin marca</option>
-                        {newProdMarcas.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Costo de compra</label>
-                      <Input type="number" min={0} value={np.costo || ""} onChange={(e) => set("costo", Number(e.target.value))} placeholder="0" className="h-9" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Precio de venta</label>
-                      <Input type="number" min={0} value={np.precio || ""} onChange={(e) => set("precio", Number(e.target.value))} placeholder="0" className="h-9" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Stock mínimo</label>
-                      <Input type="number" min={0} value={np.stockMinimo || ""} onChange={(e) => set("stockMinimo", Number(e.target.value))} placeholder="0" className="h-9" />
-                    </div>
-                    <div className="flex items-end">
-                      {np.costo > 0 && np.precio > 0 && (
-                        <div className={`text-sm font-semibold px-3 py-1.5 rounded-lg ${margenCalc >= 20 ? "bg-green-100 text-green-700" : margenCalc > 0 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
-                          Margen: {margenCalc}%
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {selectedProveedorId && (
-                    <p className="text-[10px] text-blue-600">Se vinculará automáticamente con el proveedor de esta compra</p>
-                  )}
-                  <div className="flex gap-2 justify-end">
-                    <Button size="sm" variant="ghost" onClick={() => setCreatingProduct(false)}>Cancelar</Button>
-                    <Button size="sm" onClick={handleCreateProduct} disabled={!np.nombre.trim() || newProdSaving}>
-                      {newProdSaving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-                      Crear y agregar a la compra
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">El producto se crea oculto en la tienda. Podés completar más datos después desde Productos.</p>
-                </div>
-                );
-              })()}
+              {/* Create product — opens full product dialog in new tab */}
+              <button
+                onClick={() => window.open("/admin/productos?crear=true", "_blank")}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-muted-foreground/20 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors mt-2"
+              >
+                <Plus className="w-4 h-4" /> Crear producto nuevo
+              </button>
             </div>
           </DialogContent>
         </Dialog>
