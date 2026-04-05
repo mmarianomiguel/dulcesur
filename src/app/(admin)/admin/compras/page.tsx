@@ -2952,7 +2952,7 @@ export default function ComprasPage() {
                 const pw = pdf.internal.pageSize.getWidth();
                 const margin = 10;
                 let y = 18;
-                const fmtCur = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+                const fmtCur = formatCurrency;
 
                 // Header
                 pdf.setFontSize(14);

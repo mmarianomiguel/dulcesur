@@ -512,7 +512,7 @@ export default function CajaPage() {
     const w = pdf.internal.pageSize.getWidth();
     const margin = 15;
     let y = 20;
-    const fmtCur = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+    const fmtCur = formatCurrency;
 
     // Header
     pdf.setFontSize(18);

@@ -200,7 +200,7 @@ export default function ClientesPage() {
   };
   const handleSaveZona = async () => {
     if (!zonaForm.nombre.trim()) return;
-    if (!zonaForm.dias || zonaForm.dias.length === 0) { alert("Seleccioná al menos un día de entrega"); return; }
+    if (!zonaForm.dias || zonaForm.dias.length === 0) { showAdminToast("Seleccioná al menos un día de entrega", "error"); return; }
     setZonaSaving(true);
     if (editingZona) {
       await supabase.from("zonas_entrega").update({ nombre: zonaForm.nombre, dias: zonaForm.dias }).eq("id", editingZona.id);
@@ -214,7 +214,7 @@ export default function ClientesPage() {
   const handleDeleteZona = async (id: string) => {
     const { count } = await supabase.from("clientes").select("id", { count: "exact", head: true }).eq("zona_entrega_id", id);
     if (count && count > 0) {
-      alert(`No se puede eliminar: ${count} cliente(s) usan esta zona. Reasignalos primero.`);
+      showAdminToast(`No se puede eliminar: ${count} cliente(s) usan esta zona. Reasignalos primero.`, "error");
       return;
     }
     setConfirmDialog({
@@ -1460,9 +1460,9 @@ export default function ClientesPage() {
                     if (diff > 1) issues.push(`${c.nombre}: saldo ${formatCurrency(c.saldo)} vs CC ${formatCurrency(ccSaldo)} (dif: ${formatCurrency(diff)})`);
                   }
                   if (issues.length === 0) {
-                    alert("Todos los saldos coinciden con la cuenta corriente.");
+                    showAdminToast("Todos los saldos coinciden con la cuenta corriente.", "success");
                   } else {
-                    alert(`Inconsistencias encontradas (${issues.length}):\n\n${issues.slice(0, 10).join("\n")}${issues.length > 10 ? `\n...y ${issues.length - 10} más` : ""}`);
+                    showAdminToast(`Inconsistencias encontradas (${issues.length}): ${issues.slice(0, 10).join(" | ")}${issues.length > 10 ? ` ...y ${issues.length - 10} más` : ""}`, "error");
                   }
                 }}>
                   Conciliar CC
@@ -2281,7 +2281,7 @@ export default function ClientesPage() {
                   const w = pdf.internal.pageSize.getWidth();
                   const m = 18;
                   let y = 20;
-                  const fmtC = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+                  const fmtC = formatCurrency;
                   const fechaFmt = new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
                   // Header
                   pdf.setFontSize(16); pdf.setFont("helvetica", "bold");

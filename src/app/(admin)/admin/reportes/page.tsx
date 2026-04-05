@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { showAdminToast } from "@/components/admin-toast";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
-import { todayARG } from "@/lib/formatters";
+import { todayARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,6 @@ import {
   Loader2, Download, Calendar, Filter, ChevronDown, ChevronRight, Search, X,
 } from "lucide-react";
 
-function fc(v: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
-}
 
 interface VentaRow { id: string; fecha: string; total: number; forma_pago: string; tipo_comprobante: string; created_at: string; cliente_id: string | null; origen: string | null; clientes: { nombre: string } | null; }
 interface CompraRow { id: string; fecha: string; total: number; forma_pago: string; proveedor_id: string | null; observacion: string | null; proveedores: { nombre: string } | null; }
@@ -468,27 +465,27 @@ export default function ReportesPage() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card><CardContent className="pt-6">
           <p className="text-xs text-muted-foreground">Ventas</p>
-          <p className="text-xl font-bold">{fc(totalVentas)}</p>
+          <p className="text-xl font-bold">{formatCurrency(totalVentas)}</p>
           <p className="text-xs text-muted-foreground">{ventas.length} operaciones</p>
         </CardContent></Card>
         <Card><CardContent className="pt-6">
           <p className="text-xs text-muted-foreground">Compras</p>
-          <p className="text-xl font-bold">{fc(totalCompras)}</p>
+          <p className="text-xl font-bold">{formatCurrency(totalCompras)}</p>
           <p className="text-xs text-muted-foreground">{compras.length} operaciones</p>
         </CardContent></Card>
         <Card><CardContent className="pt-6">
           <p className="text-xs text-muted-foreground">Ganancia</p>
-          <p className={`text-xl font-bold ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fc(ganancia)}</p>
+          <p className={`text-xl font-bold ${ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{formatCurrency(ganancia)}</p>
           <p className="text-xs text-muted-foreground">{totalVentas > 0 ? `${((ganancia / totalVentas) * 100).toFixed(1)}% margen` : "—"}</p>
         </CardContent></Card>
         <Card><CardContent className="pt-6">
           <p className="text-xs text-muted-foreground">Stock (costo)</p>
-          <p className="text-xl font-bold">{fc(stockCosto)}</p>
+          <p className="text-xl font-bold">{formatCurrency(stockCosto)}</p>
           <p className="text-xs text-muted-foreground">{productos.length} productos</p>
         </CardContent></Card>
         <Card><CardContent className="pt-6">
           <p className="text-xs text-muted-foreground">Stock (venta)</p>
-          <p className="text-xl font-bold">{fc(stockVenta)}</p>
+          <p className="text-xl font-bold">{formatCurrency(stockVenta)}</p>
           <p className="text-xs text-red-500">{sinStock} sin stock</p>
         </CardContent></Card>
       </div>
@@ -574,9 +571,9 @@ export default function ReportesPage() {
           {/* Filtered summary */}
           <div className="flex gap-4 text-sm">
             <span className="text-muted-foreground">{filteredVentas.length} ventas</span>
-            <span className="font-semibold">{fc(filteredVentasTotal)}</span>
+            <span className="font-semibold">{formatCurrency(filteredVentasTotal)}</span>
             <span className={`font-semibold ${filteredVentasGanancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-              Ganancia: {fc(filteredVentasGanancia)}
+              Ganancia: {formatCurrency(filteredVentasGanancia)}
             </span>
           </div>
 
@@ -611,9 +608,9 @@ export default function ReportesPage() {
                         <td className="py-2 px-3"><Badge variant="secondary" className="text-xs">{v.tipo_comprobante}</Badge></td>
                         <td className="py-2 px-3 text-muted-foreground">{v.clientes?.nombre || "—"}</td>
                         <td className="py-2 px-3"><Badge variant="outline" className="text-xs">{v.forma_pago}</Badge></td>
-                        <td className={`py-2 px-3 text-right font-semibold ${isNC(v) ? "text-amber-600" : ""}`}>{isNC(v) ? `-${fc(v.total)}` : fc(v.total)}</td>
+                        <td className={`py-2 px-3 text-right font-semibold ${isNC(v) ? "text-amber-600" : ""}`}>{isNC(v) ? `-${formatCurrency(v.total)}` : formatCurrency(v.total)}</td>
                         <td className={`py-2 px-3 text-right font-semibold ${isNC(v) ? "text-amber-600" : ventaProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                          {isNC(v) ? `-${fc(ventaProfit)}` : fc(ventaProfit)}
+                          {isNC(v) ? `-${formatCurrency(ventaProfit)}` : formatCurrency(ventaProfit)}
                           <span className="block text-[10px] font-normal text-muted-foreground">
                             {v.total > 0 ? `${((ventaProfit / v.total) * 100).toFixed(1)}%` : "—"}
                           </span>
@@ -654,11 +651,11 @@ export default function ReportesPage() {
                                           {descPct > 0 && <span className="ml-1 text-[10px] text-orange-600">(-{descPct}%)</span>}
                                         </td>
                                         <td className="py-1.5 px-3 text-center">{displayQty}</td>
-                                        <td className="py-1.5 px-3 text-right">{fc(precioVenta)}</td>
-                                        <td className="py-1.5 px-3 text-right text-muted-foreground">{fc(itemCost)}</td>
-                                        <td className="py-1.5 px-3 text-right">{fc(item.subtotal)}</td>
+                                        <td className="py-1.5 px-3 text-right">{formatCurrency(precioVenta)}</td>
+                                        <td className="py-1.5 px-3 text-right text-muted-foreground">{formatCurrency(itemCost)}</td>
+                                        <td className="py-1.5 px-3 text-right">{formatCurrency(item.subtotal)}</td>
                                         <td className={`py-1.5 px-3 text-right font-medium ${itemProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                                          {fc(itemProfit)}
+                                          {formatCurrency(itemProfit)}
                                         </td>
                                       </tr>
                                     );
@@ -667,9 +664,9 @@ export default function ReportesPage() {
                                 <tfoot>
                                   <tr className="border-t border-muted font-semibold">
                                     <td colSpan={4} className="py-1.5 px-4 pl-12 text-right">Total ganancia:</td>
-                                    <td className="py-1.5 px-3 text-right">{fc(v.total)}</td>
+                                    <td className="py-1.5 px-3 text-right">{formatCurrency(v.total)}</td>
                                     <td className={`py-1.5 px-3 text-right ${ventaProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                                      {fc(ventaProfit)}
+                                      {formatCurrency(ventaProfit)}
                                     </td>
                                   </tr>
                                 </tfoot>
@@ -733,15 +730,15 @@ export default function ReportesPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground">Venta total</p>
-              <p className="text-lg font-bold">{fc(catTotals.venta)}</p>
+              <p className="text-lg font-bold">{formatCurrency(catTotals.venta)}</p>
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground">Costo total</p>
-              <p className="text-lg font-bold">{fc(catTotals.costo)}</p>
+              <p className="text-lg font-bold">{formatCurrency(catTotals.costo)}</p>
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground">Ganancia</p>
-              <p className="text-lg font-bold text-green-600">{fc(catTotals.ganancia)}</p>
+              <p className="text-lg font-bold text-green-600">{formatCurrency(catTotals.ganancia)}</p>
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground">Margen promedio</p>
@@ -776,9 +773,9 @@ export default function ReportesPage() {
                         <td className="p-3 text-muted-foreground">{isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</td>
                         <td className="p-3 font-medium">{cat.nombre}</td>
                         <td className="p-3 text-right tabular-nums">{Math.round(cat.unidades)}</td>
-                        <td className="p-3 text-right tabular-nums">{fc(cat.venta)}</td>
-                        <td className="p-3 text-right tabular-nums text-muted-foreground">{fc(cat.costo)}</td>
-                        <td className={`p-3 text-right tabular-nums font-medium ${cat.ganancia >= 0 ? "text-green-600" : "text-red-600"}`}>{fc(cat.ganancia)}</td>
+                        <td className="p-3 text-right tabular-nums">{formatCurrency(cat.venta)}</td>
+                        <td className="p-3 text-right tabular-nums text-muted-foreground">{formatCurrency(cat.costo)}</td>
+                        <td className={`p-3 text-right tabular-nums font-medium ${cat.ganancia >= 0 ? "text-green-600" : "text-red-600"}`}>{formatCurrency(cat.ganancia)}</td>
                         <td className="p-3 text-right tabular-nums">
                           <Badge variant={cat.margen >= 30 ? "default" : cat.margen >= 15 ? "secondary" : "destructive"} className="text-xs">
                             {cat.margen.toFixed(1)}%
@@ -791,9 +788,9 @@ export default function ReportesPage() {
                           <td className="p-2"></td>
                           <td className="p-2 pl-8 text-muted-foreground text-xs">{prod.nombre}</td>
                           <td className="p-2 text-right text-xs tabular-nums">{Math.round(prod.unidades)}</td>
-                          <td className="p-2 text-right text-xs tabular-nums">{fc(prod.venta)}</td>
-                          <td className="p-2 text-right text-xs tabular-nums text-muted-foreground">{fc(prod.costo)}</td>
-                          <td className={`p-2 text-right text-xs tabular-nums ${prod.ganancia >= 0 ? "text-green-600" : "text-red-600"}`}>{fc(prod.ganancia)}</td>
+                          <td className="p-2 text-right text-xs tabular-nums">{formatCurrency(prod.venta)}</td>
+                          <td className="p-2 text-right text-xs tabular-nums text-muted-foreground">{formatCurrency(prod.costo)}</td>
+                          <td className={`p-2 text-right text-xs tabular-nums ${prod.ganancia >= 0 ? "text-green-600" : "text-red-600"}`}>{formatCurrency(prod.ganancia)}</td>
                           <td className="p-2 text-right text-xs tabular-nums">{prod.venta > 0 ? ((prod.ganancia / prod.venta) * 100).toFixed(1) : "0"}%</td>
                           <td className="p-2 text-right text-xs tabular-nums text-muted-foreground">{cat.venta > 0 ? ((prod.venta / cat.venta) * 100).toFixed(1) : "0"}%</td>
                         </tr>
@@ -811,9 +808,9 @@ export default function ReportesPage() {
                     <td className="p-3"></td>
                     <td className="p-3">Total</td>
                     <td className="p-3 text-right tabular-nums">{Math.round(catTotals.unidades)}</td>
-                    <td className="p-3 text-right tabular-nums">{fc(catTotals.venta)}</td>
-                    <td className="p-3 text-right tabular-nums">{fc(catTotals.costo)}</td>
-                    <td className="p-3 text-right tabular-nums text-green-600">{fc(catTotals.ganancia)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrency(catTotals.venta)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatCurrency(catTotals.costo)}</td>
+                    <td className="p-3 text-right tabular-nums text-green-600">{formatCurrency(catTotals.ganancia)}</td>
                     <td className="p-3 text-right tabular-nums">{catTotals.venta > 0 ? ((catTotals.ganancia / catTotals.venta) * 100).toFixed(1) : "0"}%</td>
                     <td className="p-3 text-right tabular-nums">100%</td>
                   </tr>
@@ -827,7 +824,7 @@ export default function ReportesPage() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex gap-4 text-sm">
               <span className="text-muted-foreground">{compras.length} compras</span>
-              <span className="font-semibold">{fc(totalCompras)}</span>
+              <span className="font-semibold">{formatCurrency(totalCompras)}</span>
               <span className="text-muted-foreground">{comprasPorProveedor.length} proveedores</span>
             </div>
             <Button variant="outline" size="sm" onClick={() => exportCSV("compras", "Fecha,Proveedor,Forma Pago,Total", compras.map((c) => `${c.fecha},${c.proveedores?.nombre || "S/P"},${c.forma_pago},${c.total}`).join("\n"))}>
@@ -842,7 +839,7 @@ export default function ReportesPage() {
                 <Card key={p.nombre}>
                   <CardContent className="py-3 px-4">
                     <p className="text-xs text-muted-foreground truncate">{p.nombre}</p>
-                    <p className="text-lg font-bold">{fc(p.total)}</p>
+                    <p className="text-lg font-bold">{formatCurrency(p.total)}</p>
                     <p className="text-xs text-muted-foreground">{p.qty} compra{p.qty !== 1 ? "s" : ""}</p>
                   </CardContent>
                 </Card>
@@ -883,7 +880,7 @@ export default function ReportesPage() {
                             : c.observacion || "—"}
                         </td>
                         <td className="py-2 px-3"><Badge variant="outline" className="text-xs">{c.forma_pago}</Badge></td>
-                        <td className="py-2 px-3 text-right font-semibold">{fc(c.total)}</td>
+                        <td className="py-2 px-3 text-right font-semibold">{formatCurrency(c.total)}</td>
                       </tr>
                       {isExpanded && items.length > 0 && (
                         <tr>
@@ -903,15 +900,15 @@ export default function ReportesPage() {
                                     <tr key={idx} className="border-b border-muted/50 last:border-0">
                                       <td className="py-1.5 px-4 pl-12">{item.descripcion}</td>
                                       <td className="py-1.5 px-3 text-center">{item.cantidad}</td>
-                                      <td className="py-1.5 px-3 text-right">{fc(item.precio_unitario)}</td>
-                                      <td className="py-1.5 px-3 text-right font-medium">{fc(item.subtotal)}</td>
+                                      <td className="py-1.5 px-3 text-right">{formatCurrency(item.precio_unitario)}</td>
+                                      <td className="py-1.5 px-3 text-right font-medium">{formatCurrency(item.subtotal)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
                                 <tfoot>
                                   <tr className="border-t border-muted font-semibold">
                                     <td colSpan={3} className="py-1.5 px-4 pl-12 text-right">Total:</td>
-                                    <td className="py-1.5 px-3 text-right">{fc(c.total)}</td>
+                                    <td className="py-1.5 px-3 text-right">{formatCurrency(c.total)}</td>
                                   </tr>
                                 </tfoot>
                               </table>
@@ -938,7 +935,7 @@ export default function ReportesPage() {
                     <td className="py-2 px-2"></td>
                     <td className="py-2 px-3">TOTAL</td>
                     <td colSpan={3}></td>
-                    <td className="py-2 px-3 text-right">{fc(totalCompras)}</td>
+                    <td className="py-2 px-3 text-right">{formatCurrency(totalCompras)}</td>
                   </tr>
                 </tfoot>
               )}
@@ -1068,10 +1065,10 @@ export default function ReportesPage() {
                       <p className="text-xs text-muted-foreground font-mono">{p.codigo}</p>
                     </td>
                     <td className="py-2 px-3 text-center">{p.stock}</td>
-                    <td className="py-2 px-3 text-right">{fc(p.costo)}</td>
-                    <td className="py-2 px-3 text-right">{fc(p.precio)}</td>
-                    <td className="py-2 px-3 text-right font-medium">{fc(p.stock * p.costo)}</td>
-                    <td className="py-2 px-3 text-right font-semibold text-emerald-600">{fc(p.stock * p.precio)}</td>
+                    <td className="py-2 px-3 text-right">{formatCurrency(p.costo)}</td>
+                    <td className="py-2 px-3 text-right">{formatCurrency(p.precio)}</td>
+                    <td className="py-2 px-3 text-right font-medium">{formatCurrency(p.stock * p.costo)}</td>
+                    <td className="py-2 px-3 text-right font-semibold text-emerald-600">{formatCurrency(p.stock * p.precio)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1080,8 +1077,8 @@ export default function ReportesPage() {
                   <td className="py-2 px-3">TOTAL</td>
                   <td className="py-2 px-3 text-center">{filteredProductos.reduce((a, p) => a + p.stock, 0)}</td>
                   <td colSpan={2}></td>
-                  <td className="py-2 px-3 text-right">{fc(stockCosto)}</td>
-                  <td className="py-2 px-3 text-right text-emerald-600">{fc(stockVenta)}</td>
+                  <td className="py-2 px-3 text-right">{formatCurrency(stockCosto)}</td>
+                  <td className="py-2 px-3 text-right text-emerald-600">{formatCurrency(stockVenta)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -1096,7 +1093,7 @@ export default function ReportesPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-muted-foreground">{metodo}</p>
-                      <p className="text-xl font-bold">{fc(monto)}</p>
+                      <p className="text-xl font-bold">{formatCurrency(monto)}</p>
                     </div>
                     <Badge variant="secondary">{totalVentas > 0 ? ((monto / totalVentas) * 100).toFixed(1) : "0"}%</Badge>
                   </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCurrency, todayARG } from "@/lib/formatters";
+import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 
 const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -641,7 +642,7 @@ export default function EditarPreciosPage() {
         }
       }
       if (historyInserts.length > 0) {
-        try { await supabase.from("precio_historial").insert(historyInserts); } catch {}
+        try { await supabase.from("precio_historial").insert(historyInserts); } catch { console.error("Error guardando historial de precios"); }
       }
 
       // Update local state
@@ -916,7 +917,7 @@ export default function EditarPreciosPage() {
           };
         });
       if (historyInserts.length > 0) {
-        try { await supabase.from("precio_historial").insert(historyInserts); } catch {}
+        try { await supabase.from("precio_historial").insert(historyInserts); } catch { console.error("Error guardando historial de precios"); }
       }
 
       // Update local state

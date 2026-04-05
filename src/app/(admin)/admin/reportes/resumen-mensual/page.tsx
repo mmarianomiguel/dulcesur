@@ -2,6 +2,7 @@
 
 import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,6 @@ import {
   Loader2, DollarSign, Crown, Star, ArrowUpRight, ArrowDownRight, Wallet, Calendar,
 } from "lucide-react";
 
-function fc(v: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
-}
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -311,16 +309,16 @@ export default function ResumenMensualPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Ventas</p>
-              <p className="text-lg font-bold mt-1">{fc(totalVentas)}</p>
+              <p className="text-lg font-bold mt-1">{formatCurrency(totalVentas)}</p>
               <p className="text-[11px] text-muted-foreground">{cantVentas} operaciones</p>
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Compras</p>
-              <p className="text-lg font-bold mt-1">{fc(totalCompras)}</p>
+              <p className="text-lg font-bold mt-1">{formatCurrency(totalCompras)}</p>
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Ganancia</p>
-              <p className={`text-lg font-bold mt-1 ${itemsSinCosto > 0 ? "text-amber-500" : ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fc(ganancia)}</p>
+              <p className={`text-lg font-bold mt-1 ${itemsSinCosto > 0 ? "text-amber-500" : ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>{formatCurrency(ganancia)}</p>
               {itemsSinCosto > 0 ? (
                 <p className="text-[11px] text-amber-500 font-medium">{itemsSinCosto} items sin costo cargado</p>
               ) : (
@@ -329,15 +327,15 @@ export default function ResumenMensualPage() {
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Notas Credito</p>
-              <p className="text-lg font-bold mt-1 text-red-500">-{fc(totalNC)}</p>
+              <p className="text-lg font-bold mt-1 text-red-500">-{formatCurrency(totalNC)}</p>
             </CardContent></Card>
             <Card><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Egresos</p>
-              <p className="text-lg font-bold mt-1 text-orange-500">{fc(totalEgresos)}</p>
+              <p className="text-lg font-bold mt-1 text-orange-500">{formatCurrency(totalEgresos)}</p>
             </CardContent></Card>
             <Card className="bg-primary/5"><CardContent className="pt-5 pb-4">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Neto</p>
-              <p className="text-lg font-bold mt-1">{fc(totalVentas - totalNC - totalCompras - totalEgresos)}</p>
+              <p className="text-lg font-bold mt-1">{formatCurrency(totalVentas - totalNC - totalCompras - totalEgresos)}</p>
             </CardContent></Card>
           </div>
 
@@ -359,9 +357,9 @@ export default function ResumenMensualPage() {
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{c.nombre}</p>
-                          <p className="text-[11px] text-muted-foreground">{c.qty} compras · Ticket prom. {fc(Math.round(c.total / c.qty))}</p>
+                          <p className="text-[11px] text-muted-foreground">{c.qty} compras · Ticket prom. {formatCurrency(Math.round(c.total / c.qty))}</p>
                         </div>
-                        <span className="text-sm font-bold">{fc(c.total)}</span>
+                        <span className="text-sm font-bold">{formatCurrency(c.total)}</span>
                       </div>
                     ))}
                   </div>
@@ -388,7 +386,7 @@ export default function ResumenMensualPage() {
                           <p className="text-sm font-medium truncate">{p.nombre}</p>
                           <p className="text-[11px] text-muted-foreground">{p.cantidad} vendidos</p>
                         </div>
-                        <span className="text-sm font-bold">{fc(p.total)}</span>
+                        <span className="text-sm font-bold">{formatCurrency(p.total)}</span>
                       </div>
                     ))}
                   </div>
@@ -407,7 +405,7 @@ export default function ResumenMensualPage() {
                     <div key={v.metodo}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium">{v.metodo}</span>
-                        <span className="text-sm font-bold">{fc(v.total)}</span>
+                        <span className="text-sm font-bold">{formatCurrency(v.total)}</span>
                       </div>
                       <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                         <div className="h-full bg-primary rounded-full" style={{ width: `${totalVentas > 0 ? (v.total / totalVentas) * 100 : 0}%` }} />
@@ -418,7 +416,7 @@ export default function ResumenMensualPage() {
                           {transferPorCuenta.map((tc) => (
                             <div key={tc.cuenta} className="flex justify-between text-[11px]">
                               <span className="text-muted-foreground">{tc.cuenta}</span>
-                              <span className="font-medium">{fc(tc.total)}</span>
+                              <span className="font-medium">{formatCurrency(tc.total)}</span>
                             </div>
                           ))}
                         </div>
@@ -444,7 +442,7 @@ export default function ResumenMensualPage() {
                       {egresosPorPago.map((e) => (
                         <div key={e.metodo} className="flex items-center justify-between">
                           <Badge variant="outline">{e.metodo}</Badge>
-                          <span className="text-sm font-bold text-orange-600">{fc(e.total)}</span>
+                          <span className="text-sm font-bold text-orange-600">{formatCurrency(e.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -455,7 +453,7 @@ export default function ResumenMensualPage() {
                           {egresosDetalle.map((e, i) => (
                             <div key={i} className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground truncate flex-1 mr-2">{e.descripcion}</span>
-                              <span className="font-medium text-orange-600 shrink-0">{fc(e.monto)}</span>
+                              <span className="font-medium text-orange-600 shrink-0">{formatCurrency(e.monto)}</span>
                             </div>
                           ))}
                         </div>
@@ -463,7 +461,7 @@ export default function ResumenMensualPage() {
                     )}
                     <div className="flex items-center justify-between pt-2 border-t font-bold">
                       <span className="text-sm">Total egresos</span>
-                      <span className="text-sm text-orange-600">{fc(totalEgresos)}</span>
+                      <span className="text-sm text-orange-600">{formatCurrency(totalEgresos)}</span>
                     </div>
                   </div>
                 )}
@@ -481,11 +479,11 @@ export default function ResumenMensualPage() {
                 <div className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Mes anterior</p>
-                    <p className="text-lg font-bold">{fc(comparativa.anterior)}</p>
+                    <p className="text-lg font-bold">{formatCurrency(comparativa.anterior)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Mes actual</p>
-                    <p className="text-lg font-bold">{fc(comparativa.actual)}</p>
+                    <p className="text-lg font-bold">{formatCurrency(comparativa.actual)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Variación</p>
@@ -514,9 +512,9 @@ export default function ResumenMensualPage() {
                         <span className="truncate">{p.nombre}</span>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-xs text-muted-foreground">Vendido {fc(Math.round(p.vendido))}</span>
+                        <span className="text-xs text-muted-foreground">Vendido {formatCurrency(Math.round(p.vendido))}</span>
                         <span className={`font-semibold ${p.ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                          {fc(Math.round(p.ganancia))}
+                          {formatCurrency(Math.round(p.ganancia))}
                         </span>
                         <Badge variant={p.margen >= 0 ? "default" : "destructive"} className="text-[10px] px-1.5">
                           {p.costo > 0 ? `${p.margen >= 0 ? "+" : ""}${p.margen.toFixed(0)}%` : "—"}

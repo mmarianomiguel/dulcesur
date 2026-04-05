@@ -616,6 +616,7 @@ export default function DashboardPage() {
     setItemsSinCosto((sinCostoResult as any)?.count || 0);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
+      showAdminToast("Error cargando el dashboard", "error");
     } finally {
       setLoading(false);
     }
@@ -1728,9 +1729,9 @@ export default function DashboardPage() {
                 <p className="text-sm text-emerald-800">
                   Pedido <span className="font-bold">#{deliveryConfirm.venta.numero}</span> de{" "}
                   <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "cliente"}</span> por{" "}
-                  <span className="font-bold">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(deliveryConfirm.venta.total - (ncPorPedido[deliveryConfirm.venta.id] || 0))}</span>
+                  <span className="font-bold">{formatCurrency(deliveryConfirm.venta.total - (ncPorPedido[deliveryConfirm.venta.id] || 0))}</span>
                 </p>
-                {(ncPorPedido[deliveryConfirm.venta?.id] || 0) > 0 && <p className="text-xs text-amber-600 mt-1">Incluye NC -{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(ncPorPedido[deliveryConfirm.venta.id])}</p>}
+                {(ncPorPedido[deliveryConfirm.venta?.id] || 0) > 0 && <p className="text-xs text-amber-600 mt-1">Incluye NC -{formatCurrency(ncPorPedido[deliveryConfirm.venta.id])}</p>}
                 <p className="text-xs text-emerald-600 mt-1">Pago completo — listo para entregar</p>
               </div>
             )}
@@ -1748,7 +1749,7 @@ export default function DashboardPage() {
               else if (metodo === "Cuenta Corriente") totalCobrado = 0;
               else totalCobrado = montoIngresado ?? pend;
               const restanteCC = Math.max(0, Math.round((pend - totalCobrado) * 100) / 100);
-              const fmt = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(n);
+              const fmt = formatCurrency;
               return (
                 <div className="space-y-3">
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">

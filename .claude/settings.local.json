@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"j:/Proyectos Claude/enexpro/src/app/\\(admin\\)/admin/ventas/page.tsx\")"
+    ]
+  }
+}

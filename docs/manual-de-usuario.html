@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual de Usuario — Sistema de Gestión Comercial</title>
+<style>
+  @page {
+    size: A4;
+    margin: 2cm 2.2cm;
+    @bottom-center { content: counter(page); font-size: 9pt; color: #888; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 11pt;
+    line-height: 1.65;
+    color: #1a1a2e;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 2cm;
+    background: #fff;
+  }
+
+  /* ─── Cover page ─── */
+  .cover {
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 85vh;
+    text-align: center;
+  }
+  .cover-icon {
+    width: 80px; height: 80px; border-radius: 20px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 2rem; color: #fff; font-size: 2.2rem; font-weight: 700;
+  }
+  .cover h1 { font-size: 2.4rem; font-weight: 800; color: #1a1a2e; margin-bottom: .5rem; }
+  .cover .subtitle { font-size: 1.15rem; color: #6366f1; font-weight: 600; margin-bottom: 2rem; }
+  .cover .desc { font-size: .95rem; color: #64748b; max-width: 420px; line-height: 1.7; }
+  .cover .version {
+    margin-top: 3rem; padding: .5rem 1.5rem; border-radius: 999px;
+    background: #f1f5f9; color: #64748b; font-size: .85rem; font-weight: 500;
+  }
+
+  /* ─── TOC ─── */
+  .toc { page-break-after: always; }
+  .toc h2 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #1a1a2e; }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; margin-bottom: .35rem; }
+  .toc > ol > li > a::before { content: counter(toc) ". "; font-weight: 700; color: #6366f1; }
+  .toc a {
+    text-decoration: none; color: #334155; display: flex;
+    justify-content: space-between; padding: .3rem 0;
+    border-bottom: 1px dotted #e2e8f0; font-size: .95rem;
+  }
+  .toc a:hover { color: #6366f1; }
+  .toc ol ol { padding-left: 1.5rem; }
+  .toc ol ol li { margin-bottom: .15rem; }
+  .toc ol ol a { font-size: .88rem; color: #64748b; border: none; }
+
+  /* ─── Headings ─── */
+  h1 { font-size: 1.8rem; color: #1a1a2e; margin: 2rem 0 1rem; page-break-after: avoid; }
+  h2 {
+    font-size: 1.35rem; color: #6366f1; margin: 2.5rem 0 .8rem;
+    padding-bottom: .4rem; border-bottom: 2px solid #e2e8f0;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 1.1rem; color: #1e293b; margin: 1.5rem 0 .5rem; page-break-after: avoid; }
+  h4 { font-size: 1rem; color: #475569; margin: 1rem 0 .4rem; font-weight: 600; }
+
+  /* ─── Content ─── */
+  p { margin-bottom: .7rem; }
+  ul, ol { margin: .5rem 0 1rem 1.5rem; }
+  li { margin-bottom: .3rem; }
+
+  .section { page-break-inside: avoid; }
+  .chapter { page-break-before: always; }
+  .chapter:first-of-type { page-break-before: auto; }
+
+  /* ─── Callouts ─── */
+  .tip, .warning, .info, .important {
+    padding: .8rem 1rem; border-radius: 8px; margin: 1rem 0;
+    font-size: .92rem; page-break-inside: avoid;
+  }
+  .tip { background: #ecfdf5; border-left: 4px solid #10b981; color: #065f46; }
+  .warning { background: #fffbeb; border-left: 4px solid #f59e0b; color: #92400e; }
+  .info { background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; }
+  .important { background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; }
+  .callout-title { font-weight: 700; margin-bottom: .3rem; }
+
+  /* ─── Tables ─── */
+  table {
+    width: 100%; border-collapse: collapse; margin: 1rem 0;
+    font-size: .9rem; page-break-inside: avoid;
+  }
+  th {
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    padding: .5rem .7rem; text-align: left; font-weight: 600; color: #334155;
+  }
+  td { border: 1px solid #e2e8f0; padding: .45rem .7rem; color: #475569; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  /* ─── Code ─── */
+  code {
+    background: #f1f5f9; padding: .15rem .4rem; border-radius: 4px;
+    font-size: .88rem; font-family: 'Consolas', monospace; color: #6366f1;
+  }
+
+  /* ─── Steps ─── */
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li {
+    counter-increment: step; padding-left: 2.5rem; position: relative;
+    margin-bottom: 1rem; min-height: 2rem;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 0;
+    width: 1.8rem; height: 1.8rem; border-radius: 50%;
+    background: #6366f1; color: #fff; font-size: .85rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ─── Badge ─── */
+  .badge {
+    display: inline-block; padding: .1rem .5rem; border-radius: 4px;
+    font-size: .8rem; font-weight: 600;
+  }
+  .badge-blue { background: #dbeafe; color: #1d4ed8; }
+  .badge-green { background: #dcfce7; color: #16a34a; }
+  .badge-amber { background: #fef3c7; color: #d97706; }
+  .badge-red { background: #fee2e2; color: #dc2626; }
+  .badge-purple { background: #f3e8ff; color: #7c3aed; }
+
+  /* ─── Separator ─── */
+  hr { border: none; border-top: 1px solid #e2e8f0; margin: 2rem 0; }
+
+  /* ─── Print ─── */
+  @media print {
+    body { padding: 0; max-width: none; }
+    .no-print { display: none; }
+    a { color: inherit !important; text-decoration: none !important; }
+  }
+
+  .print-btn {
+    position: fixed; top: 1rem; right: 1rem; z-index: 999;
+    background: #6366f1; color: #fff; border: none; padding: .6rem 1.5rem;
+    border-radius: 8px; font-size: .9rem; font-weight: 600; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(99,102,241,.3);
+  }
+  .print-btn:hover { background: #4f46e5; }
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">Guardar como PDF</button>
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<div class="cover">
+  <div class="cover-icon">GC</div>
+  <h1>Manual de Usuario</h1>
+  <div class="subtitle">Sistema de Gestión Comercial</div>
+  <div class="desc">
+    Guía completa de configuración y uso del sistema integrado de ecommerce y punto de venta.
+    Incluye panel administrativo, tienda online, y todos los módulos del sistema.
+  </div>
+  <div class="version">Versión 1.0 — Abril 2026</div>
+</div>
+
+<!-- ═══════════════════ TOC ═══════════════════ -->
+<div class="toc">
+  <h2>Índice de contenidos</h2>
+  <ol>
+    <li><a href="#intro">Introducción al sistema</a></li>
+    <li><a href="#setup">Configuración inicial</a>
+      <ol>
+        <li><a href="#setup-env">Variables de entorno</a></li>
+        <li><a href="#setup-db">Base de datos</a></li>
+        <li><a href="#setup-first">Primer acceso</a></li>
+        <li><a href="#setup-empresa">Datos de la empresa</a></li>
+        <li><a href="#setup-apariencia">Personalización visual</a></li>
+        <li><a href="#setup-usuarios">Usuarios y roles</a></li>
+        <li><a href="#setup-modulos">Módulos del sistema</a></li>
+      </ol>
+    </li>
+    <li><a href="#dashboard">Dashboard</a></li>
+    <li><a href="#ventas">Ventas</a>
+      <ol>
+        <li><a href="#ventas-pos">Punto de venta (POS)</a></li>
+        <li><a href="#ventas-historial">Historial de ventas</a></li>
+        <li><a href="#ventas-carga">Carga manual</a></li>
+        <li><a href="#ventas-ruta">Hojas de ruta</a></li>
+        <li><a href="#ventas-nc">Notas de crédito</a></li>
+        <li><a href="#ventas-nd">Notas de débito</a></li>
+        <li><a href="#ventas-anticipos">Anticipos</a></li>
+        <li><a href="#ventas-remitos">Remitos y facturación</a></li>
+        <li><a href="#ventas-pedidos">Pedidos online</a></li>
+      </ol>
+    </li>
+    <li><a href="#clientes">Clientes</a>
+      <ol>
+        <li><a href="#clientes-gestion">Gestión de clientes</a></li>
+        <li><a href="#clientes-cc">Cuenta corriente</a></li>
+        <li><a href="#clientes-cobros">Cobranzas</a></li>
+      </ol>
+    </li>
+    <li><a href="#productos">Productos</a>
+      <ol>
+        <li><a href="#prod-catalogo">Catálogo</a></li>
+        <li><a href="#prod-presentaciones">Presentaciones</a></li>
+        <li><a href="#prod-combos">Combos</a></li>
+        <li><a href="#prod-descuentos">Descuentos y promociones</a></li>
+        <li><a href="#prod-precios">Edición de precios</a></li>
+        <li><a href="#prod-marcas">Marcas y categorías</a></li>
+        <li><a href="#prod-lista">Lista de precios PDF</a></li>
+      </ol>
+    </li>
+    <li><a href="#proveedores">Proveedores</a></li>
+    <li><a href="#compras">Compras</a>
+      <ol>
+        <li><a href="#compras-registro">Registro de compras</a></li>
+        <li><a href="#compras-pedidos">Pedidos a proveedores</a></li>
+        <li><a href="#compras-reposicion">Reposición automática</a></li>
+      </ol>
+    </li>
+    <li><a href="#caja">Caja</a></li>
+    <li><a href="#stock">Stock</a></li>
+    <li><a href="#reportes">Reportes</a></li>
+    <li><a href="#vendedores">Vendedores y comisiones</a></li>
+    <li><a href="#auditoria">Auditoría</a></li>
+    <li><a href="#tienda">Tienda online</a>
+      <ol>
+        <li><a href="#tienda-config">Configuración de la tienda</a></li>
+        <li><a href="#tienda-catalogo">Catálogo público</a></li>
+        <li><a href="#tienda-checkout">Checkout</a></li>
+        <li><a href="#tienda-cuenta">Cuenta del cliente</a></li>
+        <li><a href="#tienda-paginas">Páginas informativas</a></li>
+      </ol>
+    </li>
+    <li><a href="#config">Configuración avanzada</a>
+      <ol>
+        <li><a href="#config-facturacion">Facturación</a></li>
+        <li><a href="#config-impresion">Impresión de recibos</a></li>
+        <li><a href="#config-pagos">Medios de pago</a></li>
+        <li><a href="#config-backup">Backup</a></li>
+      </ol>
+    </li>
+    <li><a href="#deploy">Despliegue y mantenimiento</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════ 1. INTRO ═══════════════════ -->
+<div class="chapter" id="intro">
+  <h1>1. Introducción al sistema</h1>
+  <p>Este sistema es una plataforma integrada de <strong>ecommerce + punto de venta (POS)</strong> diseñada para negocios mayoristas y minoristas. Cuenta con dos interfaces principales:</p>
+  <ul>
+    <li><strong>Panel administrativo</strong> — Accesible desde <code>/admin</code>. Permite gestionar ventas, clientes, productos, stock, caja, compras, reportes y configuración.</li>
+    <li><strong>Tienda online</strong> — Accesible desde la raíz <code>/</code>. Permite a los clientes finales navegar el catálogo, armar su carrito, y realizar pedidos.</li>
+  </ul>
+
+  <h3>Tecnologías utilizadas</h3>
+  <table>
+    <tr><th>Componente</th><th>Tecnología</th></tr>
+    <tr><td>Frontend</td><td>Next.js (App Router), React, TypeScript, Tailwind CSS, shadcn/ui</td></tr>
+    <tr><td>Backend</td><td>Next.js API Routes + Supabase (PostgreSQL)</td></tr>
+    <tr><td>Autenticación</td><td>Supabase Auth</td></tr>
+    <tr><td>Imágenes</td><td>Cloudinary</td></tr>
+    <tr><td>Pagos</td><td>Stripe</td></tr>
+    <tr><td>Deploy</td><td>VPS con webhook de auto-deploy</td></tr>
+  </table>
+
+  <h3>Convenciones de moneda</h3>
+  <p>El sistema opera en <strong>pesos argentinos (ARS)</strong>. Los montos se formatean con separador de miles punto y decimal coma (ej: $1.250,50). La zona horaria utilizada es <strong>America/Argentina/Buenos_Aires</strong>.</p>
+</div>
+
+<!-- ═══════════════════ 2. SETUP ═══════════════════ -->
+<div class="chapter" id="setup">
+  <h1>2. Configuración inicial</h1>
+  <p>Esta sección describe los pasos necesarios para poner en marcha el sistema desde cero.</p>
+
+  <h2 id="setup-env">2.1 Variables de entorno</h2>
+  <p>Crear un archivo <code>.env</code> en la raíz del proyecto con las siguientes variables:</p>
+
+  <table>
+    <tr><th>Variable</th><th>Descripción</th><th>Dónde obtenerla</th></tr>
+    <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code></td><td>URL del proyecto Supabase</td><td>Supabase → Settings → API</td></tr>
+    <tr><td><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td><td>Clave pública (anon) de Supabase</td><td>Supabase → Settings → API</td></tr>
+    <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td>Clave de servicio (admin, SECRETA)</td><td>Supabase → Settings → API</td></tr>
+    <tr><td><code>SUPABASE_DB_PASSWORD</code></td><td>Contraseña de la base de datos</td><td>Supabase → Settings → Database</td></tr>
+    <tr><td><code>NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</code></td><td>Nombre de la cuenta Cloudinary</td><td>Cloudinary → Dashboard</td></tr>
+    <tr><td><code>CLOUDINARY_API_KEY</code></td><td>API Key de Cloudinary</td><td>Cloudinary → Settings</td></tr>
+    <tr><td><code>CLOUDINARY_API_SECRET</code></td><td>API Secret de Cloudinary (SECRETA)</td><td>Cloudinary → Settings</td></tr>
+    <tr><td><code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code></td><td>Clave pública de Stripe</td><td>Stripe → Developers → API Keys</td></tr>
+    <tr><td><code>STRIPE_SECRET_KEY</code></td><td>Clave secreta de Stripe (SECRETA)</td><td>Stripe → Developers → API Keys</td></tr>
+    <tr><td><code>PULL_SECRET</code></td><td>Token para el webhook de auto-deploy</td><td>Generar una contraseña segura</td></tr>
+  </table>
+
+  <div class="important">
+    <div class="callout-title">Importante</div>
+    Las variables marcadas como SECRETA nunca deben exponerse en el navegador. Solo las variables con prefijo <code>NEXT_PUBLIC_</code> son accesibles desde el cliente.
+  </div>
+
+  <h2 id="setup-db">2.2 Base de datos</h2>
+  <p>El sistema usa <strong>Supabase</strong> (PostgreSQL). Para configurar la base de datos:</p>
+  <ol class="steps">
+    <li>Crear un nuevo proyecto en <strong>supabase.com</strong>.</li>
+    <li>Ir al <strong>SQL Editor</strong> de Supabase.</li>
+    <li>Ejecutar los scripts de migración en orden, que se encuentran en la carpeta <code>/scripts</code>:
+      <ul>
+        <li><code>migrate.sql</code> — Esquema inicial (tablas, funciones, triggers)</li>
+        <li><code>migrate-v2.sql</code> hasta <code>migrate-v17-fix-hora-cast.sql</code> — Migraciones incrementales</li>
+      </ul>
+    </li>
+    <li>Verificar que las tablas se crearon correctamente: <code>empresa</code>, <code>usuarios</code>, <code>productos</code>, <code>clientes</code>, <code>ventas</code>, <code>tienda_config</code>, etc.</li>
+  </ol>
+
+  <h2 id="setup-first">2.3 Primer acceso</h2>
+  <ol class="steps">
+    <li>Instalar dependencias: <code>npm install</code></li>
+    <li>Iniciar el servidor: <code>npm run dev</code></li>
+    <li>Crear el primer usuario administrador haciendo un POST a <code>/api/usuarios</code> con los datos: nombre, email, password, y <code>es_admin: true</code>.</li>
+    <li>Acceder a <code>/login</code> con las credenciales creadas.</li>
+    <li>Al ingresar, se redirige automáticamente al panel de administración en <code>/admin</code>.</li>
+  </ol>
+
+  <h2 id="setup-empresa">2.4 Datos de la empresa</h2>
+  <p>Ir a <strong>Configuración → Empresa</strong> para completar los datos del negocio:</p>
+  <ul>
+    <li><strong>Nombre comercial</strong> — El nombre visible del negocio</li>
+    <li><strong>Razón social</strong> — Nombre legal/fiscal</li>
+    <li><strong>CUIT</strong> — Clave Única de Identificación Tributaria</li>
+    <li><strong>Situación IVA</strong> — Responsable Inscripto, Monotributista, Exento, etc.</li>
+    <li><strong>Domicilio fiscal, teléfono</strong></li>
+  </ul>
+  <div class="tip">
+    <div class="callout-title">Consejo</div>
+    Estos datos se usan en los recibos de venta, facturas, y en el pie de página de la tienda online. Completarlos primero evita tener que regenerar documentos después.
+  </div>
+
+  <h2 id="setup-apariencia">2.5 Personalización visual (White-Label)</h2>
+  <p>Ir a <strong>Configuración → Apariencia</strong> para personalizar la identidad del sistema:</p>
+  <ul>
+    <li><strong>Nombre del sistema</strong> — Se muestra en la barra lateral del admin</li>
+    <li><strong>Subtítulo</strong> — Texto secundario debajo del nombre</li>
+    <li><strong>Logo</strong> — Subir imagen o ingresar URL. Se muestra en sidebar y tienda</li>
+    <li><strong>Color primario</strong> — Elegir entre 8 presets (Azul, Verde, Rojo, Naranja, Rosa, Cyan, Violeta, Gris) o ajustar el tono con el slider</li>
+    <li><strong>Oscuridad del sidebar</strong> — Controla qué tan oscura es la barra lateral</li>
+  </ul>
+  <p>Los cambios se aplican en <strong>tiempo real</strong> y se sincronizan entre todas las pestañas del navegador.</p>
+
+  <h2 id="setup-usuarios">2.6 Usuarios y roles</h2>
+  <p>Ir a <strong>Configuración → Usuarios y Roles</strong>.</p>
+
+  <h4>Crear un rol</h4>
+  <ol>
+    <li>Click en "Nuevo Rol"</li>
+    <li>Asignar nombre (ej: "Vendedor", "Cajero", "Encargado")</li>
+    <li>Click en "Permisos" para configurar qué módulos y submódulos puede ver ese rol</li>
+  </ol>
+
+  <h4>Permisos disponibles por módulo</h4>
+  <table>
+    <tr><th>Módulo</th><th>Submódulos</th></tr>
+    <tr><td>Dashboard</td><td>Panel principal</td></tr>
+    <tr><td>Ventas</td><td>Punto de venta, Historial y Pedidos, Entregas y Ruta, Nota de Crédito, Nota de Débito, Anticipos</td></tr>
+    <tr><td>Clientes</td><td>Listado</td></tr>
+    <tr><td>Productos</td><td>Listado, Editar Precios, Descuentos, Marcas, Lista de Precios</td></tr>
+    <tr><td>Proveedores</td><td>Listado</td></tr>
+    <tr><td>Compras</td><td>Registrar, Pedidos, Reposición</td></tr>
+    <tr><td>Caja</td><td>Gestión de caja</td></tr>
+    <tr><td>Stock</td><td>Ajustes de Stock</td></tr>
+    <tr><td>Reportes</td><td>General, Resumen Mensual, Ranking Clientes, Resumen Vendedor, Percepciones</td></tr>
+    <tr><td>Auditoría</td><td>Registro de actividades</td></tr>
+    <tr><td>Tienda Online</td><td>Configuración de tienda</td></tr>
+  </table>
+
+  <h4>Crear un usuario</h4>
+  <ol>
+    <li>Click en "Nuevo Usuario"</li>
+    <li>Completar: nombre, email, contraseña</li>
+    <li>Asignar un rol (o marcar como "Es Admin" para acceso total)</li>
+    <li>Guardar. El usuario podrá ingresar desde <code>/login</code></li>
+  </ol>
+
+  <div class="info">
+    <div class="callout-title">Nota</div>
+    Los usuarios marcados como <strong>Es Admin</strong> tienen acceso a TODOS los módulos sin importar el rol asignado. Los permisos del rol solo se aplican a usuarios que NO sean admin.
+  </div>
+
+  <h2 id="setup-modulos">2.7 Módulos del sistema</h2>
+  <p>Ir a <strong>Configuración → Módulos</strong> para activar o desactivar funcionalidades:</p>
+  <p>Se pueden desactivar módulos que no se necesiten (ej: si no se usa Compras o Proveedores). Los módulos desactivados desaparecen del menú lateral. <strong>Dashboard</strong> y <strong>Configuración</strong> siempre están activos.</p>
+</div>
+
+<!-- ═══════════════════ 3. DASHBOARD ═══════════════════ -->
+<div class="chapter" id="dashboard">
+  <h1>3. Dashboard</h1>
+  <p>La pantalla principal muestra un resumen en tiempo real del estado del negocio.</p>
+
+  <h3>Widgets principales</h3>
+  <table>
+    <tr><th>Widget</th><th>Qué muestra</th></tr>
+    <tr><td>Ventas</td><td>Total vendido en el período seleccionado</td></tr>
+    <tr><td>Tickets</td><td>Cantidad de transacciones</td></tr>
+    <tr><td>Gastos/Egresos</td><td>Total de egresos registrados</td></tr>
+    <tr><td>Ganancias</td><td>Ventas menos costos (rentabilidad)</td></tr>
+    <tr><td>Capital en mercadería</td><td>Valor del stock actual a costo</td></tr>
+    <tr><td>A cobrar</td><td>Total de saldo pendiente de clientes</td></tr>
+    <tr><td>A pagar</td><td>Total de deuda con proveedores</td></tr>
+  </table>
+
+  <h3>Gráficos</h3>
+  <ul>
+    <li><strong>Medios de pago</strong> — Gráfico de torta con distribución: Efectivo, Transferencia, Mixto, Cuenta Corriente</li>
+    <li><strong>Tendencia mensual</strong> — Barras comparando ventas vs. gastos por mes</li>
+    <li><strong>Ventas por categoría</strong> — Distribución de ventas por categoría de producto</li>
+  </ul>
+
+  <h3>Alertas</h3>
+  <ul>
+    <li><strong>Stock bajo</strong> — Productos por debajo del mínimo configurado</li>
+    <li><strong>Discrepancias de saldo</strong> — Clientes con saldo calculado diferente al registrado</li>
+    <li><strong>Ítems sin costo</strong> — Productos vendidos con costo en $0</li>
+  </ul>
+
+  <h3>Filtros de período</h3>
+  <p>Se puede filtrar por: <span class="badge badge-blue">Día</span> <span class="badge badge-green">Mes</span> <span class="badge badge-purple">Rango personalizado</span></p>
+
+  <h3>Pedidos online</h3>
+  <p>Si hay pedidos de la tienda online pendientes, se muestran en pestañas organizadas por día de entrega. Desde aquí se puede confirmar la entrega, cobrar, e imprimir el recibo.</p>
+</div>
+
+<!-- ═══════════════════ 4. VENTAS ═══════════════════ -->
+<div class="chapter" id="ventas">
+  <h1>4. Ventas</h1>
+  <p>El módulo de ventas es el corazón del sistema. Comprende el punto de venta, historial, documentos comerciales, y gestión de pedidos.</p>
+
+  <h2 id="ventas-pos">4.1 Punto de venta (POS)</h2>
+  <p>Interfaz rápida para registrar ventas presenciales. Funcionalidades:</p>
+  <ul>
+    <li><strong>Búsqueda de productos</strong> — Por nombre, código o escaneando código de barras</li>
+    <li><strong>Selección de cliente</strong> — Buscar por nombre, CUIT o crear cliente nuevo</li>
+    <li><strong>Presentaciones</strong> — Seleccionar unidad (Unidad, Caja x12, Medio Cartón, etc.)</li>
+    <li><strong>Conversión automática</strong> — Si el cliente pide 24 unidades y existe "Caja x24", el sistema sugiere la conversión</li>
+    <li><strong>Descuentos</strong> — Aplicar descuento porcentual al total</li>
+    <li><strong>Recargo por transferencia</strong> — Se aplica automáticamente si se configura</li>
+    <li><strong>Medios de pago</strong> — Efectivo, Transferencia, Cuenta Corriente, Mixto</li>
+    <li><strong>Impresión de recibo</strong> — Genera recibo térmico o PDF</li>
+  </ul>
+
+  <h4>Flujo de una venta</h4>
+  <ol class="steps">
+    <li>Seleccionar el <strong>cliente</strong> (o dejar como "Consumidor Final").</li>
+    <li>Agregar productos buscando por nombre o escaneando código de barras.</li>
+    <li>Ajustar cantidades y presentaciones según lo solicitado.</li>
+    <li>Aplicar descuento si corresponde.</li>
+    <li>Seleccionar el <strong>medio de pago</strong> y completar datos (monto efectivo, cuenta bancaria, etc.).</li>
+    <li>Click en <strong>Confirmar venta</strong>. El sistema descuenta stock, registra en caja, y genera el comprobante.</li>
+  </ol>
+
+  <div class="tip">
+    <div class="callout-title">Pago Mixto</div>
+    Si el cliente paga parte en efectivo y parte con transferencia, seleccionar "Mixto" e ingresar el monto de cada medio. El sistema valida que la suma coincida con el total.
+  </div>
+
+  <h2 id="ventas-historial">4.2 Historial de ventas</h2>
+  <p>Listado completo de todas las ventas realizadas con múltiples filtros:</p>
+  <table>
+    <tr><th>Filtro</th><th>Opciones</th></tr>
+    <tr><td>Búsqueda</td><td>Por nombre de cliente, número de comprobante, observación</td></tr>
+    <tr><td>Tipo comprobante</td><td>Remito X, Factura A/B/C, Nota de Crédito, Nota de Débito</td></tr>
+    <tr><td>Medio de pago</td><td>Efectivo, Transferencia, Cuenta Corriente, Mixto</td></tr>
+    <tr><td>Estado</td><td>Abierta, Entregada, Facturada, Anulada</td></tr>
+    <tr><td>Fecha</td><td>Rango desde/hasta</td></tr>
+    <tr><td>Vendedor</td><td>Filtrar por vendedor asignado</td></tr>
+    <tr><td>Origen</td><td>POS o Tienda Online</td></tr>
+  </table>
+
+  <h4>Acciones por venta</h4>
+  <ul>
+    <li><strong>Ver detalle</strong> — Ítems, montos, forma de pago</li>
+    <li><strong>Editar</strong> — Modificar cantidades, precios, medio de pago, observación</li>
+    <li><strong>Imprimir</strong> — Generar recibo PDF</li>
+    <li><strong>Marcar entregada</strong> — Cambiar estado a "Entregada"</li>
+    <li><strong>Crear Nota de Crédito</strong> — Desde la venta original</li>
+    <li><strong>Anular</strong> — Revierte stock, saldo, y movimientos de caja</li>
+  </ul>
+
+  <div class="warning">
+    <div class="callout-title">Anulación de ventas</div>
+    Al anular una venta, el sistema automáticamente: devuelve el stock, revierte el saldo del cliente, revierte los movimientos de cuenta corriente, y genera un movimiento de cancelación en caja. Esta operación no se puede deshacer.
+  </div>
+
+  <h2 id="ventas-carga">4.3 Carga manual</h2>
+  <p>Formulario para registrar ventas de forma manual (ej: ventas hechas por fuera del POS, facturas de papel).</p>
+  <ul>
+    <li>Permite seleccionar tipo de comprobante, número, fecha, cliente</li>
+    <li>Agregar ítems con descripción, cantidad, precio y descuento</li>
+    <li>Útil para migrar datos históricos o registrar operaciones externas</li>
+  </ul>
+
+  <h2 id="ventas-ruta">4.4 Hojas de ruta</h2>
+  <p>Organiza las entregas del día en una vista por pestañas según el día de entrega.</p>
+  <ul>
+    <li>Muestra: cliente, dirección, teléfono, total, estado de entrega</li>
+    <li>Permite confirmar entrega y cobrar en el momento</li>
+    <li>Enlace a Google Maps para navegación</li>
+    <li>Filtro por método de entrega (Envío / Retiro)</li>
+  </ul>
+
+  <h2 id="ventas-nc">4.5 Notas de crédito</h2>
+  <p>Registrar devoluciones de productos o ajustes a favor del cliente.</p>
+  <ol class="steps">
+    <li>Seleccionar el cliente.</li>
+    <li>Vincular a la venta original (se cargan automáticamente los ítems).</li>
+    <li>Ajustar las cantidades a devolver (no puede superar la cantidad original).</li>
+    <li>Seleccionar método de devolución: Efectivo, Transferencia, o Cuenta Corriente.</li>
+    <li>Confirmar. El sistema devuelve stock y ajusta el saldo del cliente.</li>
+  </ol>
+
+  <h2 id="ventas-nd">4.6 Notas de débito</h2>
+  <p>Registrar cargos adicionales al cliente (ej: intereses, fletes, ajustes).</p>
+  <ul>
+    <li>Se puede vincular opcionalmente a una venta original</li>
+    <li>Los ítems son de libre descripción (no vinculados a productos)</li>
+    <li>Suma al saldo del cliente</li>
+  </ul>
+
+  <h2 id="ventas-anticipos">4.7 Anticipos</h2>
+  <p>Gestionar pagos anticipados de clientes.</p>
+  <ul>
+    <li>Registrar anticipo con monto, concepto y cliente</li>
+    <li>Aplicar anticipo a una venta futura</li>
+    <li>Devolver anticipo si no se utiliza</li>
+    <li>Estados: <span class="badge badge-green">Vigente</span> <span class="badge badge-blue">Aplicado</span> <span class="badge badge-amber">Devuelto</span></li>
+  </ul>
+
+  <h2 id="ventas-remitos">4.8 Remitos y facturación</h2>
+  <p>Los remitos son comprobantes preliminares que luego se convierten en facturas.</p>
+
+  <h4>Facturación en lote</h4>
+  <p>Permite seleccionar múltiples remitos pendientes y convertirlos en facturas en una sola operación. Incluye barra de progreso y filtros por cliente y fecha.</p>
+
+  <h2 id="ventas-pedidos">4.9 Pedidos online</h2>
+  <p>Gestionar los pedidos realizados desde la tienda online.</p>
+  <ul>
+    <li>Ver pedidos pendientes con datos del cliente, dirección, y total</li>
+    <li>Confirmar entrega con cobro (efectivo, transferencia, cuenta corriente, mixto)</li>
+    <li>Imprimir recibo de entrega</li>
+    <li>Cancelar pedido con motivo</li>
+    <li>Generar nota de crédito por devoluciones</li>
+  </ul>
+  <p>Estados: <span class="badge badge-amber">Pendiente</span> <span class="badge badge-purple">Armado</span> <span class="badge badge-blue">Confirmado</span> <span class="badge badge-green">Entregado</span> <span class="badge badge-red">Cancelado</span></p>
+</div>
+
+<!-- ═══════════════════ 5. CLIENTES ═══════════════════ -->
+<div class="chapter" id="clientes">
+  <h1>5. Clientes</h1>
+
+  <h2 id="clientes-gestion">5.1 Gestión de clientes</h2>
+  <p>Base de datos completa de clientes con toda la información comercial y fiscal.</p>
+
+  <h4>Datos del cliente</h4>
+  <table>
+    <tr><th>Sección</th><th>Campos</th></tr>
+    <tr><td>Datos básicos</td><td>Código, Nombre/Razón Social, Tipo Doc., Nro. Doc., CUIT, Email, Teléfono</td></tr>
+    <tr><td>Dirección</td><td>Domicilio, Barrio, Localidad, Provincia, Código Postal, Domicilio Fiscal</td></tr>
+    <tr><td>Datos comerciales</td><td>Situación IVA, Tipo Factura (A/B/C), Vendedor, Zona de Entrega, Límite de Crédito</td></tr>
+  </table>
+
+  <h4>Situaciones IVA soportadas</h4>
+  <ul>
+    <li>Consumidor Final → Factura B o C</li>
+    <li>Responsable Inscripto → Factura A</li>
+    <li>Monotributista → Factura B o C</li>
+    <li>Exento → Factura B o C</li>
+  </ul>
+
+  <h4>Filtros de búsqueda</h4>
+  <p>Buscar por nombre, CUIT, documento. Filtrar por: activo/inactivo, zona de entrega, vendedor asignado.</p>
+
+  <h4>Importación masiva</h4>
+  <p>Se pueden importar clientes desde un archivo Excel. También se puede exportar la lista completa a Excel.</p>
+
+  <h2 id="clientes-cc">5.2 Cuenta corriente</h2>
+  <p>Cada cliente tiene una cuenta corriente que registra todos los movimientos financieros:</p>
+  <ul>
+    <li><strong>Debe</strong> — Montos que el cliente debe (ventas a cuenta, notas de débito)</li>
+    <li><strong>Haber</strong> — Montos a favor del cliente (cobros, notas de crédito)</li>
+    <li><strong>Saldo</strong> — Balance acumulado (positivo = deuda del cliente)</li>
+  </ul>
+  <p>El historial muestra cada movimiento con fecha, comprobante, descripción, montos, y saldo resultante.</p>
+
+  <h2 id="clientes-cobros">5.3 Cobranzas</h2>
+  <p>Interfaz dedicada para registrar cobros a clientes con deuda pendiente.</p>
+  <ol class="steps">
+    <li>Seleccionar el cliente (se muestran solo los que tienen saldo > 0).</li>
+    <li>Ingresar el monto a cobrar.</li>
+    <li>Seleccionar medio de pago y cuenta bancaria (si es transferencia).</li>
+    <li>Opcionalmente, distribuir el cobro entre varias facturas pendientes.</li>
+    <li>Confirmar. El sistema registra el cobro en caja, actualiza el saldo, y genera el movimiento en cuenta corriente.</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════ 6. PRODUCTOS ═══════════════════ -->
+<div class="chapter" id="productos">
+  <h1>6. Productos</h1>
+
+  <h2 id="prod-catalogo">6.1 Catálogo de productos</h2>
+  <p>Administración completa del catálogo de productos con precios, stock, y configuración.</p>
+
+  <h4>Campos del producto</h4>
+  <table>
+    <tr><th>Campo</th><th>Descripción</th></tr>
+    <tr><td>Código (SKU)</td><td>Identificador único del producto</td></tr>
+    <tr><td>Nombre</td><td>Nombre del producto</td></tr>
+    <tr><td>Descripción</td><td>Descripción detallada (opcional, visible en tienda)</td></tr>
+    <tr><td>Imagen</td><td>Foto del producto (se sube a Cloudinary)</td></tr>
+    <tr><td>Categoría / Subcategoría</td><td>Clasificación del producto</td></tr>
+    <tr><td>Marca</td><td>Marca comercial</td></tr>
+    <tr><td>Costo</td><td>Precio de compra (para calcular margen)</td></tr>
+    <tr><td>Precio</td><td>Precio de venta base</td></tr>
+    <tr><td>Stock actual</td><td>Unidades disponibles</td></tr>
+    <tr><td>Stock mínimo</td><td>Umbral para alerta de reposición</td></tr>
+    <tr><td>Visible en tienda</td><td>Si aparece en la tienda online</td></tr>
+    <tr><td>Activo</td><td>Si está habilitado para la venta</td></tr>
+  </table>
+
+  <h2 id="prod-presentaciones">6.2 Presentaciones</h2>
+  <p>Un producto puede tener múltiples presentaciones (variantes de empaque):</p>
+  <ul>
+    <li><strong>Unidad</strong> — Venta unitaria (1 unidad = 1 stock)</li>
+    <li><strong>Caja x12, Caja x24, etc.</strong> — Paquete de N unidades con precio propio</li>
+    <li><strong>Medio Cartón</strong> — Media caja (0.5 del cartón completo)</li>
+  </ul>
+  <p>Cada presentación tiene: nombre, cantidad de unidades, SKU propio (opcional), costo y precio.</p>
+
+  <div class="info">
+    <div class="callout-title">¿Cómo funciona el stock con presentaciones?</div>
+    El stock se maneja en <strong>unidades base</strong>. Si un producto tiene 100 unidades y se vende una "Caja x24", el stock baja 24 unidades. Si se vende un "Medio Cartón" (cantidad 0.5 de un cartón de 12), el stock baja 6 unidades.
+  </div>
+
+  <h2 id="prod-combos">6.3 Combos</h2>
+  <p>Los combos son productos compuestos por otros productos del catálogo.</p>
+  <ul>
+    <li>Se define qué productos componen el combo y en qué cantidad</li>
+    <li>El stock del combo se calcula automáticamente según el componente con menor disponibilidad</li>
+    <li>El costo se calcula sumando los costos de los componentes</li>
+    <li>Al vender un combo, se descuenta el stock de cada componente</li>
+  </ul>
+
+  <h2 id="prod-descuentos">6.4 Descuentos y promociones</h2>
+  <p>Crear promociones temporales con múltiples criterios:</p>
+  <table>
+    <tr><th>Criterio</th><th>Ejemplo</th></tr>
+    <tr><td>Por producto específico</td><td>"20% en Alfajor Havanna"</td></tr>
+    <tr><td>Por categoría</td><td>"15% en toda la categoría Golosinas"</td></tr>
+    <tr><td>Por subcategoría</td><td>"10% en Chocolates"</td></tr>
+    <tr><td>Por marca</td><td>"25% en productos Arcor"</td></tr>
+    <tr><td>Todos los productos</td><td>"5% en todo el catálogo"</td></tr>
+    <tr><td>Cantidad mínima</td><td>"10% al comprar 3 o más unidades"</td></tr>
+    <tr><td>Por presentación</td><td>"Solo para Caja x12"</td></tr>
+  </table>
+  <p>Cada descuento tiene fecha de inicio y fin. Se pueden excluir productos específicos. Los descuentos se aplican automáticamente tanto en el POS como en la tienda online.</p>
+
+  <h2 id="prod-precios">6.5 Edición masiva de precios</h2>
+  <p>Permite actualizar precios de múltiples productos a la vez:</p>
+  <ul>
+    <li>Subir archivo Excel/CSV con código y nuevo precio</li>
+    <li>Vista previa de cambios antes de aplicar</li>
+    <li>Aumento/disminución porcentual masiva</li>
+  </ul>
+
+  <h2 id="prod-marcas">6.6 Marcas y categorías</h2>
+  <p>Gestión de la clasificación de productos:</p>
+  <ul>
+    <li>Crear, editar y eliminar <strong>marcas</strong></li>
+    <li>Crear, editar y eliminar <strong>categorías</strong> y <strong>subcategorías</strong></li>
+    <li>Marcar categorías como <strong>restringidas</strong> (no visibles en tienda online)</li>
+    <li>Ver cantidad de productos por marca/categoría</li>
+  </ul>
+
+  <h2 id="prod-lista">6.7 Lista de precios PDF</h2>
+  <p>Genera un PDF descargable con los precios del catálogo, filtrable por categorías. Útil para enviar a clientes mayoristas.</p>
+</div>
+
+<!-- ═══════════════════ 7. PROVEEDORES ═══════════════════ -->
+<div class="chapter" id="proveedores">
+  <h1>7. Proveedores</h1>
+  <p>Gestión completa de proveedores con datos fiscales y cuenta corriente.</p>
+
+  <h4>Datos del proveedor</h4>
+  <ul>
+    <li><strong>Básicos</strong>: Nombre, Razón Social, CUIT, Código, Condición IVA, Rubro</li>
+    <li><strong>Contacto</strong>: Teléfono, Email, Web, Nombre de contacto</li>
+    <li><strong>Dirección</strong>: Domicilio, Localidad, Provincia</li>
+    <li><strong>Comercial</strong>: Plazo de pago, Días de entrega</li>
+  </ul>
+
+  <h4>Pestañas del proveedor</h4>
+  <ul>
+    <li><strong>Resumen</strong> — Datos básicos y saldo pendiente</li>
+    <li><strong>Compras</strong> — Historial de todas las compras realizadas</li>
+    <li><strong>Cuenta Corriente</strong> — Movimientos con saldo actualizado</li>
+  </ul>
+
+  <h4>Pagos a proveedores</h4>
+  <p>Se puede registrar un pago y distribuirlo entre varias facturas de compra pendientes. El sistema actualiza el saldo, registra en cuenta corriente, y opcionalmente genera un movimiento de egreso en caja.</p>
+</div>
+
+<!-- ═══════════════════ 8. COMPRAS ═══════════════════ -->
+<div class="chapter" id="compras">
+  <h1>8. Compras</h1>
+
+  <h2 id="compras-registro">8.1 Registro de compras</h2>
+  <p>Registrar compras a proveedores con detalle de ítems, precios y montos.</p>
+  <ul>
+    <li>Seleccionar proveedor y fecha</li>
+    <li>Agregar ítems del catálogo con cantidad y precio de compra</li>
+    <li>El total se calcula automáticamente</li>
+    <li>Registrar medio de pago y estado de pago</li>
+  </ul>
+  <p>Estados de compra: <span class="badge badge-amber">Abierta</span> <span class="badge badge-blue">Parcial</span> <span class="badge badge-green">Completa</span> <span class="badge badge-red">Cancelada</span></p>
+  <p>Estados de pago: <span class="badge badge-green">Pagada</span> <span class="badge badge-amber">Pendiente</span> <span class="badge badge-blue">Pago Parcial</span></p>
+
+  <h2 id="compras-pedidos">8.2 Pedidos a proveedores</h2>
+  <p>Crear órdenes de compra previas a la recepción de mercadería. Permite hacer seguimiento del estado: pedido, en camino, recibido.</p>
+
+  <h2 id="compras-reposicion">8.3 Reposición automática</h2>
+  <p>El sistema analiza el stock y sugiere reposiciones basándose en:</p>
+  <ul>
+    <li><strong>Stock actual vs. mínimo</strong> — Detecta productos por debajo del umbral</li>
+    <li><strong>Velocidad de venta</strong> — Calcula unidades vendidas por día</li>
+    <li><strong>Días de stock restante</strong> — Estima cuántos días dura el stock actual</li>
+    <li><strong>Cantidad sugerida</strong> — Recomienda cuánto pedir</li>
+  </ul>
+  <p>Indicadores de nivel: <span class="badge badge-red">Crítico</span> <span class="badge badge-amber">Bajo</span> <span class="badge badge-green">OK</span></p>
+  <p>Desde esta vista se pueden crear órdenes de compra directamente agrupadas por proveedor.</p>
+</div>
+
+<!-- ═══════════════════ 9. CAJA ═══════════════════ -->
+<div class="chapter" id="caja">
+  <h1>9. Caja</h1>
+  <p>Gestión completa del flujo de efectivo con sistema de turnos.</p>
+
+  <h3>Sistema de turnos</h3>
+  <ol class="steps">
+    <li><strong>Abrir turno</strong> — Ingresar fecha, operador y monto inicial de efectivo. Se muestra un indicador verde en el sidebar mientras la caja está abierta.</li>
+    <li><strong>Registrar movimientos</strong> — Durante el día se registran ingresos y egresos. Las ventas y cobros se registran automáticamente.</li>
+    <li><strong>Cerrar turno</strong> — Ingresar el conteo final de efectivo. El sistema calcula la diferencia entre lo esperado y lo real.</li>
+  </ol>
+
+  <h3>Tipos de movimiento</h3>
+  <table>
+    <tr><th>Tipo</th><th>Descripción</th><th>Ejemplo</th></tr>
+    <tr><td><span class="badge badge-green">Ingreso</span></td><td>Dinero que entra</td><td>Venta, cobro, depósito</td></tr>
+    <tr><td><span class="badge badge-red">Egreso</span></td><td>Dinero que sale</td><td>Pago a proveedor, gasto, retiro</td></tr>
+    <tr><td><span class="badge badge-blue">Cancelación</span></td><td>Reversión</td><td>Anulación de venta</td></tr>
+  </table>
+
+  <h3>Medios de pago en caja</h3>
+  <p>Cada movimiento registra el medio: Efectivo, Transferencia, Mixto, Cuenta Corriente. El resumen muestra totales separados por cada medio.</p>
+
+  <h3>Cuentas bancarias</h3>
+  <p>Se pueden configurar múltiples cuentas bancarias en <strong>Configuración → Pagos</strong>. Cada transferencia se asocia a una cuenta, permitiendo conciliación bancaria.</p>
+</div>
+
+<!-- ═══════════════════ 10. STOCK ═══════════════════ -->
+<div class="chapter" id="stock">
+  <h1>10. Stock</h1>
+
+  <h3>Ajustes de stock</h3>
+  <p>Registrar correcciones al inventario fuera de ventas/compras normales:</p>
+
+  <h4>Motivos de ajuste</h4>
+  <ul>
+    <li>Mercadería defectuosa</li>
+    <li>Mercadería vencida</li>
+    <li>Consumo interno</li>
+    <li>Venta al costo</li>
+    <li>Robo interno / externo</li>
+    <li>Diferencia de inventario (conteo físico)</li>
+  </ul>
+
+  <p>Cada ajuste registra: producto, cantidad, costo unitario, motivo, y observación. Se genera un registro en <code>stock_movimientos</code> para auditoría.</p>
+
+  <h3>Autoconsumo</h3>
+  <p>Módulo para registrar el consumo interno de empleados (club de consumo):</p>
+  <ul>
+    <li>Registrar miembros con nombre y PIN de seguridad</li>
+    <li>Registrar consumos por miembro (producto, cantidad)</li>
+    <li>Reportes mensuales por miembro y por producto</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════ 11. REPORTES ═══════════════════ -->
+<div class="chapter" id="reportes">
+  <h1>11. Reportes</h1>
+
+  <h3>Reporte de ventas</h3>
+  <p>Resumen de ventas con filas expandibles que muestran los ítems de cada venta. Filtrar por día, mes, o rango de fechas. Incluye tipo de comprobante, cliente, total, y medio de pago.</p>
+
+  <h3>Reporte de compras</h3>
+  <p>Resumen de compras a proveedores con detalle de ítems. Mismos filtros que ventas.</p>
+
+  <h3>Reporte de stock</h3>
+  <p>Estado actual del inventario filtrable por categoría, subcategoría, y marca. Muestra código, nombre, stock, precio, costo, y capital invertido.</p>
+
+  <h3>Resumen mensual</h3>
+  <p>Informe completo de un mes con:</p>
+  <ul>
+    <li>Total ventas, cantidad de ventas, notas de crédito</li>
+    <li>Total compras, costo de mercadería vendida</li>
+    <li>Ganancia neta (ventas - costos)</li>
+    <li>Top clientes y top productos</li>
+    <li>Desglose por medio de pago</li>
+    <li>Transferencias por cuenta bancaria</li>
+    <li>Detalle de egresos</li>
+    <li>Comparativa con el mes anterior</li>
+  </ul>
+
+  <h3>Ranking de clientes</h3>
+  <p>Listado de clientes ordenados por volumen de compra. Permite identificar los mejores clientes.</p>
+
+  <h3>Resumen por vendedor</h3>
+  <p>Comisiones y rendimiento por vendedor. Muestra ventas totales, ventas comisionables (excluyendo categorías configuradas), y monto de comisión calculado.</p>
+
+  <h3>Percepciones</h3>
+  <p>Registro de percepciones impositivas (IIBB, IVA) sobre ventas, con jurisdicción, alícuota, base imponible, y monto calculado.</p>
+
+  <div class="tip">
+    <div class="callout-title">Exportación</div>
+    Todos los reportes se pueden exportar a <strong>Excel</strong> para análisis externo.
+  </div>
+</div>
+
+<!-- ═══════════════════ 12. VENDEDORES ═══════════════════ -->
+<div class="chapter" id="vendedores">
+  <h1>12. Vendedores y comisiones</h1>
+  <p>Gestión de representantes de ventas con cálculo automático de comisiones.</p>
+  <ul>
+    <li><strong>Datos</strong>: Nombre, email, porcentaje de comisión</li>
+    <li><strong>Comisiones</strong>: Se calculan sobre las ventas del período seleccionado</li>
+    <li><strong>Exclusiones</strong>: Se pueden excluir categorías del cálculo de comisión (ej: cigarrillos, bebidas)</li>
+    <li><strong>Períodos</strong>: Filtrar por hoy, semana, mes, o rango personalizado</li>
+  </ul>
+  <p>Cada vendedor se asigna a clientes, y las ventas de esos clientes generan comisión para el vendedor asignado.</p>
+</div>
+
+<!-- ═══════════════════ 13. AUDITORÍA ═══════════════════ -->
+<div class="chapter" id="auditoria">
+  <h1>13. Auditoría</h1>
+  <p>Registro completo de todas las acciones del sistema para seguridad y trazabilidad.</p>
+
+  <h4>Información registrada</h4>
+  <table>
+    <tr><th>Campo</th><th>Descripción</th></tr>
+    <tr><td>Fecha/Hora</td><td>Momento exacto de la acción</td></tr>
+    <tr><td>Usuario</td><td>Quién realizó la acción</td></tr>
+    <tr><td>Acción</td><td>CREATE, UPDATE, DELETE, LOGIN, ANULACION, BACKUP</td></tr>
+    <tr><td>Módulo</td><td>Módulo afectado (Ventas, Clientes, etc.)</td></tr>
+    <tr><td>Datos anteriores</td><td>Valores antes del cambio</td></tr>
+    <tr><td>Datos nuevos</td><td>Valores después del cambio</td></tr>
+  </table>
+
+  <p>Se puede filtrar por fecha, módulo, tipo de acción, y usuario. Los registros son de solo lectura y no se pueden eliminar.</p>
+</div>
+
+<!-- ═══════════════════ 14. TIENDA ONLINE ═══════════════════ -->
+<div class="chapter" id="tienda">
+  <h1>14. Tienda online</h1>
+  <p>La tienda es la interfaz pública donde los clientes finales navegan el catálogo y realizan pedidos.</p>
+
+  <h2 id="tienda-config">14.1 Configuración de la tienda</h2>
+  <p>Toda la configuración se maneja desde <strong>Configuración → Tienda Online</strong> en el panel admin.</p>
+
+  <h4>Configuración general</h4>
+  <table>
+    <tr><th>Opción</th><th>Descripción</th></tr>
+    <tr><td>Nombre tienda</td><td>Nombre visible en navbar y footer</td></tr>
+    <tr><td>Logo</td><td>Logo de la tienda (aparece en navbar y footer)</td></tr>
+    <tr><td>Descripción</td><td>Texto del footer</td></tr>
+    <tr><td>Tienda activa</td><td>Activa o desactiva la tienda completa</td></tr>
+  </table>
+
+  <h4>Pedidos y envíos</h4>
+  <table>
+    <tr><th>Opción</th><th>Descripción</th><th>Ejemplo</th></tr>
+    <tr><td>Monto mínimo pedido</td><td>Mínimo para retiro en local</td><td>$15.000</td></tr>
+    <tr><td>Monto mínimo envío</td><td>Mínimo para envío a domicilio</td><td>$50.000</td></tr>
+    <tr><td>Costo de envío</td><td>Monto del envío (0 = gratis)</td><td>$0</td></tr>
+    <tr><td>Hora de corte</td><td>Límite para pedidos del mismo día</td><td>12:30</td></tr>
+    <tr><td>Días de entrega</td><td>Qué días se hacen entregas</td><td>Lunes, Miércoles, Viernes</td></tr>
+    <tr><td>Días máx. programación</td><td>Hasta cuántos días adelante programar</td><td>14 días</td></tr>
+    <tr><td>Recargo transferencia</td><td>% de recargo para pagos por transferencia</td><td>5%</td></tr>
+  </table>
+
+  <h4>Catálogo</h4>
+  <ul>
+    <li>Seleccionar categorías destacadas para la página de inicio</li>
+    <li>Configurar orden y cantidad máxima de categorías a mostrar</li>
+    <li>Los productos marcados como "destacado" aparecen en la home</li>
+    <li>Los productos de categorías "restringidas" no aparecen en la tienda</li>
+  </ul>
+
+  <h4>Página de inicio</h4>
+  <p>Se puede configurar con bloques dinámicos:</p>
+  <ul>
+    <li><strong>Hero</strong> — Banner principal con título, subtítulo, botones y colores de fondo</li>
+    <li><strong>Badges de confianza</strong> — Iconos con beneficios (envío gratis, seguridad, etc.)</li>
+    <li><strong>Categorías destacadas</strong> — Grid de categorías con imagen</li>
+    <li><strong>Productos destacados</strong> — Carrusel de productos marcados como destacado</li>
+  </ul>
+
+  <h4>Footer</h4>
+  <p>Personalizar: redes sociales (Instagram, Facebook, WhatsApp), enlaces informativos, datos de contacto.</p>
+
+  <h2 id="tienda-catalogo">14.2 Catálogo público</h2>
+  <p>Los clientes pueden navegar el catálogo con las siguientes herramientas:</p>
+  <ul>
+    <li><strong>Búsqueda</strong> — Barra de búsqueda con sugerencias en tiempo real</li>
+    <li><strong>Filtros</strong> — Por categoría, subcategoría y marca (con contador de productos)</li>
+    <li><strong>Vistas</strong> — Grilla o lista</li>
+    <li><strong>Paginación</strong> — 12 productos por página</li>
+    <li><strong>Badges</strong> — "NUEVO" para productos recientes, descuentos con precio tachado</li>
+  </ul>
+
+  <h4>Detalle de producto</h4>
+  <ul>
+    <li>Imagen ampliable, nombre, marca, categoría</li>
+    <li>Selector de presentación con precio actualizado</li>
+    <li>Stock disponible</li>
+    <li>Descuentos aplicados automáticamente</li>
+    <li>Contenido del combo (si es combo)</li>
+    <li>Productos relacionados (misma marca/categoría)</li>
+  </ul>
+
+  <h2 id="tienda-checkout">14.3 Checkout</h2>
+  <p>Proceso de compra paso a paso:</p>
+  <ol class="steps">
+    <li><strong>Datos de contacto</strong> — Nombre, email, teléfono. Pre-rellenado si el cliente tiene cuenta.</li>
+    <li><strong>Método de entrega</strong> — Retiro en local o envío a domicilio.</li>
+    <li><strong>Dirección</strong> (si envío) — Seleccionar dirección guardada o agregar nueva.</li>
+    <li><strong>Fecha de entrega</strong> — Calendario con los días disponibles según configuración y zona del cliente.</li>
+    <li><strong>Medio de pago</strong> — Efectivo, Transferencia, o Mixto. Si hay recargo por transferencia, se muestra el monto adicional.</li>
+    <li><strong>Confirmar pedido</strong> — El sistema valida stock en tiempo real, calcula el total final, y genera el pedido.</li>
+  </ol>
+
+  <div class="info">
+    <div class="callout-title">Validación de stock en checkout</div>
+    Antes de confirmar, el sistema re-verifica el stock de todos los productos. Si algún producto se agotó o tiene stock insuficiente, ofrece ajustar automáticamente las cantidades.
+  </div>
+
+  <h4>Montos mínimos</h4>
+  <p>El carrito muestra una barra de progreso hacia el mínimo:</p>
+  <ul>
+    <li><span class="badge badge-amber">Naranja</span> — Por debajo del mínimo de retiro</li>
+    <li><span class="badge badge-blue">Azul</span> — Habilitado para retiro, falta para envío</li>
+    <li><span class="badge badge-green">Verde</span> — Habilitado para envío a domicilio</li>
+  </ul>
+
+  <h2 id="tienda-cuenta">14.4 Cuenta del cliente</h2>
+  <p>Los clientes pueden crear una cuenta para:</p>
+  <ul>
+    <li><strong>Ver su perfil</strong> — Datos personales, saldo pendiente, zona de entrega</li>
+    <li><strong>Gestionar direcciones</strong> — Agregar, editar, eliminar direcciones de envío</li>
+    <li><strong>Ver pedidos</strong> — Historial de pedidos web y compras presenciales con detalle completo</li>
+    <li><strong>Cambiar contraseña</strong></li>
+  </ul>
+
+  <h2 id="tienda-paginas">14.5 Páginas informativas</h2>
+  <p>Se pueden crear páginas dinámicas accesibles desde <code>/info/[slug]</code>:</p>
+  <ul>
+    <li><strong>Envíos</strong> — Se genera automáticamente desde la configuración de zonas y horarios</li>
+    <li><strong>Medios de pago</strong> — Se genera automáticamente desde la configuración de pagos</li>
+    <li><strong>Contacto</strong> — Se genera automáticamente desde los datos de la empresa</li>
+    <li><strong>Páginas personalizadas</strong> — FAQ, políticas, términos, etc. con contenido HTML</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════ 15. CONFIG AVANZADA ═══════════════════ -->
+<div class="chapter" id="config">
+  <h1>15. Configuración avanzada</h1>
+
+  <h2 id="config-facturacion">15.1 Facturación</h2>
+  <p>Configurar: punto de venta, tipo de comprobante por defecto, numeración de comprobantes.</p>
+
+  <h2 id="config-impresion">15.2 Impresión de recibos</h2>
+  <p>Personalizar el formato de los recibos impresos:</p>
+  <ul>
+    <li>Datos de la empresa (nombre, domicilio, teléfono)</li>
+    <li>Logo en el recibo</li>
+    <li>Texto del pie de página</li>
+    <li>Ancho del recibo (mm)</li>
+    <li>Tamaño de fuente</li>
+    <li>Formato de ítems (detallado o condensado)</li>
+    <li>Mostrar/ocultar costo en recibo</li>
+  </ul>
+
+  <h2 id="config-pagos">15.3 Medios de pago y cuentas bancarias</h2>
+  <p>Configurar las opciones de pago del sistema:</p>
+  <ul>
+    <li><strong>Pago mixto</strong> — Habilitar/deshabilitar la opción de pago mixto (efectivo + transferencia)</li>
+    <li><strong>Recargo por transferencia</strong> — Porcentaje adicional para pagos por transferencia</li>
+  </ul>
+
+  <h4>Cuentas bancarias</h4>
+  <p>Registrar las cuentas bancarias del negocio. Cada cuenta tiene:</p>
+  <table>
+    <tr><th>Campo</th><th>Descripción</th></tr>
+    <tr><td>Nombre</td><td>Nombre identificatorio (ej: "Cuenta Santander")</td></tr>
+    <tr><td>Tipo</td><td>Caja de Ahorro, Cuenta Corriente, Billetera Virtual</td></tr>
+    <tr><td>CBU/CVU</td><td>Clave bancaria</td></tr>
+    <tr><td>Alias</td><td>Alias de la cuenta (ej: "dulcesur.mp")</td></tr>
+    <tr><td>Titular</td><td>Nombre del titular de la cuenta</td></tr>
+  </table>
+  <p>Las cuentas se muestran en los selectores de pago del POS, cobros, y checkout de la tienda.</p>
+
+  <h2 id="config-backup">15.4 Backup</h2>
+  <p>Crear y restaurar copias de seguridad de los datos del sistema. Se recomienda hacer backup antes de actualizaciones o cambios importantes.</p>
+</div>
+
+<!-- ═══════════════════ 16. DEPLOY ═══════════════════ -->
+<div class="chapter" id="deploy">
+  <h1>16. Despliegue y mantenimiento</h1>
+
+  <h3>Despliegue en VPS</h3>
+  <p>El sistema se despliega en un VPS con un mecanismo de auto-deploy:</p>
+  <ol class="steps">
+    <li>Clonar el repositorio en el servidor: <code>git clone [repo-url]</code></li>
+    <li>Configurar las variables de entorno en el archivo <code>.env</code></li>
+    <li>Instalar dependencias: <code>npm install</code></li>
+    <li>Compilar: <code>npm run build</code></li>
+    <li>Iniciar con un process manager: <code>pm2 start npm --name "enexpro" -- start</code></li>
+  </ol>
+
+  <h3>Auto-deploy con webhook</h3>
+  <p>El sistema incluye un endpoint <code>POST /api/pull</code> que ejecuta <code>git pull</code> automáticamente al recibir una solicitud con el token correcto.</p>
+  <p>Configurar el webhook en GitHub/GitLab para que al hacer push a <code>main</code>, se envíe un POST a:</p>
+  <pre><code>POST https://tu-dominio.com/api/pull
+Header: x-pull-secret: [PULL_SECRET]</code></pre>
+  <p>El servidor hace <code>git pull origin main</code> y se actualiza automáticamente.</p>
+
+  <h3>Servicios externos requeridos</h3>
+  <table>
+    <tr><th>Servicio</th><th>Propósito</th><th>Plan mínimo</th></tr>
+    <tr><td>Supabase</td><td>Base de datos + Autenticación</td><td>Free tier (500 MB)</td></tr>
+    <tr><td>Cloudinary</td><td>Almacenamiento de imágenes</td><td>Free tier (25 créditos/mes)</td></tr>
+    <tr><td>Stripe</td><td>Procesamiento de pagos (opcional)</td><td>Pay as you go</td></tr>
+    <tr><td>VPS</td><td>Hosting de la aplicación</td><td>1 vCPU, 1 GB RAM mínimo</td></tr>
+  </table>
+
+  <hr>
+  <div style="text-align: center; color: #94a3b8; font-size: .9rem; margin-top: 3rem;">
+    <p>— Fin del manual —</p>
+    <p style="margin-top: .5rem;">Versión 1.0 · Abril 2026</p>
+  </div>
+</div>
+
+</body>
+</html>

@@ -27,6 +27,7 @@ export default function RutaPublicaPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Payment form state (shared — resets when expanding new item)
   const [metodo, setMetodo] = useState<MetodoPago>("Efectivo");
@@ -67,8 +68,8 @@ export default function RutaPublicaPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "confirmar", item_id: item.id, venta_ids: [item.ventas.id] }),
     });
-    if (res.ok) { await load(); setExpanded(null); }
-    else { alert("Error al confirmar"); }
+    if (res.ok) { await load(); setExpanded(null); setActionError(null); }
+    else { setActionError("Error al confirmar la entrega"); }
     setSaving(null);
   };
 
@@ -97,8 +98,8 @@ export default function RutaPublicaPage() {
         },
       }),
     });
-    if (res.ok) { await load(); setExpanded(null); }
-    else { alert("Error al registrar cobro"); }
+    if (res.ok) { await load(); setExpanded(null); setActionError(null); }
+    else { setActionError("Error al registrar el cobro"); }
     setSaving(null);
   };
 
@@ -135,6 +136,15 @@ export default function RutaPublicaPage() {
           <span className="text-sm text-gray-600 shrink-0">{entregadas}/{items.length}</span>
         </div>
       </div>
+
+      {/* Error banner */}
+      {actionError && (
+        <div className="mx-4 mt-3 max-w-xl mx-auto flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <span className="text-sm text-red-700 flex-1">{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 text-lg font-bold leading-none">&times;</button>
+        </div>
+      )}
 
       {/* Items */}
       <div className="p-4 space-y-3 max-w-xl mx-auto">

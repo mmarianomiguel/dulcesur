@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { showAdminToast } from "@/components/admin-toast";
 
 type Producto = {
   id: string;
@@ -49,11 +50,11 @@ export default function RevisorImagenes() {
         // Remover el producto de la lista
         setProductos((prev) => prev.filter((p) => p.id !== id));
       } else {
-        alert('Error al guardar la imagen');
+        showAdminToast('Error al guardar la imagen', 'error');
       }
     } catch (e) {
       console.error(e);
-      alert('Error de conexión');
+      showAdminToast('Error de conexión', 'error');
     }
   };
 

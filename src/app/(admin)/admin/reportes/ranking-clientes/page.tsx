@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +15,6 @@ import {
   Crown, Loader2, TrendingUp, Users, ShoppingCart, ArrowUpDown, Search,
 } from "lucide-react";
 
-function fc(v: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
-}
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -207,7 +205,7 @@ export default function RankingClientesPage() {
         </CardContent></Card>
         <Card><CardContent className="pt-5 pb-4">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Total Facturado</p>
-          <p className="text-2xl font-bold mt-1">{fc(totalGeneral)}</p>
+          <p className="text-2xl font-bold mt-1">{formatCurrency(totalGeneral)}</p>
         </CardContent></Card>
         <Card><CardContent className="pt-5 pb-4">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Operaciones</p>
@@ -215,7 +213,7 @@ export default function RankingClientesPage() {
         </CardContent></Card>
         <Card><CardContent className="pt-5 pb-4">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Ticket Promedio</p>
-          <p className="text-2xl font-bold mt-1 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-green-500" />{fc(ticketGlobal)}</p>
+          <p className="text-2xl font-bold mt-1 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-green-500" />{formatCurrency(ticketGlobal)}</p>
         </CardContent></Card>
       </div>
 
@@ -286,9 +284,9 @@ export default function RankingClientesPage() {
                             {i === 0 && <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600">Top</Badge>}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right font-bold">{fc(c.total)}</td>
+                        <td className="px-4 py-3 text-right font-bold">{formatCurrency(c.total)}</td>
                         <td className="px-4 py-3 text-right hidden md:table-cell">{c.qty}</td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">{fc(c.ticketPromedio)}</td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell">{formatCurrency(c.ticketPromedio)}</td>
                         <td className="px-4 py-3 text-right hidden lg:table-cell">
                           <div className="flex items-center gap-2 justify-end">
                             <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
+import { showAdminToast } from "@/components/admin-toast";
 import { logAudit } from "@/lib/audit";
 import type { Cliente, Producto, Usuario } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1682,6 +1683,7 @@ export default function VentasPage() {
           }
           if (stockErrors.length > 0) {
             console.error("Stock decrement errors:", stockErrors);
+            showAdminToast(`Error al actualizar stock de ${stockErrors.length} producto(s)`, "error");
           }
         }
 
@@ -3763,6 +3765,7 @@ export default function VentasPage() {
                         setShowNewAddressForm(false);
                       } catch (err) {
                         console.error("Error saving address:", err);
+                        showAdminToast("Error al guardar la dirección", "error");
                       } finally {
                         setSavingAddress(false);
                       }

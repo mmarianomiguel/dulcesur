@@ -76,6 +76,7 @@ export default function ProveedoresPage() {
   const [historialCompras, setHistorialCompras] = useState<{ id: string; numero: string; fecha: string; total: number; estado: string; forma_pago: string }[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
+  const [aliasDialog, setAliasDialog] = useState<{ open: boolean; alias: string; titular: string }>({ open: false, alias: "", titular: "" });
 
   const fetchProviders = useCallback(
     () => proveedorService.getAll({ filters: { activo: true }, orderBy: "nombre" }),
@@ -657,22 +658,8 @@ export default function ProveedoresPage() {
               <div className="space-y-2 border-t pt-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-semibold">Cuentas bancarias / Alias</Label>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={async () => {
-                    const alias = prompt("Alias de transferencia:");
-                    if (!alias) return;
-                    const titular = prompt("Titular (opcional):") || "";
-                    await supabase.from("cuentas_bancarias").insert({
-                      nombre: `${editDialog.data!.nombre} - ${alias}`,
-                      alias,
-                      titular: titular || editDialog.data!.nombre,
-                      origen: "proveedor",
-                      proveedor_id: editDialog.data!.id,
-                      activo: true,
-                    });
-                    // Refresh cuentas
-                    const { data: cuentas } = await supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("proveedor_id", editDialog.data!.id).eq("activo", true);
-                    setProvCuentas((cuentas || []) as any[]);
-                    showAdminToast("Cuenta agregada", "success");
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                    setAliasDialog({ open: true, alias: "", titular: "" });
                   }}>
                     <Plus className="w-3 h-3 mr-1" /> Agregar
                   </Button>
@@ -1025,6 +1012,42 @@ export default function ProveedoresPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Alias Dialog */}
+      <Dialog open={aliasDialog.open} onOpenChange={(o) => setAliasDialog(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Agregar cuenta bancaria / Alias</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Alias de transferencia</Label>
+              <Input value={aliasDialog.alias} onChange={(e) => setAliasDialog(prev => ({ ...prev, alias: e.target.value }))} placeholder="Ej: dulcesur.pagos" autoFocus />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Titular (opcional)</Label>
+              <Input value={aliasDialog.titular} onChange={(e) => setAliasDialog(prev => ({ ...prev, titular: e.target.value }))} placeholder="Nombre del titular" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setAliasDialog({ open: false, alias: "", titular: "" })}>Cancelar</Button>
+            <Button disabled={!aliasDialog.alias.trim()} onClick={async () => {
+              const alias = aliasDialog.alias.trim();
+              const titular = aliasDialog.titular.trim();
+              await supabase.from("cuentas_bancarias").insert({
+                nombre: `${editDialog.data!.nombre} - ${alias}`,
+                alias,
+                titular: titular || editDialog.data!.nombre,
+                origen: "proveedor",
+                proveedor_id: editDialog.data!.id,
+                activo: true,
+              });
+              const { data: cuentas } = await supabase.from("cuentas_bancarias").select("id, nombre, alias, cbu_cvu, tipo_cuenta, titular").eq("proveedor_id", editDialog.data!.id).eq("activo", true);
+              setProvCuentas((cuentas || []) as any[]);
+              setAliasDialog({ open: false, alias: "", titular: "" });
+              showAdminToast("Cuenta agregada", "success");
+            }}>Agregar</Button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -1329,7 +1329,7 @@ export default function ListaPreciosPage() {
         const vpw = vPdf.internal.pageSize.getWidth();
         const vm = 10;
         let vy = 18;
-        const fmtP2 = (v: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(v);
+        const fmtP2 = formatCurrency;
 
         // Header
         vPdf.setFontSize(14);
