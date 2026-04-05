@@ -176,6 +176,9 @@ export default function ComprasPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [actualizarPrecios, setActualizarPrecios] = useState(true);
 
+  // PVP edit dialog
+  const [pvpEditIdx, setPvpEditIdx] = useState<number | null>(null);
+
   // Post-purchase: modified prices dialog
   const [showPreciosDialog, setShowPreciosDialog] = useState(false);
   const [showVisibilidadDialog, setShowVisibilidadDialog] = useState(false);
@@ -1751,34 +1754,25 @@ export default function ComprasPage() {
                           </td>
                           <td className="py-2 px-2 text-center">
                             {costoChanged && item.costo_original > 0 ? (() => {
-                              const margenActual = item.costo_original > 0 ? Math.round(((item.precio_original - item.costo_original) / item.costo_original) * 100) : 0;
                               const nuevoPrecio = roundPrice(item.costo_unitario * (item.precio_original / item.costo_original));
-                              const nuevoMargen = item.costo_unitario > 0 ? Math.round(((nuevoPrecio - item.costo_unitario) / item.costo_unitario) * 100) : 0;
                               return (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={item.actualizarPrecio}
-                                    onChange={(e) => {
-                                      setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarPrecio: e.target.checked } : it));
-                                    }}
-                                    className="w-3.5 h-3.5 rounded border-gray-300 accent-primary"
-                                  />
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {item.actualizarPrecio ? (
-                                      <span className="text-primary font-semibold">{formatCurrency(nuevoPrecio)}</span>
-                                    ) : (
-                                      <span>Mantener</span>
-                                    )}
-                                  </span>
-                                </label>
-                                <div className="text-[9px] leading-tight text-muted-foreground">
-                                  <span>Costo: {formatCurrency(item.costo_original)} → <span className="font-medium text-foreground">{formatCurrency(item.costo_unitario)}</span></span>
-                                  <br />
-                                  <span>Margen: {margenActual}% → <span className={`font-medium ${nuevoMargen >= margenActual ? "text-emerald-600" : "text-red-500"}`}>{nuevoMargen}%</span></span>
-                                  {item.actualizarPrecio && <><br /><span>PVP: {formatCurrency(item.precio_original)} → <span className="font-medium text-primary">{formatCurrency(nuevoPrecio)}</span></span></>}
-                                </div>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={item.actualizarPrecio}
+                                  onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarPrecio: e.target.checked } : it))}
+                                  className="w-3.5 h-3.5 rounded border-gray-300 accent-primary"
+                                />
+                                <span className="text-xs">
+                                  {item.actualizarPrecio ? (
+                                    <span className="text-primary font-semibold">{formatCurrency(nuevoPrecio)}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground">Mantener</span>
+                                  )}
+                                </span>
+                                <button onClick={() => setPvpEditIdx(idx)} className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                               );
                             })() : (
@@ -1890,6 +1884,79 @@ export default function ComprasPage() {
             </div>
           </div>
         )}
+
+        {/* PVP Edit dialog */}
+        {pvpEditIdx !== null && items[pvpEditIdx] && (() => {
+          const item = items[pvpEditIdx];
+          const costoChanged = item.costo_unitario !== item.costo_original;
+          const margenActual = item.costo_original > 0 ? Math.round(((item.precio_original - item.costo_original) / item.costo_original) * 100) : 0;
+          const nuevoPrecioAuto = costoChanged && item.costo_original > 0 ? roundPrice(item.costo_unitario * (item.precio_original / item.costo_original)) : item.precio_original;
+          const nuevoMargen = item.costo_unitario > 0 ? Math.round(((nuevoPrecioAuto - item.costo_unitario) / item.costo_unitario) * 100) : 0;
+          return (
+          <Dialog open={true} onOpenChange={() => setPvpEditIdx(null)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader><DialogTitle>Actualizar precio — {item.nombre}</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                {/* Cost comparison */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">Costo anterior</p>
+                    <p className="text-lg font-semibold">{formatCurrency(item.costo_original)}</p>
+                  </div>
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">Costo nuevo</p>
+                    <p className="text-lg font-semibold text-primary">{formatCurrency(item.costo_unitario)}</p>
+                  </div>
+                </div>
+
+                {/* Margin info */}
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-muted-foreground">Margen:</span>
+                  <span>{margenActual}%</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className={`font-semibold ${nuevoMargen >= margenActual ? "text-emerald-600" : "text-red-500"}`}>{nuevoMargen}%</span>
+                  <span className="text-muted-foreground text-xs">(manteniendo proporción)</span>
+                </div>
+
+                {/* Price comparison */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">PVP actual</p>
+                    <p className="text-lg font-semibold">{formatCurrency(item.precio_original)}</p>
+                  </div>
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">PVP sugerido</p>
+                    <p className="text-lg font-semibold text-primary">{formatCurrency(nuevoPrecioAuto)}</p>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setItems((prev) => prev.map((it, i) => i === pvpEditIdx ? { ...it, actualizarPrecio: false } : it));
+                      setPvpEditIdx(null);
+                    }}
+                  >
+                    Mantener PVP actual
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => {
+                      setItems((prev) => prev.map((it, i) => i === pvpEditIdx ? { ...it, actualizarPrecio: true } : it));
+                      setPvpEditIdx(null);
+                    }}
+                  >
+                    Actualizar a {formatCurrency(nuevoPrecioAuto)}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+          );
+        })()}
 
         {/* Confirmation dialog */}
         <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
