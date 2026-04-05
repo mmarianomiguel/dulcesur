@@ -175,6 +175,9 @@ export default function NotaCreditoPage() {
   useEffect(() => {
     fetchNotas();
     fetchFormData();
+    const onFocus = () => fetchFormData();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchNotas, fetchFormData]);
 
 

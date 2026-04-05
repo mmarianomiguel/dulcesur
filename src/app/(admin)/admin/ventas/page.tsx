@@ -380,6 +380,10 @@ export default function VentasPage() {
     supabase.from("turnos_caja").select("id").eq("estado", "abierto").limit(1).then(({ data }) => {
       setCajaAbierta(data && data.length > 0);
     });
+    // Refresh products when tab regains focus (e.g. after creating product in another tab)
+    const onFocus = () => fetchData();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchData]);
 
   // Load bank accounts from localStorage

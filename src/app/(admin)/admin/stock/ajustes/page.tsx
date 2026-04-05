@@ -182,7 +182,12 @@ export default function AjustesStockPage() {
     setLoading(false);
   }, [filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+    const onFocus = () => fetchData();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchData]);
 
   // Keyboard shortcuts
   useEffect(() => {

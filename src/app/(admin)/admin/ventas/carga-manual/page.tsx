@@ -155,6 +155,9 @@ export default function CargaManualPage() {
   useEffect(() => {
     fetchData();
     fetchRecientes();
+    const onFocus = () => fetchData();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchData, fetchRecientes]);
 
   const selectedClient = clients.find((c) => c.id === clientId);
