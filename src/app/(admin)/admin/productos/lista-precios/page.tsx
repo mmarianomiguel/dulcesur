@@ -1860,151 +1860,41 @@ export default function ListaPreciosPage() {
       {/* Style Picker Modal */}
       {showStylePicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col border border-border">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-border">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h2 className="text-lg font-semibold">Elegí el estilo del PDF</h2>
               <button onClick={() => setShowStylePicker(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 grid grid-cols-5 gap-4 max-w-6xl mx-auto overflow-y-auto">
-              {/* Carteles de precios */}
-              <button onClick={() => generatePDF("combinado")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="w-3 h-3 bg-muted-foreground/30 rounded-sm"></div>
-                    <span className="text-[4px] text-muted-foreground">MARCA</span>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[6px] font-bold leading-tight">Producto Ejemplo</p>
-                    <p className="text-[10px] font-bold my-0.5">$1.200,00</p>
-                  </div>
-                  <div className="border-t border-border mt-1 pt-1">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-[4px] text-muted-foreground">Efect.</p>
-                        <p className="text-[6px] font-bold">$1.200,00</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[4px] text-muted-foreground">Caja x12</p>
-                        <p className="text-[5px] font-bold text-muted-foreground">$14.400</p>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-0.5">
-                      <div>
-                        <p className="text-[4px] text-muted-foreground">Transf.</p>
-                        <p className="text-[6px] font-bold text-muted-foreground">$1.224,00</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[5px] font-bold text-muted-foreground">$14.688</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="border-t border-border mt-1 pt-0.5 flex justify-between">
-                    <span className="text-[4px] text-muted-foreground">www.dulcesur.com</span>
-                    <span className="text-[4px] text-muted-foreground">20/3/2026</span>
-                  </div>
-                </div>
-                <p className="font-semibold text-sm">Carteles de precios</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Precio grande + detalle Efec/Transf. + Caja</p>
-              </button>
-
-              {/* Duo — Unidad + Caja */}
-              <button onClick={() => generatePDF("duo")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="w-3 h-3 bg-muted-foreground/30 rounded-sm"></div>
-                    <span className="text-[4px] text-muted-foreground">MARCA</span>
-                  </div>
-                  <p className="text-[6px] font-bold text-center leading-tight mb-1">Producto Ejemplo</p>
-                  <div className="flex gap-0.5">
-                    <div className="flex-1 text-center border-r border-border pr-0.5">
-                      <p className="text-[4px] font-bold text-muted-foreground">UNIDAD</p>
-                      <p className="text-[9px] font-bold">$1.200</p>
-                      <p className="text-[4px] text-muted-foreground">Transf. $1.224</p>
-                    </div>
-                    <div className="flex-1 text-center bg-muted/50 rounded-sm pl-0.5">
-                      <p className="text-[4px] font-bold text-muted-foreground">CAJA x12</p>
-                      <p className="text-[9px] font-bold">$14.400</p>
-                      <p className="text-[4px] text-muted-foreground">Transf. $14.688</p>
-                    </div>
-                  </div>
-                  <div className="border-t border-border mt-1 pt-0.5 flex justify-between">
-                    <span className="text-[4px] text-muted-foreground">www.dulcesur.com</span>
-                    <span className="text-[4px] text-muted-foreground">30/3/2026</span>
-                  </div>
-                </div>
-                <p className="font-semibold text-sm">Cartel Unidad + Caja</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Dos columnas: precio unitario y por caja, ambos visibles</p>
-              </button>
-
-              {/* Simple — Precio + Caja */}
-              <button onClick={() => generatePDF("simple")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="w-3 h-3 bg-muted-foreground/30 rounded-sm"></div>
-                    <span className="text-[4px] text-muted-foreground">MARCA</span>
-                  </div>
-                  <p className="text-[6px] font-bold text-center leading-tight mb-0.5">Producto Ejemplo</p>
-                  <p className="text-[10px] font-bold text-center mb-1">$1.200</p>
-                  <div className="bg-muted/60 rounded-sm px-1 py-0.5 flex justify-between items-center">
-                    <span className="text-[5px] font-bold text-muted-foreground">Caja x12</span>
-                    <span className="text-[7px] font-bold">$14.400</span>
-                  </div>
-                  <div className="border-t border-border mt-1 pt-0.5 flex justify-between">
-                    <span className="text-[4px] text-muted-foreground">www.dulcesur.com</span>
-                    <span className="text-[4px] text-muted-foreground">30/3/2026</span>
-                  </div>
-                </div>
-                <p className="font-semibold text-sm">Precio + Caja</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Precio unitario grande + banda con precio por caja</p>
-              </button>
-
-              {/* Poster */}
-              <button onClick={() => generatePDF("poster")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
-                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="w-4 h-3 bg-muted-foreground/30 rounded-sm"></div>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[6px] font-bold italic underline mb-1">OFERTA</p>
-                    <p className="text-[7px] font-bold leading-tight">Producto Ejemplo x36</p>
-                    <p className="text-[14px] font-bold mt-1">$30.240</p>
-                    <p className="text-[4px] text-muted-foreground mt-0.5">$840,00 Final c/u</p>
-                  </div>
-                </div>
-                <p className="font-semibold text-sm">Poster</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Página completa A4</p>
-              </button>
-
+            <div className="p-6 grid grid-cols-3 gap-4 max-w-4xl mx-auto overflow-y-auto">
               {/* Góndola — Carteles para estantes */}
               <button onClick={() => generatePDF("gondola")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
                 <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
                   <div className="flex justify-between items-center mb-0.5">
                     <div className="w-3 h-2 bg-muted-foreground/30 rounded-sm"></div>
-                    <span className="text-[3px] text-muted-foreground">web | 4/4/26</span>
+                    <span className="text-[3px] text-muted-foreground">www.dulcesur.com</span>
                   </div>
                   <div className="border-t border-border pt-0.5">
                     <p className="text-[5px] font-bold text-center leading-tight">Producto Ejemplo 200g</p>
                   </div>
                   <div className="bg-muted/40 rounded-sm py-1 my-0.5">
-                    <p className="text-[11px] font-bold text-center leading-none">$1.200</p>
-                    <p className="text-[4px] text-muted-foreground text-center">Transf. $1.224</p>
+                    <p className="text-[11px] font-bold text-center leading-none">$1.200,00</p>
                   </div>
                   <div className="border-t border-border pt-0.5 flex justify-between items-center">
                     <span className="text-[4px] font-bold text-muted-foreground">Caja x12</span>
                     <div className="text-right">
                       <span className="text-[5px] font-bold">$14.400</span>
-                      <span className="text-[3px] text-muted-foreground ml-0.5">($1.200 c/u)</span>
+                      <span className="text-[3px] text-muted-foreground ml-0.5 italic">($1.200,00 c/u)</span>
                     </div>
                   </div>
                 </div>
                 <p className="font-semibold text-sm">Carteles de góndola</p>
-                <p className="text-xs text-muted-foreground mt-0.5">24 etiquetas por hoja A4 apaisada, con presentación y precio transf.</p>
+                <p className="text-xs text-muted-foreground mt-0.5">15 etiquetas por hoja A4 apaisada</p>
               </button>
 
               {/* Lista General */}
-              <div className="col-span-5 border-2 border-border rounded-xl p-4 space-y-3">
+              <div className="col-span-2 border-2 border-border rounded-xl p-4 space-y-3">
                 <div className="border border-border rounded-lg p-3 bg-accent/30">
                   <p className="text-[6px] font-bold text-center mb-1">LISTA DE PRECIOS - DULCESUR</p>
                   <div className="space-y-0.5">
@@ -2037,7 +1927,7 @@ export default function ListaPreciosPage() {
               </div>
 
               {/* Variaciones de precio */}
-              <div className="col-span-5 border-2 border-border rounded-xl p-4 space-y-3">
+              <div className="col-span-3 border-2 border-border rounded-xl p-4 space-y-3">
                 <div className="border border-border rounded-lg p-3 bg-accent/30">
                   <p className="text-[6px] font-bold mb-1">Lista de Precios Actualizados</p>
                   <div className="space-y-0.5">
@@ -2071,7 +1961,7 @@ export default function ListaPreciosPage() {
             </div>
 
             <div className="flex border-b border-border px-6 overflow-x-auto">
-              {(["general", "combinado", "duo", "poster"] as const).map((tab) => (
+              {(["general"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setConfigTab(tab)}
@@ -2079,7 +1969,7 @@ export default function ListaPreciosPage() {
                     configTab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {tab === "combinado" ? "Carteles" : tab === "duo" ? "Unidad + Caja" : tab === "general" ? "General" : "Poster"}
+                  {"General"}
                 </button>
               ))}
             </div>
