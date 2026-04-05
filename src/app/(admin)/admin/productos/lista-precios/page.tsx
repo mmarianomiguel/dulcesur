@@ -1151,7 +1151,7 @@ export default function ListaPreciosPage() {
           pdf.text("PRODUCTO", lm + 3, ty);
           pdf.text("UNIDAD", colUnidad, ty, { align: "right" });
           pdf.text("CAJA (cant.)", colCaja + 8, ty, { align: "right" });
-          pdf.text("ACTUALIZ.", colFecha, ty, { align: "right" });
+          pdf.text("ULT. MODIF.", colFecha, ty, { align: "right" });
           pdf.setTextColor(0);
           return y + 7.5;
         };
@@ -1169,7 +1169,7 @@ export default function ListaPreciosPage() {
           pdf.setTextColor(200);
           pdf.text("UNIDAD", colUnidad, y + 4.5, { align: "right" });
           pdf.text("CAJA (cant.)", colCaja + 8, y + 4.5, { align: "right" });
-          pdf.text("ACTUALIZ.", colFecha, y + 4.5, { align: "right" });
+          pdf.text("ULT. MODIF.", colFecha, y + 4.5, { align: "right" });
           pdf.setTextColor(0);
           return y + 8;
         };
