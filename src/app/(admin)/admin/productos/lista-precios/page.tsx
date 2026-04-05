@@ -1097,43 +1097,46 @@ export default function ListaPreciosPage() {
 
         const drawHeader = (isFirstPage: boolean) => {
           if (isFirstPage) {
-            // Logo
-            const logoW = logoBase64 ? 20 : 0;
-            if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 7, logoW, logoW); } catch {} }
+            // Logo — respect aspect ratio
+            const logoH = logoBase64 ? 12 : 0;
+            const logoW = logoBase64 ? logoH * logoAspectRatio : 0;
+            if (logoBase64) { try { pdf.addImage(logoBase64, "PNG", lm, 8, logoW, logoH); } catch {} }
 
-            // Title block
-            const titleX = logoBase64 ? lm + logoW + 5 : lm;
+            // Title + info right-aligned to logo
+            const titleX = logoBase64 ? lm + logoW + 4 : lm;
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(18);
-            pdf.setTextColor(40);
-            pdf.text("Lista de Precios", titleX, 16);
+            pdf.setFontSize(16);
+            pdf.setTextColor(30);
+            pdf.text("Lista de Precios", titleX, 14);
 
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(9);
-            pdf.setTextColor(100);
-            pdf.text(empresaNombre, titleX, 21.5);
-
-            pdf.setFontSize(7.5);
-            pdf.setTextColor(140);
-            pdf.text(`${today}  ·  ${selectedProducts.length} productos`, titleX, 26);
+            pdf.setTextColor(80);
+            pdf.text(`${empresaNombre}  ·  ${today}  ·  ${selectedProducts.length} productos`, titleX, 19.5);
             pdf.setTextColor(0);
 
-            // Clean separator
-            pdf.setDrawColor(60);
-            pdf.setLineWidth(0.5);
-            pdf.line(lm, 30, rm, 30);
+            // Separator
+            pdf.setDrawColor(80);
+            pdf.setLineWidth(0.4);
+            pdf.line(lm, 24, rm, 24);
 
-            return 35;
+            return 28;
           } else {
-            // Continuation pages: company name + thin line
+            // Continuation pages
+            if (logoBase64) {
+              const lH = 5;
+              const lW = lH * logoAspectRatio;
+              try { pdf.addImage(logoBase64, "PNG", lm, 4, lW, lH); } catch {}
+            }
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(7);
-            pdf.setTextColor(150);
-            pdf.text(`${empresaNombre} — Lista de Precios`, lm, 7);
+            pdf.setTextColor(120);
+            const contX = logoBase64 ? lm + 5 * logoAspectRatio + 3 : lm;
+            pdf.text(`${empresaNombre} — Lista de Precios`, contX, 7.5);
             pdf.setTextColor(0);
             pdf.setDrawColor(200);
             pdf.setLineWidth(0.2);
-            pdf.line(lm, 9, rm, 9);
+            pdf.line(lm, 10, rm, 10);
             return 13;
           }
         };
