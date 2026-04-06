@@ -1751,9 +1751,13 @@ export default function ProductosPage() {
                 variant={soloDestacado ? "default" : "outline"}
                 className="gap-2"
                 onClick={() => { setSoloDestacado(!soloDestacado); setPage(1); }}
+                title={`${products.filter((p: any) => p.destacado).length} productos destacados (se muestran hasta 8 en la tienda)`}
               >
                 <Star className="w-4 h-4" />
                 Destacados
+                <span className={`text-xs font-normal ${soloDestacado ? "text-white/80" : "text-muted-foreground"}`}>
+                  {products.filter((p: any) => p.destacado).length}/8
+                </span>
               </Button>
               <Button
                 variant={comboFilter === "si" ? "default" : "outline"}

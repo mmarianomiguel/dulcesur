@@ -77,7 +77,7 @@ export default async function TiendaHomePage() {
           const { data: movs } = await supabase
             .from("stock_movimientos")
             .select("producto_id")
-            .eq("cantidad_antes", 0)
+            .in("tipo", ["compra", "ajuste_ingreso"])
             .gt("cantidad_despues", 0)
             .gt("created_at", cutoff);
           const ids = [...new Set((movs || []).map((m: any) => m.producto_id))];
