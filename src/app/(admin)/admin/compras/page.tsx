@@ -1012,6 +1012,7 @@ export default function ComprasPage() {
               .update({
                 costo: item.costo_unitario,
                 precio: newPrecio,
+                precio_anterior: item.precio_original,
                 fecha_actualizacion: todayString(),
               })
               .eq("id", item.producto_id);
