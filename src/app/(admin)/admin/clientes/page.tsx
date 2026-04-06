@@ -671,66 +671,82 @@ export default function ClientesPage() {
 
   const recalcularSaldo = async () => {
     if (!movClient?.id) return;
+    const clienteId = movClient.id;
 
-    // 1. Get current saldo from DB
-    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", movClient.id).single();
+    const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
     const saldoActual = freshCli?.saldo ?? 0;
 
-    // 2. Delete any previous "Ajuste recálculo" CC entries
-    await supabase
-      .from("cuenta_corriente")
-      .delete()
-      .eq("cliente_id", movClient.id)
-      .eq("comprobante", "Ajuste recálculo");
+    await supabase.from("cuenta_corriente").delete()
+      .eq("cliente_id", clienteId).eq("comprobante", "Ajuste recálculo");
 
-    // 3. Calculate saldo from VENTAS (source of truth), not from CC table
-    //    CC table is incomplete — Efectivo/Transferencia sales don't create CC entries
-    const { data: ventas } = await supabase
-      .from("ventas")
-      .select("id, total, monto_pagado, tipo_comprobante")
-      .eq("cliente_id", movClient.id)
-      .neq("estado", "anulada");
-    if (!ventas) { showAdminToast("Error al recalcular", "error"); return; }
+    // Replicate display logic: ventas + caja + CC with dedup
+    const { data: allVentas } = await supabase.from("ventas")
+      .select("id, total, monto_pagado, tipo_comprobante, forma_pago")
+      .eq("cliente_id", clienteId).neq("estado", "anulada");
+    if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
-    let saldoFinal = 0;
-    let totalVentas = 0;
-    let totalPagado = 0;
-    let totalNC = 0;
-    for (const v of ventas) {
-      const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
-      if (isNC) {
-        // NC applied as credit: reduces debt by (total - monto_pagado)
-        // NC refunded as cash: monto_pagado = total, no debt change
-        const ncCredito = v.total - (v.monto_pagado || 0);
-        totalNC += ncCredito;
-        saldoFinal -= ncCredito;
-      } else {
-        totalVentas += v.total;
-        totalPagado += v.monto_pagado || 0;
-        saldoFinal += v.total - (v.monto_pagado || 0);
+    // PENDIENTE = sum of non-NC venta totals
+    let totalDebe = 0;
+    const ventaIds: string[] = [];
+    for (const v of allVentas) {
+      if (v.tipo_comprobante?.includes("Nota de Crédito")) continue;
+      totalDebe += v.total;
+      ventaIds.push(v.id);
+    }
+
+    // COBRADO part 1: NC totals
+    let totalHaber = 0;
+    for (const v of allVentas) {
+      if (v.tipo_comprobante?.includes("Nota de Crédito")) totalHaber += v.total;
+    }
+
+    // COBRADO part 2: caja payments linked to ventas
+    const cajaByVenta = new Map<string, number>();
+    for (let i = 0; i < ventaIds.length; i += 100) {
+      const batch = ventaIds.slice(i, i + 100);
+      const { data: cajaData } = await supabase.from("caja_movimientos")
+        .select("referencia_id, monto").in("referencia_id", batch)
+        .eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+      for (const c of cajaData || []) {
+        if (c.referencia_id) cajaByVenta.set(c.referencia_id, (cajaByVenta.get(c.referencia_id) || 0) + c.monto);
       }
     }
-    saldoFinal = Math.round(saldoFinal * 100) / 100;
+    for (const m of cajaByVenta.values()) totalHaber += m;
 
-    console.log("[Recalcular] Ventas:", totalVentas, "Pagado:", totalPagado, "NC:", totalNC, "Saldo:", saldoFinal);
+    // COBRADO part 3: monto_pagado fallback for old ventas without caja entries
+    for (const v of allVentas) {
+      if (v.tipo_comprobante?.includes("Nota de Crédito")) continue;
+      if (v.tipo_comprobante?.includes("Nota de Débito")) continue;
+      if (!cajaByVenta.has(v.id) && v.forma_pago !== "Cuenta Corriente" && v.forma_pago !== "Pendiente") {
+        totalHaber += v.monto_pagado || 0;
+      }
+    }
 
-    // 4. Update stored saldo
-    await supabase.from("clientes").update({ saldo: saldoFinal }).eq("id", movClient.id);
+    // COBRADO part 4: CC haber entries not already covered by caja (dedup)
+    const ventasConCaja = new Set(cajaByVenta.keys());
+    const { data: ccHabers } = await supabase.from("cuenta_corriente")
+      .select("haber, venta_id, comprobante")
+      .eq("cliente_id", clienteId).gt("haber", 0);
+    for (const cc of ccHabers || []) {
+      if (cc.venta_id && ventasConCaja.has(cc.venta_id)) continue;
+      if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) continue;
+      totalHaber += cc.haber;
+    }
 
-    // Update last CC row saldo too
-    const { data: lastRow } = await supabase
-      .from("cuenta_corriente")
-      .select("id")
-      .eq("cliente_id", movClient.id)
-      .order("fecha", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1);
+    const saldoFinal = Math.round((totalDebe - totalHaber) * 100) / 100;
+    console.log("[Recalcular] Debe:", totalDebe, "Haber:", totalHaber, "Saldo:", saldoFinal);
+
+    await supabase.from("clientes").update({ saldo: saldoFinal }).eq("id", clienteId);
+
+    const { data: lastRow } = await supabase.from("cuenta_corriente").select("id")
+      .eq("cliente_id", clienteId)
+      .order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(1);
     if (lastRow && lastRow.length > 0) {
       await supabase.from("cuenta_corriente").update({ saldo: saldoFinal }).eq("id", lastRow[0].id);
     }
 
     showAdminToast(
-      `Ventas: ${formatCurrency(totalVentas)} | Pagado: ${formatCurrency(totalPagado)}${totalNC > 0 ? ` | NC: ${formatCurrency(totalNC)}` : ""} → Saldo: ${formatCurrency(saldoFinal)}`,
+      `Pendiente: ${formatCurrency(totalDebe)} | Cobrado: ${formatCurrency(totalHaber)} → Saldo: ${formatCurrency(saldoFinal)}`,
       saldoActual !== saldoFinal ? "success" : "info"
     );
 
