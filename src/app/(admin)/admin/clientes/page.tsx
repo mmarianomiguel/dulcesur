@@ -553,13 +553,41 @@ export default function ClientesPage() {
         if (!isND) {
           const cajaEntries = cajaByVenta.get(v.id);
           if (cajaEntries && cajaEntries.length > 0) {
-            // Detailed breakdown from caja (works for Efectivo, Transferencia, Mixto, cobro saldo)
-            for (let ci = 0; ci < cajaEntries.length; ci++) {
-              const ce = cajaEntries[ci];
-              entries.push({
-                id: `v-${v.id}-pago-${ci}`, fecha: v.fecha, created_at: v.created_at || v.fecha + `T00:00:0${ci + 1}`,
-                comprobante: comp, debe: 0, haber: ce.monto, forma_pago: ce.metodo_pago, descripcion: "", venta_id: v.id,
-              });
+            const cajaTotal = cajaEntries.reduce((s, e) => s + e.monto, 0);
+
+            if (cajaTotal > v.total + 0.01) {
+              // Caja includes cobro saldo portion — cap at venta total, show excess separately
+              let remaining = Math.round(v.total * 100) / 100;
+              for (let ci = 0; ci < cajaEntries.length; ci++) {
+                const ce = cajaEntries[ci];
+                const capped = Math.round(Math.min(ce.monto, remaining) * 100) / 100;
+                remaining = Math.round((remaining - capped) * 100) / 100;
+                if (capped > 0) {
+                  entries.push({
+                    id: `v-${v.id}-pago-${ci}`, fecha: v.fecha, created_at: v.created_at || v.fecha + `T00:00:0${ci + 1}`,
+                    comprobante: comp, debe: 0, haber: capped, forma_pago: ce.metodo_pago, descripcion: "", venta_id: v.id,
+                  });
+                }
+              }
+              const excess = Math.round((cajaTotal - v.total) * 100) / 100;
+              if (excess > 0) {
+                entries.push({
+                  id: `v-${v.id}-cobro-saldo`, fecha: v.fecha,
+                  created_at: (v.created_at || v.fecha) + "T23:59:58",
+                  comprobante: `Cobro saldo`, debe: 0, haber: excess,
+                  forma_pago: cajaEntries[cajaEntries.length - 1].metodo_pago,
+                  descripcion: "Cobro saldo anterior",
+                });
+              }
+            } else {
+              // Normal: caja matches venta total — show as-is
+              for (let ci = 0; ci < cajaEntries.length; ci++) {
+                const ce = cajaEntries[ci];
+                entries.push({
+                  id: `v-${v.id}-pago-${ci}`, fecha: v.fecha, created_at: v.created_at || v.fecha + `T00:00:0${ci + 1}`,
+                  comprobante: comp, debe: 0, haber: ce.monto, forma_pago: ce.metodo_pago, descripcion: "", venta_id: v.id,
+                });
+              }
             }
           } else if (fp !== "Cuenta Corriente" && fp !== "Pendiente") {
             // No caja entries but not CC — use monto_pagado as fallback (old data)
@@ -586,6 +614,21 @@ export default function ClientesPage() {
     for (const cc of ccHaberData || []) {
       // Skip if this CC haber references a venta that already has caja desglose
       if (cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
+
+      // Skip orphaned non-Mixto "Cobro saldo - Venta #XXX" entries (venta_id was corrupted to null)
+      // These are duplicates: the caja entries for that venta already include the saldo portion
+      // Do NOT skip Mixto "Cobro saldo #XXX" entries (legitimate payments for old CC debts)
+      if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) {
+        const numMatch = cc.comprobante.match(/#(\d+-\d+)/);
+        if (numMatch) {
+          const linkedVenta = (ventas || []).find((v: any) => v.numero === numMatch[1]);
+          if (linkedVenta && cajaByVenta.has(linkedVenta.id)) {
+            const ct = (cajaByVenta.get(linkedVenta.id) || []).reduce((s: number, e: any) => s + e.monto, 0);
+            if (ct > linkedVenta.total + 0.01) continue; // caja has excess = cobro saldo already shown
+          }
+        }
+      }
+
       entries.push({
         id: `cc-${cc.id}`, fecha: cc.fecha, created_at: cc.created_at || cc.fecha,
         comprobante: cc.comprobante || "Pago", debe: 0, haber: cc.haber,
@@ -633,31 +676,48 @@ export default function ClientesPage() {
     const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", movClient.id).single();
     const saldoActual = freshCli?.saldo ?? 0;
 
-    // 2. Delete any previous "Ajuste recálculo" entries (they were auto-created by this function
-    //    and may be incorrect — we recompute from scratch)
+    // 2. Delete any previous "Ajuste recálculo" CC entries
     await supabase
       .from("cuenta_corriente")
       .delete()
       .eq("cliente_id", movClient.id)
       .eq("comprobante", "Ajuste recálculo");
 
-    // 3. Sum all remaining CC entries (debe increases debt, haber decreases it)
-    const { data } = await supabase
-      .from("cuenta_corriente")
-      .select("debe, haber, comprobante, descripcion")
-      .eq("cliente_id", movClient.id);
-    if (!data) { showAdminToast("Error al recalcular", "error"); return; }
-    const totalDebe = data.reduce((s, r) => s + (r.debe || 0), 0);
-    const totalHaber = data.reduce((s, r) => s + (r.haber || 0), 0);
-    const saldoFinal = Math.round((totalDebe - totalHaber) * 100) / 100;
+    // 3. Calculate saldo from VENTAS (source of truth), not from CC table
+    //    CC table is incomplete — Efectivo/Transferencia sales don't create CC entries
+    const { data: ventas } = await supabase
+      .from("ventas")
+      .select("id, total, monto_pagado, tipo_comprobante")
+      .eq("cliente_id", movClient.id)
+      .neq("estado", "anulada");
+    if (!ventas) { showAdminToast("Error al recalcular", "error"); return; }
 
-    // Diagnostic: log all entries so we can see what's contributing
-    console.log("[Recalcular] CC entries:", data.map(r => ({ comp: r.comprobante, desc: r.descripcion, debe: r.debe, haber: r.haber })));
-    console.log("[Recalcular] totalDebe:", totalDebe, "totalHaber:", totalHaber, "saldoFinal:", saldoFinal);
+    let saldoFinal = 0;
+    let totalVentas = 0;
+    let totalPagado = 0;
+    let totalNC = 0;
+    for (const v of ventas) {
+      const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
+      if (isNC) {
+        // NC applied as credit: reduces debt by (total - monto_pagado)
+        // NC refunded as cash: monto_pagado = total, no debt change
+        const ncCredito = v.total - (v.monto_pagado || 0);
+        totalNC += ncCredito;
+        saldoFinal -= ncCredito;
+      } else {
+        totalVentas += v.total;
+        totalPagado += v.monto_pagado || 0;
+        saldoFinal += v.total - (v.monto_pagado || 0);
+      }
+    }
+    saldoFinal = Math.round(saldoFinal * 100) / 100;
 
-    // 4. Update stored saldo and last CC row
+    console.log("[Recalcular] Ventas:", totalVentas, "Pagado:", totalPagado, "NC:", totalNC, "Saldo:", saldoFinal);
+
+    // 4. Update stored saldo
     await supabase.from("clientes").update({ saldo: saldoFinal }).eq("id", movClient.id);
 
+    // Update last CC row saldo too
     const { data: lastRow } = await supabase
       .from("cuenta_corriente")
       .select("id")
@@ -669,10 +729,8 @@ export default function ClientesPage() {
       await supabase.from("cuenta_corriente").update({ saldo: saldoFinal }).eq("id", lastRow[0].id);
     }
 
-    const haberDetail = data.filter(r => r.haber > 0).map(r => `${r.comprobante}: $${r.haber}`).join(" | ");
-    const debeDetail = data.filter(r => r.debe > 0).map(r => `${r.comprobante}: $${r.debe}`).join(" | ");
     showAdminToast(
-      `Debe: ${formatCurrency(totalDebe)} | Haber: ${formatCurrency(totalHaber)} → Saldo: ${formatCurrency(saldoFinal)}${haberDetail ? ` [Habers: ${haberDetail}]` : ""}`,
+      `Ventas: ${formatCurrency(totalVentas)} | Pagado: ${formatCurrency(totalPagado)}${totalNC > 0 ? ` | NC: ${formatCurrency(totalNC)}` : ""} → Saldo: ${formatCurrency(saldoFinal)}`,
       saldoActual !== saldoFinal ? "success" : "info"
     );
 
