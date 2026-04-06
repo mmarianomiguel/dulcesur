@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
           {
             folder: "dulcesur",
             resource_type: "image",
-            transformation: [{ width: 1200, crop: "limit", quality: "auto:good", fetch_format: "auto" }],
+            transformation: [{ width: 1200, crop: "limit", quality: "auto:good", format: "webp" }],
           },
           (error, result) => {
             clearTimeout(timer);

@@ -281,6 +281,7 @@ function CartDrawer() {
                         src={(item.imagen || item.imagen_url)!}
                         alt={item.nombre}
                         fill
+                        sizes="96px"
                         className="object-contain p-1"
                       />
                     ) : (

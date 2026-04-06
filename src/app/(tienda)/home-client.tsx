@@ -379,6 +379,7 @@ function ProductosDestacadosBlock({
                           src={prod.imagen_url}
                           alt={prod.nombre}
                           fill
+                          sizes="(max-width: 768px) 50vw, 25vw"
                           loading="lazy"
                           className="card-product-img object-contain p-4"
                         />
@@ -594,6 +595,7 @@ function AumentosRecientesBlock() {
                       src={prod.imagen_url}
                       alt={prod.nombre}
                       fill
+                      sizes="(max-width: 768px) 50vw, 25vw"
                       loading="lazy"
                       className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                     />
@@ -751,6 +753,7 @@ function ImagenBannerBlock({ config }: { config: Record<string, any> }) {
         src={url}
         alt={config.alt || ""}
         fill
+        sizes="100vw"
         priority
         className="object-cover"
       />

@@ -190,6 +190,7 @@ export default function CarritoPage() {
                     src={(item.imagen_url || item.imagen)!}
                     alt={item.nombre}
                     fill
+                    sizes="80px"
                     className="object-contain p-1"
                   />
                 ) : (

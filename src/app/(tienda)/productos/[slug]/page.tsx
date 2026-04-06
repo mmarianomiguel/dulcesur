@@ -942,6 +942,7 @@ export default function ProductoDetallePage() {
                             src={rel.imagen_url}
                             alt={rel.nombre}
                             fill
+                            sizes="200px"
                             className="object-contain p-4 group-hover:scale-110 transition-transform duration-300"
                           />
                         ) : (

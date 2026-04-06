@@ -16,5 +16,5 @@ export default function cloudinaryLoader({
   if (!src || !src.includes("res.cloudinary.com")) return src;
   const q = quality ?? 80;
   // Insert transformations after /upload/ — handles versioned URLs like /upload/v1234/...
-  return src.replace("/upload/", `/upload/w_${width},q_${q},f_auto/`);
+  return src.replace("/upload/", `/upload/w_${width},q_${q}/`);
 }
