@@ -21,7 +21,13 @@ export default async function AumentosRecientesPage() {
     .gt("fecha_actualizacion", cutoff)
     .order("fecha_actualizacion", { ascending: false });
 
-  const productos = (data || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+  const productos = (data || [])
+    .filter((p: any) => Number(p.precio) > Number(p.precio_anterior))
+    .map((p: any) => ({
+      ...p,
+      categorias: Array.isArray(p.categorias) ? (p.categorias[0] ?? null) : p.categorias,
+      marcas: Array.isArray(p.marcas) ? (p.marcas[0] ?? null) : p.marcas,
+    }));
 
   return <AumentosRecientesClient productos={productos} />;
 }
