@@ -72,6 +72,58 @@ export default async function TiendaHomePage() {
             .limit(maxItems);
           if (featured && featured.length > 0) prods = featured;
         }
+        if (!prods && orden === "recien_repuestos") {
+          const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          const { data: movs } = await supabase
+            .from("stock_movimientos")
+            .select("producto_id")
+            .eq("cantidad_antes", 0)
+            .gt("cantidad_despues", 0)
+            .gt("created_at", cutoff);
+          const ids = [...new Set((movs || []).map((m: any) => m.producto_id))];
+          if (ids.length > 0) {
+            const { data: repuestos } = await supabase
+              .from("productos")
+              .select(baseSelect)
+              .eq("activo", true)
+              .eq("visibilidad", "visible")
+              .gt("stock", 0)
+              .in("id", ids)
+              .limit(maxItems);
+            if (repuestos && repuestos.length > 0) prods = repuestos;
+          }
+        }
+        if (!prods && orden === "mas_vendidos") {
+          const cutoff30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          const { data: ventaMovs } = await supabase
+            .from("venta_items")
+            .select("producto_id, cantidad, ventas!inner(created_at)")
+            .gt("ventas.created_at", cutoff30)
+            .limit(5000);
+          if (ventaMovs && ventaMovs.length > 0) {
+            const totals: Record<string, number> = {};
+            for (const item of ventaMovs) {
+              totals[item.producto_id] = (totals[item.producto_id] || 0) + Number(item.cantidad);
+            }
+            const topIds = Object.entries(totals)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, maxItems)
+              .map(([id]) => id);
+            if (topIds.length > 0) {
+              const { data: topProds } = await supabase
+                .from("productos")
+                .select(baseSelect)
+                .eq("activo", true)
+                .eq("visibilidad", "visible")
+                .in("id", topIds);
+              if (topProds && topProds.length > 0) {
+                prods = topIds
+                  .map((id) => topProds.find((p: any) => p.id === id))
+                  .filter(Boolean) as any[];
+              }
+            }
+          }
+        }
         if (!prods) {
           let query = supabase
             .from("productos")
