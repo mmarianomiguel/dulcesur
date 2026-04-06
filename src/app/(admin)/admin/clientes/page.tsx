@@ -583,21 +583,6 @@ export default function ClientesPage() {
       [...cajaByVenta.keys()].filter((vid) => cajaByVenta.get(vid)!.length > 0)
     );
 
-    // Auto-fix: saldo allocation CC habers incorrectly linked to ventas with caja entries.
-    // These entries were created with venta_id = current venta (the one being paid) instead of null,
-    // causing them to be skipped by the filter below. Identify them by comprobante/descripcion pattern.
-    const badSaldoHabers = (ccHaberData || []).filter((cc: any) =>
-      cc.venta_id &&
-      ventasWithCaja.has(cc.venta_id) &&
-      (cc.comprobante?.toLowerCase().includes("saldo") || cc.descripcion?.toLowerCase().includes("deuda anterior"))
-    );
-    if (badSaldoHabers.length > 0) {
-      for (const cc of badSaldoHabers) {
-        await supabase.from("cuenta_corriente").update({ venta_id: null }).eq("id", cc.id);
-        cc.venta_id = null; // fix in-memory so display is correct without re-fetch
-      }
-    }
-
     for (const cc of ccHaberData || []) {
       // Skip if this CC haber references a venta that already has caja desglose
       if (cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
