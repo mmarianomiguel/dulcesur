@@ -553,41 +553,13 @@ export default function ClientesPage() {
         if (!isND) {
           const cajaEntries = cajaByVenta.get(v.id);
           if (cajaEntries && cajaEntries.length > 0) {
-            const cajaTotal = cajaEntries.reduce((s, e) => s + e.monto, 0);
-
-            if (cajaTotal > v.total + 0.01) {
-              // Old data: caja includes cobro saldo portion — cap at venta total, show excess separately
-              let remaining = Math.round(v.total * 100) / 100;
-              for (let ci = 0; ci < cajaEntries.length; ci++) {
-                const ce = cajaEntries[ci];
-                const capped = Math.round(Math.min(ce.monto, remaining) * 100) / 100;
-                remaining = Math.round((remaining - capped) * 100) / 100;
-                if (capped > 0) {
-                  entries.push({
-                    id: `v-${v.id}-pago-${ci}`, fecha: v.fecha, created_at: v.created_at || v.fecha + `T00:00:0${ci + 1}`,
-                    comprobante: comp, debe: 0, haber: capped, forma_pago: ce.metodo_pago, descripcion: "", venta_id: v.id,
-                  });
-                }
-              }
-              const excess = Math.round((cajaTotal - v.total) * 100) / 100;
-              if (excess > 0) {
-                entries.push({
-                  id: `v-${v.id}-cobro-saldo`, fecha: v.fecha,
-                  created_at: (v.created_at || v.fecha) + "T23:59:58",
-                  comprobante: `Cobro saldo`, debe: 0, haber: excess,
-                  forma_pago: cajaEntries[cajaEntries.length - 1].metodo_pago,
-                  descripcion: "Cobro saldo anterior", venta_id: v.id,
-                });
-              }
-            } else {
-              // Normal: caja matches venta total — show as-is
-              for (let ci = 0; ci < cajaEntries.length; ci++) {
-                const ce = cajaEntries[ci];
-                entries.push({
-                  id: `v-${v.id}-pago-${ci}`, fecha: v.fecha, created_at: v.created_at || v.fecha + `T00:00:0${ci + 1}`,
-                  comprobante: comp, debe: 0, haber: ce.monto, forma_pago: ce.metodo_pago, descripcion: "", venta_id: v.id,
-                });
-              }
+            // Detailed breakdown from caja (works for Efectivo, Transferencia, Mixto, cobro saldo)
+            for (let ci = 0; ci < cajaEntries.length; ci++) {
+              const ce = cajaEntries[ci];
+              entries.push({
+                id: `v-${v.id}-pago-${ci}`, fecha: v.fecha, created_at: v.created_at || v.fecha + `T00:00:0${ci + 1}`,
+                comprobante: comp, debe: 0, haber: ce.monto, forma_pago: ce.metodo_pago, descripcion: "", venta_id: v.id,
+              });
             }
           } else if (fp !== "Cuenta Corriente" && fp !== "Pendiente") {
             // No caja entries but not CC — use monto_pagado as fallback (old data)
@@ -611,21 +583,23 @@ export default function ClientesPage() {
       [...cajaByVenta.keys()].filter((vid) => cajaByVenta.get(vid)!.length > 0)
     );
 
-    // Re-link orphaned cobro saldo CC entries whose venta_id was previously nullified.
-    // Parse the venta number from the comprobante to find the matching venta.
-    for (const cc of ccHaberData || []) {
-      if (cc.venta_id) continue; // already linked
-      const match = cc.comprobante?.match(/#(\d+-\d+)/);
-      if (match) {
-        const numero = match[1];
-        const linkedVenta = (ventas || []).find((v: any) => v.numero === numero);
-        if (linkedVenta) cc.venta_id = linkedVenta.id; // re-link in memory
+    // Auto-fix: saldo allocation CC habers incorrectly linked to ventas with caja entries.
+    // These entries were created with venta_id = current venta (the one being paid) instead of null,
+    // causing them to be skipped by the filter below. Identify them by comprobante/descripcion pattern.
+    const badSaldoHabers = (ccHaberData || []).filter((cc: any) =>
+      cc.venta_id &&
+      ventasWithCaja.has(cc.venta_id) &&
+      (cc.comprobante?.toLowerCase().includes("saldo") || cc.descripcion?.toLowerCase().includes("deuda anterior"))
+    );
+    if (badSaldoHabers.length > 0) {
+      for (const cc of badSaldoHabers) {
+        await supabase.from("cuenta_corriente").update({ venta_id: null }).eq("id", cc.id);
+        cc.venta_id = null; // fix in-memory so display is correct without re-fetch
       }
     }
 
     for (const cc of ccHaberData || []) {
       // Skip if this CC haber references a venta that already has caja desglose
-      // (cobro saldo payments are already shown via caja excess splitting above)
       if (cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
       entries.push({
         id: `cc-${cc.id}`, fecha: cc.fecha, created_at: cc.created_at || cc.fecha,
