@@ -659,12 +659,16 @@ export default function ClientesPage() {
     // 3. Sum all remaining CC entries (debe increases debt, haber decreases it)
     const { data } = await supabase
       .from("cuenta_corriente")
-      .select("debe, haber")
+      .select("debe, haber, comprobante, descripcion")
       .eq("cliente_id", movClient.id);
     if (!data) { showAdminToast("Error al recalcular", "error"); return; }
     const totalDebe = data.reduce((s, r) => s + (r.debe || 0), 0);
     const totalHaber = data.reduce((s, r) => s + (r.haber || 0), 0);
     const saldoFinal = Math.round((totalDebe - totalHaber) * 100) / 100;
+
+    // Diagnostic: log all entries so we can see what's contributing
+    console.log("[Recalcular] CC entries:", data.map(r => ({ comp: r.comprobante, desc: r.descripcion, debe: r.debe, haber: r.haber })));
+    console.log("[Recalcular] totalDebe:", totalDebe, "totalHaber:", totalHaber, "saldoFinal:", saldoFinal);
 
     // 4. Update stored saldo and last CC row
     await supabase.from("clientes").update({ saldo: saldoFinal }).eq("id", movClient.id);
@@ -680,11 +684,12 @@ export default function ClientesPage() {
       await supabase.from("cuenta_corriente").update({ saldo: saldoFinal }).eq("id", lastRow[0].id);
     }
 
-    if (saldoActual !== saldoFinal) {
-      showAdminToast(`Saldo recalculado: ${formatCurrency(saldoActual)} → ${formatCurrency(saldoFinal)}`, "success");
-    } else {
-      showAdminToast("El saldo ya es correcto", "success");
-    }
+    const haberDetail = data.filter(r => r.haber > 0).map(r => `${r.comprobante}: $${r.haber}`).join(" | ");
+    const debeDetail = data.filter(r => r.debe > 0).map(r => `${r.comprobante}: $${r.debe}`).join(" | ");
+    showAdminToast(
+      `Debe: ${formatCurrency(totalDebe)} | Haber: ${formatCurrency(totalHaber)} → Saldo: ${formatCurrency(saldoFinal)}${haberDetail ? ` [Habers: ${haberDetail}]` : ""}`,
+      saldoActual !== saldoFinal ? "success" : "info"
+    );
 
     fetchClients();
     fetchMovimientos(movClient.id, movDesde, movHasta);
