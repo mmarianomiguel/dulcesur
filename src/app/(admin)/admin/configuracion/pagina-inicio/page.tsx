@@ -687,6 +687,58 @@ function InsertPoint({ onClick }: { onClick: () => void }) {
   );
 }
 
+// ── Featured Products Panel ─────────────────────────────────────────────────
+
+function FeaturedProductsPanel() {
+  const [products, setProducts] = useState<{ id: string; nombre: string; imagen_url: string | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from("productos")
+      .select("id, nombre, imagen_url")
+      .eq("destacado", true)
+      .order("nombre")
+      .then(({ data }) => {
+        setProducts(data || []);
+        setLoading(false);
+      });
+  }, []);
+
+  const removeDestacado = async (id: string) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    await supabase.from("productos").update({ destacado: false }).eq("id", id);
+  };
+
+  if (loading) return <p className="text-xs text-muted-foreground">Cargando destacados...</p>;
+  if (products.length === 0)
+    return <p className="text-xs text-muted-foreground italic">Ningún producto marcado como destacado.</p>;
+
+  return (
+    <div className="grid grid-cols-3 gap-2 mt-1">
+      {products.map((p) => (
+        <div key={p.id} className="relative group rounded-lg border border-border bg-muted/40 p-2 flex flex-col items-center gap-1">
+          {p.imagen_url ? (
+            <img src={p.imagen_url} alt="" className="w-12 h-12 object-contain rounded" />
+          ) : (
+            <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
+              <Package className="w-5 h-5 text-muted-foreground" />
+            </div>
+          )}
+          <p className="text-[10px] text-center text-foreground leading-tight line-clamp-2">{p.nombre}</p>
+          <button
+            onClick={() => removeDestacado(p.id)}
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold"
+            title="Quitar de destacados"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function PaginaInicioEditor() {
@@ -1392,8 +1444,14 @@ function BlockConfigForm({
                 <SelectItem value="precio_asc">Precio: menor a mayor</SelectItem>
                 <SelectItem value="precio_desc">Precio: mayor a menor</SelectItem>
                 <SelectItem value="nombre">Nombre A-Z</SelectItem>
+                <SelectItem value="recien_repuestos">Recién repuestos (sin stock → con stock)</SelectItem>
+                <SelectItem value="mas_vendidos">Más vendidos (últimos 30 días)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Productos destacados actuales</Label>
+            <FeaturedProductsPanel />
           </div>
         </div>
       );
