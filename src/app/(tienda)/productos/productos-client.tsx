@@ -599,10 +599,10 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const RadioCircle = ({ selected }: { selected: boolean }) => (
     <span
       className={`shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-        selected ? "border-primary" : "border-gray-300"
+        selected ? "border-primary bg-primary" : "border-gray-300"
       }`}
     >
-      {selected && <span className="w-2.5 h-2.5 rounded-full bg-primary" />}
+      {selected && <span className="w-2 h-2 rounded-full bg-white" />}
     </span>
   );
 
@@ -743,7 +743,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
             {/* "Todas" option */}
             <button
               onClick={() => updateParams({ categoria: null, subcategoria: null })}
-              className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+              className={`flex items-center gap-3 py-1.5 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${!categoriaId ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
             >
               <RadioCircle selected={!categoriaId} />
               <span className={`text-sm ${!categoriaId ? "font-semibold text-primary" : "text-gray-600"}`}>
@@ -793,7 +793,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           toggleExpand(cat.id);
                         }
                       }}
-                      className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer flex-1 min-w-0 transition-colors"
+                      className={`flex items-center gap-3 py-2 rounded-lg cursor-pointer flex-1 min-w-0 transition-all border-l-[3px] ${isSelected ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
                     >
                       <RadioCircle selected={isSelected} />
                       <span
@@ -823,7 +823,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                                 subcategoria: slugify(sub.nombre),
                               })
                             }
-                            className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+                            className={`flex items-center gap-3 py-1.5 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${subSelected ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
                           >
                             <RadioCircle selected={subSelected} />
                             <span
@@ -894,7 +894,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                 {!marcaSearch && (
                 <button
                   onClick={() => updateParams({ marca: null })}
-                  className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+                  className={`flex items-center gap-3 py-2 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${!marcaParam ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
                 >
                   <RadioCircle selected={!marcaParam} />
                   <span className={`text-sm ${!marcaParam ? "font-semibold text-primary" : "text-gray-600"}`}>
@@ -913,7 +913,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                     <button
                       key={marca.id}
                       onClick={() => selectMarca(marca)}
-                      className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+                      className={`flex items-center gap-3 py-2 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${isSelected ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
                     >
                       <RadioCircle selected={isSelected} />
                       <span
@@ -955,7 +955,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               <button
                 key={opt.value}
                 onClick={() => updateParams({ tipo: opt.value || null })}
-                className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+                className={`flex items-center gap-3 py-2 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${isSelected ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
               >
                 <RadioCircle selected={isSelected} />
                 <span className={`text-sm ${isSelected ? "font-semibold text-primary" : "text-gray-600"}`}>
@@ -983,7 +983,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               <button
                 key={opt.value}
                 onClick={() => updateParams({ disponibilidad: opt.value || null })}
-                className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 cursor-pointer w-full transition-colors"
+                className={`flex items-center gap-3 py-2 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${isSelected ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
               >
                 <RadioCircle selected={isSelected} />
                 <span className={`text-sm ${isSelected ? "font-semibold text-primary" : "text-gray-600"}`}>
