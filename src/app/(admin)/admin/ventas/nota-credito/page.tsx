@@ -387,7 +387,7 @@ export default function NotaCreditoPage() {
         recargo_porcentaje: 0,
         total,
         estado: "cerrada",
-        entregado: true,
+        entregado: origenId ? (clientVentas.find((v) => v.id === origenId)?.entregado ?? true) : true,
         observacion: observacion || null,
         remito_origen_id: origenId && origenId !== "none" ? origenId : null,
       })
