@@ -648,7 +648,15 @@ export default function ClientesPage() {
     const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", movClient.id).single();
     const saldoActual = freshCli?.saldo ?? 0;
 
-    // 2. Sum all CC entries
+    // 2. Delete any previous "Ajuste recálculo" entries (they were auto-created by this function
+    //    and may be incorrect — we recompute from scratch)
+    await supabase
+      .from("cuenta_corriente")
+      .delete()
+      .eq("cliente_id", movClient.id)
+      .eq("comprobante", "Ajuste recálculo");
+
+    // 3. Sum all remaining CC entries (debe increases debt, haber decreases it)
     const { data } = await supabase
       .from("cuenta_corriente")
       .select("debe, haber")
@@ -656,42 +664,23 @@ export default function ClientesPage() {
     if (!data) { showAdminToast("Error al recalcular", "error"); return; }
     const totalDebe = data.reduce((s, r) => s + (r.debe || 0), 0);
     const totalHaber = data.reduce((s, r) => s + (r.haber || 0), 0);
-    const saldoReal = Math.round((totalDebe - totalHaber) * 100) / 100;
+    const saldoFinal = Math.round((totalDebe - totalHaber) * 100) / 100;
 
-    // 3. Check for cobros without matching CC haber entries
-    const { data: cobros } = await supabase.from("cobros").select("monto").eq("cliente_id", movClient.id);
-    const totalCobros = (cobros || []).reduce((s, r) => s + (r.monto || 0), 0);
-    const totalCCHaber = totalHaber;
-    const cobrosHuerfanos = Math.round((totalCobros - totalCCHaber) * 100) / 100;
-
-    // If there are cobros without CC entries, account for them
-    const saldoFinal = cobrosHuerfanos > 0
-      ? Math.round((saldoReal - cobrosHuerfanos) * 100) / 100
-      : saldoReal;
-
+    // 4. Update stored saldo and last CC row
     await supabase.from("clientes").update({ saldo: saldoFinal }).eq("id", movClient.id);
 
-    // Update the last CC row saldo too
-    const { data: lastRow } = await supabase.from("cuenta_corriente").select("id").eq("cliente_id", movClient.id).order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(1);
+    const { data: lastRow } = await supabase
+      .from("cuenta_corriente")
+      .select("id")
+      .eq("cliente_id", movClient.id)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1);
     if (lastRow && lastRow.length > 0) {
       await supabase.from("cuenta_corriente").update({ saldo: saldoFinal }).eq("id", lastRow[0].id);
     }
 
-    // If there were orphaned cobros, create missing CC entries
-    if (cobrosHuerfanos > 0) {
-      const hoy = todayARG();
-      await supabase.from("cuenta_corriente").insert({
-        cliente_id: movClient.id,
-        fecha: hoy,
-        comprobante: `Ajuste recálculo`,
-        descripcion: `Cobros sin registrar en CC (ajuste automático)`,
-        debe: 0,
-        haber: cobrosHuerfanos,
-        saldo: saldoFinal,
-        forma_pago: "Ajuste",
-      });
-      showAdminToast(`Saldo recalculado: ${formatCurrency(saldoActual)} → ${formatCurrency(saldoFinal)} (se encontraron cobros sin registrar: ${formatCurrency(cobrosHuerfanos)})`, "success");
-    } else if (saldoActual !== saldoFinal) {
+    if (saldoActual !== saldoFinal) {
       showAdminToast(`Saldo recalculado: ${formatCurrency(saldoActual)} → ${formatCurrency(saldoFinal)}`, "success");
     } else {
       showAdminToast("El saldo ya es correcto", "success");
