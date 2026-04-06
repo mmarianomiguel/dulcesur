@@ -1537,31 +1537,29 @@ export default function DashboardPage() {
           </div>
 
           {/* ─── Saldos Descuadrados ─── */}
+          {/* Detection uses CC table which is incomplete — use Recalcular in Clientes for accurate correction */}
           {isWidgetVisible("saldos") && saldoMismatches.length > 0 && (
-            <div className="rounded-xl border border-red-200 bg-red-50/50 p-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-600" />
-                  <span className="text-sm font-semibold text-red-800">Saldos Descuadrados</span>
-                  <Badge variant="destructive" className="text-xs">{saldoMismatches.length}</Badge>
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800">Saldos a revisar</span>
+                  <Badge className="text-xs bg-amber-100 text-amber-800">{saldoMismatches.length}</Badge>
                 </div>
-                <Button variant="outline" size="sm" className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-100" onClick={fixAllSaldos}>
-                  Corregir todos
-                </Button>
+                <span className="text-[10px] text-amber-600">Usar Recalcular en Clientes → Resumen de Cuenta</span>
               </div>
               <div className="border rounded-lg overflow-hidden bg-white">
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>Cliente</TableHead><TableHead>Saldo actual</TableHead><TableHead>Saldo calculado</TableHead><TableHead className="text-right"></TableHead></TableRow>
+                    <TableRow><TableHead>Cliente</TableHead><TableHead>Saldo actual</TableHead><TableHead className="text-right"></TableHead></TableRow>
                   </TableHeader>
                   <TableBody>
                     {saldoMismatches.slice(0, 8).map((c) => (
                       <TableRow key={c.id}>
                         <TableCell className="font-medium text-sm">{c.nombre}</TableCell>
                         <TableCell className="text-sm">{formatCurrency(c.saldo)}</TableCell>
-                        <TableCell className="text-sm text-red-600">{formatCurrency(c.calculado)}</TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => fixSaldo(c.id, c.calculado)}>Corregir</Button>
+                          <span className="text-[10px] text-gray-400">Revisar en Clientes</span>
                         </TableCell>
                       </TableRow>
                     ))}
