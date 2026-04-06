@@ -292,14 +292,13 @@ export default function VentasPage() {
   // ---------- data fetch ----------
   // Light refresh: only products + presentaciones (for tab focus)
   const refreshProducts = useCallback(async () => {
-    const [{ data: prods }, { data: presData }, { data: presData2 }] = await Promise.all([
-      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
-      supabase.from("presentaciones").select("*").range(0, 999),
-      supabase.from("presentaciones").select("*").range(1000, 1999),
+    const [{ data: prods }, { data: presData }] = await Promise.all([
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, costo, sku").order("id").limit(3000),
     ]);
-    setProducts(prods || []);
+    setProducts((prods || []) as unknown as Producto[]);
     const map: Record<string, Presentacion[]> = {};
-    for (const raw of [...(presData || []), ...(presData2 || [])]) {
+    for (const raw of (presData || [])) {
       const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
       if (!map[pr.producto_id]) map[pr.producto_id] = [];
       map[pr.producto_id].push(pr);
@@ -310,22 +309,21 @@ export default function VentasPage() {
   const fetchData = useCallback(async () => {
     // Single batch: all data in one Promise.all
     const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData },
-           { data: allComboItems }, { data: descuentosData }, { data: presData }, { data: presData2 },
+           { data: allComboItems }, { data: descuentosData }, { data: presData },
            { data: empData }, { data: tcData }] = await Promise.all([
-      supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
-      supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("clientes").select("id, codigo_cliente, nombre, email, telefono, saldo, situacion_iva, tipo_factura, tipo_documento, numero_documento, cuit, razon_social, domicilio, domicilio_comercial, domicilio_fiscal, localidad, provincia, codigo_postal, barrio, vendedor_id, observacion, zona_entrega, limite_credito").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo").eq("activo", true).eq("rol", "vendedor"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
       supabase.from("zonas_entrega").select("id, nombre, dias").order("nombre"),
       supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, costo)"),
       supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", todayARG()),
-      supabase.from("presentaciones").select("*").range(0, 999),
-      supabase.from("presentaciones").select("*").range(1000, 1999),
+      supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, costo, sku").order("id").limit(3000),
       supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva, receipt_config").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
     ]);
 
-    setProducts(prods || []);
+    setProducts((prods || []) as unknown as Producto[]);
     setClients((cls || []) as unknown as Cliente[]);
     setSellers((sls || []) as unknown as Usuario[]);
     setListasPrecio((listas || []) as any[]);
@@ -348,7 +346,7 @@ export default function VentasPage() {
     setActiveDiscounts((descuentosData || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= todayARG()));
 
     const map: Record<string, Presentacion[]> = {};
-    for (const raw of [...(presData || []), ...(presData2 || [])]) {
+    for (const raw of (presData || [])) {
       const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
       if (!map[pr.producto_id]) map[pr.producto_id] = [];
       map[pr.producto_id].push(pr);
@@ -3072,7 +3070,7 @@ export default function VentasPage() {
           <Separator />
 
           <div className="space-y-1 max-h-[300px] overflow-y-auto">
-            {filteredClients.map((c, idx) => (
+            {filteredClients.slice(0, 60).map((c, idx) => (
               <div
                 key={c.id}
                 className={`flex items-center gap-3 p-3 rounded-lg transition-colors cursor-pointer ${
@@ -3101,6 +3099,9 @@ export default function VentasPage() {
             ))}
             {filteredClients.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">No se encontraron clientes</p>
+            )}
+            {filteredClients.length > 60 && (
+              <p className="text-xs text-muted-foreground text-center py-2">Mostrando 60 de {filteredClients.length}. Buscá para filtrar.</p>
             )}
           </div>
 
