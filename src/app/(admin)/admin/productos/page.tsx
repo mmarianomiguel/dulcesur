@@ -163,6 +163,7 @@ export default function ProductosPage() {
   const [stockFilter, setStockFilter] = useState("all");
   const [tiendaFilter, setTiendaFilter] = useState("all");
   const [comboFilter, setComboFilter] = useState("all");
+  const [soloDestacado, setSoloDestacado] = useState(false);
   const [sortBy, setSortBy] = useState("nombre_asc");
   const [page, setPage] = useState(1);
   // Combobox states
@@ -1533,7 +1534,8 @@ export default function ProductosPage() {
       const matchesStock = stockFilter === "all" || (stockFilter === "si" ? effectiveStock > 0 : effectiveStock === 0);
       const matchesTienda = tiendaFilter === "all" || (tiendaFilter === "visible" ? p.visibilidad === "visible" : p.visibilidad === "oculto");
       const matchesCombo = comboFilter === "all" || (comboFilter === "si" ? !!(p as any).es_combo : !(p as any).es_combo);
-      return matchesSearch && matchesCategory && matchesSubcategory && matchesMarca && matchesStock && matchesTienda && matchesCombo;
+      const matchesDestacado = !soloDestacado || !!(p as any).destacado;
+      return matchesSearch && matchesCategory && matchesSubcategory && matchesMarca && matchesStock && matchesTienda && matchesCombo && matchesDestacado;
     });
     arr.sort((a, b) => {
       if (sortBy === "nombre_asc") return a.nombre.localeCompare(b.nombre);
@@ -1560,7 +1562,7 @@ export default function ProductosPage() {
       return 0;
     });
     return arr;
-  }, [products, debouncedSearch, presCodigoMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, tiendaFilter, comboFilter, sortBy]);
+  }, [products, debouncedSearch, presCodigoMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, tiendaFilter, comboFilter, soloDestacado, sortBy]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -1745,6 +1747,14 @@ export default function ProductosPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                variant={soloDestacado ? "default" : "outline"}
+                className="gap-2"
+                onClick={() => { setSoloDestacado(!soloDestacado); setPage(1); }}
+              >
+                <Star className="w-4 h-4" />
+                Destacados
+              </Button>
               <Button
                 variant={comboFilter === "si" ? "default" : "outline"}
                 className="gap-2"
@@ -2138,6 +2148,7 @@ export default function ProductosPage() {
                     <th className="text-left py-3 px-4 font-medium">Marca</th>
                     <th className="text-center py-3 px-4 font-medium">Stock</th>
                     <th className="text-right py-3 px-4 font-medium">Precio</th>
+                    <th className="text-center py-3 px-2 font-medium w-8"></th>
                     <th className="text-right py-3 px-4 font-medium w-24">Acciones</th>
                   </tr>
                 </thead>
@@ -2226,6 +2237,35 @@ export default function ProductosPage() {
                       </td>
                       <td className="py-3 px-4 text-right font-semibold">
                         {formatCurrency(product.precio)}
+                      </td>
+                      <td className="py-3 px-2 text-center">
+                        <button
+                          title={!!(product as any).destacado ? "Quitar de destacados" : "Marcar como destacado"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newVal = !(product as any).destacado;
+                            setProducts((prev) =>
+                              prev.map((p) => p.id === product.id ? { ...p, destacado: newVal } as any : p)
+                            );
+                            supabase
+                              .from("productos")
+                              .update({ destacado: newVal })
+                              .eq("id", product.id)
+                              .then(({ error }) => {
+                                if (error) {
+                                  setProducts((prev) =>
+                                    prev.map((p) => p.id === product.id ? { ...p, destacado: !newVal } as any : p)
+                                  );
+                                  showAdminToast("Error al actualizar destacado", "error");
+                                }
+                              });
+                          }}
+                          className="p-1 rounded hover:bg-muted transition-colors"
+                        >
+                          <Star
+                            className={`w-4 h-4 transition-colors ${!!(product as any).destacado ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/40"}`}
+                          />
+                        </button>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-0.5">
