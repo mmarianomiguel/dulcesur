@@ -170,14 +170,15 @@ export default function HojaDeRutaPage() {
     // Fetch payments per order from caja_movimientos + NC refunds
     if (rows.length > 0) {
       const ventaIds = rows.map((v) => v.id);
-      const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
+      const clienteIds = [...new Set(rows.map((v) => v.cliente_id).filter(Boolean))] as string[];
+      const [{ data: movs }, { data: ncDirect }, { data: facturas }, { data: ncByCliente }] = await Promise.all([
         supabase
           .from("caja_movimientos")
           .select("referencia_id, monto")
           .eq("tipo", "ingreso")
           .eq("referencia_tipo", "venta")
           .in("referencia_id", ventaIds),
-        // Find NCs linked directly to these sales
+        // Find NCs linked directly to these sales via remito_origen_id
         supabase
           .from("ventas")
           .select("remito_origen_id, total")
@@ -190,6 +191,14 @@ export default function HojaDeRutaPage() {
           .select("id, remito_origen_id")
           .in("remito_origen_id", ventaIds)
           .ilike("tipo_comprobante", "Factura%"),
+        // Fallback: NCs for these clients without a remito_origen_id (unlinked NCs)
+        supabase
+          .from("ventas")
+          .select("cliente_id, total")
+          .in("cliente_id", clienteIds)
+          .ilike("tipo_comprobante", "Nota de Crédito%")
+          .neq("estado", "anulada")
+          .is("remito_origen_id", null),
       ]);
 
       // Build map: factura_id -> original remito_id
@@ -229,6 +238,18 @@ export default function HojaDeRutaPage() {
           ncMap[originalRemitoId] = (ncMap[originalRemitoId] || 0) + (nc.total || 0);
         }
       });
+      // Fallback: assign unlinked NCs to the first pending sale for that client
+      if (ncByCliente && ncByCliente.length > 0) {
+        const firstSaleByCliente: Record<string, string> = {};
+        rows.forEach((v) => { if (v.cliente_id && !firstSaleByCliente[v.cliente_id]) firstSaleByCliente[v.cliente_id] = v.id; });
+        (ncByCliente as any[]).forEach((nc: any) => {
+          const saleId = firstSaleByCliente[nc.cliente_id];
+          if (saleId) {
+            pagadoMap[saleId] = (pagadoMap[saleId] || 0) + (nc.total || 0);
+            ncMap[saleId] = (ncMap[saleId] || 0) + (nc.total || 0);
+          }
+        });
+      }
       setPagadoPorVenta(pagadoMap);
       setNcPorVenta(ncMap);
     } else {
