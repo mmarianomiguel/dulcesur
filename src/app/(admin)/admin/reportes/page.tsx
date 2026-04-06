@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 
-interface VentaRow { id: string; fecha: string; total: number; forma_pago: string; tipo_comprobante: string; created_at: string; cliente_id: string | null; origen: string | null; clientes: { nombre: string } | null; }
+interface VentaRow { id: string; fecha: string; total: number; forma_pago: string; tipo_comprobante: string; created_at: string; cliente_id: string | null; origen: string | null; remito_origen_id: string | null; clientes: { nombre: string } | null; }
 interface CompraRow { id: string; fecha: string; total: number; forma_pago: string; proveedor_id: string | null; observacion: string | null; proveedores: { nombre: string } | null; }
 interface CompraItemRow { compra_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; }
 interface VentaItemDetail { venta_id: string; producto_id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; unidades_por_presentacion: number; presentacion?: string; descuento?: number; costo_unitario?: number; productos: { costo: number; nombre: string; categoria_id: string | null; subcategoria_id: string | null } | null; }
@@ -36,6 +36,7 @@ export default function ReportesPage() {
   // Ventas report
   const [ventas, setVentas] = useState<VentaRow[]>([]);
   const [ventaItems, setVentaItems] = useState<VentaItemDetail[]>([]);
+  const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
 
   // Ventas filters
   const [ventaDateMode, setVentaDateMode] = useState<"dia" | "mensual" | "entre_fechas">("mensual");
@@ -101,7 +102,7 @@ export default function ReportesPage() {
     const { desde: dEff, hasta: hEff } = effectiveDates;
 
     const [{ data: vts }, { data: cmps }, { data: prods }] = await Promise.all([
-      supabase.from("ventas").select("id, fecha, total, forma_pago, tipo_comprobante, created_at, cliente_id, origen, estado, clientes(nombre)")
+      supabase.from("ventas").select("id, fecha, total, forma_pago, tipo_comprobante, created_at, cliente_id, origen, estado, remito_origen_id, clientes(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
         .neq("estado", "anulada")
         .order("created_at", { ascending: false }),
@@ -111,7 +112,26 @@ export default function ReportesPage() {
       supabase.from("productos").select("id, nombre, codigo, stock, precio, costo, categoria_id, subcategoria_id, marca_id").eq("activo", true).order("nombre").limit(10000),
     ]);
 
-    setVentas((vts || []).map((v: any) => ({ ...v, clientes: Array.isArray(v.clientes) ? v.clientes[0] || null : v.clientes })) as VentaRow[]);
+    const ventasList = (vts || []).map((v: any) => ({ ...v, clientes: Array.isArray(v.clientes) ? v.clientes[0] || null : v.clientes })) as VentaRow[];
+    setVentas(ventasList);
+
+    // Batch fetch NC deductions for non-NC sales
+    const nonNcIds = ventasList.filter(v => !v.tipo_comprobante.toLowerCase().includes("nota de crédito")).map(v => v.id);
+    if (nonNcIds.length > 0) {
+      const { data: ncsData } = await supabase
+        .from("ventas")
+        .select("remito_origen_id, total")
+        .in("remito_origen_id", nonNcIds)
+        .ilike("tipo_comprobante", "Nota de Crédito%")
+        .neq("estado", "anulada");
+      const ncMap: Record<string, number> = {};
+      (ncsData || []).forEach((nc: any) => {
+        if (nc.remito_origen_id) ncMap[nc.remito_origen_id] = (ncMap[nc.remito_origen_id] || 0) + (nc.total || 0);
+      });
+      setNcPorVenta(ncMap);
+    } else {
+      setNcPorVenta({});
+    }
     const comprasList = (cmps || []).map((c: any) => ({ ...c, proveedores: Array.isArray(c.proveedores) ? c.proveedores[0] || null : c.proveedores })) as CompraRow[];
     setCompras(comprasList);
 
@@ -225,12 +245,18 @@ export default function ReportesPage() {
     return (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
   };
   const ncVentaIds = useMemo(() => new Set(ventas.filter(isNC).map(v => v.id)), [ventas]);
-  const ganancia = useMemo(() => ventaItems.reduce((a, item: any) => {
-    const costoPres = getItemCost(item);
-    const ventaItem = Number(item.subtotal) || 0;
-    const itemGanancia = ventaItem - costoPres * item.cantidad;
-    return a + (ncVentaIds.has(item.venta_id) ? -itemGanancia : itemGanancia);
-  }, 0), [ventaItems, ncVentaIds]);
+  const ganancia = useMemo(() => {
+    // Sum ganancia from non-NC items
+    const itemsGanancia = ventaItems.reduce((a, item: any) => {
+      if (ncVentaIds.has(item.venta_id)) return a; // skip NC items
+      const costoPres = getItemCost(item);
+      const ventaItem = Number(item.subtotal) || 0;
+      return a + (ventaItem - costoPres * item.cantidad);
+    }, 0);
+    // Subtract NC totals from original sales (NC reduces revenue, not separate ganancia)
+    const ncDeductions = Object.values(ncPorVenta).reduce((a, v) => a + v, 0);
+    return itemsGanancia - ncDeductions;
+  }, [ventaItems, ncVentaIds, ncPorVenta]);
 
   // Split Mixto into Efectivo + Transferencia + CC using caja_movimientos
   const ventasPorPago = useMemo(() => {
@@ -591,10 +617,12 @@ export default function ReportesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredVentas.map((v) => {
+                {filteredVentas.filter(v => !(isNC(v) && v.remito_origen_id)).map((v) => {
                   const isExpanded = expandedVentas.has(v.id);
                   const items = ventaItemsMap[v.id] || [];
-                  const ventaProfit = calcVentaProfit(v.id);
+                  const ncAmt = ncPorVenta[v.id] || 0;
+                  const netTotal = v.total - ncAmt;
+                  const ventaProfit = calcVentaProfit(v.id) - ncAmt;
                   return (
                     <React.Fragment key={v.id}>
                       <tr
@@ -608,11 +636,21 @@ export default function ReportesPage() {
                         <td className="py-2 px-3"><Badge variant="secondary" className="text-xs">{v.tipo_comprobante}</Badge></td>
                         <td className="py-2 px-3 text-muted-foreground">{v.clientes?.nombre || "—"}</td>
                         <td className="py-2 px-3"><Badge variant="outline" className="text-xs">{v.forma_pago}</Badge></td>
-                        <td className={`py-2 px-3 text-right font-semibold ${isNC(v) ? "text-amber-600" : ""}`}>{isNC(v) ? `-${formatCurrency(v.total)}` : formatCurrency(v.total)}</td>
+                        <td className="py-2 px-3 text-right font-semibold">
+                          {ncAmt > 0 ? (
+                            <>
+                              <span className="line-through text-muted-foreground text-xs block">{formatCurrency(v.total)}</span>
+                              <span className="text-red-500 text-[10px] block">NC -{formatCurrency(ncAmt)}</span>
+                              <span>{formatCurrency(netTotal)}</span>
+                            </>
+                          ) : isNC(v) ? (
+                            <span className="text-amber-600">-{formatCurrency(v.total)}</span>
+                          ) : formatCurrency(v.total)}
+                        </td>
                         <td className={`py-2 px-3 text-right font-semibold ${isNC(v) ? "text-amber-600" : ventaProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                           {isNC(v) ? `-${formatCurrency(ventaProfit)}` : formatCurrency(ventaProfit)}
                           <span className="block text-[10px] font-normal text-muted-foreground">
-                            {v.total > 0 ? `${((ventaProfit / v.total) * 100).toFixed(1)}%` : "—"}
+                            {netTotal > 0 ? `${((ventaProfit / netTotal) * 100).toFixed(1)}%` : "—"}
                           </span>
                         </td>
                       </tr>

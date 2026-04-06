@@ -110,6 +110,7 @@ interface VentaRow {
   vendedor_id: string | null;
   origen: string | null;
   metodo_entrega: string | null;
+  remito_origen_id: string | null;
   clientes: ClienteInfo | null;
 }
 
@@ -173,6 +174,7 @@ interface Pedido {
   _cuit?: string;
   _domicilio?: string;
   _comboIds?: Set<string>;
+  _remito_origen_id?: string | null;
   isOnline?: boolean;
   forma_pago?: string;
 }
@@ -274,6 +276,7 @@ export default function ListadoVentasPage() {
   const [recargoTransferencia, setRecargoTransferencia] = useState(2);
   const [clienteSaldo, setClienteSaldo] = useState(0);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
+  const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
   const [detailNCs, setDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
   const [editandoPago, setEditandoPago] = useState(false);
@@ -297,7 +300,7 @@ export default function ListadoVentasPage() {
     setLoading(true);
     let query = supabase
       .from("ventas")
-      .select("*, created_at, clientes(id, nombre, cuit, tipo_factura, domicilio, telefono, email, situacion_iva, localidad, provincia, codigo_postal, numero_documento)")
+      .select("*, remito_origen_id, created_at, clientes(id, nombre, cuit, tipo_factura, domicilio, telefono, email, situacion_iva, localidad, provincia, codigo_postal, numero_documento)")
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -365,6 +368,25 @@ export default function ListadoVentasPage() {
     }
 
     setVentas(results);
+
+    // Batch fetch NCs linked to these ventas
+    const ventaIds = results.filter(v => !v.tipo_comprobante.includes("Nota de Crédito")).map(v => v.id);
+    if (ventaIds.length > 0) {
+      const { data: ncs } = await supabase
+        .from("ventas")
+        .select("remito_origen_id, total")
+        .in("remito_origen_id", ventaIds)
+        .ilike("tipo_comprobante", "Nota de Crédito%")
+        .neq("estado", "anulada");
+      const map: Record<string, number> = {};
+      (ncs || []).forEach((nc: any) => {
+        if (nc.remito_origen_id) map[nc.remito_origen_id] = (map[nc.remito_origen_id] || 0) + (nc.total || 0);
+      });
+      setNcPorVenta(map);
+    } else {
+      setNcPorVenta({});
+    }
+
     setLoading(false);
   }, [quickPeriod, filterOrigen, filterType, filterPayment, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
 
@@ -1740,6 +1762,7 @@ export default function ListadoVentasPage() {
         _clienteId: v.cliente_id,
         _entregado: v.entregado,
         _tipo_comprobante: v.tipo_comprobante,
+        _remito_origen_id: v.remito_origen_id,
         _descuento_porcentaje: v.descuento_porcentaje,
         _recargo_porcentaje: v.recargo_porcentaje,
         _vendedor: v.vendedor_id ? (vendedores.find((vd) => vd.id === v.vendedor_id)?.nombre || "") : "",
@@ -2098,9 +2121,35 @@ export default function ListadoVentasPage() {
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className={`text-lg font-bold ${order.estado === "cancelado" ? "line-through text-muted-foreground" : isNC ? "text-red-500" : ""}`}>
-                            {isNC ? `-${formatCurrency(order.total)}` : formatCurrency(order.total)}
-                          </p>
+                          {(() => {
+                            const ncAmt = !isNC ? (ncPorVenta[order._ventaId || ""] || 0) : 0;
+                            const cancelled = order.estado === "cancelado";
+                            if (isNC) {
+                              // NC row: show as negative, and link to origin if available
+                              return (
+                                <>
+                                  <p className="text-base font-bold text-red-500">-{formatCurrency(order.total)}</p>
+                                  {order._remito_origen_id && (
+                                    <p className="text-[10px] text-muted-foreground">→ aplicada al pedido</p>
+                                  )}
+                                </>
+                              );
+                            }
+                            if (ncAmt > 0 && !cancelled) {
+                              return (
+                                <>
+                                  <p className="text-sm line-through text-muted-foreground">{formatCurrency(order.total)}</p>
+                                  <p className="text-[10px] text-red-500">NC -{formatCurrency(ncAmt)}</p>
+                                  <p className="text-lg font-bold">{formatCurrency(order.total - ncAmt)}</p>
+                                </>
+                              );
+                            }
+                            return (
+                              <p className={`text-lg font-bold ${cancelled ? "line-through text-muted-foreground" : ""}`}>
+                                {formatCurrency(order.total)}
+                              </p>
+                            );
+                          })()}
                           <p className="text-[10px] text-muted-foreground font-mono">#{order.numero}</p>
                         </div>
                       </div>
