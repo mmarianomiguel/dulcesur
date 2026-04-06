@@ -27,6 +27,7 @@ import {
   MoreHorizontal,
   Pill,
   Milk,
+  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -524,6 +525,120 @@ function ProductosDestacadosBlock({
   );
 }
 
+function AumentosRecientesBlock() {
+  const { filtrarCategorias } = useCategoriasPermitidas();
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url, stock, activo, precio_anterior, fecha_actualizacion, categorias(id, nombre, restringida)")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .gt("precio_anterior", 0)
+      .gt("fecha_actualizacion", cutoff)
+      .order("fecha_actualizacion", { ascending: false })
+      .limit(12)
+      .then(({ data }) => {
+        const increased = (data || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+        setProductos(increased as any);
+        setLoaded(true);
+      });
+  }, []);
+
+  if (!loaded) return null;
+
+  const filtered = productos.filter((p) => {
+    const cat = (p as any).categorias;
+    if (!cat) return true;
+    return filtrarCategorias([cat]).length > 0;
+  }).slice(0, 8);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <section className="py-12 bg-orange-50/40 border-t border-orange-100">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <TrendingUp className="w-6 h-6 text-orange-500" />
+              Aumentos Recientes
+            </h2>
+            <div className="w-16 h-1 bg-orange-400 rounded-full mt-2" />
+          </div>
+          <Link
+            href="/aumentos-recientes"
+            className="text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors"
+          >
+            Ver todos →
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {filtered.map((prod) => {
+            const pa = Number((prod as any).precio_anterior);
+            const diff = prod.precio - pa;
+            const pct = Math.round((diff / pa) * 100);
+            return (
+              <Link
+                key={prod.id}
+                href={`/productos/${productSlug(prod.nombre, prod.id)}`}
+                className="group rounded-2xl border border-orange-100 bg-white hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden flex flex-col"
+              >
+                <div className="relative aspect-square bg-gray-50 overflow-hidden">
+                  {prod.imagen_url ? (
+                    <Image
+                      src={prod.imagen_url}
+                      alt={prod.nombre}
+                      fill
+                      loading="lazy"
+                      className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Package className="w-10 h-10 text-gray-200" />
+                    </div>
+                  )}
+                  <span className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                    <TrendingUp className="w-2.5 h-2.5" /> +{pct}%
+                  </span>
+                </div>
+                <div className="p-3 flex flex-col gap-1 flex-1">
+                  {(prod as any).categorias?.nombre && (
+                    <span className="text-[10px] text-orange-500 font-medium">{(prod as any).categorias.nombre}</span>
+                  )}
+                  <p className="text-xs font-medium text-gray-800 line-clamp-2 min-h-[2rem]">{prod.nombre}</p>
+                  <div className="mt-auto pt-2">
+                    <p className="text-base font-bold text-gray-900">{formatCurrency(prod.precio)}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="text-[11px] text-gray-400 line-through">{formatCurrency(pa)}</span>
+                      <span className="text-[11px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-semibold">
+                        ↑ {formatCurrency(diff)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="text-center mt-8">
+          <Link
+            href="/aumentos-recientes"
+            className="inline-block border-2 border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white rounded-full px-8 py-3 font-semibold transition-all duration-200 active:scale-95"
+          >
+            Ver todos los aumentos recientes
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BannerPromoBlock({ config }: { config: Record<string, any> }) {
   const colorFondo = config.color_fondo || "hsl(var(--primary))";
 
@@ -940,6 +1055,7 @@ export default function TiendaPage({
   return (
     <div className="min-h-screen bg-white">
       {bloques.map((bloque) => renderBlock(bloque))}
+      <AumentosRecientesBlock />
     </div>
   );
 }
