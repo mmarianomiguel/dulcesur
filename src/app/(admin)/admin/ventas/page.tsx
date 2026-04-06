@@ -292,13 +292,14 @@ export default function VentasPage() {
   // ---------- data fetch ----------
   // Light refresh: only products + presentaciones (for tab focus)
   const refreshProducts = useCallback(async () => {
-    const [{ data: prods }, { data: presData }] = await Promise.all([
+    const [{ data: prods }, { data: presData }, { data: presData2 }] = await Promise.all([
       supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
-      supabase.from("presentaciones").select("*").limit(5000),
+      supabase.from("presentaciones").select("*").range(0, 999),
+      supabase.from("presentaciones").select("*").range(1000, 1999),
     ]);
     setProducts(prods || []);
     const map: Record<string, Presentacion[]> = {};
-    for (const raw of presData || []) {
+    for (const raw of [...(presData || []), ...(presData2 || [])]) {
       const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
       if (!map[pr.producto_id]) map[pr.producto_id] = [];
       map[pr.producto_id].push(pr);
@@ -309,7 +310,7 @@ export default function VentasPage() {
   const fetchData = useCallback(async () => {
     // Single batch: all data in one Promise.all
     const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData },
-           { data: allComboItems }, { data: descuentosData }, { data: presData },
+           { data: allComboItems }, { data: descuentosData }, { data: presData }, { data: presData2 },
            { data: empData }, { data: tcData }] = await Promise.all([
       supabase.from("productos").select("*").eq("activo", true).order("nombre").limit(10000),
       supabase.from("clientes").select("*").eq("activo", true).order("nombre"),
@@ -318,7 +319,8 @@ export default function VentasPage() {
       supabase.from("zonas_entrega").select("id, nombre, dias").order("nombre"),
       supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(id, nombre, stock, costo)"),
       supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", todayARG()),
-      supabase.from("presentaciones").select("*").limit(5000),
+      supabase.from("presentaciones").select("*").range(0, 999),
+      supabase.from("presentaciones").select("*").range(1000, 1999),
       supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva, receipt_config").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
     ]);
@@ -346,7 +348,7 @@ export default function VentasPage() {
     setActiveDiscounts((descuentosData || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= todayARG()));
 
     const map: Record<string, Presentacion[]> = {};
-    for (const raw of presData || []) {
+    for (const raw of [...(presData || []), ...(presData2 || [])]) {
       const pr = { ...raw, codigo: raw.sku || "", costo: raw.costo || 0 } as Presentacion;
       if (!map[pr.producto_id]) map[pr.producto_id] = [];
       map[pr.producto_id].push(pr);
