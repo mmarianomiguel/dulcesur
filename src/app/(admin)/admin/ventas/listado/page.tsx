@@ -2588,6 +2588,7 @@ export default function ListadoVentasPage() {
 
                 {/* Registrar cobro — any order with pending amount */}
                 {!isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
+                  const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
                   const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
                   const pendiente = Math.round((computedTotal - pagado) * 100) / 100;
                   if (pendiente < 1) return null;
@@ -2601,8 +2602,8 @@ export default function ListadoVentasPage() {
                       clienteId={clienteId || ""}
                       clienteNombre={poSelectedPedido.nombre_cliente || ""}
                       clienteSaldo={clienteSaldo}
-                      montoVenta={computedTotal}
-                      subtotalItems={itemsSubtotal}
+                      montoVenta={pendiente}
+                      subtotalItems={Math.max(0, itemsSubtotal - ncTotal)}
                       costoEnvio={poSelectedPedido.costo_envio || 0}
                       recargoTransferencia={recargoTransferencia}
                       cuentasBancarias={cuentasBancarias}
