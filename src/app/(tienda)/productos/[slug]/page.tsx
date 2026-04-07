@@ -170,46 +170,59 @@ export default function ProductoDetallePage() {
     async function fetchData() {
       setLoading(true);
 
-      // Resolve tienda cliente_id for client-specific discounts
-      try {
-        const raw = localStorage.getItem("cliente_auth");
-        if (raw) {
-          const auth = JSON.parse(raw);
-          if (auth?.id) {
-            const { data: authData } = await supabase.from("clientes_auth").select("cliente_id").eq("id", auth.id).single();
-            if (authData?.cliente_id) setTiendaClienteId(authData.cliente_id);
+      // Resolve auth + slug + discounts all in parallel
+      const today = new Date().toISOString().split("T")[0];
+
+      // Auth resolution (non-blocking)
+      let clienteIdResolved: string | null = null;
+      const authPromise = (async () => {
+        try {
+          const raw = localStorage.getItem("cliente_auth");
+          if (raw) {
+            const auth = JSON.parse(raw);
+            if (auth?.id) {
+              const { data: authData } = await supabase.from("clientes_auth").select("cliente_id").eq("id", auth.id).single();
+              if (authData?.cliente_id) {
+                clienteIdResolved = authData.cliente_id;
+                setTiendaClienteId(authData.cliente_id);
+              }
+            }
+          }
+        } catch { /* no auth */ }
+      })();
+
+      // Slug resolution
+      let productId = id;
+      const slugPromise = (async () => {
+        if (!productId) {
+          const parts = slug.split("-");
+          const shortId = parts[parts.length - 1];
+          if (/^[0-9a-f]{8}$/i.test(shortId)) {
+            const lower = `${shortId}-0000-0000-0000-000000000000`;
+            const upper = `${shortId}-ffff-ffff-ffff-ffffffffffff`;
+            const { data } = await supabase.from("productos").select("id").gte("id", lower).lte("id", upper).limit(1).single();
+            productId = data?.id || slug;
+          } else {
+            productId = slug;
           }
         }
-      } catch { /* no auth */ }
+      })();
 
-      // Round 1: Resolve slug (if needed) + fetch product + discounts — all in parallel
-      let productId = id;
-      if (!productId) {
-        // Slug-based URL — resolve short ID to UUID
-        const parts = slug.split("-");
-        const shortId = parts[parts.length - 1];
-        if (/^[0-9a-f]{8}$/i.test(shortId)) {
-          const lower = `${shortId}-0000-0000-0000-000000000000`;
-          const upper = `${shortId}-ffff-ffff-ffff-ffffffffffff`;
-          const { data } = await supabase.from("productos").select("id").gte("id", lower).lte("id", upper).limit(1).single();
-          productId = data?.id || slug;
-        } else {
-          productId = slug;
-        }
-      }
+      // Discounts (independent, start immediately)
+      const discountsPromise = supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today);
 
-      const today = new Date().toISOString().split("T")[0];
-      const [{ data: prod }, { data: discountsRaw }] = await Promise.all([
-        supabase.from("productos").select("id, nombre, descripcion_detallada, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", productId).single(),
-        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
-      ]);
+      // Wait for slug + discounts (auth can finish later)
+      const [, { data: discountsRaw }] = await Promise.all([slugPromise, discountsPromise]);
       setActiveDiscounts((discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
+
+      // Now fetch product (needs resolved productId)
+      const { data: prod } = await supabase.from("productos").select("id, nombre, descripcion_detallada, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", productId).single();
 
       if (prod) {
         const MAX_RELATED = 8;
         const relSelect = "id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)";
 
-        // Fire related products queries immediately (non-blocking — don't await them yet)
+        // Fire related products + essential data + auth all in parallel
         const relatedPromise = Promise.all([
           prod.marca_id
             ? supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("marca_id", prod.marca_id).eq("activo", true).eq("visibilidad", "visible").gt("stock", 0).neq("id", productId).limit(MAX_RELATED)
@@ -220,7 +233,7 @@ export default function ProductoDetallePage() {
           supabase.from("productos").select(relSelect).eq("categoria_id", prod.categoria_id).eq("activo", true).eq("visibilidad", "visible").gt("stock", 0).neq("id", productId).limit(MAX_RELATED),
         ]);
 
-        // Round 2: only essential data needed to display the product
+        // Essential data + auth wait — all in parallel
         const [{ data: cat }, { data: pres }, comboResult] = await Promise.all([
           supabase.from("categorias").select("restringida").eq("id", prod.categoria_id).single(),
           supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku").eq("producto_id", productId).order("cantidad"),
@@ -229,21 +242,17 @@ export default function ProductoDetallePage() {
             : Promise.resolve({ data: null }),
         ]);
 
-        // Check restricted category access
+        // Ensure auth is resolved before restricted check
+        await authPromise;
+
+        // Check restricted category access (reuse already-resolved clienteId)
         if (cat?.restringida) {
-          const raw = localStorage.getItem("cliente_auth");
           let hasAccess = false;
-          if (raw) {
+          if (clienteIdResolved) {
             try {
-              const auth = JSON.parse(raw);
-              if (auth?.id) {
-                const { data: authData } = await supabase.from("clientes_auth").select("cliente_id").eq("id", auth.id).single();
-                if (authData?.cliente_id) {
-                  const { data: cliente } = await supabase.from("clientes").select("categorias_permitidas").eq("id", authData.cliente_id).single();
-                  hasAccess = (cliente?.categorias_permitidas || []).includes(prod.categoria_id);
-                }
-              }
-            } catch { /* invalid auth */ }
+              const { data: cliente } = await supabase.from("clientes").select("categorias_permitidas").eq("id", clienteIdResolved).single();
+              hasAccess = (cliente?.categorias_permitidas || []).includes(prod.categoria_id);
+            } catch { /* error */ }
           }
           if (!hasAccess) {
             setRestricted(true);
