@@ -131,7 +131,7 @@ export default function PedidosPage() {
           .eq("cliente_id", clienteId)
           .not("tipo_comprobante", "ilike", "Nota de Crédito%")
           .not("tipo_comprobante", "ilike", "Nota de Débito%")
-          .order("fecha", { ascending: false });
+          .order("fecha", { ascending: false }) as unknown as Promise<any>;
       }
 
       const [{ data }, { data: ventasData }] = await Promise.all([pedidosPromise, ventasPromise]);
@@ -260,6 +260,26 @@ export default function PedidosPage() {
       // Client saldo
       let clienteSaldoReal = Math.max(0, (cliData as any)?.saldo || 0);
       setClienteSaldo(clienteSaldoReal);
+
+      // Reconcile saldoMap against client's actual saldo (source of truth).
+      // monto_pagado on ventas can be stale; client saldo is always up to date.
+      const sumPending = Object.values(saldoMap).reduce((s, v) => s + v, 0);
+      if (clienteSaldoReal <= 0) {
+        // Client owes nothing — clear all per-venta debts
+        for (const k of Object.keys(saldoMap)) saldoMap[k] = 0;
+      } else if (sumPending > clienteSaldoReal + 0.01) {
+        // FIFO-reduce from oldest until total pending matches actual saldo
+        const sorted = allVentas
+          .filter((v: any) => (saldoMap[v.id] || 0) > 0)
+          .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        let excess = Math.round((sumPending - clienteSaldoReal) * 100) / 100;
+        for (const v of sorted) {
+          if (excess <= 0.01) break;
+          const reduce = Math.min(excess, saldoMap[v.id] || 0);
+          saldoMap[v.id] = Math.round(((saldoMap[v.id] || 0) - reduce) * 100) / 100;
+          excess = Math.round((excess - reduce) * 100) / 100;
+        }
+      }
 
       // Build payment details for ventas that had CC debt
       for (const ventaId of ventaIds) {
