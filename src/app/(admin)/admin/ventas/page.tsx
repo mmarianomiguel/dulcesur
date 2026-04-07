@@ -1901,10 +1901,17 @@ export default function VentasPage() {
               referencia_tipo: "cobro_saldo",
             });
             // Atomic saldo update via RPC (negative = reduce debt from cobro)
-            const { data: newSaldoAfterCobro } = await supabase.rpc("atomic_update_client_saldo", {
+            const { data: newSaldoAfterCobro, error: saldoCobErr } = await supabase.rpc("atomic_update_client_saldo", {
               p_client_id: clientId,
               p_change: -saldoPendiente,
             });
+            let finalSaldoAfterCobro = newSaldoAfterCobro;
+            if (saldoCobErr) {
+              // Fallback: direct update if RPC fails
+              const { data: currCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+              finalSaldoAfterCobro = Math.max(0, Math.round(((currCli?.saldo ?? 0) - saldoPendiente) * 100) / 100);
+              await supabase.from("clientes").update({ saldo: finalSaldoAfterCobro }).eq("id", clientId);
+            }
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
@@ -1912,7 +1919,7 @@ export default function VentasPage() {
               descripcion: `Cobro saldo anterior (${formaPago})`,
               debe: 0,
               haber: saldoPendiente,
-              saldo: newSaldoAfterCobro,
+              saldo: finalSaldoAfterCobro,
               forma_pago: formaPago,
               venta_id: venta.id,
             });
@@ -1934,7 +1941,7 @@ export default function VentasPage() {
               remainingCobro = Math.round((remainingCobro - aplicar) * 100) / 100;
               await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + aplicar }).eq("id", pv.id);
             }
-            if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: newSaldoAfterCobro } : c));
+            if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: finalSaldoAfterCobro } : c));
           }
         }
 

@@ -728,8 +728,11 @@ export default function ClientesPage() {
       .select("haber, venta_id, comprobante")
       .eq("cliente_id", clienteId).gt("haber", 0);
     for (const cc of ccHabers || []) {
-      if (cc.venta_id && ventasConCaja.has(cc.venta_id)) continue;
-      if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) continue;
+      // Cobro saldo entries (from POS) have caja counterparts with referencia_tipo="cobro_saldo"
+      // which are NOT in cajaByVenta, so they must NOT be deduped here.
+      // "Cobro deuda" (from clientes page) uses referencia_tipo="venta" in caja, so dedup IS correct for those.
+      const isCobrosaldo = cc.comprobante?.startsWith("Cobro saldo");
+      if (!isCobrosaldo && cc.venta_id && ventasConCaja.has(cc.venta_id)) continue;
       totalHaber += cc.haber;
     }
 
