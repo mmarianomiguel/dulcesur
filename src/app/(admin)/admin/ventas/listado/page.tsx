@@ -2596,6 +2596,14 @@ export default function ListadoVentasPage() {
                   if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
                   const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
 
+                  // Adjust Mixto defaults: NC deducts from efectivo first, remainder from transferencia
+                  const origEfectivo = (poSelectedPedido as any).monto_efectivo || 0;
+                  const origTransferencia = (poSelectedPedido as any).monto_transferencia || 0;
+                  const ncDeduccionEfectivo = Math.min(ncTotal, origEfectivo);
+                  const ncResto = ncTotal - ncDeduccionEfectivo;
+                  const adjEfectivo = Math.max(0, origEfectivo - ncDeduccionEfectivo);
+                  const adjTransferencia = Math.max(0, origTransferencia - ncResto);
+
                   return (
                     <CobroVentaSection
                       ventaId={(poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id || ""}
@@ -2609,8 +2617,8 @@ export default function ListadoVentasPage() {
                       cuentasBancarias={cuentasBancarias}
                       isEnvio={poSelectedPedido.metodo_entrega === "envio"}
                       defaultMetodo={(poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago}
-                      defaultEfectivo={(poSelectedPedido as any).monto_efectivo}
-                      defaultTransferencia={(poSelectedPedido as any).monto_transferencia}
+                      defaultEfectivo={ncTotal > 0 ? adjEfectivo : origEfectivo}
+                      defaultTransferencia={ncTotal > 0 ? adjTransferencia : origTransferencia}
                       defaultCuentaAlias={(poSelectedPedido as any).cuenta_transferencia_alias}
                       onConfirmar={async (result: CobroVentaResult) => {
                         const hoy = todayARG();
