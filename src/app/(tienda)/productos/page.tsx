@@ -18,7 +18,7 @@ export default async function ProductosServerPage() {
     supabase.from("marcas").select("id, nombre"),
     supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
     supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
-    supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible"),
+    supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible").limit(10000),
     // First page of products sorted A-Z (default sort)
     supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" }).eq("activo", true).eq("visibilidad", "visible").order("nombre", { ascending: true }).range(0, PER_PAGE - 1),
     // Presentaciones for first page will be fetched after we have product IDs

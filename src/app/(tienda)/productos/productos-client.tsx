@@ -241,7 +241,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
         supabase.from("marcas").select("id, nombre"),
         supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
         supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
-        supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible"),
+        supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible").limit(10000),
       ]);
 
       const dias = configRes.data?.dias_ocultar_sin_stock ?? 7;
