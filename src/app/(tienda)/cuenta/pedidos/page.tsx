@@ -116,114 +116,129 @@ export default function PedidosPage() {
       }
       const clienteId = authRec?.cliente_id;
 
-      // Fetch pedidos tienda
-      const { data } = await supabase
+      // Phase 1: Fetch pedidos + ventas in parallel
+      const pedidosPromise = supabase
         .from("pedidos_tienda")
         .select("id, numero, created_at, estado, total, metodo_pago, monto_efectivo, monto_transferencia, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, unidades_por_presentacion, producto_id)")
         .eq("cliente_auth_id", id)
         .order("created_at", { ascending: false });
 
-      // Fetch all ventas for this client (includes POS + web)
-      let allVentas: any[] = [];
+      let ventasPromise: Promise<any> = Promise.resolve({ data: [] });
       if (clienteId) {
-        const { data: ventas } = await supabase
+        ventasPromise = supabase
           .from("ventas")
           .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, monto_pagado, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
           .eq("cliente_id", clienteId)
           .not("tipo_comprobante", "ilike", "Nota de Crédito%")
           .not("tipo_comprobante", "ilike", "Nota de Débito%")
           .order("fecha", { ascending: false });
-        allVentas = ventas || [];
       }
 
-      // For each venta, find associated NCs
+      const [{ data }, { data: ventasData }] = await Promise.all([pedidosPromise, ventasPromise]);
+      const allVentas: any[] = ventasData || [];
+
+      // Phase 2: All venta-dependent queries in parallel
       const ventaIds = allVentas.map((v: any) => v.id);
+
+      const ncPromise = ventaIds.length > 0
+        ? supabase.from("ventas")
+            .select("id, numero, fecha, total, remito_origen_id, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
+            .in("remito_origen_id", ventaIds)
+            .ilike("tipo_comprobante", "Nota de Crédito%")
+        : Promise.resolve({ data: [] });
+
+      const cajaPromise = ventaIds.length > 0
+        ? supabase.from("caja_movimientos")
+            .select("referencia_id, metodo_pago, monto, cuenta_bancaria, created_at, descripcion")
+            .in("referencia_id", ventaIds)
+            .eq("referencia_tipo", "venta")
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [] });
+
+      const ccPromise = ventaIds.length > 0
+        ? supabase.from("cuenta_corriente")
+            .select("venta_id, debe, haber, forma_pago, created_at")
+            .in("venta_id", ventaIds)
+        : Promise.resolve({ data: [] });
+
+      const cobroPromise = ventaIds.length > 0
+        ? supabase.from("cobro_items")
+            .select("venta_id, monto_aplicado, cobros(forma_pago, fecha)")
+            .in("venta_id", ventaIds)
+        : Promise.resolve({ data: [] });
+
+      const ccHabersPromise = clienteId
+        ? supabase.from("cuenta_corriente")
+            .select("haber, forma_pago, created_at, venta_id")
+            .eq("cliente_id", clienteId)
+            .gt("haber", 0)
+            .eq("debe", 0)
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [] });
+
+      const saldoPromise = clienteId
+        ? supabase.from("clientes").select("saldo").eq("id", clienteId).single()
+        : Promise.resolve({ data: { saldo: 0 } });
+
+      const [
+        { data: ncsData },
+        { data: movsData },
+        { data: ccEntriesData },
+        { data: cobroItemsData },
+        { data: allHabersData },
+        { data: cliData },
+      ] = await Promise.all([ncPromise, cajaPromise, ccPromise, cobroPromise, ccHabersPromise, saldoPromise]);
+
+      // Process NCs
       let ncMap: Record<string, NotaCredito[]> = {};
-      if (ventaIds.length > 0) {
-        const { data: ncs } = await supabase
-          .from("ventas")
-          .select("id, numero, fecha, total, remito_origen_id, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
-          .in("remito_origen_id", ventaIds)
-          .ilike("tipo_comprobante", "Nota de Crédito%");
-        for (const nc of ncs || []) {
-          const key = (nc as any).remito_origen_id;
-          if (!ncMap[key]) ncMap[key] = [];
-          ncMap[key].push({
-            id: nc.id,
-            numero: nc.numero,
-            fecha: nc.fecha,
-            total: nc.total,
-            items: (nc as any).venta_items || [],
-          });
-        }
+      for (const nc of ncsData || []) {
+        const key = (nc as any).remito_origen_id;
+        if (!ncMap[key]) ncMap[key] = [];
+        ncMap[key].push({
+          id: nc.id, numero: nc.numero, fecha: nc.fecha, total: nc.total,
+          items: (nc as any).venta_items || [],
+        });
       }
 
-      // Fetch payment breakdown from caja_movimientos
+      // Process caja_movimientos
       let pagosMap: Record<string, PagoDetalle[]> = {};
-      if (ventaIds.length > 0) {
-        const { data: movs } = await supabase
-          .from("caja_movimientos")
-          .select("referencia_id, metodo_pago, monto, cuenta_bancaria, created_at, descripcion")
-          .in("referencia_id", ventaIds)
-          .eq("referencia_tipo", "venta")
-          .order("created_at", { ascending: true });
-        for (const m of movs || []) {
-          const key = m.referencia_id;
-          if (!pagosMap[key]) pagosMap[key] = [];
-          pagosMap[key].push({
-            metodo_pago: m.metodo_pago,
-            monto: m.monto,
-            cuenta_bancaria: m.cuenta_bancaria || undefined,
-            fecha: m.created_at || undefined,
-            descripcion: m.descripcion || undefined,
-          });
-        }
+      for (const m of movsData || []) {
+        const key = m.referencia_id;
+        if (!pagosMap[key]) pagosMap[key] = [];
+        pagosMap[key].push({
+          metodo_pago: m.metodo_pago, monto: m.monto,
+          cuenta_bancaria: m.cuenta_bancaria || undefined,
+          fecha: m.created_at || undefined, descripcion: m.descripcion || undefined,
+        });
       }
 
-      // Query CC entries for these ventas to detect which ones had CC debt
-      // (forma_pago can be changed by cobrar, so we use cuenta_corriente as source of truth)
+      // Process CC entries
       const ccDebeMap: Record<string, number> = {};
       let ccHabersByVenta: Record<string, { haber: number; forma_pago: string; created_at: string }[]> = {};
-      if (ventaIds.length > 0) {
-        const { data: ccEntries } = await supabase
-          .from("cuenta_corriente")
-          .select("venta_id, debe, haber, forma_pago, created_at")
-          .in("venta_id", ventaIds);
-        for (const cc of ccEntries || []) {
-          if (!cc.venta_id) continue;
-          if ((cc.debe || 0) > 0) {
-            ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + (cc.debe || 0);
-          }
-          if ((cc.haber || 0) > 0 && (cc.debe || 0) === 0) {
-            if (!ccHabersByVenta[cc.venta_id]) ccHabersByVenta[cc.venta_id] = [];
-            ccHabersByVenta[cc.venta_id].push({
-              haber: cc.haber,
-              forma_pago: cc.forma_pago || "Pago",
-              created_at: cc.created_at,
-            });
-          }
+      for (const cc of ccEntriesData || []) {
+        if (!cc.venta_id) continue;
+        if ((cc.debe || 0) > 0) {
+          ccDebeMap[cc.venta_id] = (ccDebeMap[cc.venta_id] || 0) + (cc.debe || 0);
         }
-      }
-
-      // Also detect CC ventas by cobro_items (cobros registered against a venta)
-      let cobroItemsByVenta: Record<string, { monto: number; forma_pago: string; fecha: string }[]> = {};
-      if (ventaIds.length > 0) {
-        const { data: cobroItems } = await supabase
-          .from("cobro_items")
-          .select("venta_id, monto_aplicado, cobros(forma_pago, fecha)")
-          .in("venta_id", ventaIds);
-        for (const ci of cobroItems || []) {
-          if (!cobroItemsByVenta[ci.venta_id]) cobroItemsByVenta[ci.venta_id] = [];
-          const cobro = (ci as any).cobros;
-          cobroItemsByVenta[ci.venta_id].push({
-            monto: ci.monto_aplicado,
-            forma_pago: cobro?.forma_pago || "Cobro",
-            fecha: cobro?.fecha || "",
+        if ((cc.haber || 0) > 0 && (cc.debe || 0) === 0) {
+          if (!ccHabersByVenta[cc.venta_id]) ccHabersByVenta[cc.venta_id] = [];
+          ccHabersByVenta[cc.venta_id].push({
+            haber: cc.haber, forma_pago: cc.forma_pago || "Pago", created_at: cc.created_at,
           });
         }
       }
 
-      // Determine which ventas had CC debt: CC entries in cuenta_corriente OR cobro_items exist
+      // Process cobro_items
+      let cobroItemsByVenta: Record<string, { monto: number; forma_pago: string; fecha: string }[]> = {};
+      for (const ci of cobroItemsData || []) {
+        if (!cobroItemsByVenta[ci.venta_id]) cobroItemsByVenta[ci.venta_id] = [];
+        const cobro = (ci as any).cobros;
+        cobroItemsByVenta[ci.venta_id].push({
+          monto: ci.monto_aplicado, forma_pago: cobro?.forma_pago || "Cobro", fecha: cobro?.fecha || "",
+        });
+      }
+
+      // Determine which ventas had CC debt
       const hadCCDebt: Record<string, boolean> = {};
       for (const ventaId of ventaIds) {
         if ((ccDebeMap[ventaId] || 0) > 0 || (cobroItemsByVenta[ventaId] || []).length > 0) {
@@ -231,39 +246,20 @@ export default function PedidosPage() {
         }
       }
 
-      // Build saldo map using total - monto_pagado for ventas that had CC debt
+      // Build saldo map
       const saldoMap: Record<string, number> = {};
       for (const v of allVentas) {
-        if (hadCCDebt[v.id]) {
-          saldoMap[v.id] = Math.max(0, v.total - (v.monto_pagado || 0));
-        } else {
-          saldoMap[v.id] = 0;
-        }
+        saldoMap[v.id] = hadCCDebt[v.id] ? Math.max(0, v.total - (v.monto_pagado || 0)) : 0;
       }
 
-      // For gap payments (cobro_saldo linked to different venta), fetch ALL client CC habers
-      let clientCCHabers: { haber: number; forma_pago: string; created_at: string; venta_id: string | null }[] = [];
-      if (clienteId) {
-        const { data: allHabers } = await supabase
-          .from("cuenta_corriente")
-          .select("haber, forma_pago, created_at, venta_id")
-          .eq("cliente_id", clienteId)
-          .gt("haber", 0)
-          .eq("debe", 0)
-          .order("created_at", { ascending: true });
-        // Keep habers not already attributed to a CC venta's ccHabersByVenta
-        clientCCHabers = (allHabers || []).filter((h: any) =>
-          !h.venta_id || !ventaIds.includes(h.venta_id) || !hadCCDebt[h.venta_id]
-        );
-      }
+      // Process client CC habers
+      let clientCCHabers = (allHabersData || []).filter((h: any) =>
+        !h.venta_id || !ventaIds.includes(h.venta_id) || !hadCCDebt[h.venta_id]
+      );
 
-      // Get client saldo
-      let clienteSaldoReal = 0;
-      if (clienteId) {
-        const { data: cli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
-        clienteSaldoReal = Math.max(0, cli?.saldo || 0);
-        setClienteSaldo(clienteSaldoReal);
-      }
+      // Client saldo
+      let clienteSaldoReal = Math.max(0, (cliData as any)?.saldo || 0);
+      setClienteSaldo(clienteSaldoReal);
 
       // Build payment details for ventas that had CC debt
       for (const ventaId of ventaIds) {
