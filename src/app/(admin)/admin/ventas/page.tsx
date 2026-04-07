@@ -1286,7 +1286,10 @@ export default function VentasPage() {
       setStockExceedDialog({ open: true, issues, adjustSet: new Set(issues.map((i) => i.item.id)) });
       return;
     }
-    if (formaPago === "Efectivo") {
+    if (cobrarEnEntrega) {
+      // Skip cash dialog — payment will be collected by delivery person
+      handleCerrarComprobante();
+    } else if (formaPago === "Efectivo") {
       setCashReceived("");
       setCashDialogOpen(true);
     } else {
