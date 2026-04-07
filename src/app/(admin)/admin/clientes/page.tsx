@@ -680,60 +680,81 @@ export default function ClientesPage() {
     await supabase.from("cuenta_corriente").delete()
       .eq("cliente_id", clienteId).eq("comprobante", "Ajuste recálculo");
 
-    // Replicate display logic: ventas + caja + CC with dedup
+    // Use EXACT same algorithm as fetchMovimientos (libro diario entries)
     const { data: allVentas } = await supabase.from("ventas")
-      .select("id, total, monto_pagado, tipo_comprobante, forma_pago")
+      .select("id, numero, total, monto_pagado, tipo_comprobante, forma_pago")
       .eq("cliente_id", clienteId).neq("estado", "anulada");
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
-    // PENDIENTE = sum of non-NC venta totals
-    let totalDebe = 0;
-    const ventaIds: string[] = [];
-    for (const v of allVentas) {
-      if (v.tipo_comprobante?.includes("Nota de Crédito")) continue;
-      totalDebe += v.total;
-      ventaIds.push(v.id);
-    }
-
-    // COBRADO part 1: NC totals
-    let totalHaber = 0;
-    for (const v of allVentas) {
-      if (v.tipo_comprobante?.includes("Nota de Crédito")) totalHaber += v.total;
-    }
-
-    // COBRADO part 2: caja payments linked to ventas
-    const cajaByVenta = new Map<string, number>();
-    for (let i = 0; i < ventaIds.length; i += 100) {
-      const batch = ventaIds.slice(i, i + 100);
-      const { data: cajaData } = await supabase.from("caja_movimientos")
-        .select("referencia_id, monto").in("referencia_id", batch)
-        .eq("referencia_tipo", "venta").eq("tipo", "ingreso");
-      for (const c of cajaData || []) {
-        if (c.referencia_id) cajaByVenta.set(c.referencia_id, (cajaByVenta.get(c.referencia_id) || 0) + c.monto);
-      }
-    }
-    for (const m of cajaByVenta.values()) totalHaber += m;
-
-    // COBRADO part 3: monto_pagado fallback for old ventas without caja entries
-    for (const v of allVentas) {
-      if (v.tipo_comprobante?.includes("Nota de Crédito")) continue;
-      if (v.tipo_comprobante?.includes("Nota de Débito")) continue;
-      if (!cajaByVenta.has(v.id) && v.forma_pago !== "Cuenta Corriente" && v.forma_pago !== "Pendiente") {
-        totalHaber += v.monto_pagado || 0;
-      }
-    }
-
-    // COBRADO part 4: CC haber entries not already covered by caja (dedup)
-    const ventasConCaja = new Set(cajaByVenta.keys());
-    const { data: ccHabers } = await supabase.from("cuenta_corriente")
-      .select("haber, venta_id, comprobante")
+    // Fetch CC haber entries
+    const { data: ccAllData } = await supabase.from("cuenta_corriente")
+      .select("id, haber, venta_id, comprobante")
       .eq("cliente_id", clienteId).gt("haber", 0);
-    for (const cc of ccHabers || []) {
-      // Cobro saldo entries (from POS) have caja counterparts with referencia_tipo="cobro_saldo"
-      // which are NOT in cajaByVenta, so they must NOT be deduped here.
-      // "Cobro deuda" (from clientes page) uses referencia_tipo="venta" in caja, so dedup IS correct for those.
-      const isCobrosaldo = cc.comprobante?.startsWith("Cobro saldo");
-      if (!isCobrosaldo && cc.venta_id && ventasConCaja.has(cc.venta_id)) continue;
+
+    // Fetch caja_movimientos for all ventas
+    const allVentaIds = allVentas.filter(v => !v.tipo_comprobante?.includes("Nota de Crédito")).map(v => v.id);
+    const cajaByVenta = new Map<string, { metodo_pago: string; monto: number }[]>();
+    for (let i = 0; i < allVentaIds.length; i += 100) {
+      const batch = allVentaIds.slice(i, i + 100);
+      const { data: cajaData } = await supabase.from("caja_movimientos")
+        .select("referencia_id, metodo_pago, monto").in("referencia_id", batch)
+        .eq("referencia_tipo", "venta").eq("tipo", "ingreso");
+      for (const cm of cajaData || []) {
+        if (!cm.referencia_id) continue;
+        const arr = cajaByVenta.get(cm.referencia_id) || [];
+        arr.push({ metodo_pago: cm.metodo_pago, monto: cm.monto });
+        cajaByVenta.set(cm.referencia_id, arr);
+      }
+    }
+
+    // Build entries exactly like fetchMovimientos
+    let totalDebe = 0;
+    let totalHaber = 0;
+
+    for (const v of allVentas) {
+      const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
+      const isND = v.tipo_comprobante?.includes("Nota de Débito");
+      const fp = v.forma_pago || "";
+
+      if (isNC) {
+        totalHaber += v.total;
+      } else {
+        totalDebe += v.total;
+
+        if (!isND) {
+          const cajaEntries = cajaByVenta.get(v.id);
+          if (cajaEntries && cajaEntries.length > 0) {
+            const cajaTotal = cajaEntries.reduce((s, e) => s + e.monto, 0);
+            // Same as fetchMovimientos: cap + excess = cajaTotal
+            totalHaber += cajaTotal;
+          } else if (fp !== "Cuenta Corriente" && fp !== "Pendiente") {
+            totalHaber += v.monto_pagado || 0;
+          }
+        }
+      }
+    }
+
+    // CC haber entries — same dedup as fetchMovimientos
+    const ventasWithCaja = new Set(
+      [...cajaByVenta.keys()].filter((vid) => cajaByVenta.get(vid)!.length > 0)
+    );
+
+    for (const cc of ccAllData || []) {
+      // Skip if venta_id already has caja desglose (same as fetchMovimientos line 616)
+      if (cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
+
+      // Skip orphaned "Cobro saldo - Venta #XXX" entries (same as fetchMovimientos)
+      if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) {
+        const numMatch = cc.comprobante.match(/#(\d+-\d+)/);
+        if (numMatch) {
+          const linkedVenta = allVentas.find((v: any) => v.numero === numMatch[1]);
+          if (linkedVenta && cajaByVenta.has(linkedVenta.id)) {
+            const ct = (cajaByVenta.get(linkedVenta.id) || []).reduce((s: number, e: any) => s + e.monto, 0);
+            if (ct > linkedVenta.total + 0.01) continue;
+          }
+        }
+      }
+
       totalHaber += cc.haber;
     }
 
