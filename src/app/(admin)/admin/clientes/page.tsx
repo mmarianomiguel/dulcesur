@@ -612,19 +612,22 @@ export default function ClientesPage() {
     );
 
     for (const cc of ccHaberData || []) {
-      // Skip if this CC haber references a venta that already has caja desglose
-      if (cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
+      // "Cobro saldo" entries have caja counterparts with referencia_tipo="cobro_saldo"
+      // which are NOT in cajaByVenta (only "venta" type is fetched), so they must NOT be skipped
+      const isCobrosaldo = cc.comprobante?.startsWith("Cobro saldo");
 
-      // Skip orphaned non-Mixto "Cobro saldo - Venta #XXX" entries (venta_id was corrupted to null)
-      // These are duplicates: the caja entries for that venta already include the saldo portion
-      // Do NOT skip Mixto "Cobro saldo #XXX" entries (legitimate payments for old CC debts)
+      // Skip non-cobrosaldo CC habers that reference a venta already covered by caja_movimientos
+      if (!isCobrosaldo && cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
+
+      // Skip orphaned "Cobro saldo - Venta #XXX" entries when the linked venta's caja
+      // already has excess (meaning the cobro saldo is already shown as caja excess)
       if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) {
         const numMatch = cc.comprobante.match(/#(\d+-\d+)/);
         if (numMatch) {
           const linkedVenta = (ventas || []).find((v: any) => v.numero === numMatch[1]);
           if (linkedVenta && cajaByVenta.has(linkedVenta.id)) {
             const ct = (cajaByVenta.get(linkedVenta.id) || []).reduce((s: number, e: any) => s + e.monto, 0);
-            if (ct > linkedVenta.total + 0.01) continue; // caja has excess = cobro saldo already shown
+            if (ct > linkedVenta.total + 0.01) continue;
           }
         }
       }
@@ -740,10 +743,12 @@ export default function ClientesPage() {
     );
 
     for (const cc of ccAllData || []) {
-      // Skip if venta_id already has caja desglose (same as fetchMovimientos line 616)
-      if (cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
+      // "Cobro saldo" entries have caja counterparts with referencia_tipo="cobro_saldo"
+      // which are NOT in cajaByVenta, so they must NOT be skipped
+      const isCobrosaldo = cc.comprobante?.startsWith("Cobro saldo");
+      if (!isCobrosaldo && cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
 
-      // Skip orphaned "Cobro saldo - Venta #XXX" entries (same as fetchMovimientos)
+      // Skip orphaned "Cobro saldo - Venta #XXX" entries when linked venta has caja excess
       if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) {
         const numMatch = cc.comprobante.match(/#(\d+-\d+)/);
         if (numMatch) {
