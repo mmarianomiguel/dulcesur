@@ -1077,9 +1077,9 @@ export default function ListaPreciosPage() {
         const totalPages = { count: 1 };
         let globalRowIdx = 0;
 
-        // Column positions (right-aligned prices)
-        const colUnidad = rm - 52;
-        const colCaja = rm - 22;
+        // Column positions (right-aligned prices) — spread evenly across available width
+        const colUnidad = rm - 80;
+        const colCaja = rm - 40;
         const colFecha = rm - 2;
 
         const drawPageFooter = (pageNum: number) => {
