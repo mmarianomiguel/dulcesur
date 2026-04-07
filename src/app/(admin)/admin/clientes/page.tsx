@@ -652,7 +652,8 @@ export default function ClientesPage() {
 
     const totalDebe = ccRows.reduce((s: number, r) => s + r.debe, 0);
     const totalHaber = ccRows.reduce((s: number, r) => s + r.haber, 0);
-    setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: freshCli?.saldo ?? 0, saldoInicial: 0 });
+    const saldoCalculado = Math.round((totalDebe - totalHaber) * 100) / 100;
+    setMovCCTotals({ debe: totalDebe, haber: totalHaber, saldo: saldoCalculado, saldoInicial: 0 });
 
     // === Tab Cobros ===
     let cobrosQuery = supabase
