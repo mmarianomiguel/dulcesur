@@ -459,9 +459,9 @@ export default function CheckoutPage() {
     const hoyCheck = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
     const [stockRes, presRes, descRes] = await Promise.all([
-      supabase.from("productos").select("id, stock, nombre, es_combo, costo, precio").in("id", productIds),
+      supabase.from("productos").select("id, stock, nombre, es_combo, costo, precio, categoria_id, subcategoria_id, marca_id").in("id", productIds),
       supabase.from("presentaciones").select("producto_id, nombre, cantidad, costo, precio").in("producto_id", productIds),
-      supabase.from("descuentos").select("producto_id, porcentaje, presentacion").eq("activo", true).lte("fecha_inicio", hoyCheck),
+      supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", hoyCheck),
     ]);
 
     if (stockRes.error || presRes.error) {
@@ -477,10 +477,19 @@ export default function CheckoutPage() {
     const stockMap: Record<string, { stock: number; nombre: string }> = {};
     const costoMap: Record<string, number> = {};
     const prodPriceMap: Record<string, number> = {};
+    const prodMetaMap: Record<string, { categoria_id: string; subcategoria_id: string; marca_id: string; es_combo: boolean; precio: number }> = {};
     for (const p of stockData || []) {
       stockMap[p.id] = { stock: p.stock, nombre: p.nombre };
       costoMap[p.id] = p.costo || 0;
       prodPriceMap[p.id] = p.precio;
+      prodMetaMap[p.id] = { categoria_id: p.categoria_id, subcategoria_id: p.subcategoria_id, marca_id: p.marca_id, es_combo: !!p.es_combo, precio: p.precio };
+    }
+
+    // Resolve real cliente_id for discount matching
+    let realClienteId: string | null = null;
+    if (clienteId) {
+      const { data: authRec } = await supabase.from("clientes_auth").select("cliente_id").eq("id", clienteId).single();
+      if (authRec?.cliente_id) realClienteId = authRec.cliente_id;
     }
 
     // Build presentation cost + price maps from the single presentaciones query
@@ -556,12 +565,40 @@ export default function CheckoutPage() {
       const pres = item.presentacion || "Unidad";
       // Get correct base price from DB
       let correctPrice = presPriceMap[`${prodId}_${pres}`] ?? prodPriceMap[prodId] ?? item.precio;
-      // Apply active discount if exists
-      const disc = activeDescs.find((d: any) =>
-        d.producto_id === prodId && (!d.presentacion || d.presentacion === pres || d.presentacion === "todas")
-      );
-      if (disc) {
-        correctPrice = Math.round(correctPrice * (1 - disc.porcentaje / 100));
+      // Apply best active discount using full matching logic (same as POS)
+      const meta = prodMetaMap[prodId];
+      let bestDiscount = 0;
+      if (meta) {
+        for (const d of activeDescs) {
+          if (d.excluir_combos && meta.es_combo) continue;
+          if (d.productos_excluidos_ids?.length > 0 && d.productos_excluidos_ids.includes(prodId)) continue;
+          if (d.clientes_ids?.length > 0 && (!realClienteId || !d.clientes_ids.includes(realClienteId))) continue;
+          if (d.cantidad_minima && d.cantidad_minima > 0 && item.cantidad < d.cantidad_minima) continue;
+          if (d.presentacion === "unidad" && pres !== "Unidad") continue;
+          if (d.presentacion === "caja" && pres === "Unidad") continue;
+          let effectivePercent = Number(d.porcentaje);
+          if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && meta.precio > 0) {
+            effectivePercent = Math.max(0, Math.min(100, ((meta.precio - d.precio_fijo) / meta.precio) * 100));
+          }
+          if (d.aplica_a === "todos") {
+            bestDiscount = Math.max(bestDiscount, effectivePercent);
+          } else if (d.aplica_a === "categorias") {
+            const catIds: string[] = d.categorias_ids || [];
+            if (catIds.includes(meta.categoria_id) || catIds.includes(meta.subcategoria_id)) bestDiscount = Math.max(bestDiscount, effectivePercent);
+          } else if (d.aplica_a === "subcategorias") {
+            const subIds: string[] = d.subcategorias_ids || [];
+            if (meta.subcategoria_id && subIds.includes(meta.subcategoria_id)) bestDiscount = Math.max(bestDiscount, effectivePercent);
+          } else if (d.aplica_a === "productos") {
+            const prodIds: string[] = d.productos_ids || [];
+            if (prodIds.includes(prodId)) bestDiscount = Math.max(bestDiscount, effectivePercent);
+          } else if (d.aplica_a === "marcas") {
+            const mIds: string[] = d.marcas_ids || [];
+            if (meta.marca_id && mIds.includes(meta.marca_id)) bestDiscount = Math.max(bestDiscount, effectivePercent);
+          }
+        }
+      }
+      if (bestDiscount > 0) {
+        correctPrice = Math.round(correctPrice * (1 - bestDiscount / 100));
       }
       item.precio = correctPrice;
     }
