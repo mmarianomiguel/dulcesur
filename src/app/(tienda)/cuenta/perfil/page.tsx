@@ -62,65 +62,57 @@ export default function PerfilPage() {
     setClienteAuthId(id);
 
     const fetchProfile = async () => {
-      const { data, error: fetchErr } = await supabase
-        .from("clientes_auth")
-        .select("nombre, email, telefono, cliente_id")
-        .eq("id", id)
-        .single();
-      if (fetchErr || !data) {
-        // Client no longer exists — clear stale session
-        localStorage.removeItem("cliente_auth");
-        window.location.href = "/cuenta";
-        return;
-      }
-      if (data) {
-        setNombre(data.nombre);
-        setEmail(data.email);
-        // telefono will be overridden by clientes.telefono if available (more reliable)
-        if (data.cliente_id) {
-          setClienteId(data.cliente_id);
-          // Fetch client details
-          const { data: cliente } = await supabase
-            .from("clientes")
-            .select("tipo_documento, numero_documento, domicilio, provincia, localidad, codigo_postal, saldo, zona_entrega, dias_entrega, telefono")
-            .eq("id", data.cliente_id)
-            .single();
-          if (cliente) {
-            // Use clientes.telefono as primary (admin manages it), fallback to clientes_auth
-            setTelefono(cliente.telefono || data.telefono || "");
-            setTipoDocumento(cliente.tipo_documento || "");
-            setNumeroDocumento(cliente.numero_documento || "");
-            setDomicilio(cliente.domicilio || "");
-            setProvincia(cliente.provincia || "");
-            setLocalidad(cliente.localidad || "");
-            setCodigoPostal(cliente.codigo_postal || "");
-            setSaldo(cliente.saldo || 0);
-            setSaldoLoaded(true);
-            setDiasEntrega(cliente.dias_entrega || []);
-            // Fetch zone name if set
-            if (cliente.zona_entrega) {
-              const { data: zona } = await supabase.from("zonas_entrega").select("nombre").eq("id", cliente.zona_entrega).single();
-              if (zona) setZonaNombre(zona.nombre);
-            }
-          }
-        } else {
-          // No linked cliente — use clientes_auth.telefono
-          setTelefono(data.telefono || "");
-        }
-      }
-    };
-    fetchProfile();
+      // Fetch auth data, stats, and order count all in parallel
+      const [{ data, error: fetchErr }, { data: authData }, { count }] = await Promise.all([
+        supabase.from("clientes_auth").select("nombre, email, telefono, cliente_id").eq("id", id).single(),
+        supabase.from("clientes_auth").select("created_at").eq("id", id).single(),
+        supabase.from("pedidos_tienda").select("id", { count: "exact", head: true }).eq("cliente_auth_id", id),
+      ]);
 
-    // Fetch stats
-    Promise.resolve(supabase.from("clientes_auth").select("created_at").eq("id", id).single()).then(({ data: authData }) => {
+      // Stats
       if (authData?.created_at) {
         const d = new Date(authData.created_at);
         setMiembroDesde(d.toLocaleDateString("es-AR", { month: "long", year: "numeric" }));
       }
-    }).catch(() => {});
-    Promise.resolve(supabase.from("pedidos_tienda").select("id", { count: "exact", head: true }).eq("cliente_auth_id", id)).then(({ count }) => {
       if (count != null) setTotalPedidos(count);
-    }).catch(() => {});
+
+      if (fetchErr || !data) {
+        localStorage.removeItem("cliente_auth");
+        window.location.href = "/cuenta";
+        return;
+      }
+      setNombre(data.nombre);
+      setEmail(data.email);
+      if (data.cliente_id) {
+        setClienteId(data.cliente_id);
+        // Fetch client details + zones in parallel
+        const [{ data: cliente }, { data: zonas }] = await Promise.all([
+          supabase.from("clientes")
+            .select("tipo_documento, numero_documento, domicilio, provincia, localidad, codigo_postal, saldo, zona_entrega, dias_entrega, telefono")
+            .eq("id", data.cliente_id).single(),
+          supabase.from("zonas_entrega").select("id, nombre"),
+        ]);
+        if (cliente) {
+          setTelefono(cliente.telefono || data.telefono || "");
+          setTipoDocumento(cliente.tipo_documento || "");
+          setNumeroDocumento(cliente.numero_documento || "");
+          setDomicilio(cliente.domicilio || "");
+          setProvincia(cliente.provincia || "");
+          setLocalidad(cliente.localidad || "");
+          setCodigoPostal(cliente.codigo_postal || "");
+          setSaldo(cliente.saldo || 0);
+          setSaldoLoaded(true);
+          setDiasEntrega(cliente.dias_entrega || []);
+          if (cliente.zona_entrega && zonas) {
+            const zona = zonas.find((z: any) => z.id === cliente.zona_entrega);
+            if (zona) setZonaNombre(zona.nombre);
+          }
+        }
+      } else {
+        setTelefono(data.telefono || "");
+      }
+    };
+    fetchProfile();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {

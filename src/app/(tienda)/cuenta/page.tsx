@@ -58,43 +58,33 @@ export default function CuentaPage() {
   useEffect(() => {
     setMounted(true);
 
-    // Load logo from tienda_config
-    supabase.from("tienda_config").select("logo_url").limit(1).single().then(({ data }) => {
-      if (data?.logo_url) setLogoUrl(data.logo_url);
-    });
-
     const stored = localStorage.getItem("cliente_auth");
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Verify client still exists in DB (background check — UI already shows cached data)
-      supabase
-        .from("clientes_auth")
-        .select("id, nombre, email")
-        .eq("id", parsed.id)
-        .single()
-        .then(({ data: clienteDB, error: clienteErr }) => {
-          if (clienteErr || !clienteDB) {
-            // Client no longer exists — clear stale session
-            localStorage.removeItem("cliente_auth");
-            setCliente(null);
-            setCheckingAuth(false);
-            return;
-          }
-          // Update local data with DB values
-          const fresh = { id: clienteDB.id, nombre: clienteDB.nombre, email: clienteDB.email };
-          setCliente(fresh);
+      // Verify client, load logo, and count orders all in parallel
+      Promise.all([
+        supabase.from("tienda_config").select("logo_url").limit(1).single(),
+        supabase.from("clientes_auth").select("id, nombre, email").eq("id", parsed.id).single(),
+        supabase.from("pedidos_tienda").select("id", { count: "exact", head: true }).eq("cliente_auth_id", parsed.id),
+      ]).then(([{ data: logoData }, { data: clienteDB, error: clienteErr }, { count }]) => {
+        if (logoData?.logo_url) setLogoUrl(logoData.logo_url);
+        if (clienteErr || !clienteDB) {
+          localStorage.removeItem("cliente_auth");
+          setCliente(null);
           setCheckingAuth(false);
-          localStorage.setItem("cliente_auth", JSON.stringify(fresh));
-          // Fetch order count
-          supabase
-            .from("pedidos_tienda")
-            .select("id", { count: "exact", head: true })
-            .eq("cliente_auth_id", parsed.id)
-            .then(({ count }) => {
-              if (count !== null) setOrderCount(count);
-            });
-        });
+          return;
+        }
+        const fresh = { id: clienteDB.id, nombre: clienteDB.nombre, email: clienteDB.email };
+        setCliente(fresh);
+        setCheckingAuth(false);
+        localStorage.setItem("cliente_auth", JSON.stringify(fresh));
+        if (count !== null) setOrderCount(count);
+      });
     } else {
+      // Load logo only
+      supabase.from("tienda_config").select("logo_url").limit(1).single().then(({ data }) => {
+        if (data?.logo_url) setLogoUrl(data.logo_url);
+      });
       setCheckingAuth(false);
     }
   }, []);

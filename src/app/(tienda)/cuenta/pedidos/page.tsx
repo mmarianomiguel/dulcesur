@@ -102,40 +102,34 @@ export default function PedidosPage() {
       if (!stored) { window.location.href = "/cuenta"; return; }
       const { id } = JSON.parse(stored);
 
-      // Verify client still exists in DB
-      const { data: authRec, error: authErr } = await supabase
-        .from("clientes_auth")
-        .select("cliente_id")
-        .eq("id", id)
-        .single();
+      // Phase 1: Auth check + pedidos in parallel (pedidos don't need cliente_id)
+      const [{ data: authRec, error: authErr }, { data }] = await Promise.all([
+        supabase.from("clientes_auth").select("cliente_id").eq("id", id).single(),
+        supabase.from("pedidos_tienda")
+          .select("id, numero, created_at, estado, total, metodo_pago, monto_efectivo, monto_transferencia, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, unidades_por_presentacion, producto_id)")
+          .eq("cliente_auth_id", id)
+          .order("created_at", { ascending: false }),
+      ]);
       if (authErr || !authRec) {
-        // Client no longer exists — clear stale session
         localStorage.removeItem("cliente_auth");
         window.location.href = "/cuenta";
         return;
       }
       const clienteId = authRec?.cliente_id;
 
-      // Phase 1: Fetch pedidos + ventas in parallel
-      const pedidosPromise = supabase
-        .from("pedidos_tienda")
-        .select("id, numero, created_at, estado, total, metodo_pago, monto_efectivo, monto_transferencia, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, unidades_por_presentacion, producto_id)")
-        .eq("cliente_auth_id", id)
-        .order("created_at", { ascending: false });
-
-      let ventasPromise: Promise<any> = Promise.resolve({ data: [] });
+      // Phase 2: Fetch ventas (needs cliente_id)
+      let ventasData: any[] = [];
       if (clienteId) {
-        ventasPromise = supabase
+        const { data: vd } = await supabase
           .from("ventas")
           .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, monto_pagado, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
           .eq("cliente_id", clienteId)
           .not("tipo_comprobante", "ilike", "Nota de Crédito%")
           .not("tipo_comprobante", "ilike", "Nota de Débito%")
-          .order("fecha", { ascending: false }) as unknown as Promise<any>;
+          .order("fecha", { ascending: false });
+        ventasData = vd || [];
       }
-
-      const [{ data }, { data: ventasData }] = await Promise.all([pedidosPromise, ventasPromise]);
-      const allVentas: any[] = ventasData || [];
+      const allVentas: any[] = ventasData;
 
       // Phase 2: All venta-dependent queries in parallel
       const ventaIds = allVentas.map((v: any) => v.id);
