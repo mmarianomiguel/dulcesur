@@ -2596,10 +2596,16 @@ export default function ListadoVentasPage() {
                   if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
                   const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
 
-                  // Adjust Mixto defaults: NC reduces transferencia, efectivo stays the same
+                  // When NC exists, base cobro on adjusted subtotal so surcharge recalculates
+                  // NC comes off subtotal → efectivo stays, transfer = new subtotal - efectivo
+                  const actualPayments = ncTotal > 0
+                    ? detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito")).reduce((s, p) => s + p.monto, 0)
+                    : 0;
+                  const montoBase = ncTotal > 0
+                    ? Math.max(0, Math.round((itemsSubtotal - ncTotal - actualPayments) * 100) / 100)
+                    : pendiente;
                   const origEfectivo = (poSelectedPedido as any).monto_efectivo || 0;
-                  const adjEfectivo = Math.min(origEfectivo, pendiente);
-                  const adjTransferencia = Math.max(0, pendiente - adjEfectivo);
+                  const adjEfectivo = Math.min(origEfectivo, montoBase);
 
                   return (
                     <CobroVentaSection
@@ -2607,7 +2613,7 @@ export default function ListadoVentasPage() {
                       clienteId={clienteId || ""}
                       clienteNombre={poSelectedPedido.nombre_cliente || ""}
                       clienteSaldo={clienteSaldo}
-                      montoVenta={pendiente}
+                      montoVenta={montoBase}
                       subtotalItems={Math.max(0, itemsSubtotal - ncTotal)}
                       costoEnvio={poSelectedPedido.costo_envio || 0}
                       recargoTransferencia={recargoTransferencia}
@@ -2615,7 +2621,8 @@ export default function ListadoVentasPage() {
                       isEnvio={poSelectedPedido.metodo_entrega === "envio"}
                       defaultMetodo={(poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago}
                       defaultEfectivo={adjEfectivo}
-                      defaultTransferencia={adjTransferencia}
+                      defaultTransferencia={ncTotal > 0 ? Math.max(0, montoBase - adjEfectivo) : ((poSelectedPedido as any).monto_transferencia || 0)}
+                      recalcSurcharge={ncTotal > 0}
                       defaultCuentaAlias={(poSelectedPedido as any).cuenta_transferencia_alias}
                       onConfirmar={async (result: CobroVentaResult) => {
                         const hoy = todayARG();

@@ -79,6 +79,7 @@ interface Props {
   defaultTransferencia?: number;
   defaultCuentaAlias?: string;
   isEnvio?: boolean;
+  recalcSurcharge?: boolean;
   onConfirmar: (result: CobroVentaResult) => Promise<void>;
 }
 
@@ -86,7 +87,7 @@ type MetodoPago = "Efectivo" | "Transferencia" | "Mixto" | "Cuenta Corriente";
 
 export function CobroVentaSection({
   ventaId, clienteId, clienteNombre, clienteSaldo, montoVenta,
-  subtotalItems, costoEnvio, recargoTransferencia, cuentasBancarias,
+  subtotalItems, costoEnvio, recargoTransferencia, cuentasBancarias, recalcSurcharge,
   defaultMetodo, defaultEfectivo, defaultTransferencia, defaultCuentaAlias,
   isEnvio, onConfirmar,
 }: Props) {
@@ -227,7 +228,8 @@ export function CobroVentaSection({
   const surcharge = useMemo(() => {
     if (recPct <= 0) return 0;
     // Don't add surcharge if keeping original method (already included in total)
-    if (isOriginalMetodo) return 0;
+    // Unless recalcSurcharge is set (e.g. NC adjusted the base amount)
+    if (isOriginalMetodo && !recalcSurcharge) return 0;
     if (metodo === "Transferencia") return Math.round(montoVenta * recPct) / 100;
     if (metodo === "Mixto") return Math.round(mixtoTransferencia * recPct) / 100;
     return 0;
