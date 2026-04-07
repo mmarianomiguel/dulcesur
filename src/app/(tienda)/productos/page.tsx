@@ -11,19 +11,35 @@ export default async function ProductosServerPage() {
   const supabase = createServerSupabase();
   const today = new Date().toISOString().split("T")[0];
 
+  // Helper: fetch all rows with pagination to bypass Supabase max rows limit
+  const fetchAllRows = async (query: any) => {
+    const PAGE = 1000;
+    const allRows: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data } = await query.range(from, from + PAGE - 1);
+      if (!data || data.length === 0) break;
+      allRows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    return allRows;
+  };
+
   // Fetch all initial data in parallel — same queries as the client, but server-side
-  const [catsRes, subsRes, marcasRes, discRes, configRes, prodsCountRes, prodsRes, presRes] = await Promise.all([
+  const [catsRes, subsRes, marcasRes, discRes, configRes, prodsCountAll, prodsRes, presRes] = await Promise.all([
     supabase.from("categorias").select("id, nombre, restringida"),
     supabase.from("subcategorias").select("id, nombre, categoria_id"),
     supabase.from("marcas").select("id, nombre"),
     supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
     supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
-    supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible").limit(10000),
+    fetchAllRows(supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible")),
     // First page of products sorted A-Z (default sort)
     supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" }).eq("activo", true).eq("visibilidad", "visible").order("nombre", { ascending: true }).range(0, PER_PAGE - 1),
     // Presentaciones for first page will be fetched after we have product IDs
     Promise.resolve(null),
   ]);
+  const prodsCountRes = { data: prodsCountAll };
 
   const dias = configRes.data?.dias_ocultar_sin_stock ?? 7;
 

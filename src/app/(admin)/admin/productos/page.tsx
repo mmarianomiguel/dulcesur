@@ -343,9 +343,36 @@ export default function ProductosPage() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
 
-    const [{ data: allProdsRaw }, { data: allPres }, { data: allCI }] = await Promise.all([
-      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").limit(10000),
-      supabase.from("presentaciones").select("producto_id, sku, nombre, cantidad").limit(10000),
+    // Fetch all products with pagination to bypass Supabase max rows limit (default 1000)
+    const PAGE_SIZE = 1000;
+    const fetchAllProducts = async () => {
+      const allRows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data } = await supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(from, from + PAGE_SIZE - 1);
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+      return allRows;
+    };
+    const fetchAllPres = async () => {
+      const allRows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data } = await supabase.from("presentaciones").select("producto_id, sku, nombre, cantidad").range(from, from + PAGE_SIZE - 1);
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+      return allRows;
+    };
+
+    const [allProdsRaw, allPres, { data: allCI }] = await Promise.all([
+      fetchAllProducts(),
+      fetchAllPres(),
       supabase.from("combo_items").select("combo_id, cantidad, productos!combo_items_producto_id_fkey(stock)").limit(5000),
     ]);
     const allProds = (allProdsRaw || []) as unknown as ProductoWithRelations[];

@@ -235,20 +235,33 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   useEffect(() => {
     async function loadFilters() {
       const today = new Date().toISOString().split("T")[0];
-      const [catsRes, subsRes, marcasRes, discRes, configRes, prodsRes] = await Promise.all([
+
+      // Paginated fetch to bypass Supabase max rows limit (default 1000)
+      const fetchAllProds = async () => {
+        const PAGE = 1000;
+        const allRows: any[] = [];
+        let from = 0;
+        while (true) {
+          const { data } = await supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible").range(from, from + PAGE - 1);
+          if (!data || data.length === 0) break;
+          allRows.push(...data);
+          if (data.length < PAGE) break;
+          from += PAGE;
+        }
+        return allRows;
+      };
+
+      const [catsRes, subsRes, marcasRes, discRes, configRes, allProds] = await Promise.all([
         supabase.from("categorias").select("id, nombre, restringida"),
         supabase.from("subcategorias").select("id, nombre, categoria_id"),
         supabase.from("marcas").select("id, nombre"),
         supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
         supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
-        supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible").limit(10000),
+        fetchAllProds(),
       ]);
 
       const dias = configRes.data?.dias_ocultar_sin_stock ?? 7;
       setDiasOcultarSinStock(dias);
-
-      // Filter products by stock cutoff (same logic as product grid)
-      const allProds = prodsRes.data || [];
       const cutoff = dias > 0
         ? new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
         : null;
