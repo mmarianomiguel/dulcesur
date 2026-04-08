@@ -226,91 +226,137 @@ export default function UsuariosPage() {
               No se encontraron usuarios
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                      Nombre
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                      Email
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">
-                      Rol
-                    </th>
-                    <th className="text-center py-3 px-4 font-medium text-muted-foreground">
-                      Estado
-                    </th>
-                    <th className="text-center py-3 px-4 font-medium text-muted-foreground">
-                      Admin
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((u) => (
-                    <tr
-                      key={u.id}
-                      className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors${!u.activo ? " opacity-50" : ""}`}
-                    >
-                      <td className="py-3 px-4 font-medium">{u.nombre}</td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {u.email || "-"}
-                      </td>
-                      <td className="py-3 px-4">
-                        {u.roles?.nombre ? (
-                          <Badge variant="secondary">{u.roles.nombre}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <button onClick={() => handleToggleActive(u)}>
-                          <Badge
-                            variant={u.activo ? "default" : "outline"}
-                            className={
-                              u.activo
-                                ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer"
-                                : "text-muted-foreground cursor-pointer"
-                            }
-                          >
-                            {u.activo ? "Activo" : "Inactivo"}
-                          </Badge>
-                        </button>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {u.es_admin && (
-                          <Shield className="w-4 h-4 text-amber-500 inline-block" />
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEdit(u)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDeactivate(u)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+            <>
+              {/* Mobile card view */}
+              <div className="sm:hidden divide-y">
+                {filtered.map((u) => (
+                  <div key={u.id} className={`p-4 space-y-2${!u.activo ? " opacity-50" : ""}`}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-medium flex items-center gap-1.5">
+                          {u.nombre}
+                          {u.es_admin && <Shield className="w-3.5 h-3.5 text-amber-500" />}
                         </div>
-                      </td>
+                        <div className="text-sm text-muted-foreground">{u.email || "-"}</div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeactivate(u)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {u.roles?.nombre ? (
+                        <Badge variant="secondary">{u.roles.nombre}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Sin rol</span>
+                      )}
+                      <button onClick={() => handleToggleActive(u)}>
+                        <Badge
+                          variant={u.activo ? "default" : "outline"}
+                          className={
+                            u.activo
+                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer"
+                              : "text-muted-foreground cursor-pointer"
+                          }
+                        >
+                          {u.activo ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                        Nombre
+                      </th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                        Email
+                      </th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                        Rol
+                      </th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground">
+                        Estado
+                      </th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground">
+                        Admin
+                      </th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">
+                        Acciones
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filtered.map((u) => (
+                      <tr
+                        key={u.id}
+                        className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors${!u.activo ? " opacity-50" : ""}`}
+                      >
+                        <td className="py-3 px-4 font-medium">{u.nombre}</td>
+                        <td className="py-3 px-4 text-muted-foreground">
+                          {u.email || "-"}
+                        </td>
+                        <td className="py-3 px-4">
+                          {u.roles?.nombre ? (
+                            <Badge variant="secondary">{u.roles.nombre}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button onClick={() => handleToggleActive(u)}>
+                            <Badge
+                              variant={u.activo ? "default" : "outline"}
+                              className={
+                                u.activo
+                                  ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer"
+                                  : "text-muted-foreground cursor-pointer"
+                              }
+                            >
+                              {u.activo ? "Activo" : "Inactivo"}
+                            </Badge>
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {u.es_admin && (
+                            <Shield className="w-4 h-4 text-amber-500 inline-block" />
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => openEdit(u)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => handleDeactivate(u)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

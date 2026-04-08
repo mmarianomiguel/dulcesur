@@ -273,7 +273,7 @@ export default function FacturacionPendientePage() {
           </DialogHeader>
           {detailRemito && (
             <div className="w-full overflow-hidden space-y-4">
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Fecha:</span> <span className="font-medium ml-1">{new Date(detailRemito.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span></div>
                 <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium ml-1">{detailRemito.clientes?.nombre || "—"}</span></div>
                 <div><span className="text-muted-foreground">Pago:</span> <span className="font-medium ml-1">{detailRemito.forma_pago}</span></div>

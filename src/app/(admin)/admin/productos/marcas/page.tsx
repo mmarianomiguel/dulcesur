@@ -386,33 +386,51 @@ export default function MarcasPage() {
               action={!search ? { label: "Crear marca", onClick: openCreate } : undefined}
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium">Nombre</th>
-                    <th className="text-left px-4 py-3 font-medium">Productos</th>
-                    <th className="text-right px-4 py-3 font-medium">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((m) => (
-                    <tr key={m.id} className="border-b hover:bg-muted/30">
-                      <td className="px-4 py-3 font-medium">{m.nombre}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{m.producto_count}</Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="w-4 h-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(m.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
-                        </div>
-                      </td>
+            <>
+              {/* Mobile card view */}
+              <div className="sm:hidden divide-y">
+                {filtered.map((m) => (
+                  <div key={m.id} className="p-4 flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{m.nombre}</div>
+                      <Badge variant="secondary" className="mt-1"><Package className="w-3 h-3 mr-1" />{m.producto_count}</Badge>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(m.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-4 py-3 font-medium">Nombre</th>
+                      <th className="text-left px-4 py-3 font-medium">Productos</th>
+                      <th className="text-right px-4 py-3 font-medium">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filtered.map((m) => (
+                      <tr key={m.id} className="border-b hover:bg-muted/30">
+                        <td className="px-4 py-3 font-medium">{m.nombre}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{m.producto_count}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(m)}><Pencil className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(m.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -427,38 +445,63 @@ export default function MarcasPage() {
               {catLoading ? <LoadingSpinner /> : filteredCats.length === 0 ? (
                 <EmptyState icon={FolderTree} title="No hay categorías" action={{ label: "Crear categoría", onClick: () => { setCatNombre(""); setEditingCat(null); setCatDialogOpen(true); } }} />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b bg-muted/50"><th className="text-left px-4 py-3 font-medium">Nombre</th><th className="text-left px-4 py-3 font-medium">Productos</th><th className="text-center px-4 py-3 font-medium">Visibilidad</th><th className="text-right px-4 py-3 font-medium">Acciones</th></tr></thead>
-                    <tbody>
-                      {filteredCats.map((c) => (
-                        <tr key={c.id} className="border-b hover:bg-muted/30">
-                          <td className="px-4 py-3 font-medium">{c.nombre}</td>
-                          <td className="px-4 py-3"><Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{c.producto_count}</Badge></td>
-                          <td className="px-4 py-3 text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className={`gap-1.5 text-xs ${c.restringida ? "text-amber-600 hover:text-amber-700" : "text-emerald-600 hover:text-emerald-700"}`}
-                              onClick={async () => {
-                                const newVal = !c.restringida;
-                                await supabase.from("categorias").update({ restringida: newVal }).eq("id", c.id);
-                                setCategorías((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, restringida: newVal } : cat));
-                                showAdminToast(newVal ? `"${c.nombre}" restringida — solo clientes autorizados` : `"${c.nombre}" pública — visible para todos`, "success");
-                              }}
-                            >
-                              {c.restringida ? <><Lock className="w-3.5 h-3.5" /> Restringida</> : <><LockOpen className="w-3.5 h-3.5" /> Pública</>}
-                            </Button>
-                          </td>
-                          <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
+                <>
+                  {/* Mobile card view */}
+                  <div className="sm:hidden divide-y">
+                    {filteredCats.map((c) => (
+                      <div key={c.id} className="p-4 space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-medium">{c.nombre}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{c.producto_count}</Badge>
+                              <Badge variant={c.restringida ? "outline" : "secondary"} className={c.restringida ? "text-amber-600 border-amber-300" : "text-emerald-600"}>
+                                {c.restringida ? "Restringida" : "Pública"}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" onClick={() => { setEditingCat(c); setCatNombre(c.nombre); setCatDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button>
                             <Button variant="ghost" size="icon" onClick={() => handleDeleteCat(c.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
-                          </div></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b bg-muted/50"><th className="text-left px-4 py-3 font-medium">Nombre</th><th className="text-left px-4 py-3 font-medium">Productos</th><th className="text-center px-4 py-3 font-medium">Visibilidad</th><th className="text-right px-4 py-3 font-medium">Acciones</th></tr></thead>
+                      <tbody>
+                        {filteredCats.map((c) => (
+                          <tr key={c.id} className="border-b hover:bg-muted/30">
+                            <td className="px-4 py-3 font-medium">{c.nombre}</td>
+                            <td className="px-4 py-3"><Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{c.producto_count}</Badge></td>
+                            <td className="px-4 py-3 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`gap-1.5 text-xs ${c.restringida ? "text-amber-600 hover:text-amber-700" : "text-emerald-600 hover:text-emerald-700"}`}
+                                onClick={async () => {
+                                  const newVal = !c.restringida;
+                                  await supabase.from("categorias").update({ restringida: newVal }).eq("id", c.id);
+                                  setCategorías((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, restringida: newVal } : cat));
+                                  showAdminToast(newVal ? `"${c.nombre}" restringida — solo clientes autorizados` : `"${c.nombre}" pública — visible para todos`, "success");
+                                }}
+                              >
+                                {c.restringida ? <><Lock className="w-3.5 h-3.5" /> Restringida</> : <><LockOpen className="w-3.5 h-3.5" /> Pública</>}
+                              </Button>
+                            </td>
+                            <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => { setEditingCat(c); setCatNombre(c.nombre); setCatDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteCat(c.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                            </div></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -472,24 +515,43 @@ export default function MarcasPage() {
               {catLoading ? <LoadingSpinner /> : filteredSubs.length === 0 ? (
                 <EmptyState icon={Layers} title="No hay subcategorías" action={{ label: "Crear subcategoría", onClick: () => { setSubNombre(""); setSubCatId(""); setEditingSub(null); setSubDialogOpen(true); } }} />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b bg-muted/50"><th className="text-left px-4 py-3 font-medium">Nombre</th><th className="text-left px-4 py-3 font-medium">Categoría</th><th className="text-left px-4 py-3 font-medium">Productos</th><th className="text-right px-4 py-3 font-medium">Acciones</th></tr></thead>
-                    <tbody>
-                      {filteredSubs.map((s) => (
-                        <tr key={s.id} className="border-b hover:bg-muted/30">
-                          <td className="px-4 py-3 font-medium">{s.nombre}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{s.categoria_nombre}</td>
-                          <td className="px-4 py-3"><Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{s.producto_count}</Badge></td>
-                          <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => { setEditingSub(s); setSubNombre(s.nombre); setSubCatId(s.categoria_id); setSubDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteSub(s.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
-                          </div></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  {/* Mobile card view */}
+                  <div className="sm:hidden divide-y">
+                    {filteredSubs.map((s) => (
+                      <div key={s.id} className="p-4 flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{s.nombre}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{s.categoria_nombre}</div>
+                          <Badge variant="secondary" className="mt-1"><Package className="w-3 h-3 mr-1" />{s.producto_count}</Badge>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => { setEditingSub(s); setSubNombre(s.nombre); setSubCatId(s.categoria_id); setSubDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteSub(s.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b bg-muted/50"><th className="text-left px-4 py-3 font-medium">Nombre</th><th className="text-left px-4 py-3 font-medium">Categoría</th><th className="text-left px-4 py-3 font-medium">Productos</th><th className="text-right px-4 py-3 font-medium">Acciones</th></tr></thead>
+                      <tbody>
+                        {filteredSubs.map((s) => (
+                          <tr key={s.id} className="border-b hover:bg-muted/30">
+                            <td className="px-4 py-3 font-medium">{s.nombre}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{s.categoria_nombre}</td>
+                            <td className="px-4 py-3"><Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{s.producto_count}</Badge></td>
+                            <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => { setEditingSub(s); setSubNombre(s.nombre); setSubCatId(s.categoria_id); setSubDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteSub(s.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                            </div></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

@@ -1496,7 +1496,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <h2 className="text-[15px] font-semibold mb-3">Accesos Rápidos</h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Link href="/admin/ventas" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
                   <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center"><ShoppingCart className="w-5 h-5 text-emerald-500" /></div>
                   <div><p className="text-sm font-semibold">Nueva Venta</p><p className="text-xs text-muted-foreground">Ir al punto de venta</p></div>
@@ -1517,7 +1517,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <h2 className="text-[15px] font-semibold mb-3">Reportes</h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Link href="/admin/reportes" className="flex flex-col gap-3 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
                   <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center"><BarChart3 className="w-5 h-5 text-primary-foreground" /></div>
                   <div><p className="text-sm font-semibold">Resumen Mensual</p><p className="text-xs text-muted-foreground">Ventas, gastos, ganancia</p></div>
@@ -1779,7 +1779,7 @@ export default function DashboardPage() {
                     </div>
                   )}
                   {metodo === "Mixto" && (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <label className="text-[10px] text-gray-500">Efectivo</label>
                         <input type="number" value={mixEf || ""} onChange={(e) => setField("cobroMixtoEf", Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
@@ -1793,7 +1793,7 @@ export default function DashboardPage() {
                   {(metodo === "Transferencia" || metodo === "Mixto") && deliveryCuentasBancarias.length > 0 && (
                     <div className="space-y-1.5">
                       <p className="text-xs font-medium text-muted-foreground">Cuenta bancaria</p>
-                      <div className="grid grid-cols-2 gap-1.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                         {deliveryCuentasBancarias.map((cb) => (
                           <button key={cb.id} onClick={() => setField("cobroCuentaBancaria", cb.nombre)}
                             className={`flex items-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-xs transition-all text-left ${deliveryConfirm.cobroCuentaBancaria === cb.nombre ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>

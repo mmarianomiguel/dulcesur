@@ -715,7 +715,7 @@ function FeaturedProductsPanel() {
     return <p className="text-xs text-muted-foreground italic">Ningún producto marcado como destacado.</p>;
 
   return (
-    <div className="grid grid-cols-3 gap-2 mt-1">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
       {products.map((p) => (
         <div key={p.id} className="relative group rounded-lg border border-border bg-muted/40 p-2 flex flex-col items-center gap-1">
           {p.imagen_url ? (

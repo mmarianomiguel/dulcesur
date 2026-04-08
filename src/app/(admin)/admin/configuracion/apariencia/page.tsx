@@ -76,7 +76,7 @@ export default function AparienciaPage() {
           <CardDescription>Nombre y logo del sistema</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nombre del sistema</Label>
               <Input
@@ -94,7 +94,7 @@ export default function AparienciaPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Inicial del logo</Label>
               <Input

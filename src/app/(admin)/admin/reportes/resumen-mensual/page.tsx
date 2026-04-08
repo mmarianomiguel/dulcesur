@@ -477,7 +477,7 @@ export default function ResumenMensualPage() {
                 <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="w-4 h-4" />Comparativa vs {comparativa.label}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Mes anterior</p>
                     <p className="text-lg font-bold">{formatCurrency(comparativa.anterior)}</p>

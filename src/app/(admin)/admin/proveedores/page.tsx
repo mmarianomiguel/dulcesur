@@ -518,71 +518,116 @@ export default function ProveedoresPage() {
           ) : filtered.length === 0 ? (
             <EmptyState title="No se encontraron proveedores" icon={Truck} />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Proveedor</th>
-                    <th className="text-left py-3 px-4 font-medium">CUIT</th>
-                    <th className="text-left py-3 px-4 font-medium">Rubro</th>
-                    <th className="text-left py-3 px-4 font-medium">Contacto</th>
-                    <th className="text-center py-3 px-4 font-medium">Productos</th>
-                    <th className="text-right py-3 px-4 font-medium">Saldo</th>
-                    <th className="text-right py-3 px-4 font-medium w-52">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((p) => (
-                    <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4">
+            <>
+              {/* Mobile card view */}
+              <div className="sm:hidden divide-y">
+                {filtered.map((p) => (
+                  <div key={p.id} className="p-4 space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
                         <div className="font-medium">{p.nombre}</div>
                         {(p as any).razon_social && <div className="text-xs text-muted-foreground">{(p as any).razon_social}</div>}
-                        {(p as any).codigo_proveedor && <div className="text-[10px] text-muted-foreground">Cód: {(p as any).codigo_proveedor}</div>}
-                      </td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.cuit || "—"}</td>
-                      <td className="py-3 px-4">
-                        {p.rubro && <Badge variant="secondary" className="text-xs font-normal">{p.rubro}</Badge>}
-                        {(p as any).plazo_pago && <div className="text-[10px] text-muted-foreground mt-0.5">{(p as any).plazo_pago}</div>}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col gap-0.5 text-muted-foreground text-xs">
-                          {p.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{p.telefono}</span>}
-                          {p.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{p.email}</span>}
-                          {(p as any).contacto_nombre && <span className="text-[10px]">Contacto: {(p as any).contacto_nombre}</span>}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {(prodCountMap[p.id] || 0) > 0 ? (
-                          <button
-                            onClick={async () => {
-                              const { data } = await supabase.from("producto_proveedores").select("productos(nombre, codigo, precio, stock)").eq("proveedor_id", p.id);
-                              const prods = (data || []).map((pp: any) => pp.productos).filter(Boolean);
-                              setProdListDialog({ open: true, nombre: p.nombre, productos: prods });
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition"
-                          >
-                            {prodCountMap[p.id]} prod.
-                          </button>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">0</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        {p.saldo > 0 ? <span className="font-semibold text-orange-500">{formatCurrency(p.saldo)}</span> : <span className="text-muted-foreground">$0</span>}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Historial" onClick={() => openCuentaCorriente(p)}><History className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Registrar pago" onClick={() => openPago(p)}><DollarSign className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                        </div>
-                      </td>
+                        {p.cuit && <div className="text-xs text-muted-foreground font-mono">{p.cuit}</div>}
+                      </div>
+                      <div>
+                        {p.saldo > 0 ? <span className="font-semibold text-orange-500 text-sm">{formatCurrency(p.saldo)}</span> : <span className="text-muted-foreground text-sm">$0</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {p.rubro && <Badge variant="secondary" className="text-xs font-normal">{p.rubro}</Badge>}
+                      {(prodCountMap[p.id] || 0) > 0 && (
+                        <button
+                          onClick={async () => {
+                            const { data } = await supabase.from("producto_proveedores").select("productos(nombre, codigo, precio, stock)").eq("proveedor_id", p.id);
+                            const prods = (data || []).map((pp: any) => pp.productos).filter(Boolean);
+                            setProdListDialog({ open: true, nombre: p.nombre, productos: prods });
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition"
+                        >
+                          {prodCountMap[p.id]} prod.
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-0.5 text-muted-foreground text-xs">
+                      {p.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{p.telefono}</span>}
+                      {p.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{p.email}</span>}
+                    </div>
+                    <div className="flex justify-end gap-1 pt-1 border-t">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Historial" onClick={() => openCuentaCorriente(p)}><History className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Registrar pago" onClick={() => openPago(p)}><DollarSign className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="text-left py-3 px-4 font-medium">Proveedor</th>
+                      <th className="text-left py-3 px-4 font-medium">CUIT</th>
+                      <th className="text-left py-3 px-4 font-medium">Rubro</th>
+                      <th className="text-left py-3 px-4 font-medium">Contacto</th>
+                      <th className="text-center py-3 px-4 font-medium">Productos</th>
+                      <th className="text-right py-3 px-4 font-medium">Saldo</th>
+                      <th className="text-right py-3 px-4 font-medium w-52">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filtered.map((p) => (
+                      <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-medium">{p.nombre}</div>
+                          {(p as any).razon_social && <div className="text-xs text-muted-foreground">{(p as any).razon_social}</div>}
+                          {(p as any).codigo_proveedor && <div className="text-[10px] text-muted-foreground">Cód: {(p as any).codigo_proveedor}</div>}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.cuit || "—"}</td>
+                        <td className="py-3 px-4">
+                          {p.rubro && <Badge variant="secondary" className="text-xs font-normal">{p.rubro}</Badge>}
+                          {(p as any).plazo_pago && <div className="text-[10px] text-muted-foreground mt-0.5">{(p as any).plazo_pago}</div>}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-0.5 text-muted-foreground text-xs">
+                            {p.telefono && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{p.telefono}</span>}
+                            {p.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{p.email}</span>}
+                            {(p as any).contacto_nombre && <span className="text-[10px]">Contacto: {(p as any).contacto_nombre}</span>}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {(prodCountMap[p.id] || 0) > 0 ? (
+                            <button
+                              onClick={async () => {
+                                const { data } = await supabase.from("producto_proveedores").select("productos(nombre, codigo, precio, stock)").eq("proveedor_id", p.id);
+                                const prods = (data || []).map((pp: any) => pp.productos).filter(Boolean);
+                                setProdListDialog({ open: true, nombre: p.nombre, productos: prods });
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition"
+                            >
+                              {prodCountMap[p.id]} prod.
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">0</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {p.saldo > 0 ? <span className="font-semibold text-orange-500">{formatCurrency(p.saldo)}</span> : <span className="text-muted-foreground">$0</span>}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Historial" onClick={() => openCuentaCorriente(p)}><History className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Registrar pago" onClick={() => openPago(p)}><DollarSign className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Edit className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -595,11 +640,11 @@ export default function ProveedoresPage() {
             {/* Datos principales */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Datos principales</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="text-xs">Nombre comercial *</Label><Input value={form.nombre} onChange={(e) => f("nombre", e.target.value)} placeholder="Ej: Arcor" /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Razón social</Label><Input value={form.razon_social} onChange={(e) => f("razon_social", e.target.value)} placeholder="Ej: Arcor S.A.I.C." /></div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5"><Label className="text-xs">CUIT</Label><Input value={form.cuit} onChange={(e) => f("cuit", e.target.value)} placeholder="XX-XXXXXXXX-X" /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Cond. IVA</Label>
                   <Select value={form.condicion_iva} onValueChange={(v) => f("condicion_iva", v || "")}>
@@ -613,7 +658,7 @@ export default function ProveedoresPage() {
                 </div>
                 <div className="space-y-1.5"><Label className="text-xs">Código proveedor</Label><Input value={form.codigo_proveedor} onChange={(e) => f("codigo_proveedor", e.target.value)} placeholder="Código interno" /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="text-xs">Rubro</Label><Input value={form.rubro} onChange={(e) => f("rubro", e.target.value)} placeholder="Ej: Golosinas, Bebidas" /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Página web</Label><Input value={form.web} onChange={(e) => f("web", e.target.value)} placeholder="www.ejemplo.com" /></div>
               </div>
@@ -622,12 +667,12 @@ export default function ProveedoresPage() {
             {/* Contacto */}
             <div className="space-y-3 border-t pt-4">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Contacto</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="text-xs">Teléfono principal</Label><Input value={form.telefono} onChange={(e) => f("telefono", e.target.value)} /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Teléfono alternativo</Label><Input value={form.telefono2} onChange={(e) => f("telefono2", e.target.value)} /></div>
               </div>
               <div className="space-y-1.5"><Label className="text-xs">E-mail</Label><Input value={form.email} onChange={(e) => f("email", e.target.value)} type="email" /></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="text-xs">Nombre de contacto</Label><Input value={form.contacto_nombre} onChange={(e) => f("contacto_nombre", e.target.value)} placeholder="Ej: Juan Pérez" /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Cargo</Label><Input value={form.contacto_cargo} onChange={(e) => f("contacto_cargo", e.target.value)} placeholder="Ej: Vendedor" /></div>
               </div>
@@ -637,7 +682,7 @@ export default function ProveedoresPage() {
             <div className="space-y-3 border-t pt-4">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Dirección</h3>
               <div className="space-y-1.5"><Label className="text-xs">Domicilio</Label><Input value={form.domicilio} onChange={(e) => f("domicilio", e.target.value)} /></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="text-xs">Localidad</Label><Input value={form.localidad} onChange={(e) => f("localidad", e.target.value)} /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Provincia</Label><Input value={form.provincia} onChange={(e) => f("provincia", e.target.value)} /></div>
               </div>
@@ -646,7 +691,7 @@ export default function ProveedoresPage() {
             {/* Condiciones comerciales */}
             <div className="space-y-3 border-t pt-4">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Condiciones comerciales</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="text-xs">Días de entrega</Label><Input value={form.dias_entrega} onChange={(e) => f("dias_entrega", e.target.value)} placeholder="Ej: Lunes y Jueves" /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Plazo de pago</Label><Input value={form.plazo_pago} onChange={(e) => f("plazo_pago", e.target.value)} placeholder="Ej: 30 días, Contado" /></div>
               </div>
@@ -834,7 +879,7 @@ export default function ProveedoresPage() {
                     </div>
 
                     {/* KPI cards */}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="rounded-lg border p-2.5">
                         <p className="text-[10px] text-gray-500 uppercase tracking-wider">Compras</p>
                         <p className="text-base font-bold">{formatCurrency(Math.round(totalDebe))}</p>
@@ -910,7 +955,7 @@ export default function ProveedoresPage() {
                 {histTab === "compras" && (
                   <div className="space-y-3">
                     {/* KPI cards */}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="rounded-lg border p-2.5">
                         <p className="text-[10px] text-gray-500 uppercase tracking-wider">Total compras</p>
                         <p className="text-base font-bold">{formatCurrency(Math.round(histComprasTotals.total))}</p>
