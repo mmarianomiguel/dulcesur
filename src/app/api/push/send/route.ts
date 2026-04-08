@@ -26,9 +26,8 @@ export async function POST(req: NextRequest) {
 
     const isEnvio = metodo_entrega === "envio";
     const despacho = isEnvio ? "Envio a domicilio" : "Retiro en local";
-    const emoji = isEnvio ? "\ud83d\ude9a" : "\ud83c\udfea";
 
-    const title = `${emoji} Nuevo pedido #${numero}`;
+    const title = isEnvio ? `Nuevo pedido #${numero} - ENVIO` : `Nuevo pedido #${numero} - RETIRO`;
     const lines = [
       `Cliente: ${cliente}`,
       `Total: $${Math.round(total).toLocaleString("es-AR")}`,

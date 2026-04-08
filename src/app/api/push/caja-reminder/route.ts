@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   }
 
   const payload = JSON.stringify({
-    title: "\u26a0\ufe0f Caja abierta",
+    title: "Caja abierta - Recordatorio",
     body: `El turno #${turno.numero} sigue abierto (apertura: ${turno.hora_apertura?.substring(0, 5)} hs). Acordate de cerrar la caja.`,
     tag: "caja-reminder",
     url: "/admin/caja",

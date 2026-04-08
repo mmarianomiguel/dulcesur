@@ -210,7 +210,7 @@ async function handleRegister({
 
   // Send push notification to admins about new client (fire-and-forget)
   sendPushToAll(
-    "\ud83d\udc64 Nuevo cliente registrado",
+    "Nuevo cliente registrado",
     `${nombre}\n${email}${telefono ? "\nTel: " + telefono : ""}`,
     "new-client-" + Date.now(),
     "/admin/clientes"
