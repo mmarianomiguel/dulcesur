@@ -11,6 +11,8 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  Smartphone,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,11 +36,11 @@ import { supabase } from "@/lib/supabase";
 import type { NotificacionPlantilla } from "@/types/database";
 
 const SEG_TYPES = [
-  { value: "todos", label: "Todos los clientes", icon: Users },
-  { value: "cliente", label: "Cliente específico", icon: User },
-  { value: "zona", label: "Por zona de entrega", icon: MapPin },
-  { value: "rol", label: "Por rol", icon: Shield },
-  { value: "inactividad", label: "Por inactividad", icon: Clock },
+  { value: "todos", label: "Todos", fullLabel: "Todos los clientes", icon: Users },
+  { value: "cliente", label: "Cliente", fullLabel: "Cliente específico", icon: User },
+  { value: "zona", label: "Zona", fullLabel: "Por zona de entrega", icon: MapPin },
+  { value: "rol", label: "Rol", fullLabel: "Por rol", icon: Shield },
+  { value: "inactividad", label: "Inactivos", fullLabel: "Por inactividad", icon: Clock },
 ];
 
 export default function EnviarNotificacionPage() {
@@ -53,6 +55,7 @@ export default function EnviarNotificacionPage() {
   const [sending, setSending] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Search state
   const [clienteQuery, setClienteQuery] = useState("");
@@ -166,161 +169,222 @@ export default function EnviarNotificacionPage() {
   const canSend = titulo.trim() && mensaje.trim() && (segTipo !== "cliente" || selectedCliente) && (segTipo !== "zona" || segValor) && (segTipo !== "rol" || segValor) && (segTipo !== "inactividad" || segValor);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Send className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Enviar Notificación</h1>
+    <div className="space-y-4 sm:space-y-6 max-w-2xl">
+      {/* Header */}
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <Send className="h-4.5 w-4.5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-lg sm:text-2xl font-bold">Enviar Notificación</h1>
+          <p className="text-xs text-muted-foreground hidden sm:block">Enviá notificaciones push a tus clientes</p>
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr,320px]">
-        {/* Form */}
-        <div className="space-y-5 bg-white dark:bg-gray-900 border rounded-xl p-6">
-          {/* Template selector */}
+      {/* Step 1: Template or free text */}
+      <div className="bg-white dark:bg-gray-900 border rounded-xl p-4 sm:p-5 space-y-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <span className="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center shrink-0">1</span>
+          Contenido
+        </div>
+
+        <div>
+          <Label className="text-xs text-gray-500">Plantilla (opcional)</Label>
+          <Select value={plantillaId || "libre"} onValueChange={handlePlantillaChange}>
+            <SelectTrigger><SelectValue placeholder="Seleccionar plantilla..." /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="libre">Notificación libre</SelectItem>
+              {plantillas.map((p) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label className="text-xs text-gray-500">Título</Label>
+          <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título de la notificación" />
+        </div>
+
+        <div>
+          <Label className="text-xs text-gray-500">Mensaje</Label>
+          <Textarea value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Cuerpo del mensaje" rows={3} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Plantilla (opcional)</Label>
-            <Select value={plantillaId || "libre"} onValueChange={handlePlantillaChange}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar plantilla..." /></SelectTrigger>
+            <Label className="text-xs text-gray-500">Tipo</Label>
+            <Select value={tipo} onValueChange={(v) => v && setTipo(v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="libre">Notificación libre</SelectItem>
-                {plantillas.map((p) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                <SelectItem value="pedido">Pedido</SelectItem>
+                <SelectItem value="promocion">Promoción</SelectItem>
+                <SelectItem value="recordatorio">Recordatorio</SelectItem>
+                <SelectItem value="catalogo">Catálogo</SelectItem>
+                <SelectItem value="cuenta_corriente">Cuenta Corriente</SelectItem>
+                <SelectItem value="sistema">Sistema</SelectItem>
               </SelectContent>
             </Select>
           </div>
-
           <div>
-            <Label>Título</Label>
-            <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título de la notificación" />
+            <Label className="text-xs text-gray-500">URL (opcional)</Label>
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="/cuenta/pedidos" />
           </div>
+        </div>
 
-          <div>
-            <Label>Mensaje</Label>
-            <Textarea value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Cuerpo del mensaje" rows={4} />
-          </div>
+        {/* Mobile preview toggle */}
+        {(titulo || mensaje) && (
+          <button
+            onClick={() => setShowPreview(!showPreview)}
+            className="flex items-center gap-1.5 text-xs text-primary hover:underline lg:hidden"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            {showPreview ? "Ocultar" : "Ver"} vista previa
+          </button>
+        )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Tipo</Label>
-              <Select value={tipo} onValueChange={(v) => v && setTipo(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pedido">Pedido</SelectItem>
-                  <SelectItem value="promocion">Promoción</SelectItem>
-                  <SelectItem value="recordatorio">Recordatorio</SelectItem>
-                  <SelectItem value="catalogo">Catálogo</SelectItem>
-                  <SelectItem value="cuenta_corriente">Cuenta Corriente</SelectItem>
-                  <SelectItem value="sistema">Sistema</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>URL (opcional)</Label>
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="/cuenta/pedidos" />
+        {/* Inline preview (mobile: collapsible, desktop: always visible) */}
+        {(titulo || mensaje) && (
+          <div className={`${showPreview ? "block" : "hidden"} lg:block`}>
+            <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-800">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Smartphone className="h-3.5 w-3.5 text-gray-400" />
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Vista previa</span>
+              </div>
+              <div className="font-semibold text-sm">{titulo || "Título..."}</div>
+              <div className="text-xs text-gray-500 mt-0.5 whitespace-pre-wrap">{mensaje || "Mensaje..."}</div>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Segmentation */}
-          <div className="border-t pt-4">
-            <Label className="text-base font-semibold mb-3 block">Destinatarios</Label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
-              {SEG_TYPES.map((s) => {
-                const Icon = s.icon;
-                return (
-                  <button
-                    key={s.value}
-                    onClick={() => { setSegTipo(s.value); setSegValor(""); setSelectedCliente(null); }}
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-all ${segTipo === s.value ? "border-primary bg-primary/5 text-primary font-medium" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {s.label}
+      {/* Step 2: Segmentation */}
+      <div className="bg-white dark:bg-gray-900 border rounded-xl p-4 sm:p-5 space-y-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <span className="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center shrink-0">2</span>
+          Destinatarios
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {SEG_TYPES.map((s) => {
+            const Icon = s.icon;
+            const active = segTipo === s.value;
+            return (
+              <button
+                key={s.value}
+                onClick={() => { setSegTipo(s.value); setSegValor(""); setSelectedCliente(null); }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs sm:text-sm transition-all ${
+                  active
+                    ? "border-primary bg-primary/5 text-primary font-medium shadow-sm"
+                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 text-gray-600"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="sm:hidden">{s.label}</span>
+                <span className="hidden sm:inline">{s.fullLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Segmentation value inputs */}
+        {segTipo === "cliente" && (
+          <div className="relative">
+            <Input
+              value={selectedCliente ? selectedCliente.nombre : clienteQuery}
+              onChange={(e) => { setClienteQuery(e.target.value); setSelectedCliente(null); }}
+              placeholder="Buscar cliente por nombre..."
+            />
+            {clienteResults.length > 0 && !selectedCliente && (
+              <div className="absolute z-10 top-full left-0 right-0 bg-white dark:bg-gray-900 border rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
+                {clienteResults.map((c) => (
+                  <button key={c.id} onClick={() => { setSelectedCliente(c); setClienteResults([]); }} className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm border-b last:border-0">
+                    <div className="font-medium">{c.nombre}</div>
+                    {c.email && <div className="text-xs text-gray-400">{c.email}</div>}
                   </button>
-                );
-              })}
-            </div>
-
-            {/* Segmentation value inputs */}
-            {segTipo === "cliente" && (
-              <div className="relative">
-                <Input
-                  value={selectedCliente ? selectedCliente.nombre : clienteQuery}
-                  onChange={(e) => { setClienteQuery(e.target.value); setSelectedCliente(null); }}
-                  placeholder="Buscar cliente por nombre..."
-                />
-                {clienteResults.length > 0 && !selectedCliente && (
-                  <div className="absolute z-10 top-full left-0 right-0 bg-white dark:bg-gray-900 border rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
-                    {clienteResults.map((c) => (
-                      <button key={c.id} onClick={() => { setSelectedCliente(c); setClienteResults([]); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm">
-                        <div className="font-medium">{c.nombre}</div>
-                        {c.email && <div className="text-xs text-gray-400">{c.email}</div>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {segTipo === "zona" && (
-              <Select value={segValor} onValueChange={(v) => v && setSegValor(v)}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar zona..." /></SelectTrigger>
-                <SelectContent>{zonas.map((z) => <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>)}</SelectContent>
-              </Select>
-            )}
-
-            {segTipo === "rol" && (
-              <Select value={segValor} onValueChange={(v) => v && setSegValor(v)}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar rol..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="vendedor">Vendedor</SelectItem>
-                  <SelectItem value="repartidor">Repartidor</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-
-            {segTipo === "inactividad" && (
-              <div className="flex items-center gap-2">
-                <Input type="number" value={segValor} onChange={(e) => setSegValor(e.target.value)} placeholder="30" className="w-24" />
-                <span className="text-sm text-gray-500">días sin comprar</span>
-              </div>
-            )}
-
-            {estimado !== null && (
-              <div className="mt-3 text-sm text-gray-600 flex items-center gap-1.5">
-                <Users className="h-4 w-4" /> {estimado} destinatario{estimado !== 1 ? "s" : ""} estimado{estimado !== 1 ? "s" : ""}
+                ))}
               </div>
             )}
           </div>
+        )}
 
-          <div className="flex justify-end pt-2">
-            <Button onClick={() => setConfirmOpen(true)} disabled={!canSend || sending} size="lg">
-              {sending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Enviando...</> : <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>}
-            </Button>
+        {segTipo === "zona" && (
+          <Select value={segValor} onValueChange={(v) => v && setSegValor(v)}>
+            <SelectTrigger><SelectValue placeholder="Seleccionar zona..." /></SelectTrigger>
+            <SelectContent>{zonas.map((z) => <SelectItem key={z.id} value={z.id}>{z.nombre}</SelectItem>)}</SelectContent>
+          </Select>
+        )}
+
+        {segTipo === "rol" && (
+          <Select value={segValor} onValueChange={(v) => v && setSegValor(v)}>
+            <SelectTrigger><SelectValue placeholder="Seleccionar rol..." /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="vendedor">Vendedor</SelectItem>
+              <SelectItem value="repartidor">Repartidor</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {segTipo === "inactividad" && (
+          <div className="flex items-center gap-2">
+            <Input type="number" value={segValor} onChange={(e) => setSegValor(e.target.value)} placeholder="30" className="w-20" />
+            <span className="text-sm text-gray-500">días sin comprar</span>
+          </div>
+        )}
+
+        {estimado !== null && (
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 rounded-lg">
+            <Users className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium text-primary">{estimado} destinatario{estimado !== 1 ? "s" : ""}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Result card */}
+      {result && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-400">
+            <CheckCircle className="h-4.5 w-4.5" />
+            Notificación enviada
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
+              <div className="text-lg font-bold text-gray-900 dark:text-white">{result.destinatarios}</div>
+              <div className="text-gray-500">Destinatarios</div>
+            </div>
+            <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
+              <div className="text-lg font-bold text-green-600">{result.push_enviadas}</div>
+              <div className="text-gray-500">Push enviadas</div>
+            </div>
+            {result.push_fallidas > 0 && (
+              <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
+                <div className="text-lg font-bold text-red-500">{result.push_fallidas}</div>
+                <div className="text-gray-500">Fallidas</div>
+              </div>
+            )}
+            {result.sin_push > 0 && (
+              <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
+                <div className="text-lg font-bold text-gray-400">{result.sin_push}</div>
+                <div className="text-gray-500">Sin push</div>
+              </div>
+            )}
           </div>
         </div>
+      )}
 
-        {/* Preview + Result */}
-        <div className="space-y-4">
-          {/* Preview card */}
-          <div className="border rounded-xl p-4 bg-white dark:bg-gray-900">
-            <Label className="text-xs text-gray-400 uppercase tracking-wide">Vista previa</Label>
-            <div className="mt-3 border rounded-lg p-3 bg-gray-50 dark:bg-gray-800">
-              <div className="font-semibold text-sm">{titulo || "Título de la notificación"}</div>
-              <div className="text-xs text-gray-500 mt-1 whitespace-pre-wrap">{mensaje || "Cuerpo del mensaje..."}</div>
-            </div>
-          </div>
-
-          {/* Result */}
-          {result && (
-            <div className="border rounded-xl p-4 bg-white dark:bg-gray-900 space-y-2">
-              <Label className="text-xs text-gray-400 uppercase tracking-wide">Resultado</Label>
-              <div className="space-y-1.5 mt-2 text-sm">
-                <div className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-500" /> {result.destinatarios} destinatarios</div>
-                <div className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-500" /> {result.push_enviadas} push enviadas</div>
-                {result.push_fallidas > 0 && <div className="flex items-center gap-2"><AlertCircle className="h-4 w-4 text-red-500" /> {result.push_fallidas} push fallidas</div>}
-                {result.sin_push > 0 && <div className="flex items-center gap-2 text-gray-400"><AlertCircle className="h-4 w-4" /> {result.sin_push} sin push activo</div>}
-              </div>
-            </div>
+      {/* Send button - sticky on mobile */}
+      <div className="sticky bottom-0 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent dark:from-gray-950 dark:via-gray-950 pt-4 pb-2 -mx-4 px-4 sm:static sm:bg-transparent sm:p-0 sm:m-0">
+        <Button
+          onClick={() => setConfirmOpen(true)}
+          disabled={!canSend || sending}
+          size="lg"
+          className="w-full sm:w-auto"
+        >
+          {sending ? (
+            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Enviando...</>
+          ) : (
+            <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>
           )}
-        </div>
+        </Button>
       </div>
 
       {/* Confirm dialog */}
@@ -328,11 +392,13 @@ export default function EnviarNotificacionPage() {
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Confirmar envío</DialogTitle></DialogHeader>
           <p className="text-sm text-gray-500">
-            Se enviará la notificación a {estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}. ¿Confirmar?
+            Se enviará la notificación a <strong>{estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}</strong>. ¿Confirmar?
           </p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSend}>Enviar</Button>
+            <Button onClick={handleSend}>
+              <Send className="h-4 w-4 mr-1.5" /> Enviar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

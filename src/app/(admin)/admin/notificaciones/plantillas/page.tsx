@@ -8,6 +8,7 @@ import {
   Trash2,
   X,
   Loader2,
+  MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,13 @@ const TIPO_COLORS: Record<string, string> = {
   catalogo: "bg-purple-100 text-purple-700",
   cuenta_corriente: "bg-rose-100 text-rose-700",
   sistema: "bg-gray-100 text-gray-700",
+};
+
+const DEST_LABELS: Record<string, string> = {
+  cliente: "Clientes",
+  admin: "Admins",
+  vendedor: "Vendedores",
+  todos: "Todos",
 };
 
 const EMPTY: Partial<NotificacionPlantilla> = {
@@ -181,61 +189,90 @@ export default function PlantillasPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <FileText className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Plantillas de Notificación</h1>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <FileText className="h-4.5 w-4.5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-bold truncate">Plantillas</h1>
+            <p className="text-xs text-muted-foreground hidden sm:block">Configurá las plantillas de notificación</p>
+          </div>
         </div>
-        <Button onClick={() => { setEditing(EMPTY); setDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" /> Nueva plantilla
+        <Button size="sm" onClick={() => { setEditing(EMPTY); setDialogOpen(true); }}>
+          <Plus className="h-4 w-4 sm:mr-1.5" />
+          <span className="hidden sm:inline">Nueva</span>
         </Button>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : plantillas.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">No hay plantillas configuradas</div>
+        <div className="text-center py-16">
+          <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-3">
+            <FileText className="h-7 w-7 text-gray-400" />
+          </div>
+          <p className="text-gray-500 font-medium">No hay plantillas</p>
+          <p className="text-sm text-gray-400 mt-1">Creá tu primera plantilla de notificación</p>
+          <Button size="sm" className="mt-4" onClick={() => { setEditing(EMPTY); setDialogOpen(true); }}>
+            <Plus className="h-4 w-4 mr-1.5" /> Crear plantilla
+          </Button>
+        </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Nombre</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Tipo</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Destinatario</th>
-                <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Activa</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {plantillas.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{p.nombre}</div>
-                    <div className="text-xs text-gray-400 truncate max-w-xs">{p.titulo_template}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge className={TIPO_COLORS[p.tipo] || ""}>{TIPOS.find((t) => t.value === p.tipo)?.label || p.tipo}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 capitalize">{p.destinatario_default}</td>
-                  <td className="px-4 py-3 text-center">
-                    <Switch checked={p.activa} onCheckedChange={() => handleToggle(p)} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => { setEditing(p); setDialogOpen(true); }}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(p.id)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
+        <div className="space-y-2.5">
+          {plantillas.map((p) => (
+            <div
+              key={p.id}
+              className={`bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all ${
+                !p.activa ? "opacity-60" : ""
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm">{p.nombre}</span>
+                    <Badge className={`${TIPO_COLORS[p.tipo] || ""} text-[10px] px-1.5 py-0`}>
+                      {TIPOS.find((t) => t.value === p.tipo)?.label || p.tipo}
+                    </Badge>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                      {DEST_LABELS[p.destinatario_default] || p.destinatario_default}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1 truncate">{p.titulo_template}</div>
+                  <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{p.mensaje_template}</div>
+                  {(p.variables_disponibles || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(p.variables_disponibles as string[]).map((v: string) => (
+                        <span key={v} className="text-[10px] bg-primary/8 text-primary/70 px-1.5 py-0.5 rounded font-mono">
+                          {`{{${v}}}`}
+                        </span>
+                      ))}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Switch checked={p.activa} onCheckedChange={() => handleToggle(p)} />
+                  <button
+                    onClick={() => { setEditing(p); setDialogOpen(true); }}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(p.id)}
+                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -272,8 +309,8 @@ export default function PlantillasPage() {
               <Label>Variables disponibles</Label>
               <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
                 {(editing.variables_disponibles || []).map((v) => (
-                  <Badge key={v} variant="secondary" className="cursor-pointer gap-1 pr-1">
-                    {"{{" + v + "}}"}
+                  <Badge key={v} variant="secondary" className="cursor-pointer gap-1 pr-1 font-mono text-xs">
+                    {`{{${v}}}`}
                     <button onClick={() => removeVariable(v)} className="ml-0.5 hover:text-red-500"><X className="h-3 w-3" /></button>
                   </Badge>
                 ))}
@@ -288,10 +325,10 @@ export default function PlantillasPage() {
               <Label>Título</Label>
               <Input ref={tituloRef} value={editing.titulo_template || ""} onChange={(e) => setEditing((x) => ({ ...x, titulo_template: e.target.value }))} placeholder="Ej: Tu pedido #{{numero}} está en camino" />
               {(editing.variables_disponibles || []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
+                <div className="flex flex-wrap gap-1 mt-1.5">
                   {(editing.variables_disponibles || []).map((v) => (
-                    <button key={v} onClick={() => insertVariable(v, "titulo")} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded hover:bg-primary/20 transition-colors">
-                      {"{{" + v + "}}"}
+                    <button key={v} onClick={() => insertVariable(v, "titulo")} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
+                      {`{{${v}}}`}
                     </button>
                   ))}
                 </div>
@@ -302,10 +339,10 @@ export default function PlantillasPage() {
               <Label>Mensaje</Label>
               <Textarea ref={mensajeRef} value={editing.mensaje_template || ""} onChange={(e) => setEditing((x) => ({ ...x, mensaje_template: e.target.value }))} placeholder="Ej: Hola {{cliente}}, tu pedido..." rows={3} />
               {(editing.variables_disponibles || []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
+                <div className="flex flex-wrap gap-1 mt-1.5">
                   {(editing.variables_disponibles || []).map((v) => (
-                    <button key={v} onClick={() => insertVariable(v, "mensaje")} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded hover:bg-primary/20 transition-colors">
-                      {"{{" + v + "}}"}
+                    <button key={v} onClick={() => insertVariable(v, "mensaje")} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
+                      {`{{${v}}}`}
                     </button>
                   ))}
                 </div>
@@ -321,7 +358,7 @@ export default function PlantillasPage() {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
               <Button onClick={handleSave} disabled={saving}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {editing.id ? "Guardar cambios" : "Crear plantilla"}
+                {editing.id ? "Guardar" : "Crear"}
               </Button>
             </div>
           </div>

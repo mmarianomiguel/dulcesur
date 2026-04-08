@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Clock, Loader2, Eye, ChevronLeft, ChevronRight, CheckCircle, XCircle, Send as SendIcon } from "lucide-react";
+import { Clock, Loader2, Eye, ChevronLeft, ChevronRight, CheckCircle, XCircle, Send as SendIcon, Users, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -41,11 +41,11 @@ const TIPO_LABELS: Record<string, string> = {
 
 const SEG_LABELS: Record<string, string> = {
   todos: "Todos",
-  cliente: "Cliente específico",
-  zona: "Por zona",
-  rol: "Por rol",
-  inactividad: "Por inactividad",
-  clientes_ids: "Lista de clientes",
+  cliente: "Cliente",
+  zona: "Zona",
+  rol: "Rol",
+  inactividad: "Inactivos",
+  clientes_ids: "Hoja ruta",
 };
 
 const PAGE_SIZE = 20;
@@ -74,6 +74,17 @@ interface DestRow {
   usuario_nombre?: string;
 }
 
+function tiempoRelativo(fecha: string): string {
+  const diff = Date.now() - new Date(fecha).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "ahora";
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d`;
+}
+
 export default function HistorialPage() {
   const [notifs, setNotifs] = useState<NotifRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +109,6 @@ export default function HistorialPage() {
       const { data, count, error } = await query;
       if (error) throw error;
 
-      // Get recipient counts per notification
       const notifIds = (data || []).map((n: any) => n.id);
       let destCounts: Record<string, { total: number; leidas: number }> = {};
 
@@ -141,7 +151,6 @@ export default function HistorialPage() {
         .order("created_at", { ascending: false });
 
       const rows = dests || [];
-      // Resolve names
       const clienteIds = rows.filter((d: any) => d.cliente_id).map((d: any) => d.cliente_id);
       const userIds = rows.filter((d: any) => d.usuario_id).map((d: any) => d.usuario_id);
 
@@ -172,77 +181,93 @@ export default function HistorialPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Clock className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Historial de Notificaciones</h1>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <Clock className="h-4.5 w-4.5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-bold truncate">Historial</h1>
+            <p className="text-xs text-muted-foreground hidden sm:block">Todas las notificaciones enviadas</p>
+          </div>
         </div>
         <Select value={tipoFilter} onValueChange={(v) => { if (v) { setTipoFilter(v); setPage(0); } }}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-32 sm:w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los tipos</SelectItem>
+            <SelectItem value="all">Todos</SelectItem>
             {Object.entries(TIPO_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : notifs.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">No hay notificaciones enviadas</div>
+        <div className="text-center py-16">
+          <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-3">
+            <Inbox className="h-7 w-7 text-gray-400" />
+          </div>
+          <p className="text-gray-500 font-medium">No hay notificaciones</p>
+          <p className="text-sm text-gray-400 mt-1">Las notificaciones enviadas aparecerán acá</p>
+        </div>
       ) : (
         <>
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-800">
-                <tr>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Fecha</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Título</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Tipo</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Audiencia</th>
-                  <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Destinatarios</th>
-                  <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Leídas</th>
-                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {notifs.map((n) => (
-                  <tr key={n.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => openDetail(n)}>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDateARG(n.created_at)}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-sm truncate max-w-xs">{n.titulo}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge className={TIPO_COLORS[n.tipo] || ""}>{TIPO_LABELS[n.tipo] || n.tipo}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{SEG_LABELS[n.segmentacion?.tipo] || n.segmentacion?.tipo}</td>
-                    <td className="px-4 py-3 text-center text-sm">{n.dest_count}</td>
-                    <td className="px-4 py-3 text-center text-sm">
-                      {n.dest_count ? (
-                        <span className={n.leidas_count === n.dest_count ? "text-green-600" : "text-gray-500"}>
-                          {n.leidas_count}/{n.dest_count}
-                        </span>
-                      ) : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Card list */}
+          <div className="space-y-2">
+            {notifs.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => openDetail(n)}
+                className="w-full text-left bg-white dark:bg-gray-900 border rounded-xl p-3.5 sm:p-4 hover:border-primary/20 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    {/* Title row */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm truncate">{n.titulo}</span>
+                      <Badge className={`${TIPO_COLORS[n.tipo] || ""} text-[10px] px-1.5 py-0 shrink-0`}>
+                        {TIPO_LABELS[n.tipo] || n.tipo}
+                      </Badge>
+                    </div>
+
+                    {/* Message preview */}
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">{n.mensaje}</p>
+
+                    {/* Meta row */}
+                    <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400">
+                      <span>{formatDateARG(n.created_at)}</span>
+                      <span className="flex items-center gap-0.5">
+                        <Users className="h-3 w-3" /> {n.dest_count}
+                      </span>
+                      <span>
+                        {n.dest_count ? (
+                          <span className={n.leidas_count === n.dest_count ? "text-green-500" : ""}>
+                            {n.leidas_count}/{n.dest_count} leídas
+                          </span>
+                        ) : "—"}
+                      </span>
+                      <span className="hidden sm:inline">{SEG_LABELS[n.segmentacion?.tipo] || ""}</span>
+                    </div>
+                  </div>
+
+                  {/* Arrow indicator */}
+                  <ChevronRight className="h-4 w-4 text-gray-300 shrink-0 mt-1" />
+                </div>
+              </button>
+            ))}
           </div>
 
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">{total} notificaciones</span>
+              <span className="text-xs sm:text-sm text-gray-500">{total} notificaciones</span>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm">{page + 1} / {totalPages}</span>
+                <span className="text-sm tabular-nums">{page + 1} / {totalPages}</span>
                 <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -258,39 +283,44 @@ export default function HistorialPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <SendIcon className="h-5 w-5 text-primary" />
-              Detalle de notificación
+              Detalle
             </DialogTitle>
           </DialogHeader>
           {detailNotif && (
             <div className="space-y-4 mt-2">
-              <div>
-                <div className="font-semibold">{detailNotif.titulo}</div>
-                <div className="text-sm text-gray-500 mt-1 whitespace-pre-wrap">{detailNotif.mensaje}</div>
-              </div>
-              <div className="flex gap-2 text-xs text-gray-400">
-                <Badge className={TIPO_COLORS[detailNotif.tipo] || ""}>{TIPO_LABELS[detailNotif.tipo]}</Badge>
-                <span>{formatDateARG(detailNotif.created_at)}</span>
+              {/* Notification content */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3.5">
+                <div className="font-semibold text-sm">{detailNotif.titulo}</div>
+                <div className="text-xs text-gray-500 mt-1 whitespace-pre-wrap">{detailNotif.mensaje}</div>
               </div>
 
+              <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
+                <Badge className={TIPO_COLORS[detailNotif.tipo] || ""}>{TIPO_LABELS[detailNotif.tipo]}</Badge>
+                <span>{formatDateARG(detailNotif.created_at)}</span>
+                <span>{SEG_LABELS[detailNotif.segmentacion?.tipo] || ""}</span>
+              </div>
+
+              {/* Recipients */}
               <div className="border-t pt-3">
-                <div className="text-sm font-medium mb-2">Destinatarios ({detailDests.length})</div>
+                <div className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-gray-400" />
+                  Destinatarios ({detailDests.length})
+                </div>
                 {loadingDetail ? (
-                  <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                  <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
                 ) : detailDests.length === 0 ? (
-                  <div className="text-sm text-gray-400">Sin destinatarios</div>
+                  <div className="text-sm text-gray-400 py-4 text-center">Sin destinatarios</div>
                 ) : (
-                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                  <div className="space-y-0.5 max-h-64 overflow-y-auto">
                     {detailDests.map((d) => (
-                      <div key={d.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <span className="truncate">{d.cliente_nombre || d.usuario_nombre || "—"}</span>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className="flex items-center gap-1 text-xs" title="Push">
+                      <div key={d.id} className="flex items-center justify-between text-sm py-2 px-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <span className="truncate font-medium text-xs">{d.cliente_nombre || d.usuario_nombre || "—"}</span>
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <span className="flex items-center gap-1 text-[11px]" title="Push enviada">
                             {d.push_enviada ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <XCircle className="h-3.5 w-3.5 text-gray-300" />}
-                            Push
                           </span>
-                          <span className="flex items-center gap-1 text-xs" title="Leída">
-                            {d.leida ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <XCircle className="h-3.5 w-3.5 text-gray-300" />}
-                            Leída
+                          <span className="flex items-center gap-1 text-[11px]" title="Leída">
+                            {d.leida ? <Eye className="h-3.5 w-3.5 text-green-500" /> : <Eye className="h-3.5 w-3.5 text-gray-300" />}
                           </span>
                         </div>
                       </div>
