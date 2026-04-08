@@ -50,10 +50,21 @@ export default function TiendaNavbar() {
   } | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("cliente_auth");
-      if (stored) { const p = JSON.parse(stored); if (p?.id) setClienteId(p.id); }
-    } catch {}
+    const readCliente = () => {
+      try {
+        const stored = localStorage.getItem("cliente_auth");
+        if (stored) { const p = JSON.parse(stored); if (p?.id) { setClienteId(p.id); return; } }
+      } catch {}
+      setClienteId(null);
+    };
+    readCliente();
+    // Re-check on storage changes (login/logout from other tabs) and on focus (same tab navigation)
+    window.addEventListener("storage", readCliente);
+    window.addEventListener("focus", readCliente);
+    return () => {
+      window.removeEventListener("storage", readCliente);
+      window.removeEventListener("focus", readCliente);
+    };
   }, []);
 
   useEffect(() => {
