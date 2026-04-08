@@ -897,6 +897,19 @@ export default function CheckoutPage() {
 
       // NO caja entries at checkout — admin confirms cobro from venta detail dialog
 
+      // Send push notification to admin (fire-and-forget)
+      fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          numero,
+          cliente: `${nombre} ${apellido}`.trim(),
+          total: vTotal,
+          forma_pago: metodoPago === "efectivo" ? "Efectivo" : metodoPago === "transferencia" ? "Transferencia" : "Mixto",
+          metodo_entrega: metodoEntrega === "retiro" ? "retiro" : "envio",
+        }),
+      }).catch(() => {});
+
       localStorage.removeItem("carrito");
       window.dispatchEvent(new Event("cart-updated"));
       setOrderNumber(numero);

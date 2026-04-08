@@ -28,6 +28,9 @@ import {
   FileText,
   X,
   UserCheck,
+  Bell,
+  BellRing,
+  Loader2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -178,6 +181,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [cajaAbierta, setCajaAbierta] = useState(false);
   const { dark, toggle: toggleDark } = useDarkMode();
   const permsFetched = useRef(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [userId, setUserId] = useState<string>("");
+  const pushChecked = useRef(false);
 
   // Close mobile sidebar on route change
   const prevPathname = useRef(pathname);
@@ -251,6 +258,76 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Check push subscription status on mount
+  useEffect(() => {
+    if (pushChecked.current) return;
+    pushChecked.current = true;
+    (async () => {
+      try {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+        const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+        if (!reg) return;
+        const sub = await reg.pushManager.getSubscription();
+        if (!sub) return;
+        const res = await fetch(`/api/push/subscribe?endpoint=${encodeURIComponent(sub.endpoint)}`);
+        const { subscribed } = await res.json();
+        setPushSubscribed(subscribed);
+      } catch {}
+    })();
+  }, []);
+
+  const togglePush = async () => {
+    if (pushLoading) return;
+    setPushLoading(true);
+    try {
+      // Register SW if not already
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+
+      if (pushSubscribed) {
+        // Unsubscribe
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: sub.toJSON(), action: "unsubscribe" }),
+          });
+          await sub.unsubscribe();
+        }
+        setPushSubscribed(false);
+      } else {
+        // Request permission
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") {
+          setPushLoading(false);
+          return;
+        }
+        // Subscribe
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+        });
+        // Get user id
+        let uid = userId;
+        if (!uid) {
+          const { data: { user } } = await supabase.auth.getUser();
+          uid = user?.id || "unknown";
+          setUserId(uid);
+        }
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: sub.toJSON(), user_id: uid }),
+        });
+        setPushSubscribed(true);
+      }
+    } catch (err) {
+      console.error("Push toggle error:", err);
+    }
+    setPushLoading(false);
+  };
 
   const loadModulos = useCallback(() => {
     try {
@@ -511,6 +588,20 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                   <Building2 className="w-3 h-3" /> {wl.system_name || "DulceSur"}
                 </p>
               </div>
+              <button
+                onClick={togglePush}
+                title={pushSubscribed ? "Desactivar notificaciones push" : "Activar notificaciones push"}
+                aria-label="Notificaciones push"
+                className={`transition-colors ${pushSubscribed ? "text-primary" : "text-sidebar-foreground/50 hover:text-sidebar-foreground"}`}
+              >
+                {pushLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : pushSubscribed ? (
+                  <BellRing className="w-4 h-4" />
+                ) : (
+                  <Bell className="w-4 h-4" />
+                )}
+              </button>
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();
