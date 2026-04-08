@@ -2,7 +2,7 @@
 
 import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -115,6 +115,8 @@ export default function HojaDeRutaPage() {
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [dlvConfirm, setDlvConfirm] = useState<{ open: boolean; ids: string[]; pendiente: number; type: "paid" | "unpaid" | "no_client"; clienteNombre?: string }>({ open: false, ids: [], pendiente: 0, type: "paid" });
   const [orden, setOrden] = useState<Record<string, number>>({});
+  const [savedOrdenLoaded, setSavedOrdenLoaded] = useState(false);
+  const savedOrdenRef = useRef<Record<string, number>>({});
   const [filterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
   const [search, setSearch] = useState("");
   const [showAllPending, setShowAllPending] = useState(true);
@@ -273,10 +275,20 @@ export default function HojaDeRutaPage() {
       setNcPorVenta({});
     }
 
-    // Initialize order sequence
+    // Initialize order sequence, preferring saved order from hoja_ruta_items
+    const saved = savedOrdenRef.current;
     const newOrden: Record<string, number> = {};
-    rows.forEach((v, i) => {
-      newOrden[v.id] = orden[v.id] ?? i + 1;
+    // Find the max saved orden to append new ventas after it
+    const maxSaved = Object.values(saved).length > 0 ? Math.max(...Object.values(saved)) : 0;
+    let nextOrden = maxSaved + 1;
+    rows.forEach((v) => {
+      if (saved[v.id] !== undefined) {
+        newOrden[v.id] = saved[v.id];
+      } else if (orden[v.id] !== undefined) {
+        newOrden[v.id] = orden[v.id];
+      } else {
+        newOrden[v.id] = nextOrden++;
+      }
     });
     setOrden(newOrden);
 
@@ -288,7 +300,7 @@ export default function HojaDeRutaPage() {
     fetchVentas();
   }, [fetchVentas]);
 
-  // Check if there's an existing active hoja de ruta for today
+  // Check if there's an existing active hoja de ruta and load saved order
   useEffect(() => {
     (async () => {
       const { data } = await supabase
@@ -302,6 +314,26 @@ export default function HojaDeRutaPage() {
         setHojaRutaId(data.id);
         setHojaToken(data.token_fijo);
         if (data.modo_link) setModoLink(data.modo_link);
+
+        // Load saved order from hoja_ruta_items
+        const { data: items } = await supabase
+          .from("hoja_ruta_items")
+          .select("venta_id, orden")
+          .eq("hoja_ruta_id", data.id)
+          .order("orden");
+        if (items && items.length > 0) {
+          const saved: Record<string, number> = {};
+          items.forEach((item: any) => { saved[item.venta_id] = item.orden; });
+          savedOrdenRef.current = saved;
+          setSavedOrdenLoaded(true);
+          setOrden((prev) => {
+            const merged = { ...prev };
+            for (const [k, v] of Object.entries(saved)) { merged[k] = v; }
+            return merged;
+          });
+        } else {
+          setSavedOrdenLoaded(true);
+        }
       }
     })();
   }, []);
