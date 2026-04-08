@@ -513,6 +513,7 @@ export default function ComprasPage() {
 
   // Product creation removed — now opens full dialog via /admin/productos?crear=true
   const [searchHighlight, setSearchHighlight] = useState(0);
+  const [searchPresIdx, setSearchPresIdx] = useState(-1); // -1 = Unidad, 0+ = box variant index
 
   // Keyboard navigation for items table
   const [selectedItemIdx, setSelectedItemIdx] = useState<number | null>(null);
@@ -533,10 +534,24 @@ export default function ComprasPage() {
 
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedItemIdx((prev) => prev === null ? 0 : Math.min(prev + 1, len - 1));
+        setSelectedItemIdx((prev) => {
+          const next = prev === null ? 0 : Math.min(prev + 1, len - 1);
+          setTimeout(() => {
+            const rows = document.querySelectorAll("[data-compra-item]");
+            rows[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }, 0);
+          return next;
+        });
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedItemIdx((prev) => prev === null ? 0 : Math.max(prev - 1, 0));
+        setSelectedItemIdx((prev) => {
+          const next = prev === null ? 0 : Math.max(prev - 1, 0);
+          setTimeout(() => {
+            const rows = document.querySelectorAll("[data-compra-item]");
+            rows[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }, 0);
+          return next;
+        });
       } else if (e.key === "ArrowRight" || e.key === "+") {
         e.preventDefault();
         if (selectedItemIdx === null || selectedItemIdx >= len) return;
@@ -1514,6 +1529,7 @@ export default function ComprasPage() {
                       document.querySelector(`[data-search-idx="${next}"]`)?.scrollIntoView({ block: "nearest" });
                       return next;
                     });
+                    setSearchPresIdx(-1);
                   } else if (e.key === "ArrowUp") {
                     e.preventDefault();
                     setSearchHighlight((h) => {
@@ -1521,9 +1537,26 @@ export default function ComprasPage() {
                       document.querySelector(`[data-search-idx="${next}"]`)?.scrollIntoView({ block: "nearest" });
                       return next;
                     });
+                    setSearchPresIdx(-1);
+                  } else if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    const p = productResults[searchHighlight];
+                    if (p) {
+                      const boxPres = (searchPresentaciones[p.id] || []).find((pr) => pr.cantidad > 1);
+                      if (boxPres) setSearchPresIdx((h) => Math.min(h + 1, 0));
+                    }
+                  } else if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setSearchPresIdx((h) => Math.max(h - 1, -1));
                   } else if (e.key === "Enter" && productResults[searchHighlight]) {
                     e.preventDefault();
-                    addProduct(productResults[searchHighlight]);
+                    const p = productResults[searchHighlight];
+                    const boxPres = (searchPresentaciones[p.id] || []).find((pr) => pr.cantidad > 1);
+                    if (searchPresIdx >= 0 && boxPres) {
+                      addProduct(p, boxPres.cantidad, boxPres.costo > 0 ? Math.round(boxPres.costo / boxPres.cantidad) : p.costo);
+                    } else {
+                      addProduct(p);
+                    }
                   }
                 }}
                 className="pl-9 h-11"
@@ -1570,8 +1603,8 @@ export default function ComprasPage() {
                       <div className="flex gap-2 mt-2.5 pl-14">
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="h-8 text-xs flex-1"
+                          variant={isHighlighted && searchPresIdx === -1 ? "default" : "outline"}
+                          className={`h-8 text-xs flex-1 ${isHighlighted && searchPresIdx === -1 ? "ring-2 ring-primary" : ""}`}
                           onClick={() => addProduct(p)}
                         >
                           + Unidad
@@ -1579,7 +1612,7 @@ export default function ComprasPage() {
                         {boxPres && (
                           <Button
                             size="sm"
-                            className="h-8 text-xs flex-1"
+                            className={`h-8 text-xs flex-1 ${isHighlighted && searchPresIdx === 0 ? "ring-2 ring-primary" : ""}`}
                             onClick={() => addProduct(p, boxPres.cantidad, boxPres.costo > 0 ? Math.round(boxPres.costo / boxPres.cantidad) : p.costo)}
                           >
                             + {boxLabel} ({boxPres.cantidad} un.)

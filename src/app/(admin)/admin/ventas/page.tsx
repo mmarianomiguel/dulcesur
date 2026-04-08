@@ -180,6 +180,7 @@ export default function VentasPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [searchHighlight, setSearchHighlight] = useState(0);
+  const [searchPresIdx, setSearchPresIdx] = useState(-1); // -1 = Unidad, 0+ = box variant index
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [clientHighlight, setClientHighlight] = useState(0);
@@ -2946,18 +2947,34 @@ export default function VentasPage() {
               onChange={(e) => { setProductSearch(e.target.value); setSearchHighlight(0); }}
               onKeyDown={(e) => {
                 const list = filteredProducts.slice(0, 50);
-                if (e.key === "ArrowDown") { e.preventDefault(); setSearchHighlight((h) => Math.min(h + 1, list.length - 1)); }
-                else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHighlight((h) => Math.max(h - 1, 0)); }
-                else if (e.key === "Enter" && list.length > 0) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setSearchHighlight((h) => Math.min(h + 1, list.length - 1)); setSearchPresIdx(-1); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHighlight((h) => Math.max(h - 1, 0)); setSearchPresIdx(-1); }
+                else if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  const p = list[searchHighlight];
+                  if (p) {
+                    const boxVars = (presentacionesMap[p.id] || []).filter((pr) => pr.nombre !== "Unidad" && pr.cantidad !== 1);
+                    if (boxVars.length > 0) setSearchPresIdx((h) => Math.min(h + 1, boxVars.length - 1));
+                  }
+                } else if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  setSearchPresIdx((h) => Math.max(h - 1, -1));
+                } else if (e.key === "Enter" && list.length > 0) {
                   e.preventDefault();
                   const p = list[searchHighlight];
                   if (p) {
                     const pres = presentacionesMap[p.id] || [];
                     if (pres.length === 0) fetchPresentaciones(p.id);
-                    const matchedPres = productSearch.length >= 2
-                      ? pres.find((pr) => (pr.codigo || "").toLowerCase() === productSearch.toLowerCase())
-                      : undefined;
-                    tryAddItem(p, matchedPres);
+                    const boxVars = pres.filter((pr) => pr.nombre !== "Unidad" && pr.cantidad !== 1);
+                    const selectedPres = searchPresIdx >= 0 && searchPresIdx < boxVars.length ? boxVars[searchPresIdx] : undefined;
+                    if (!selectedPres) {
+                      const matchedPres = productSearch.length >= 2
+                        ? pres.find((pr) => (pr.codigo || "").toLowerCase() === productSearch.toLowerCase())
+                        : undefined;
+                      tryAddItem(p, matchedPres);
+                    } else {
+                      tryAddItem(p, selectedPres);
+                    }
                   }
                 }
               }}
@@ -3014,14 +3031,14 @@ export default function VentasPage() {
                   </button>
                   {boxVariants.length > 0 && (
                     <div className="flex gap-2 mt-2.5 pl-14">
-                      <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => tryAddItem(p)}>
+                      <Button size="sm" variant={highlighted && searchPresIdx === -1 ? "default" : "outline"} className={`h-8 text-xs flex-1 ${highlighted && searchPresIdx === -1 ? "ring-2 ring-primary" : ""}`} onClick={() => tryAddItem(p)}>
                         + Unidad
                       </Button>
-                      {boxVariants.map((pr) => (
+                      {boxVariants.map((pr, prIdx) => (
                         <Button
                           key={pr.id}
                           size="sm"
-                          className={`h-8 text-xs flex-1 ${matchedPres?.id === pr.id ? "ring-2 ring-primary" : ""}`}
+                          className={`h-8 text-xs flex-1 ${(highlighted && searchPresIdx === prIdx) || matchedPres?.id === pr.id ? "ring-2 ring-primary" : ""}`}
                           onClick={() => tryAddItem(p, pr)}
                         >
                           + {pr.nombre || `Caja x${pr.cantidad}`} ({pr.cantidad} un.)
