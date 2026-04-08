@@ -804,8 +804,13 @@ export default function HojaDeRutaPage() {
       }
 
       if (hojaRutaId) {
-        // Update existing hoja
-        await supabase.from("hoja_ruta").update({ modo_link: modoLink }).eq("id", hojaRutaId);
+        // Update existing hoja — generate token if missing
+        let currentToken = hojaToken;
+        if (!currentToken) {
+          currentToken = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+          setHojaToken(currentToken);
+        }
+        await supabase.from("hoja_ruta").update({ modo_link: modoLink, token_fijo: currentToken }).eq("id", hojaRutaId);
         // Delete old items and re-insert with new order
         await supabase.from("hoja_ruta_items").delete().eq("hoja_ruta_id", hojaRutaId);
         await supabase.from("hoja_ruta_items").insert(
