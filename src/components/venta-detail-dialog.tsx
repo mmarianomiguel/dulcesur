@@ -553,11 +553,7 @@ export function VentaDetailDialog({
                   <div className="space-y-2 max-h-[400px] overflow-y-auto">
                     {productResults.map((p, idx) => {
                       const highlighted = idx === searchHighlight;
-                      const boxVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
-                      const hasMedio = boxVariants.some(pr => (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio"));
-                      const boxPres = boxVariants.find(pr => (pr.unidades_por_presentacion || 1) > 1);
-                      const syntheticMedio = (!hasMedio && boxPres) ? [{ nombre: "½ Caja", precio: Math.round(boxPres.precio / 2), unidades_por_presentacion: 0.5 }] : [];
-                      const allVariants = [...boxVariants, ...syntheticMedio];
+                      const allVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
                       const stockVal = p.stock ?? null;
                       return (
                         <div
@@ -600,20 +596,16 @@ export function VentaDetailDialog({
                               <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => addProduct(p)}>
                                 + Unidad
                               </Button>
-                              {allVariants.map((pr, i) => {
-                                const isMedioVariant = (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio");
-                                const label = isMedioVariant ? "½ Caja" : pr.nombre;
-                                return (
-                                  <Button
-                                    key={i}
-                                    size="sm"
-                                    className="h-8 text-xs flex-1"
-                                    onClick={() => addProduct(p, pr)}
-                                  >
-                                    + {label}
-                                  </Button>
-                                );
-                              })}
+                              {allVariants.map((pr, i) => (
+                                <Button
+                                  key={i}
+                                  size="sm"
+                                  className="h-8 text-xs flex-1"
+                                  onClick={() => addProduct(p, pr)}
+                                >
+                                  + {pr.nombre}
+                                </Button>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -649,7 +641,7 @@ export function VentaDetailDialog({
                       const upp = item.unidades_por_presentacion || 1;
                       const isMedio = upp < 1;
                       const displayQty = isMedio ? item.cantidad * upp : item.cantidad;
-                      const displayStep = isMedio ? upp : 0.5;
+                      const displayStep = isMedio ? upp : 1;
                       return (
                         <tr key={idx} className="border-b last:border-0">
                           <td className="px-3 py-2 font-medium">
