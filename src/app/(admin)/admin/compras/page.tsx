@@ -796,6 +796,11 @@ export default function ComprasPage() {
         actualizarPrecio: true,
       },
     ]);
+    // Scroll to the newly added item after render
+    setTimeout(() => {
+      const rows = document.querySelectorAll("[data-compra-item]");
+      if (rows.length > 0) rows[rows.length - 1].scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
     setProductSearch("");
     setProductResults([]);
     setProductSearchOpen(false);
@@ -1644,7 +1649,7 @@ export default function ComprasPage() {
                 {items.map((item, idx) => {
                   const costoChanged = item.costo_unitario !== item.costo_original;
                   return (
-                    <div key={item.producto_id} className="py-3 px-4 space-y-2">
+                    <div key={item.producto_id} data-compra-item className="py-3 px-4 space-y-2">
                       {/* Product header */}
                       <div className="flex items-center gap-2">
                         <div className="w-9 h-9 rounded bg-muted flex items-center justify-center overflow-hidden shrink-0">
@@ -1766,6 +1771,7 @@ export default function ComprasPage() {
                       return (
                         <tr
                           key={item.producto_id}
+                          data-compra-item
                           className={`border-b last:border-0 transition-colors cursor-pointer ${isSelected ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted/50"}`}
                           onClick={() => setSelectedItemIdx(idx)}
                         >
