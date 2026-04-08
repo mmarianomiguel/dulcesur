@@ -2511,18 +2511,18 @@ export default function ClientesPage() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl w-[95vw] max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>{editingClient ? "Editar cliente" : "Nuevo cliente"}</DialogTitle>
           </DialogHeader>
           <Tabs defaultValue="persona" className="mt-2">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="persona">Persona física</TabsTrigger>
-              <TabsTrigger value="facturacion">Datos de facturación</TabsTrigger>
-              <TabsTrigger value="password">Restablecer contraseña</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 h-auto">
+              <TabsTrigger value="persona" className="text-xs sm:text-sm px-1.5 sm:px-3 py-1.5">Persona</TabsTrigger>
+              <TabsTrigger value="facturacion" className="text-xs sm:text-sm px-1.5 sm:px-3 py-1.5">Facturación</TabsTrigger>
+              <TabsTrigger value="password" className="text-xs sm:text-sm px-1.5 sm:px-3 py-1.5">Contraseña</TabsTrigger>
             </TabsList>
-            <TabsContent value="persona" className="space-y-4 mt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <TabsContent value="persona" className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
                   <Label>Código de cliente</Label>
                   <Input value={form.codigo_cliente} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 4); f("codigo_cliente", v); }} maxLength={4} className="font-mono" />
@@ -2548,17 +2548,17 @@ export default function ClientesPage() {
                   <Input value={form.numero_documento} onChange={(e) => f("numero_documento", e.target.value)} />
                 </div>
                 <div className="sm:col-span-2 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <Label>Domicilio</Label>
                     {form.domicilio && (
                       <a
                         href={form.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([form.domicilio, form.localidad, form.provincia].filter(Boolean).join(", "))}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                        className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 shrink-0"
                       >
                         <MapPin className="w-3 h-3" />
-                        Ver en mapa {form.maps_url && "(custom)"}
+                        <span className="hidden sm:inline">Ver en mapa</span><span className="sm:hidden">Mapa</span>
                       </a>
                     )}
                   </div>
@@ -2567,7 +2567,7 @@ export default function ClientesPage() {
                     <Input
                       value={form.maps_url}
                       onChange={(e) => f("maps_url", e.target.value)}
-                      placeholder="Link de Google Maps personalizado (opcional)"
+                      placeholder="Link de Google Maps (opcional)"
                       className="text-xs h-8"
                     />
                     {form.maps_url && (
@@ -2700,8 +2700,8 @@ export default function ClientesPage() {
                 </div>
               </div>
             </TabsContent>
-            <TabsContent value="facturacion" className="space-y-4 mt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <TabsContent value="facturacion" className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="sm:col-span-2 space-y-2">
                   <Label>Razón social</Label>
                   <Input value={form.razon_social} onChange={(e) => f("razon_social", e.target.value)} />
@@ -2739,7 +2739,7 @@ export default function ClientesPage() {
                 </div>
               </div>
             </TabsContent>
-            <TabsContent value="password" className="space-y-4 mt-4">
+            <TabsContent value="password" className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
               <p className="text-sm text-muted-foreground">Solo disponible para clientes con cuenta en la tienda online</p>
               {editingClient && authEmail ? (
                 <div className="space-y-4">
@@ -2808,7 +2808,7 @@ export default function ClientesPage() {
               )}
             </TabsContent>
           </Tabs>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={savingClient}>{savingClient ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}{editingClient ? "Guardar cambios" : "Crear cliente"}</Button>
           </div>
