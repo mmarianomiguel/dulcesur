@@ -16,10 +16,14 @@ if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   );
 }
 
+function ascii(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 async function sendPushToAll(title: string, body: string, tag: string, url: string) {
   const { data: subs } = await supabase.from("push_subscriptions").select("*");
   if (!subs || subs.length === 0) return;
-  const payload = JSON.stringify({ title, body, tag, url });
+  const payload = JSON.stringify({ title: ascii(title), body: ascii(body), tag, url });
   const expired: string[] = [];
   await Promise.allSettled(
     subs.map(async (sub) => {

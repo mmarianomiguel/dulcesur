@@ -14,9 +14,13 @@ webpush.setVapidDetails(
 );
 
 // POST — send a test notification with custom title/body
+function ascii(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export async function POST(req: NextRequest) {
   const { title, body, tag, url } = await req.json();
-  const payload = JSON.stringify({ title, body, tag: tag || "test", url: url || "/admin" });
+  const payload = JSON.stringify({ title: ascii(title), body: ascii(body), tag: tag || "test", url: url || "/admin" });
 
   const { data: subs } = await supabase.from("push_subscriptions").select("*");
   if (!subs || subs.length === 0) return NextResponse.json({ sent: 0 });

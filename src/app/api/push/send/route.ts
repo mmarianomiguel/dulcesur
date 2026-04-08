@@ -13,6 +13,11 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!
 );
 
+// Strip accents for push compatibility (iOS Safari doesn't decode UTF-8 well in push payloads)
+function ascii(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -29,15 +34,15 @@ export async function POST(req: NextRequest) {
 
     const title = isEnvio ? `Nuevo pedido #${numero} - ENVIO` : `Nuevo pedido #${numero} - RETIRO`;
     const lines = [
-      `Cliente: ${cliente}`,
+      `Cliente: ${ascii(cliente)}`,
       `Total: $${Math.round(total).toLocaleString("es-AR")}`,
-      `Pago: ${forma_pago}`,
+      `Pago: ${ascii(forma_pago)}`,
       `Despacho: ${despacho}`,
     ];
 
     const payload = JSON.stringify({
-      title,
-      body: lines.join("\n"),
+      title: ascii(title),
+      body: ascii(lines.join("\n")),
       tag: `pedido-${numero}`,
       metodo_entrega,
       url: "/admin/ventas/pedidos-online",
