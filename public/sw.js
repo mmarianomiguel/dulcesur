@@ -5,9 +5,11 @@ self.addEventListener("push", (event) => {
 
   let data;
   try {
-    data = event.data.json();
+    // Decode as UTF-8 explicitly to preserve accented characters
+    const raw = new TextDecoder("utf-8").decode(event.data.arrayBuffer());
+    data = JSON.parse(raw);
   } catch {
-    data = { title: "DulceSur", body: event.data.text() };
+    try { data = event.data.json(); } catch { data = { title: "DulceSur", body: event.data.text() }; }
   }
 
   const isEnvio = data.metodo_entrega === "envio";
