@@ -147,6 +147,7 @@ export default function HojaDeRutaPage() {
   // Notificaciones a clientes
   const [notifSending, setNotifSending] = useState(false);
   const [notifSent, setNotifSent] = useState(false);
+  const [showNotifDialog, setShowNotifDialog] = useState(false);
 
   const fetchVentas = useCallback(async () => {
     setLoading(true);
@@ -990,14 +991,12 @@ export default function HojaDeRutaPage() {
             </Button>
           )}
           <Button
-            onClick={enviarNotificacionesRuta}
+            onClick={() => setShowNotifDialog(true)}
             disabled={notifSending || notifSent || filteredVentas.length === 0}
             variant={notifSent ? "outline" : "secondary"}
             size="sm"
           >
-            {notifSending ? (
-              <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Enviando...</>
-            ) : notifSent ? (
+            {notifSent ? (
               <><CheckCircle className="w-4 h-4 mr-1.5 text-green-500" /> Notificados</>
             ) : (
               <><Bell className="w-4 h-4 mr-1.5" /> Notificar clientes</>
@@ -2095,6 +2094,51 @@ export default function HojaDeRutaPage() {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Notify clients dialog */}
+      <Dialog open={showNotifDialog} onOpenChange={setShowNotifDialog}>
+        <DialogContent className="max-w-sm max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="w-5 h-5 text-primary" />
+              Notificar clientes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-1">
+            <p className="text-sm text-muted-foreground">
+              Se enviará la notificación <strong>&quot;Tu pedido está en camino&quot;</strong> a los siguientes clientes:
+            </p>
+            <div className="border rounded-lg divide-y max-h-52 overflow-y-auto">
+              {(() => {
+                const seen = new Set<string>();
+                const uniqueClientes: ClienteInfo[] = [];
+                for (const v of filteredVentas) {
+                  if (v.clientes && v.cliente_id && !seen.has(v.cliente_id)) {
+                    seen.add(v.cliente_id);
+                    uniqueClientes.push(v.clientes);
+                  }
+                }
+                return uniqueClientes.map((c) => (
+                  <div key={c.id} className="px-3 py-2 text-sm flex items-center justify-between">
+                    <span className="font-medium">{c.nombre}</span>
+                    {c.telefono && <span className="text-xs text-gray-400">{c.telefono}</span>}
+                  </div>
+                ));
+              })()}
+            </div>
+            {(() => {
+              const count = new Set(filteredVentas.map((v) => v.cliente_id).filter(Boolean)).size;
+              return <p className="text-xs text-gray-400">{count} cliente{count !== 1 ? "s" : ""} serán notificados</p>;
+            })()}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setShowNotifDialog(false)}>Cancelar</Button>
+              <Button size="sm" onClick={() => { setShowNotifDialog(false); enviarNotificacionesRuta(); }} disabled={notifSending}>
+                {notifSending ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Enviando...</> : <><Bell className="w-4 h-4 mr-1.5" /> Enviar notificaciones</>}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
