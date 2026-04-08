@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   },
   description:
     "Tienda online de DulceSur. Golosinas, galletitas, snacks y más al mejor precio.",
+  manifest: "/manifest-tienda.json",
 };
 
 export default function TiendaLayout({ children }: { children: React.ReactNode }) {
