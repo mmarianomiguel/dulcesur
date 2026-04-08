@@ -9,7 +9,7 @@ const supabase = createClient(
 // POST — subscribe or unsubscribe from push notifications
 export async function POST(req: NextRequest) {
   try {
-    const { subscription, user_id, action } = await req.json();
+    const { subscription, user_id, cliente_id, action } = await req.json();
 
     if (action === "unsubscribe") {
       if (!subscription?.endpoint) {
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
         endpoint: subscription.endpoint,
         keys_p256dh: subscription.keys.p256dh,
         keys_auth: subscription.keys.auth,
+        cliente_id: cliente_id || null,
       },
       { onConflict: "endpoint" }
     );

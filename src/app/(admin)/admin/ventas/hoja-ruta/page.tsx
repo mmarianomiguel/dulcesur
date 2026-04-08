@@ -55,6 +55,7 @@ import {
   Share2,
   Copy,
   ExternalLink,
+  Bell,
 } from "lucide-react";
 
 interface ClienteInfo {
@@ -142,6 +143,10 @@ export default function HojaDeRutaPage() {
   const [savingRuta, setSavingRuta] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [modoLink, setModoLink] = useState<"solo_ver" | "confirmar" | "confirmar_cobrar">("confirmar_cobrar");
+
+  // Notificaciones a clientes
+  const [notifSending, setNotifSending] = useState(false);
+  const [notifSent, setNotifSent] = useState(false);
 
   const fetchVentas = useCallback(async () => {
     setLoading(true);
@@ -857,6 +862,34 @@ export default function HojaDeRutaPage() {
     setSavingRuta(false);
   };
 
+  const enviarNotificacionesRuta = async () => {
+    const clienteIds = [...new Set(filteredVentas.map((v) => v.cliente_id).filter(Boolean))] as string[];
+    if (clienteIds.length === 0) {
+      return;
+    }
+    setNotifSending(true);
+    try {
+      const res = await fetch("/api/notificaciones/enviar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: "Tu pedido esta en camino",
+          mensaje: "Tu pedido esta siendo enviado. Pronto lo recibiras!",
+          tipo: "pedido",
+          url: "/cuenta/pedidos",
+          segmentacion: { tipo: "clientes_ids", valor: clienteIds.map(Number) },
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+      setNotifSent(true);
+    } catch (err) {
+      console.error("Error sending notifications:", err);
+    } finally {
+      setNotifSending(false);
+    }
+  };
+
   // Filter and sort ventas
   const filteredVentas = ventas.filter((v) => {
     if (filterEntrega === "envio" && v.metodo_entrega !== "envio") return false;
@@ -956,6 +989,20 @@ export default function HojaDeRutaPage() {
               <span className="sm:hidden">Link</span>
             </Button>
           )}
+          <Button
+            onClick={enviarNotificacionesRuta}
+            disabled={notifSending || notifSent || filteredVentas.length === 0}
+            variant={notifSent ? "outline" : "secondary"}
+            size="sm"
+          >
+            {notifSending ? (
+              <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Enviando...</>
+            ) : notifSent ? (
+              <><CheckCircle className="w-4 h-4 mr-1.5 text-green-500" /> Notificados</>
+            ) : (
+              <><Bell className="w-4 h-4 mr-1.5" /> Notificar clientes</>
+            )}
+          </Button>
           <Button onClick={saveAndShareRuta} disabled={savingRuta || filteredVentas.length === 0} size="sm">
             {savingRuta ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Share2 className="w-4 h-4 mr-1.5" />}
             {hojaRutaId ? "Actualizar Ruta" : "Guardar y Compartir"}

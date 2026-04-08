@@ -61,6 +61,26 @@ export interface Database {
         Insert: Partial<Numerador>;
         Update: Partial<Numerador>;
       };
+      notificacion_plantillas: {
+        Row: NotificacionPlantilla;
+        Insert: Partial<NotificacionPlantilla>;
+        Update: Partial<NotificacionPlantilla>;
+      };
+      notificaciones: {
+        Row: Notificacion;
+        Insert: Partial<Notificacion>;
+        Update: Partial<Notificacion>;
+      };
+      notificacion_destinatarios: {
+        Row: NotificacionDestinatarioRow;
+        Insert: Partial<NotificacionDestinatarioRow>;
+        Update: Partial<NotificacionDestinatarioRow>;
+      };
+      notificacion_preferencias: {
+        Row: NotificacionPreferencia;
+        Insert: Partial<NotificacionPreferencia>;
+        Update: Partial<NotificacionPreferencia>;
+      };
     };
     Functions: {
       next_numero: {
@@ -344,4 +364,58 @@ export interface Numerador {
   tipo: string;
   punto_venta: string;
   ultimo_numero: number;
+}
+
+// ── Notification System ──
+
+export type NotificacionTipo = "pedido" | "promocion" | "recordatorio" | "catalogo" | "cuenta_corriente" | "sistema";
+export type NotificacionDestinatarioTipo = "cliente" | "admin" | "vendedor" | "todos";
+
+export interface NotificacionPlantilla {
+  id: string;
+  nombre: string;
+  titulo_template: string;
+  mensaje_template: string;
+  tipo: NotificacionTipo;
+  destinatario_default: NotificacionDestinatarioTipo;
+  activa: boolean;
+  variables_disponibles: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Notificacion {
+  id: string;
+  plantilla_id: string | null;
+  titulo: string;
+  mensaje: string;
+  tipo: NotificacionTipo;
+  url: string | null;
+  enviada_por: string | null;
+  segmentacion: {
+    tipo: "todos" | "cliente" | "zona" | "rol" | "inactividad" | "clientes_ids";
+    valor?: string | number | number[];
+  };
+  created_at: string;
+}
+
+export interface NotificacionDestinatarioRow {
+  id: string;
+  notificacion_id: string;
+  cliente_id: number | null;
+  usuario_id: string | null;
+  leida: boolean;
+  leida_at: string | null;
+  push_enviada: boolean;
+  push_error: string | null;
+  created_at: string;
+}
+
+export interface NotificacionPreferencia {
+  id: string;
+  cliente_id: number;
+  tipo: NotificacionTipo;
+  push_enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }

@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { slugify, productSlug } from "@/lib/utils";
 import { useCart } from "./cart-drawer";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
+import NotificationBell from "./notification-bell";
 
 interface Categoria {
   id: string;
@@ -39,6 +40,7 @@ export default function TiendaNavbar() {
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [logoSrc, setLogoSrc] = useState<string>(FALLBACK_LOGO);
+  const [clienteId, setClienteId] = useState<number | null>(null);
   const [mobilLogoSrc, setMobilLogoSrc] = useState<string>(FALLBACK_LOGO);
 
   const [config, setConfig] = useState<{
@@ -46,6 +48,13 @@ export default function TiendaNavbar() {
     umbral_envio_gratis?: number; horario_atencion_inicio?: string;
     horario_atencion_fin?: string; dias_atencion?: string[];
   } | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("cliente_auth");
+      if (stored) { const p = JSON.parse(stored); if (p?.id) setClienteId(p.id); }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -242,6 +251,9 @@ export default function TiendaNavbar() {
               <User className="h-5 w-5" />
               Mi cuenta
             </Link>
+
+            {/* Notifications */}
+            {clienteId && <NotificationBell clienteId={clienteId} />}
 
             {/* Cart */}
             <button

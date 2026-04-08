@@ -128,6 +128,18 @@ const navigation: NavItem[] = [
       { name: "Percepciones", href: "/admin/ventas/percepciones" },
     ],
   },
+  {
+    name: "Notificaciones",
+    href: "/admin/notificaciones",
+    icon: BellRing,
+    children: [
+      { name: "Dashboard", href: "/admin/notificaciones" },
+      { name: "Enviar", href: "/admin/notificaciones/enviar" },
+      { name: "Plantillas", href: "/admin/notificaciones/plantillas" },
+      { name: "Historial", href: "/admin/notificaciones/historial" },
+      { name: "Configuración", href: "/admin/notificaciones/configuracion" },
+    ],
+  },
   { name: "Vendedores", href: "/admin/vendedores", icon: UserCheck },
   {
     name: "Auditoría",
