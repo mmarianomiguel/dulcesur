@@ -995,7 +995,12 @@ export default function PedidosOnlinePage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          {pedido.fecha_entrega ? new Date(pedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" }) : "---"}
+                          {pedido.fecha_entrega ? (
+                            <span className={pedido.metodo_entrega !== "envio" ? "text-amber-700 font-medium" : ""}>
+                              {pedido.metodo_entrega !== "envio" ? "Retiro: " : ""}
+                              {new Date(pedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })}
+                            </span>
+                          ) : "---"}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <Badge variant="secondary" className="text-xs">{pedido.items.length}</Badge>

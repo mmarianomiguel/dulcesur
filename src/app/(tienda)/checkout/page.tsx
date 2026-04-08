@@ -61,6 +61,9 @@ interface TiendaConfig {
   monto_minimo_envio: number;
   recargo_transferencia: number;
   costo_envio: number;
+  horario_atencion_inicio: string;
+  horario_atencion_fin: string;
+  dias_atencion: string[];
 }
 
 
@@ -120,6 +123,51 @@ function getAvailableDates(
   return dates;
 }
 
+const DAY_NAMES_FULL = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+function isStoreOpen(cfg: TiendaConfig): boolean {
+  const now = getArgentinaNow();
+  const dayName = DAY_NAMES_FULL[now.getDay()];
+  const isOperatingDay = (cfg.dias_atencion || []).some(
+    (d) => d.toLowerCase() === dayName || d.toLowerCase().replace("á", "a").replace("é", "e").replace("í", "i") === dayName.replace("á", "a").replace("é", "e").replace("í", "i")
+  );
+  if (!isOperatingDay) return false;
+  const [hI, mI] = (cfg.horario_atencion_inicio || "08:00").split(":").map(Number);
+  const [hF, mF] = (cfg.horario_atencion_fin || "18:00").split(":").map(Number);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  return nowMin >= hI * 60 + mI && nowMin < hF * 60 + mF;
+}
+
+function getNextOpenDay(cfg: TiendaConfig): { label: string; date: string } {
+  const dayMap: Record<string, number> = {
+    domingo: 0, lunes: 1, martes: 2, miercoles: 3, miércoles: 3,
+    jueves: 4, viernes: 5, sabado: 6, sábado: 6,
+  };
+  const allowedDays = (cfg.dias_atencion || []).map((d) => dayMap[d.toLowerCase()] ?? -1).filter((d) => d >= 0);
+  if (allowedDays.length === 0) return { label: "próximo día hábil", date: "" };
+
+  const now = getArgentinaNow();
+  // Check if still open today
+  const todayDay = now.getDay();
+  if (allowedDays.includes(todayDay)) {
+    const [hF, mF] = (cfg.horario_atencion_fin || "18:00").split(":").map(Number);
+    if (now.getHours() * 60 + now.getMinutes() < hF * 60 + mF) {
+      // Store opens later today or is currently open
+      return { label: "hoy", date: now.toISOString().split("T")[0] };
+    }
+  }
+
+  for (let i = 1; i <= 7; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
+    if (allowedDays.includes(d.getDay())) {
+      const dayLabel = i === 1 ? "mañana" : DAY_ABBR[d.getDay()] === "Mié" ? "el miércoles" : `el ${DAY_NAMES_FULL[d.getDay()]}`;
+      return { label: dayLabel, date: d.toISOString().split("T")[0] };
+    }
+  }
+  return { label: "próximo día hábil", date: "" };
+}
+
 export default function CheckoutPage() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -165,6 +213,10 @@ export default function CheckoutPage() {
   const configRef = useRef<TiendaConfig | null>(null);
   const [whatsappUrl, setWhatsappUrl] = useState("");
 
+  // Store hours
+  const [storeOpen, setStoreOpen] = useState(true);
+  const [nextOpenInfo, setNextOpenInfo] = useState<{ label: string; date: string }>({ label: "", date: "" });
+
   // Saldo pendiente
   const [saldoPendiente, setSaldoPendiente] = useState(0);
   const [deudasDetalle, setDeudasDetalle] = useState<{ numero: string; monto: number }[]>([]);
@@ -205,9 +257,16 @@ export default function CheckoutPage() {
         monto_minimo_envio: data.monto_minimo_envio ?? data.umbral_envio_gratis ?? 50000,
         recargo_transferencia: data.recargo_transferencia ?? 0,
         costo_envio: data.costo_envio ?? 0,
+        horario_atencion_inicio: data.horario_atencion_inicio ?? "08:00",
+        horario_atencion_fin: data.horario_atencion_fin ?? "18:00",
+        dias_atencion: data.dias_atencion ?? [],
       };
       setConfig(cfg);
       configRef.current = cfg;
+      // Check store hours
+      const open = isStoreOpen(cfg);
+      setStoreOpen(open);
+      if (!open) setNextOpenInfo(getNextOpenDay(cfg));
       // Load WhatsApp URL from footer_config or empresa phone
       const fc = (data as any)?.footer_config;
       if (fc?.whatsapp_url) {
@@ -643,7 +702,7 @@ export default function CheckoutPage() {
           metodo_entrega: metodoEntrega === "retiro" ? "retiro_local" : "envio",
           direccion_id: !showNewAddress && selectedAddressId ? selectedAddressId : null,
           direccion_texto: getAddressText() || null,
-          fecha_entrega: metodoEntrega === "retiro" ? null : fechaEntrega,
+          fecha_entrega: metodoEntrega === "retiro" ? (storeOpen ? null : nextOpenInfo.date || null) : fechaEntrega,
           metodo_pago: metodoPago,
           subtotal: vSubtotal,
           costo_envio: vCostoEnvio,
@@ -1217,6 +1276,21 @@ export default function CheckoutPage() {
                 </div>
               </button>
             </div>
+
+            {/* Store closed banner for retiro */}
+            {metodoEntrega === "retiro" && !storeOpen && nextOpenInfo.label && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <Store className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">El local está cerrado en este momento</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Podés hacer tu pedido ahora y retirarlo <strong>{nextOpenInfo.label}</strong> en horario de atención
+                    {config ? ` (${config.horario_atencion_inicio} a ${config.horario_atencion_fin} hs)` : ""}.
+                  </p>
+                  <p className="text-xs text-amber-600 mt-1.5">Tu pedido quedará reservado hasta que lo retires.</p>
+                </div>
+              </div>
+            )}
 
             {/* Envío address selection */}
             {metodoEntrega === "envio" && (
