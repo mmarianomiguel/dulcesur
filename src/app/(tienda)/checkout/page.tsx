@@ -741,7 +741,9 @@ export default function CheckoutPage() {
       // Also create a venta record so it appears in the admin sales listing
       const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
       // For delivery orders, use the delivery date as the venta date so it appears on the correct day
-      const ventaFecha = (metodoEntrega !== "retiro" && fechaEntrega) ? fechaEntrega : hoy;
+      // For delivery: use delivery date. For pickup with store closed: use next open day. Otherwise: today.
+      const retiroFecha = (!storeOpen && nextOpenInfo.date) ? nextOpenInfo.date : hoy;
+      const ventaFecha = metodoEntrega === "retiro" ? retiroFecha : (fechaEntrega || hoy);
       // Get linked cliente_id from clientes_auth
       let ventaClienteId = null;
       if (clienteId) {
