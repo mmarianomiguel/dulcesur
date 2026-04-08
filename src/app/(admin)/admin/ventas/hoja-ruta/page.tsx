@@ -52,6 +52,9 @@ import {
   Banknote,
   Landmark,
   FileText,
+  Share2,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 
 interface ClienteInfo {
@@ -132,6 +135,13 @@ export default function HojaDeRutaPage() {
   // Track how much was actually paid per order (from caja_movimientos)
   const [pagadoPorVenta, setPagadoPorVenta] = useState<Record<string, number>>({});
   const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
+
+  // Hoja de ruta sharing
+  const [hojaRutaId, setHojaRutaId] = useState<string | null>(null);
+  const [hojaToken, setHojaToken] = useState<string | null>(null);
+  const [savingRuta, setSavingRuta] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [modoLink, setModoLink] = useState<"solo_ver" | "confirmar" | "confirmar_cobrar">("confirmar_cobrar");
 
   const fetchVentas = useCallback(async () => {
     setLoading(true);
@@ -271,6 +281,24 @@ export default function HojaDeRutaPage() {
   useEffect(() => {
     fetchVentas();
   }, [fetchVentas]);
+
+  // Check if there's an existing active hoja de ruta for today
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("hoja_ruta")
+        .select("id, token_fijo, modo_link")
+        .eq("estado", "activa")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        setHojaRutaId(data.id);
+        setHojaToken(data.token_fijo);
+        if (data.modo_link) setModoLink(data.modo_link);
+      }
+    })();
+  }, []);
 
   const fetchHistorial = useCallback(async () => {
     setHistorialLoading(true);
@@ -757,6 +785,73 @@ export default function HojaDeRutaPage() {
     handleDragEnd();
   };
 
+  const saveAndShareRuta = async () => {
+    setSavingRuta(true);
+    try {
+      const ventaIds = filteredVentas.map((v) => v.id);
+      if (ventaIds.length === 0) { setSavingRuta(false); return; }
+
+      // Build ordered list of venta IDs based on current clientGroups order
+      const orderedVentaIds: { venta_id: string; orden: number }[] = [];
+      let counter = 1;
+      for (const group of clientGroups) {
+        for (const v of group.ventas) {
+          if (ventaIds.includes(v.id)) {
+            orderedVentaIds.push({ venta_id: v.id, orden: counter });
+          }
+        }
+        counter++;
+      }
+
+      if (hojaRutaId) {
+        // Update existing hoja
+        await supabase.from("hoja_ruta").update({ modo_link: modoLink }).eq("id", hojaRutaId);
+        // Delete old items and re-insert with new order
+        await supabase.from("hoja_ruta_items").delete().eq("hoja_ruta_id", hojaRutaId);
+        await supabase.from("hoja_ruta_items").insert(
+          orderedVentaIds.map((item) => ({
+            hoja_ruta_id: hojaRutaId,
+            venta_id: item.venta_id,
+            orden: item.orden,
+          }))
+        );
+        setShowShareDialog(true);
+      } else {
+        // Create new hoja
+        const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        const { data: hoja, error } = await supabase.from("hoja_ruta").insert({
+          fecha: selectedDate || getArgentinaToday(),
+          nombre: `Ruta ${new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}`,
+          estado: "activa",
+          modo_link: modoLink,
+          token_fijo: token,
+        }).select("id, token_fijo").single();
+
+        if (error || !hoja) {
+          console.error("Error creating hoja:", error);
+          setSavingRuta(false);
+          return;
+        }
+
+        // Insert items
+        await supabase.from("hoja_ruta_items").insert(
+          orderedVentaIds.map((item) => ({
+            hoja_ruta_id: hoja.id,
+            venta_id: item.venta_id,
+            orden: item.orden,
+          }))
+        );
+
+        setHojaRutaId(hoja.id);
+        setHojaToken(hoja.token_fijo);
+        setShowShareDialog(true);
+      }
+    } catch (err) {
+      console.error("Error saving ruta:", err);
+    }
+    setSavingRuta(false);
+  };
+
   // Filter and sort ventas
   const filteredVentas = ventas.filter((v) => {
     if (filterEntrega === "envio" && v.metodo_entrega !== "envio") return false;
@@ -848,6 +943,10 @@ export default function HojaDeRutaPage() {
             <p className="text-sm text-muted-foreground">Gestiona entregas pendientes, cobros y hoja de ruta</p>
           </div>
         </div>
+        <Button onClick={saveAndShareRuta} disabled={savingRuta || filteredVentas.length === 0}>
+          {savingRuta ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Share2 className="w-4 h-4 mr-2" />}
+          {hojaRutaId ? "Actualizar Ruta" : "Guardar y Compartir"}
+        </Button>
       </div>
 
       {/* Pendientes / Historial tabs */}
@@ -1935,6 +2034,65 @@ export default function HojaDeRutaPage() {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Share route dialog */}
+      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="w-5 h-5" />
+              Compartir Hoja de Ruta
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Permisos del repartidor</Label>
+              <Select value={modoLink} onValueChange={(v) => setModoLink(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="solo_ver">Solo ver (sin acciones)</SelectItem>
+                  <SelectItem value="confirmar">Confirmar entregas</SelectItem>
+                  <SelectItem value="confirmar_cobrar">Confirmar y cobrar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {hojaToken && (
+              <div className="space-y-2">
+                <Label>Link para el repartidor</Label>
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={`${window.location.origin}/ruta/${hojaToken}`} className="text-xs font-mono" />
+                  <Button variant="outline" size="icon" onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/ruta/${hojaToken}`);
+                  }} title="Copiar link">
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              {hojaToken && (
+                <>
+                  <Button variant="outline" className="flex-1 text-green-600 border-green-200 hover:bg-green-50" onClick={() => {
+                    const url = `${window.location.origin}/ruta/${hojaToken}`;
+                    window.open(`https://wa.me/?text=${encodeURIComponent(`Hoja de ruta: ${url}`)}`, "_blank");
+                  }}>
+                    <MessageCircle className="w-4 h-4 mr-2" />WhatsApp
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => {
+                    window.open(`/ruta/${hojaToken}`, "_blank");
+                  }}>
+                    <ExternalLink className="w-4 h-4 mr-2" />Abrir
+                  </Button>
+                </>
+              )}
+              <Button onClick={() => { setShowShareDialog(false); saveAndShareRuta(); }} disabled={savingRuta}>
+                {savingRuta ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Share2 className="w-4 h-4 mr-2" />}
+                {hojaRutaId ? "Actualizar" : "Generar link"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
