@@ -87,6 +87,13 @@ function getArgentinaNow(): Date {
   );
 }
 
+function formatLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function getAvailableDates(
   diasEntrega: string[],
   maxDias: number,
@@ -104,13 +111,13 @@ function getAvailableDates(
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const startOffset = nowMinutes < cutoffMinutes ? 0 : 1;
 
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = formatLocalDate(now);
   const dates: { dayAbbr: string; dayNum: number; monthAbbr: string; value: string; isToday: boolean }[] = [];
   for (let i = startOffset; i <= maxDias && dates.length < 10; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
     if (allowedDays.includes(d.getDay())) {
-      const value = d.toISOString().split("T")[0];
+      const value = formatLocalDate(d);
       dates.push({
         dayAbbr: DAY_ABBR[d.getDay()],
         dayNum: d.getDate(),
@@ -153,7 +160,7 @@ function getNextOpenDay(cfg: TiendaConfig): { label: string; date: string } {
     const [hF, mF] = (cfg.horario_atencion_fin || "18:00").split(":").map(Number);
     if (now.getHours() * 60 + now.getMinutes() < hF * 60 + mF) {
       // Store opens later today or is currently open
-      return { label: "hoy", date: now.toISOString().split("T")[0] };
+      return { label: "hoy", date: formatLocalDate(now) };
     }
   }
 
@@ -162,7 +169,7 @@ function getNextOpenDay(cfg: TiendaConfig): { label: string; date: string } {
     d.setDate(now.getDate() + i);
     if (allowedDays.includes(d.getDay())) {
       const dayLabel = i === 1 ? "mañana" : DAY_ABBR[d.getDay()] === "Mié" ? "el miércoles" : `el ${DAY_NAMES_FULL[d.getDay()]}`;
-      return { label: dayLabel, date: d.toISOString().split("T")[0] };
+      return { label: dayLabel, date: formatLocalDate(d) };
     }
   }
   return { label: "próximo día hábil", date: "" };
@@ -287,7 +294,7 @@ export default function CheckoutPage() {
         // Default to tomorrow if no delivery days configured
         const tomorrow = new Date(getArgentinaNow());
         tomorrow.setDate(tomorrow.getDate() + 1);
-        setFechaEntrega(tomorrow.toISOString().split("T")[0]);
+        setFechaEntrega(formatLocalDate(tomorrow));
       }
       return cfg;
     }
