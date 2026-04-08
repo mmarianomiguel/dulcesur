@@ -48,12 +48,13 @@ export default function ResumenMensualPage() {
     const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
 
     // Ventas (excluyendo NC)
-    const { data: ventas } = await supabase.from("ventas").select("id, total, forma_pago, cliente_id, tipo_comprobante, clientes(nombre)")
+    const { data: ventas } = await supabase.from("ventas").select("id, total, forma_pago, cliente_id, tipo_comprobante, estado, clientes(nombre)")
       .gte("fecha", start).lt("fecha", end)
       .not("tipo_comprobante", "ilike", "Nota de Crédito%")
       .not("tipo_comprobante", "ilike", "Nota de Débito%")
       .neq("estado", "anulada");
-    const vList = ventas || [];
+    // Exclude pending web orders from totals
+    const vList = (ventas || []).filter((v: any) => !(v.estado === "pendiente" && v.tipo_comprobante === "Pedido Web"));
     setTotalVentas(vList.reduce((a: number, v: any) => a + v.total, 0));
     setCantVentas(vList.length);
 

@@ -112,7 +112,10 @@ export default function ReportesPage() {
       supabase.from("productos").select("id, nombre, codigo, stock, precio, costo, categoria_id, subcategoria_id, marca_id").eq("activo", true).order("nombre").limit(10000),
     ]);
 
-    const ventasList = (vts || []).map((v: any) => ({ ...v, clientes: Array.isArray(v.clientes) ? v.clientes[0] || null : v.clientes })) as VentaRow[];
+    // Exclude pending web orders (not yet confirmed/delivered) from reports
+    const ventasList = (vts || [])
+      .filter((v: any) => !(v.estado === "pendiente" && v.tipo_comprobante === "Pedido Web"))
+      .map((v: any) => ({ ...v, clientes: Array.isArray(v.clientes) ? v.clientes[0] || null : v.clientes })) as VentaRow[];
     setVentas(ventasList);
 
     // Batch fetch NC deductions for non-NC sales

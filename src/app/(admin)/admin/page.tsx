@@ -519,8 +519,10 @@ export default function DashboardPage() {
     if ((tiendaConfig as any)?.url_tienda) setReceiptConfig((prev) => ({ ...prev, empresaWeb: prev.empresaWeb || (tiendaConfig as any).url_tienda }));
 
     // ─── Period sales (reuse single ventas query for both totals and margin) ───
-    const periodSales = (periodSalesRaw || []).filter((v) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-    const periodNCs = (periodSalesRaw || []).filter((v) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+    // Exclude pending web orders (not yet confirmed/delivered) from dashboard totals
+    const periodSalesFiltered = (periodSalesRaw || []).filter((v: any) => !(v.estado === "pendiente" && v.tipo_comprobante === "Pedido Web"));
+    const periodSales = periodSalesFiltered.filter((v) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+    const periodNCs = periodSalesFiltered.filter((v) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
     const ncTotalAmount = periodNCs.reduce((a, v) => a + v.total, 0);
     const salesTotal = periodSales.reduce((a, v) => a + v.total, 0) - ncTotalAmount;
     setVentasPeriodo(salesTotal);
