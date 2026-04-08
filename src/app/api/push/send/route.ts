@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
               endpoint: sub.endpoint,
               keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
             },
-            payload
+            Buffer.from(payload, "utf-8")
           );
           sent++;
         } catch (err: any) {

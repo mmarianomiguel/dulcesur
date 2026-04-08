@@ -26,7 +26,7 @@ async function sendPushToAll(title: string, body: string, tag: string, url: stri
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth } },
-          payload
+          Buffer.from(payload, "utf-8")
         );
       } catch (err: any) {
         if (err.statusCode === 410 || err.statusCode === 404) expired.push(sub.endpoint);

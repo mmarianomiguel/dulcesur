@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth } },
-          payload
+          Buffer.from(payload, "utf-8")
         );
         sent++;
       } catch (err: any) {
