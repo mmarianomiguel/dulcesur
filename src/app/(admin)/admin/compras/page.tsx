@@ -1619,7 +1619,7 @@ export default function ComprasPage() {
               <>
                 {/* Price update controls */}
                 {items.some((i) => i.costo_unitario !== i.costo_original && i.costo_original > 0) && (
-                  <div className="flex items-center justify-between px-3 py-2 bg-blue-50 rounded-lg mb-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3 py-2 bg-blue-50 rounded-lg mb-3">
                     <div className="flex items-center gap-2 text-xs">
                       <span className="font-medium text-blue-800">
                         {items.filter((i) => i.costo_unitario !== i.costo_original && i.actualizarPrecio).length} de{" "}
@@ -2180,12 +2180,12 @@ export default function ComprasPage() {
   if (mode === "detail" && detailCompra) {
     return (
       <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-6xl mx-auto">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <Button variant="ghost" size="icon" onClick={() => { setMode("list"); setDetailCompra(null); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Compra {detailCompra.numero}</h1>
               <Badge variant={detailCompra.estado === "Confirmada" ? "default" : "secondary"} className="text-xs">
                 {detailCompra.estado}
@@ -2210,7 +2210,7 @@ export default function ComprasPage() {
               {new Date(detailCompra.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
               const productIds = detailItems.map((i) => i.producto_id).filter(Boolean);
               if (productIds.length === 0) return;
@@ -2428,7 +2428,40 @@ export default function ComprasPage() {
 
         <Card>
           <CardContent className="pt-0">
-            <div className="overflow-x-auto">
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y">
+              {detailItems.map((item) => {
+                const editedPrice = editedPrices[item.id];
+                const currentPrice = editedPrice !== undefined ? editedPrice : item.precio_unitario;
+                const currentSubtotal = editingPrices ? Math.round(currentPrice * item.cantidad * 100) / 100 : item.subtotal;
+                return (
+                  <div key={item.id} className={`py-3 px-4 space-y-1.5 ${editingPrices && editedPrice !== undefined && editedPrice !== item.precio_unitario ? "bg-amber-50/50" : ""}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{item.descripcion}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{item.codigo}</p>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Cant: <span className="font-medium text-foreground">{item.cantidad}</span></span>
+                      <span className="text-muted-foreground">
+                        Costo: {editingPrices ? (
+                          <MoneyInput
+                            min={0}
+                            value={currentPrice}
+                            onValueChange={(val) => setEditedPrices((prev) => ({ ...prev, [item.id]: val }))}
+                            className="w-24 inline-block text-right h-7 text-xs"
+                          />
+                        ) : (
+                          <span className="font-medium text-foreground">{formatCurrency(item.precio_unitario)}</span>
+                        )}
+                      </span>
+                      <span className="font-semibold">{formatCurrency(currentSubtotal)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
@@ -2467,6 +2500,7 @@ export default function ComprasPage() {
                   })}
                 </tbody>
               </table>
+            </div>
               <div className="border-t pt-3 mt-1 px-4 space-y-1">
                 {detailCompra.descuento_porcentaje != null && detailCompra.descuento_porcentaje > 0 && (
                   <>
@@ -2485,7 +2519,6 @@ export default function ComprasPage() {
                   <span className="text-sm font-bold">{formatCurrency(detailCompra.total)}</span>
                 </div>
               </div>
-            </div>
           </CardContent>
         </Card>
 

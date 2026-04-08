@@ -1002,12 +1002,12 @@ export default function EditarPreciosPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => router.push("/admin/productos")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+          <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
             <DollarSign className="w-5 h-5 text-primary" />
           </div>
           <div>
@@ -1030,8 +1030,8 @@ export default function EditarPreciosPage() {
       {/* Filter bar */}
       <Card className="overflow-visible">
         <CardContent className="pt-6 space-y-4">
-          <div className="flex items-end gap-4">
-            <div className="flex-1 max-w-md space-y-1.5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-4">
+            <div className="flex-1 space-y-1.5">
               <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1102,7 +1102,7 @@ export default function EditarPreciosPage() {
       <Card>
         <CardContent className="p-4">
           {/* Action buttons */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <p className="text-sm text-muted-foreground">
               {filteredProductos.length} productos
               {hasChanges && (
@@ -1111,7 +1111,7 @@ export default function EditarPreciosPage() {
                 </span>
               )}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {selectedIds.size > 0 && (
                 <Button
                   variant="ghost"
@@ -1181,6 +1181,58 @@ export default function EditarPreciosPage() {
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : (<>
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y">
+              {paginatedProductos.map((p) => {
+                const currentPrice = priceChanges[p.id] ?? p.precio;
+                const currentCosto = costoChanges[p.id] ?? p.costo ?? 0;
+                const isChanged = priceChanges[p.id] !== undefined || costoChanges[p.id] !== undefined;
+                const cajaPrice = getCajaPrice(p.id);
+                const margen = currentCosto > 0 ? ((currentPrice - currentCosto) / currentCosto) * 100 : 0;
+                const disc = getProductDiscount(p);
+                return (
+                  <div key={p.id} className={`py-3 px-4 space-y-2 ${isChanged ? "bg-orange-50 dark:bg-orange-950/20" : ""}`}>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleOne(p.id)} className="rounded border-input shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{p.nombre}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{p.codigo}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">Stock: {p.stock}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block">Costo</span>
+                        <button onClick={() => startEditing(p.id, "costo", currentCosto)} className="font-medium hover:bg-muted px-1 py-0.5 rounded">
+                          {currentCosto > 0 ? formatCurrency(currentCosto, true) : "—"}
+                        </button>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block">Precio</span>
+                        <button onClick={() => startEditing(p.id, "precio", currentPrice)} className="font-medium hover:bg-muted px-1 py-0.5 rounded">
+                          {formatCurrency(currentPrice)}
+                        </button>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block">Margen</span>
+                        <span className="font-medium">{currentCosto > 0 ? `${margen.toFixed(1)}%` : "—"}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      {cajaPrice !== null && <span className="text-muted-foreground">Caja: {formatCurrency(cajaPrice)}</span>}
+                      {disc && (
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-[10px]">
+                          {disc.tipo_descuento === "precio_fijo" && disc.precio_fijo != null ? formatCurrency(disc.precio_fijo) : `-${disc.porcentaje}%`}
+                        </Badge>
+                      )}
+                      {isChanged && <span className="text-orange-500 font-medium">Modificado</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1303,6 +1355,7 @@ export default function EditarPreciosPage() {
                 )}
               </TableBody>
             </Table>
+            </div>
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t">
                 <span className="text-xs text-muted-foreground">

@@ -888,7 +888,65 @@ export default function PedidosProveedorPage() {
                 <p className="text-xs mt-1">Selecciona un proveedor y presiona &quot;Sugerir faltantes&quot;</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Mobile card list */}
+              <div className="sm:hidden divide-y">
+                {items.map((item, idx) => (
+                  <div key={item.producto_id} className="py-3 px-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{item.nombre}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{item.codigo}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500 shrink-0" onClick={() => removeItem(idx)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block">Stock</span>
+                        <span>{item.stock}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block">Min / Max</span>
+                        <span>{item.stock_minimo} / {item.stock_maximo}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block">Cajas</span>
+                        {item.unidades_por_caja > 0 ? (
+                          <span className="font-medium">{item.cajas} <span className="text-muted-foreground">({item.unidades_por_caja} un.)</span></span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-muted-foreground mb-1 block">Cantidad</label>
+                        <Input type="number" min={1} value={item.faltante}
+                          onChange={(e) => updateItemField(idx, "faltante", Math.max(1, Number(e.target.value)))}
+                          className="h-8 text-center" />
+                      </div>
+                      <div>
+                        <label className="text-muted-foreground mb-1 block">Precio Unit.</label>
+                        <Input type="number" min={0} value={item.precio_unitario}
+                          onChange={(e) => updateItemField(idx, "precio_unitario", Math.max(0, Number(e.target.value)))}
+                          className="h-8 text-right" />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end text-xs">
+                      <span className="text-muted-foreground mr-2">Subtotal:</span>
+                      <span className="font-semibold">{formatCurrency(item.subtotal)}</span>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-end pt-3 px-4">
+                  <span className="text-sm text-muted-foreground mr-4">Total estimado:</span>
+                  <span className="text-sm font-bold">{formatCurrency(totalEstimado)}</span>
+                </div>
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground">
@@ -944,6 +1002,7 @@ export default function PedidosProveedorPage() {
                   <span className="text-sm font-bold">{formatCurrency(totalEstimado)}</span>
                 </div>
               </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -958,7 +1017,7 @@ export default function PedidosProveedorPage() {
               {saveError && (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700">{saveError}</div>
               )}
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
                 <Button variant="outline" onClick={() => { resetForm(); setSaveError(""); setMode("list"); }}>Cancelar</Button>
                 <Button variant="secondary" onClick={() => savePedido("Borrador")} disabled={saving}>
                   {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
@@ -989,26 +1048,28 @@ export default function PedidosProveedorPage() {
     return (
       <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" className="mt-1" onClick={() => { setMode("list"); setDetailPedido(null); setEditingDetail(false); }}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-                {pedidoDisplayNum(detailPedido.id)}
-              </h1>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${cfg.color}`}>
-                <EstadoIcon className="w-3.5 h-3.5" />
-                {detailPedido.estado}
-              </span>
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+          <div className="flex items-start gap-4 flex-1 min-w-0">
+            <Button variant="ghost" size="icon" className="mt-1 shrink-0" onClick={() => { setMode("list"); setDetailPedido(null); setEditingDetail(false); }}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+                  {pedidoDisplayNum(detailPedido.id)}
+                </h1>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${cfg.color}`}>
+                  <EstadoIcon className="w-3.5 h-3.5" />
+                  {detailPedido.estado}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-sm mt-0.5">
+                {detailPedido.proveedores?.nombre || "Sin proveedor"} &middot;{" "}
+                {new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+              </p>
             </div>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              {detailPedido.proveedores?.nombre || "Sin proveedor"} &middot;{" "}
-              {new Date(detailPedido.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-            </p>
           </div>
-          <div className="flex gap-2 flex-wrap justify-end">
+          <div className="flex gap-2 flex-wrap">
             {canEdit && !editingDetail && (
               <>
                 <Button size="sm" variant="outline" onClick={() => setEditingDetail(true)}>
@@ -1117,7 +1178,75 @@ export default function PedidosProveedorPage() {
         {/* Items table */}
         <Card>
           <CardContent className="pt-0">
-            <div className="overflow-x-auto">
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y">
+              {detailItems.map((item, idx) => {
+                const pendiente = item.cantidad - (item.cantidad_recibida || 0);
+                return (
+                  <div key={item.id} className="py-3 px-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{item.descripcion}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{item.codigo}</p>
+                      </div>
+                      {editingDetail && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500 shrink-0" onClick={() => removeDetailItem(idx)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block">Pedido</span>
+                        {editingDetail ? (
+                          <Input type="number" min={1} value={item.cantidad}
+                            onChange={(e) => updateDetailItemField(idx, "cantidad", Math.max(1, Number(e.target.value)))}
+                            className="h-8 text-center mt-1" />
+                        ) : (
+                          <span className="font-medium">{item.cantidad}</span>
+                        )}
+                      </div>
+                      {(isParcial || detailPedido.estado === "Recibido") && (
+                        <div>
+                          <span className="text-muted-foreground block">Recibido</span>
+                          <span className="text-emerald-600 font-medium">{item.cantidad_recibida || 0}</span>
+                        </div>
+                      )}
+                      {(isParcial || detailPedido.estado === "Recibido") && (
+                        <div>
+                          <span className="text-muted-foreground block">Pendiente</span>
+                          {pendiente > 0 ? (
+                            <span className="text-amber-600 font-medium">{pendiente}</span>
+                          ) : (
+                            <Check className="w-4 h-4 text-emerald-500" />
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-muted-foreground block">Precio Unit.</span>
+                        {editingDetail ? (
+                          <Input type="number" min={0} value={item.precio_unitario}
+                            onChange={(e) => updateDetailItemField(idx, "precio_unitario", Math.max(0, Number(e.target.value)))}
+                            className="h-8 text-right mt-1" />
+                        ) : (
+                          <span>{formatCurrency(item.precio_unitario)}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end text-xs">
+                      <span className="text-muted-foreground mr-2">Subtotal:</span>
+                      <span className="font-semibold">{formatCurrency(item.subtotal)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex justify-end pt-3 px-4">
+                <span className="text-sm text-muted-foreground mr-4">Total:</span>
+                <span className="text-sm font-bold">{formatCurrency(detailTotal)}</span>
+              </div>
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
@@ -1231,11 +1360,11 @@ export default function PedidosProveedorPage() {
           </Card>
         ) : (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
                 {generatedGroups.length} proveedor(es) - Total estimado: <span className="font-bold text-foreground">{formatCurrency(selectedTotal)}</span>
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button variant="outline" onClick={() => { setGeneratedGroups([]); setMode("list"); }}>Cancelar</Button>
                 <Button onClick={confirmGeneratedPedidos} disabled={saving || selectedCount === 0}>
                   {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
@@ -1305,12 +1434,12 @@ export default function PedidosProveedorPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Pedidos a Proveedores</h1>
           <p className="text-muted-foreground text-sm">Gestiona tus pedidos de compra</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center rounded-lg border overflow-hidden text-sm">
             <button className={`px-3 py-2 ${pedirHasta === "maximo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("maximo")}>Hasta máx</button>
             <button className={`px-3 py-2 ${pedirHasta === "minimo" ? "bg-primary text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setPedirHasta("minimo")}>Hasta mín</button>
@@ -1455,7 +1584,35 @@ export default function PedidosProveedorPage() {
               <p className="text-sm">No se encontraron pedidos</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y">
+              {filtered.map((p) => {
+                const cfg = estadoConfig(p.estado);
+                const Icon = cfg.icon;
+                return (
+                  <div key={p.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openDetail(p)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-medium">{pedidoDisplayNum(p.id)}</span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${cfg.color}`}>
+                          <Icon className="w-3 h-3" />
+                          {p.estado}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                        <span>{p.proveedores?.nombre || "\u2014"}</span>
+                        <span>&middot;</span>
+                        <span>{new Date(p.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
+                      </div>
+                    </div>
+                    <span className="font-semibold text-sm shrink-0">{formatCurrency(p.costo_total_estimado || 0)}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
@@ -1514,6 +1671,7 @@ export default function PedidosProveedorPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

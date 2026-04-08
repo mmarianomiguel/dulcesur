@@ -1130,12 +1130,35 @@ export default function CajaPage() {
             ) : histTurnos.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground"><Clock className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-sm">No hay turnos cerrados</p></div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Mobile card list */}
+              <div className="sm:hidden divide-y">
+                {histTurnos.map((t) => (
+                  <div key={t.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 cursor-pointer" onClick={() => openHistDetail(t)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-medium">#{t.numero}</span>
+                        <span className="text-xs text-muted-foreground">{t.operador}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} · {t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold">{formatCurrency(t.efectivo_real || 0)}</p>
+                      <p className={`text-xs font-medium ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(t.diferencia || 0)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b text-muted-foreground"><th className="text-left py-2 px-3 font-medium">Turno</th><th className="text-left py-2 px-3 font-medium">Fecha</th><th className="text-left py-2 px-3 font-medium">Operador</th><th className="text-left py-2 px-3 font-medium">Horario</th><th className="text-right py-2 px-3 font-medium">Ef. Real</th><th className="text-right py-2 px-3 font-medium">Diferencia</th><th className="w-10"></th></tr></thead>
                   <tbody>{histTurnos.map((t) => (<tr key={t.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openHistDetail(t)}><td className="py-2 px-3 font-mono text-xs">#{t.numero}</td><td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td><td className="py-2 px-3">{t.operador}</td><td className="py-2 px-3 text-muted-foreground text-xs">{t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}</td><td className="py-2 px-3 text-right font-semibold">{formatCurrency(t.efectivo_real || 0)}</td><td className={`py-2 px-3 text-right font-semibold ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(t.diferencia || 0)}</td><td className="py-2 px-3"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td></tr>))}</tbody>
                 </table>
               </div>
+              </>
             )}
           </DialogContent>
         </Dialog>
@@ -1419,7 +1442,27 @@ export default function CajaPage() {
                 {ventas.length === 0 ? (
                   <EmptyState title="No hay ventas hoy" icon={Wallet} />
                 ) : (
-                  <div className="overflow-x-auto">
+                  <>
+                  {/* Mobile card list */}
+                  <div className="sm:hidden divide-y">
+                    {ventas.map((v) => (
+                      <div key={v.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openVentaDetail(v)}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs">{v.numero}</span>
+                            {(v as any).origen === "tienda" && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 border-pink-300 text-pink-600">Web</Badge>
+                            )}
+                            <Badge variant="secondary" className="text-[10px] font-normal">{v.forma_pago}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{(v as any).clientes?.nombre || "—"}</p>
+                        </div>
+                        <span className="font-semibold text-sm text-emerald-600 shrink-0">{formatCurrency(v.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b text-muted-foreground">
@@ -1472,6 +1515,7 @@ export default function CajaPage() {
                       </tbody>
                     </table>
                   </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1485,7 +1529,26 @@ export default function CajaPage() {
                 {movements.length === 0 ? (
                   <EmptyState title="No hay movimientos hoy" icon={Wallet} />
                 ) : (
-                  <div className="overflow-x-auto">
+                  <>
+                  {/* Mobile card list */}
+                  <div className="sm:hidden divide-y">
+                    {movements.map((m) => (
+                      <div key={m.id} className="py-3 px-4 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{m.descripcion}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-muted-foreground">{m.hora?.substring(0, 5)}</span>
+                            <Badge variant="secondary" className="text-[10px] font-normal">{m.metodo_pago}</Badge>
+                          </div>
+                        </div>
+                        <span className={`font-semibold text-sm shrink-0 ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
+                          {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b text-muted-foreground">
@@ -1497,32 +1560,21 @@ export default function CajaPage() {
                       </thead>
                       <tbody>
                         {movements.map((m) => (
-                          <tr
-                            key={m.id}
-                            className="border-b last:border-0 hover:bg-muted/50 transition-colors"
-                          >
-                            <td className="py-3 px-4 text-muted-foreground">
-                              {m.hora?.substring(0, 5)}
-                            </td>
+                          <tr key={m.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="py-3 px-4 text-muted-foreground">{m.hora?.substring(0, 5)}</td>
                             <td className="py-3 px-4 font-medium">{m.descripcion}</td>
                             <td className="py-3 px-4">
-                              <Badge variant="secondary" className="text-xs font-normal">
-                                {m.metodo_pago}
-                              </Badge>
+                              <Badge variant="secondary" className="text-xs font-normal">{m.metodo_pago}</Badge>
                             </td>
-                            <td
-                              className={`py-3 px-4 text-right font-semibold ${
-                                m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"
-                              }`}
-                            >
-                              {m.tipo === "ingreso" ? "+" : "-"}
-                              {formatCurrency(Math.abs(m.monto))}
+                            <td className={`py-3 px-4 text-right font-semibold ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
+                              {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1547,7 +1599,7 @@ export default function CajaPage() {
                 placeholder="Motivo del movimiento"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Monto</Label>
                 <MoneyInput
@@ -1658,14 +1710,14 @@ export default function CajaPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg border p-3 bg-emerald-50 dark:bg-emerald-950/20">
-                  <p className="text-xs text-muted-foreground">Efectivo inicial</p>
-                  <p className="font-bold">{formatCurrency(histDetail.efectivo_inicial)}</p>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="rounded-lg border p-2 sm:p-3 bg-emerald-50 dark:bg-emerald-950/20">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. inicial</p>
+                  <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_inicial)}</p>
                 </div>
-                <div className="rounded-lg border p-3 bg-blue-50 dark:bg-blue-950/20">
-                  <p className="text-xs text-muted-foreground">Efectivo real</p>
-                  <p className="font-bold">{formatCurrency(histDetail.efectivo_real || 0)}</p>
+                <div className="rounded-lg border p-2 sm:p-3 bg-blue-50 dark:bg-blue-950/20">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. real</p>
+                  <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_real || 0)}</p>
                 </div>
                 <div className={`rounded-lg border p-3 ${(histDetail.diferencia || 0) === 0 ? "bg-muted/30" : (histDetail.diferencia || 0) > 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
                   <p className="text-xs text-muted-foreground">Diferencia</p>

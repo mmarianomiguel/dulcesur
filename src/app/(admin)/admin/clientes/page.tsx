@@ -1121,7 +1121,7 @@ export default function ClientesPage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
             <Users className="w-5 h-5 text-primary" />
@@ -1131,33 +1131,33 @@ export default function ClientesPage() {
             <p className="text-sm text-muted-foreground">{clients.length} clientes registrados</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {activeTab === "cobranzas" && (
             <Button variant="outline" size="sm" onClick={exportCSV}>
-              <Download className="w-4 h-4 mr-2" />Exportar
+              <Download className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Exportar</span>
             </Button>
           )}
           {activeTab === "listado" && (
             <>
               <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportClients} />
               <Button variant="outline" size="sm" onClick={handleExportClients}>
-                <FileSpreadsheet className="w-4 h-4 mr-2" />Exportar Excel
+                <FileSpreadsheet className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Exportar Excel</span>
               </Button>
               <Button variant="outline" size="sm" onClick={() => importRef.current?.click()} disabled={importing}>
-                {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                {importing ? importProgress : "Importar Excel"}
+                {importing ? <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" /> : <Upload className="w-4 h-4 sm:mr-2" />}
+                <span className="hidden sm:inline">{importing ? importProgress : "Importar Excel"}</span>
               </Button>
             </>
           )}
           <Link href="/admin/clientes/mapa">
-            <Button variant="outline" size="sm" className="gap-1.5"><MapPin className="w-4 h-4" />Ver mapa</Button>
+            <Button variant="outline" size="sm" className="gap-1.5"><MapPin className="w-4 h-4" /><span className="hidden sm:inline">Ver mapa</span></Button>
           </Link>
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" />Nuevo cliente</Button>
+          <Button onClick={openNew}><Plus className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Nuevo cliente</span></Button>
         </div>
       </div>
 
       {/* Main Tabs: Listado / Cobranzas */}
-      <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit overflow-x-auto">
         <button
           onClick={() => setActiveTab("listado")}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "listado" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
@@ -1722,7 +1722,7 @@ export default function ClientesPage() {
 
       {/* Movements Dialog */}
       <Dialog open={movOpen} onOpenChange={setMovOpen}>
-        <DialogContent className="max-w-[880px] max-h-[90vh] overflow-y-auto p-0" showCloseButton={false}>
+        <DialogContent className="max-w-[880px] w-[95vw] max-h-[90vh] overflow-y-auto p-0" showCloseButton={false}>
           {/* Header */}
           <div className="px-6 pt-5 pb-0">
             <div className="flex items-center justify-between mb-4">
@@ -1744,13 +1744,13 @@ export default function ClientesPage() {
             </div>
 
             {/* Filters row */}
-            <div className="flex items-end gap-2 mb-4">
-              <div>
+            <div className="flex flex-wrap items-end gap-2 mb-4">
+              <div className="w-full sm:w-auto">
                 <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Filtrar</label>
                 <select
                   value={movCCFilter}
                   onChange={(e) => setMovCCFilter(e.target.value)}
-                  className="border rounded-lg px-3 py-1.5 h-8 text-xs bg-background focus:outline-none focus:ring-2 focus:ring-ring w-48"
+                  className="border rounded-lg px-3 py-1.5 h-8 text-xs bg-background focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-48"
                 >
                   <option value="all">Ver todos los movimientos</option>
                   <option value="debe">Solo compras (debe)</option>
@@ -1758,13 +1758,13 @@ export default function ClientesPage() {
                   <option value="pendiente">Solo con saldo pendiente</option>
                 </select>
               </div>
-              <div>
+              <div className="flex-1 min-w-[120px]">
                 <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Desde</label>
-                <Input type="date" value={movDesde} onChange={(e) => setMovDesde(e.target.value)} className="h-8 text-xs w-36" />
+                <Input type="date" value={movDesde} onChange={(e) => setMovDesde(e.target.value)} className="h-8 text-xs" />
               </div>
-              <div>
+              <div className="flex-1 min-w-[120px]">
                 <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Hasta</label>
-                <Input type="date" value={movHasta} onChange={(e) => setMovHasta(e.target.value)} className="h-8 text-xs w-36" />
+                <Input type="date" value={movHasta} onChange={(e) => setMovHasta(e.target.value)} className="h-8 text-xs" />
               </div>
               <Button size="sm" className="h-8" onClick={() => movClient && fetchMovimientos(movClient.id, movDesde, movHasta)}>
                 Filtrar
@@ -1796,7 +1796,7 @@ export default function ClientesPage() {
 
             {/* ══════ TAB COMPRAS ══════ */}
             <TabsContent value="compras" className="mt-0 px-6 pt-4 pb-6">
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Ventas</p>
                   <p className="text-lg font-bold">{formatCurrency(movTotals.ventas)}</p>
@@ -2013,7 +2013,7 @@ export default function ClientesPage() {
 
                         {/* Totals footer — Pendiente / Cobrado / Saldo Deudor */}
                         <div className="bg-muted/50 border-t px-4 py-3">
-                          <div className="flex items-center justify-end gap-6">
+                          <div className="flex items-center justify-end gap-3 sm:gap-6 flex-wrap">
                             <div className="text-right">
                               <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Pendiente</p>
                               <p className="text-sm font-bold tabular-nums">{formatCurrency(Math.round(movCCTotals.debe))}</p>
@@ -2032,8 +2032,8 @@ export default function ClientesPage() {
                     )}
 
                     {/* Action buttons — below table like the mockup */}
-                    <div className="flex items-center justify-between mt-4">
-                      <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4">
+                      <div className="flex gap-2 flex-wrap">
                         {movCCTotals.saldo > 0 && movClient && (
                           <Button size="sm" className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" onClick={() => { setCobroClient(movClient); setCobroOpen(true); }}>
                             <DollarSign className="w-4 h-4 mr-1.5" />Ingresar Pago
@@ -2511,7 +2511,7 @@ export default function ClientesPage() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingClient ? "Editar cliente" : "Nuevo cliente"}</DialogTitle>
           </DialogHeader>
@@ -2522,7 +2522,7 @@ export default function ClientesPage() {
               <TabsTrigger value="password">Restablecer contraseña</TabsTrigger>
             </TabsList>
             <TabsContent value="persona" className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Código de cliente</Label>
                   <Input value={form.codigo_cliente} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 4); f("codigo_cliente", v); }} maxLength={4} className="font-mono" />
@@ -2547,7 +2547,7 @@ export default function ClientesPage() {
                   <Label>Número de Documento</Label>
                   <Input value={form.numero_documento} onChange={(e) => f("numero_documento", e.target.value)} />
                 </div>
-                <div className="col-span-2 space-y-2">
+                <div className="sm:col-span-2 space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Domicilio</Label>
                     {form.domicilio && (
@@ -2606,7 +2606,7 @@ export default function ClientesPage() {
                   <Label>Código Postal</Label>
                   <Input value={form.codigo_postal} onChange={(e) => f("codigo_postal", e.target.value)} />
                 </div>
-                <div className="col-span-2 space-y-2">
+                <div className="sm:col-span-2 space-y-2">
                   <Label>Zona de entrega</Label>
                   <Select value={form.zona_entrega || "none"} onValueChange={(v) => f("zona_entrega", v === "none" ? "" : (v || ""))}>
                     <SelectTrigger>
@@ -2642,7 +2642,7 @@ export default function ClientesPage() {
                   })()}
                 </div>
                 {categoriasRestringidas.length > 0 && (
-                <div className="col-span-2 space-y-2">
+                <div className="sm:col-span-2 space-y-2">
                   <Label>Categorías restringidas permitidas</Label>
                   <div className="flex flex-wrap gap-2">
                     {categoriasRestringidas.map((cat) => {
@@ -2674,7 +2674,7 @@ export default function ClientesPage() {
                   </p>
                 </div>
                 )}
-                <div className="col-span-2 space-y-2">
+                <div className="sm:col-span-2 space-y-2">
                   <Label>Vendedor</Label>
                   <Select value={form.vendedor_id || "none"} onValueChange={(v) => f("vendedor_id", v === "none" ? "" : (v || ""))}>
                     <SelectTrigger>
@@ -2701,8 +2701,8 @@ export default function ClientesPage() {
               </div>
             </TabsContent>
             <TabsContent value="facturacion" className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2 space-y-2">
                   <Label>Razón social</Label>
                   <Input value={form.razon_social} onChange={(e) => f("razon_social", e.target.value)} />
                 </div>

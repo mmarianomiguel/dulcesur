@@ -443,7 +443,7 @@ export default function ReposicionPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex-1">
               <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Buscar</Label>
               <div className="relative">
@@ -456,7 +456,7 @@ export default function ReposicionPage() {
                 />
               </div>
             </div>
-            <div className="flex-shrink-0 self-end flex gap-2">
+            <div className="flex-shrink-0 self-end flex gap-2 flex-wrap">
               <Select value={filterNivel} onValueChange={(v) => setFilterNivel((v || "all") as any)}>
                 <SelectTrigger className="w-36">
                   <SelectValue placeholder="Urgencia" />
@@ -653,7 +653,57 @@ export default function ReposicionPage() {
               description="No hay productos por debajo del minimo configurado"
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y">
+              {filtered.map((item) => {
+                const precio = item.precio_proveedor || item.costo;
+                return (
+                  <div key={item.producto_id} className="py-3 px-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {item.nivel === "critico" ? (
+                            <Badge variant="destructive" className="text-[10px] font-medium">SIN STOCK</Badge>
+                          ) : (
+                            <Badge className="text-[10px] font-medium bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500/20">BAJO</Badge>
+                          )}
+                          <span className="font-mono text-xs text-muted-foreground">{item.codigo}</span>
+                        </div>
+                        <p className="font-medium text-sm mt-1 truncate">{item.nombre}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block">Stock</span>
+                        <span className={item.nivel === "critico" ? "text-red-500 font-bold" : "text-amber-600 font-semibold"}>{item.stock}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block">Min / Max</span>
+                        <span>{item.stock_minimo} / {item.stock_maximo}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block">A pedir</span>
+                        <span className="font-semibold">{item.faltante}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px] font-normal">{item.categoria}</Badge>
+                        {item.proveedor_nombre ? (
+                          <span className="text-muted-foreground">{item.proveedor_nombre}</span>
+                        ) : (
+                          <span className="text-muted-foreground italic">Sin proveedor</span>
+                        )}
+                      </div>
+                      <span className="font-semibold">{formatCurrency(item.faltante * precio)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
@@ -730,6 +780,7 @@ export default function ReposicionPage() {
                   })}
                 </tbody>
               </table>
+            </div>
 
               {/* Footer total */}
               <div className="flex items-center justify-between border-t bg-muted/30 rounded-b-lg px-4 py-3">
@@ -741,7 +792,7 @@ export default function ReposicionPage() {
                   <span className="text-lg font-bold">{formatCurrency(costoReposicion)}</span>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </CardContent>
       </Card>
