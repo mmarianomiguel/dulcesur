@@ -3031,14 +3031,14 @@ export default function VentasPage() {
                   </button>
                   {boxVariants.length > 0 && (
                     <div className="flex gap-2 mt-2.5 pl-14">
-                      <Button size="sm" variant={highlighted && searchPresIdx === -1 ? "default" : "outline"} className={`h-8 text-xs flex-1 ${highlighted && searchPresIdx === -1 ? "ring-2 ring-primary" : ""}`} onClick={() => tryAddItem(p)}>
+                      <Button size="sm" variant={highlighted && searchPresIdx === -1 ? "default" : "outline"} className={`h-8 text-xs flex-1 ${highlighted && searchPresIdx === -1 ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600" : ""}`} onClick={() => tryAddItem(p)}>
                         + Unidad
                       </Button>
                       {boxVariants.map((pr, prIdx) => (
                         <Button
                           key={pr.id}
                           size="sm"
-                          className={`h-8 text-xs flex-1 ${(highlighted && searchPresIdx === prIdx) || matchedPres?.id === pr.id ? "ring-2 ring-primary" : ""}`}
+                          className={`h-8 text-xs flex-1 ${highlighted && searchPresIdx === prIdx ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600" : matchedPres?.id === pr.id ? "ring-2 ring-primary" : ""}`}
                           onClick={() => tryAddItem(p, pr)}
                         >
                           + {pr.nombre || `Caja x${pr.cantidad}`} ({pr.cantidad} un.)
@@ -3588,6 +3588,7 @@ export default function VentasPage() {
                 setDeliveryMethod("pickup");
                 setCobrarEnEntrega(false);
                 setDespacho("Retira en local");
+                setDeliveryDialogOpen(false);
               }}
               className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
                 deliveryMethod === "pickup"
@@ -3631,6 +3632,7 @@ export default function VentasPage() {
                       setCobrarEnEntrega(true);
                       setDespacho("Envio a domicilio");
                       setSelectedAddressId(addr.id);
+                      setDeliveryDialogOpen(false);
                     }}
                     className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
                       deliveryMethod === "delivery" && selectedAddressId === addr.id
