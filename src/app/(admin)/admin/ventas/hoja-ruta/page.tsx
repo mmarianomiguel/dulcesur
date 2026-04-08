@@ -933,20 +933,29 @@ export default function HojaDeRutaPage() {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 shrink-0">
             <Truck className="w-5 h-5 text-primary" />
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold">Entregas y Hoja de Ruta</h1>
-            <p className="text-sm text-muted-foreground">Gestiona entregas pendientes, cobros y hoja de ruta</p>
+            <p className="text-sm text-muted-foreground hidden sm:block">Gestiona entregas pendientes, cobros y hoja de ruta</p>
           </div>
         </div>
-        <Button onClick={saveAndShareRuta} disabled={savingRuta || filteredVentas.length === 0}>
-          {savingRuta ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Share2 className="w-4 h-4 mr-2" />}
-          {hojaRutaId ? "Actualizar Ruta" : "Guardar y Compartir"}
-        </Button>
+        <div className="flex gap-2">
+          {hojaToken && (
+            <Button variant="outline" size="sm" onClick={() => setShowShareDialog(true)}>
+              <ExternalLink className="w-4 h-4 mr-1.5" />
+              <span className="hidden sm:inline">Ver link</span>
+              <span className="sm:hidden">Link</span>
+            </Button>
+          )}
+          <Button onClick={saveAndShareRuta} disabled={savingRuta || filteredVentas.length === 0} size="sm">
+            {savingRuta ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Share2 className="w-4 h-4 mr-1.5" />}
+            {hojaRutaId ? "Actualizar Ruta" : "Guardar y Compartir"}
+          </Button>
+        </div>
       </div>
 
       {/* Pendientes / Historial tabs */}
@@ -2043,27 +2052,40 @@ export default function HojaDeRutaPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Share2 className="w-5 h-5" />
-              Compartir Hoja de Ruta
+              Compartir con el repartidor
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-5">
+            {/* Permisos */}
             <div className="space-y-2">
-              <Label>Permisos del repartidor</Label>
-              <Select value={modoLink} onValueChange={(v) => setModoLink(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="solo_ver">Solo ver (sin acciones)</SelectItem>
-                  <SelectItem value="confirmar">Confirmar entregas</SelectItem>
-                  <SelectItem value="confirmar_cobrar">Confirmar y cobrar</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Permisos del repartidor</Label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {([
+                  { value: "solo_ver", label: "Solo ver", desc: "Ve las entregas pero no puede hacer nada" },
+                  { value: "confirmar", label: "Confirmar entregas", desc: "Puede marcar entregas como completadas" },
+                  { value: "confirmar_cobrar", label: "Confirmar y cobrar", desc: "Puede confirmar entregas y registrar pagos" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setModoLink(opt.value)}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg border-2 transition-all ${
+                      modoLink === opt.value ? "border-primary bg-primary/5" : "border-muted hover:border-primary/30"
+                    }`}
+                  >
+                    <span className={`text-sm font-medium ${modoLink === opt.value ? "text-primary" : "text-foreground"}`}>{opt.label}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Link */}
             {hojaToken && (
               <div className="space-y-2">
-                <Label>Link para el repartidor</Label>
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Link para el repartidor</Label>
                 <div className="flex items-center gap-2">
-                  <Input readOnly value={`${window.location.origin}/ruta/${hojaToken}`} className="text-xs font-mono" />
-                  <Button variant="outline" size="icon" onClick={() => {
+                  <Input readOnly value={`${window.location.origin}/ruta/${hojaToken}`} className="text-xs font-mono bg-muted/50" />
+                  <Button variant="outline" size="icon" className="shrink-0" onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/ruta/${hojaToken}`);
                   }} title="Copiar link">
                     <Copy className="w-4 h-4" />
@@ -2071,27 +2093,39 @@ export default function HojaDeRutaPage() {
                 </div>
               </div>
             )}
-            <div className="flex gap-2">
-              {hojaToken && (
-                <>
-                  <Button variant="outline" className="flex-1 text-green-600 border-green-200 hover:bg-green-50" onClick={() => {
+
+            {/* Action buttons */}
+            {hojaToken ? (
+              <div className="space-y-2">
+                <Button
+                  className="w-full h-12 text-base bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => {
                     const url = `${window.location.origin}/ruta/${hojaToken}`;
-                    window.open(`https://wa.me/?text=${encodeURIComponent(`Hoja de ruta: ${url}`)}`, "_blank");
-                  }}>
-                    <MessageCircle className="w-4 h-4 mr-2" />WhatsApp
-                  </Button>
+                    window.open(`https://wa.me/?text=${encodeURIComponent(`Hoja de ruta:\n${url}`)}`, "_blank");
+                  }}
+                >
+                  <MessageCircle className="w-5 h-5 mr-2" />
+                  Enviar por WhatsApp
+                </Button>
+                <div className="flex gap-2">
                   <Button variant="outline" className="flex-1" onClick={() => {
                     window.open(`/ruta/${hojaToken}`, "_blank");
                   }}>
-                    <ExternalLink className="w-4 h-4 mr-2" />Abrir
+                    <ExternalLink className="w-4 h-4 mr-1.5" />
+                    Abrir link
                   </Button>
-                </>
-              )}
-              <Button onClick={() => { setShowShareDialog(false); saveAndShareRuta(); }} disabled={savingRuta}>
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowShareDialog(false); saveAndShareRuta(); }} disabled={savingRuta}>
+                    {savingRuta ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
+                    Actualizar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button className="w-full h-12" onClick={() => { setShowShareDialog(false); saveAndShareRuta(); }} disabled={savingRuta}>
                 {savingRuta ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Share2 className="w-4 h-4 mr-2" />}
-                {hojaRutaId ? "Actualizar" : "Generar link"}
+                Generar link para compartir
               </Button>
-            </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
