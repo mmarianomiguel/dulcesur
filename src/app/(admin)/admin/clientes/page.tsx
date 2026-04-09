@@ -437,7 +437,7 @@ export default function ClientesPage() {
     // Build queries
     let ventasQuery = supabase
       .from("ventas")
-      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, monto_pagado, remito_origen_id, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
+      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, subtotal, estado, monto_pagado, remito_origen_id, recargo_porcentaje, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
       .eq("cliente_id", clienteId)
       .neq("estado", "anulada")
       .order("created_at", { ascending: false });
@@ -468,8 +468,7 @@ export default function ClientesPage() {
     setMovimientos(compras);
 
     const totalVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
-    // Only count unlinked NCs (linked NCs are already reflected in parent venta's total)
-    const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito") && !v.remito_origen_id).reduce((s: number, v: any) => s + v.total, 0);
+    const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
     setMovTotals({ ventas: totalVentas, nc: totalNC, totalComprado: totalVentas - totalNC });
 
     // === Tab Resumen (Libro Diario) — ALL ventas + CC payments ===
@@ -526,6 +525,16 @@ export default function ClientesPage() {
       return tipo?.replace(/Factura\s*/i, "FC ").replace(/Remito\s*/i, "RM ") || "";
     };
 
+    // Build maps for surcharge and NC calculations
+    const recargoByVenta = new Map<string, number>();
+    const ncByParent = new Map<string, number>();
+    for (const v of ventas || []) {
+      if ((v as any).recargo_porcentaje > 0) recargoByVenta.set(v.id, (v as any).recargo_porcentaje);
+      if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
+        ncByParent.set(v.remito_origen_id, (ncByParent.get(v.remito_origen_id) || 0) + v.total);
+      }
+    }
+
     for (const v of ventas || []) {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
@@ -533,33 +542,48 @@ export default function ClientesPage() {
       const fp = v.forma_pago || "";
 
       if (isNC) {
-        // NC linked to a parent venta: the parent's total already reflects the NC deduction
-        // so we DON'T add it as a separate haber (that would double-subtract)
-        // Only show unlinked NCs (standalone credit notes not tied to any venta)
-        if (!v.remito_origen_id) {
+        // NC always appears as haber (credit) with its face value
+        entries.push({
+          id: `v-${v.id}-haber`, fecha: v.fecha, created_at: v.created_at || v.fecha,
+          comprobante: comp, debe: 0, haber: v.total, forma_pago: fp, descripcion: "", venta_id: v.id,
+        });
+      } else {
+        const rec = (v as any).recargo_porcentaje || 0;
+        const sub = (v as any).subtotal || 0;
+        const ncForThis = ncByParent.get(v.id) || 0;
+        const cajaEntries = cajaByVenta.get(v.id);
+        const cajaTotal = cajaEntries ? cajaEntries.reduce((s, e) => s + e.monto, 0) : 0;
+
+        // If venta has transfer surcharge: show subtotal as debe (items total, no surcharge)
+        // and add a separate recargo debe entry so NC + recargo + payment balance to 0
+        const debeFormaPago = (fp === "Cuenta Corriente" || fp === "Pendiente") ? fp : "";
+        if (rec > 0 && sub > 0) {
+          // Debe = subtotal (items only, pre-surcharge)
           entries.push({
-            id: `v-${v.id}-haber`, fecha: v.fecha, created_at: v.created_at || v.fecha,
-            comprobante: comp, debe: 0, haber: v.total, forma_pago: fp, descripcion: "", venta_id: v.id,
+            id: `v-${v.id}-debe`, fecha: v.fecha, created_at: v.created_at || v.fecha,
+            comprobante: comp, debe: sub, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
+          });
+          // Recargo = derived from what was actually paid minus the base (subtotal - NC)
+          const derivedRecargo = Math.max(0, Math.round((cajaTotal - (sub - ncForThis)) * 100) / 100);
+          if (derivedRecargo > 0) {
+            entries.push({
+              id: `v-${v.id}-recargo`, fecha: v.fecha, created_at: (v.created_at || v.fecha) + "T00:00:00.1",
+              comprobante: `Recargo transf. ${rec}%`, debe: derivedRecargo, haber: 0, forma_pago: "", descripcion: "", venta_id: v.id,
+            });
+          }
+        } else {
+          // No surcharge: debe = venta total (as before)
+          entries.push({
+            id: `v-${v.id}-debe`, fecha: v.fecha, created_at: v.created_at || v.fecha,
+            comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
           });
         }
-      } else {
-        // Regular sale or ND → Debe (full amount)
-        // Only show forma_pago on the DEBE row for CC/Pendiente (it signals the debt type)
-        // For Efectivo/Transferencia/Mixto the payment method appears on the HABER row when paid
-        const debeFormaPago = (fp === "Cuenta Corriente" || fp === "Pendiente") ? fp : "";
-        entries.push({
-          id: `v-${v.id}-debe`, fecha: v.fecha, created_at: v.created_at || v.fecha,
-          comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
-        });
 
         // Add Haber entries for payments on this sale
         // Use caja_movimientos as primary source (covers POS, web, cobros from POS)
         // Then CC haber as fallback for CC-only payments
         if (!isND) {
-          const cajaEntries = cajaByVenta.get(v.id);
           if (cajaEntries && cajaEntries.length > 0) {
-            const cajaTotal = cajaEntries.reduce((s, e) => s + e.monto, 0);
-
             if (cajaTotal > v.total + 0.01) {
               // Caja includes cobro saldo portion — cap at venta total, show excess separately
               let remaining = Math.round(v.total * 100) / 100;
