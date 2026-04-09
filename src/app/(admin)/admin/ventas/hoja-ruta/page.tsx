@@ -1987,22 +1987,22 @@ export default function HojaDeRutaPage() {
                   {allVentas.length === 1 ? (
                     <>
                       <div className="flex justify-between"><span className="text-gray-500">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(payVenta.total)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(itemsSubtotalGrupo)}</span></div>
                     </>
                   ) : (
                     <>
                       {allVentas.map((v) => (
                         <div key={v.id} className="flex justify-between">
                           <span className="text-gray-500">#{v.numero}</span>
-                          <span className="font-medium">{formatCurrency(v.total)}</span>
+                          <span className="font-medium">{formatCurrency(v.venta_items.reduce((si, i) => si + i.precio_unitario * i.cantidad, 0))}</span>
                         </div>
                       ))}
-                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
+                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(itemsSubtotalGrupo)}</span></div>
                     </>
                   )}
                   {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
                   {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-gray-500">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
-                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500 font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(totalDebeGrupo)}</span></div>
+                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500 font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(preDebeGrupo)}</span></div>
                 </div>
 
                 {/* CobroVentaSection — same as listado detail */}
