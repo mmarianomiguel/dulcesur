@@ -53,6 +53,10 @@ export default function ReportesPage() {
   // Caja movimientos for Mixto splitting
   const [cajaMovimientos, setCajaMovimientos] = useState<{ referencia_id: string; referencia_tipo: string; metodo_pago: string; monto: number }[]>([]);
 
+  // NC items profit map (original_sale_id → ganancia of credited items) and description map
+  const [ncItemsProfitMap, setNcItemsProfitMap] = useState<Record<string, number>>({});
+  const [ncItemsDescMap, setNcItemsDescMap] = useState<Record<string, string[]>>({});
+
   // Compras report
   const [compras, setCompras] = useState<CompraRow[]>([]);
   const [compraItems, setCompraItems] = useState<CompraItemRow[]>([]);
@@ -168,9 +172,32 @@ export default function ReportesPage() {
       ]);
       setVentaItems((items || []) as any[]);
       setCajaMovimientos((movs || []) as any[]);
+
+      // Build NC items profit + description maps
+      const ncVentas = ventasList.filter(v => (v.tipo_comprobante || "").toLowerCase().includes("nota de crédito") && v.remito_origen_id);
+      const profitMap: Record<string, number> = {};
+      const descMap: Record<string, string[]> = {};
+      for (const nc of ncVentas) {
+        const ncItems = (items || []).filter((i: any) => i.venta_id === nc.id);
+        const ncProfit = ncItems.reduce((a: number, i: any) => {
+          const cost = (i.costo_unitario && i.costo_unitario > 0) ? i.costo_unitario : 0;
+          return a + ((Number(i.subtotal) || 0) - cost * i.cantidad);
+        }, 0);
+        const origId = nc.remito_origen_id!;
+        profitMap[origId] = (profitMap[origId] || 0) + ncProfit;
+        if (!descMap[origId]) descMap[origId] = [];
+        ncItems.forEach((i: any) => {
+          const desc = i.descripcion || i.productos?.nombre || "";
+          if (desc && !descMap[origId].includes(desc)) descMap[origId].push(desc);
+        });
+      }
+      setNcItemsProfitMap(profitMap);
+      setNcItemsDescMap(descMap);
     } else {
       setVentaItems([]);
       setCajaMovimientos([]);
+      setNcItemsProfitMap({});
+      setNcItemsDescMap({});
     }
 
     setLoading(false);
@@ -256,10 +283,10 @@ export default function ReportesPage() {
       const ventaItem = Number(item.subtotal) || 0;
       return a + (ventaItem - costoPres * item.cantidad);
     }, 0);
-    // Subtract NC totals from original sales (NC reduces revenue, not separate ganancia)
-    const ncDeductions = Object.values(ncPorVenta).reduce((a, v) => a + v, 0);
-    return itemsGanancia - ncDeductions;
-  }, [ventaItems, ncVentaIds, ncPorVenta]);
+    // Subtract NC items PROFIT (not NC revenue) — NC reduces both revenue AND cost
+    const ncProfitDeductions = Object.values(ncItemsProfitMap).reduce((a, v) => a + v, 0);
+    return itemsGanancia - ncProfitDeductions;
+  }, [ventaItems, ncVentaIds, ncItemsProfitMap]);
 
   // Split Mixto into Efectivo + Transferencia + CC using caja_movimientos
   const ventasPorPago = useMemo(() => {
@@ -625,7 +652,9 @@ export default function ReportesPage() {
                   const items = ventaItemsMap[v.id] || [];
                   const ncAmt = ncPorVenta[v.id] || 0;
                   const netTotal = v.total - ncAmt;
-                  const ventaProfit = calcVentaProfit(v.id) - ncAmt;
+                  const ncProfitAmt = ncItemsProfitMap[v.id] || 0;
+                  const ventaProfit = calcVentaProfit(v.id) - ncProfitAmt;
+                  const ncDescs = ncItemsDescMap[v.id] || [];
                   return (
                     <React.Fragment key={v.id}>
                       <tr
@@ -690,6 +719,9 @@ export default function ReportesPage() {
                                             <span className="ml-1.5 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{(item as any).presentacion}</span>
                                           )}
                                           {descPct > 0 && <span className="ml-1 text-[10px] text-orange-600">(-{descPct}%)</span>}
+                                          {ncDescs.includes(item.descripcion || item.productos?.nombre || "") && (
+                                            <span className="ml-1.5 text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-medium">NC</span>
+                                          )}
                                         </td>
                                         <td className="py-1.5 px-3 text-center">{displayQty}</td>
                                         <td className="py-1.5 px-3 text-right">{formatCurrency(precioVenta)}</td>
@@ -703,9 +735,16 @@ export default function ReportesPage() {
                                   })}
                                 </tbody>
                                 <tfoot>
+                                  {ncAmt > 0 && (
+                                    <tr className="border-t border-red-200 bg-red-50/50 text-red-600 text-xs">
+                                      <td colSpan={4} className="py-1.5 px-4 pl-12 text-right font-medium">Nota de Crédito</td>
+                                      <td className="py-1.5 px-3 text-right font-medium">-{formatCurrency(ncAmt)}</td>
+                                      <td className="py-1.5 px-3 text-right font-medium">-{formatCurrency(ncProfitAmt)}</td>
+                                    </tr>
+                                  )}
                                   <tr className="border-t border-muted font-semibold">
                                     <td colSpan={4} className="py-1.5 px-4 pl-12 text-right">Total ganancia:</td>
-                                    <td className="py-1.5 px-3 text-right">{formatCurrency(v.total)}</td>
+                                    <td className="py-1.5 px-3 text-right">{formatCurrency(netTotal)}</td>
                                     <td className={`py-1.5 px-3 text-right ${ventaProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                                       {formatCurrency(ventaProfit)}
                                     </td>
