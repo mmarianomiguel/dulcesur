@@ -127,11 +127,11 @@ function SkeletonCategory() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-center mb-10 animate-fade-in-up">
-      <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+    <div className="text-center mb-6 animate-fade-in-up">
+      <h2 className="text-xl md:text-2xl font-bold text-gray-900">
         {children}
       </h2>
-      <div className="w-16 h-1 bg-primary rounded-full mx-auto mt-3" />
+      <div className="w-12 h-0.5 bg-primary rounded-full mx-auto mt-2" />
     </div>
   );
 }
@@ -144,33 +144,32 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
 
   return (
     <section
-      className="relative overflow-hidden min-h-[420px] flex items-center"
+      className="relative overflow-hidden"
       style={{
-        background: `linear-gradient(to right, ${colorInicio}, ${colorFin})`,
+        background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})`,
       }}
     >
-      {/* decorative circles */}
-      <div className="absolute top-10 right-10 w-64 h-64 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute top-40 right-56 w-40 h-40 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute -bottom-10 right-20 w-32 h-32 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute top-20 right-96 w-20 h-20 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute bottom-16 right-72 w-12 h-12 bg-white/10 rounded-full hidden md:block" />
+      {/* subtle decorative elements */}
+      <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/4 translate-x-1/4 hidden md:block" />
+      <div className="absolute bottom-0 right-1/4 w-32 h-32 bg-white/5 rounded-full translate-y-1/3 hidden md:block" />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full">
-        <div className="max-w-2xl">
-          <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight mb-5 animate-fade-in-up">
-            {config.titulo || "Bienvenido a nuestra tienda"}
-          </h1>
-          {config.subtitulo && (
-            <p className="text-lg text-white/90 mb-8 max-w-lg animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
-              {config.subtitulo}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
+        <div className="flex items-center justify-between gap-6">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-white leading-tight animate-fade-in-up">
+              {config.titulo || "Bienvenido a nuestra tienda"}
+            </h1>
+            {config.subtitulo && (
+              <p className="text-sm md:text-base text-white/85 mt-2 max-w-lg animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
+                {config.subtitulo}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-3 shrink-0 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
             {config.boton_texto && (
               <Link
                 href={config.boton_link || "/productos"}
-                className="bg-white text-gray-900 rounded-full px-8 py-3.5 font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
+                className="bg-white text-gray-900 rounded-full px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
               >
                 {config.boton_texto}
               </Link>
@@ -178,7 +177,7 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
             {config.boton_secundario_texto && (
               <Link
                 href={config.boton_secundario_link || "/productos"}
-                className="border-2 border-white text-white rounded-full px-8 py-3 font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
+                className="border-2 border-white text-white rounded-full px-6 py-2 text-sm font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
               >
                 {config.boton_secundario_texto}
               </Link>
@@ -257,18 +256,18 @@ function CategoriasDestacadasBlock({
   const cats = filtrarCategorias(categorias).slice(0, maxItems);
 
   return (
-    <section className="py-16">
+    <section className="py-8 md:py-10">
       <div className="max-w-7xl mx-auto px-4">
         <SectionTitle>{titulo}</SectionTitle>
 
         {loading ? (
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
             {Array.from({ length: maxItems }).map((_, i) => (
               <SkeletonCategory key={i} />
             ))}
           </div>
         ) : cats.length > 0 ? (
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-4 stagger-children">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3 stagger-children">
             {cats.map((cat) => {
               const key = cat.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
               const Icon = categoryIcons[key] || Package;
@@ -350,18 +349,18 @@ function ProductosDestacadosBlock({
   };
 
   return (
-    <section className="py-16 bg-gray-50/50">
+    <section className="py-8 md:py-10 bg-gray-50/50">
       <div className="max-w-7xl mx-auto px-4">
         <SectionTitle>{titulo}</SectionTitle>
 
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Array.from({ length: maxItems }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 stagger-children">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-children">
             {visibleProds.map((prod) => {
               const qty = getQty(prod.id);
               const sinStock = prod.stock <= 0;
@@ -512,10 +511,10 @@ function ProductosDestacadosBlock({
 
         {/* view all link */}
         {!loading && visibleProds.length > 0 && (
-          <div className="text-center mt-10">
+          <div className="text-center mt-6">
             <Link
               href="/productos"
-              className="inline-block border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white rounded-full px-8 py-3 font-semibold transition-all duration-200 active:scale-95"
+              className="inline-block border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white rounded-full px-8 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95"
             >
               Ver todos los productos
             </Link>
@@ -560,9 +559,9 @@ function AumentosRecientesBlock() {
   if (filtered.length === 0) return null;
 
   return (
-    <section className="py-12 bg-orange-50/40 border-t border-orange-100">
+    <section className="py-8 md:py-10 bg-orange-50/40 border-t border-orange-100">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <TrendingUp className="w-6 h-6 text-orange-500" />
@@ -628,10 +627,10 @@ function AumentosRecientesBlock() {
           })}
         </div>
 
-        <div className="text-center mt-8">
+        <div className="text-center mt-6">
           <Link
             href="/aumentos-recientes"
-            className="inline-block border-2 border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white rounded-full px-8 py-3 font-semibold transition-all duration-200 active:scale-95"
+            className="inline-block border-2 border-orange-500 text-orange-600 hover:bg-orange-500 hover:text-white rounded-full px-8 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95"
           >
             Ver todos los aumentos recientes
           </Link>
@@ -645,10 +644,10 @@ function BannerPromoBlock({ config }: { config: Record<string, any> }) {
   const colorFondo = config.color_fondo || "hsl(var(--primary))";
 
   return (
-    <section className="py-12">
+    <section className="py-6">
       <div className="max-w-7xl mx-auto px-4">
         <div
-          className="text-white p-8 md:p-12 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6"
+          className="text-white p-6 md:p-8 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4"
           style={{ background: `linear-gradient(to right, ${colorFondo}, ${colorFondo}dd)` }}
         >
           <div className="flex items-center gap-5">
@@ -679,33 +678,30 @@ function BannerPromoBlock({ config }: { config: Record<string, any> }) {
 }
 
 function PorQueElegirnosBlock({ config }: { config: Record<string, any> }) {
-  const titulo = config.titulo_seccion || "¿Por qué elegirnos?";
   const cards: { icono: string; titulo: string; descripcion: string }[] =
     config.cards || [];
 
   if (cards.length === 0) return null;
 
   return (
-    <section className="bg-gray-50 py-10 md:py-16">
+    <section className="border-y border-gray-100 bg-gray-50/50 py-5">
       <div className="max-w-7xl mx-auto px-4">
-        <SectionTitle>{titulo}</SectionTitle>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 stagger-children">
+        <div className={`grid grid-cols-1 md:grid-cols-${Math.min(cards.length, 4)} gap-3`}>
           {cards.map((item, i) => {
             const Icon = resolveIcon(item.icono);
             return (
               <div
                 key={i}
-                className="animate-fade-in-up bg-white rounded-2xl p-5 md:p-8 flex md:flex-col items-center md:text-center gap-4 md:gap-0 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
+                className="flex items-center gap-3 py-1"
               >
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary/8 text-primary flex items-center justify-center shrink-0 md:mx-auto md:mb-5">
-                  <Icon className="w-5 h-5 md:w-6 md:h-6" />
+                <div className="w-10 h-10 rounded-full bg-primary/8 text-primary flex items-center justify-center shrink-0">
+                  <Icon className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="text-base md:text-lg font-bold text-gray-900 md:mb-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 leading-tight">
                     {item.titulo}
-                  </h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">
+                  </p>
+                  <p className="text-xs text-gray-500 leading-tight mt-0.5 line-clamp-1">
                     {item.descripcion}
                   </p>
                 </div>
@@ -1018,7 +1014,7 @@ export default function TiendaPage({
     return (
       <div className="min-h-screen bg-white">
         {/* hero skeleton */}
-        <div className="bg-gray-100 min-h-[420px] animate-pulse" />
+        <div className="bg-gray-100 h-[120px] animate-pulse" />
         {/* badges skeleton */}
         <div className="border-y border-gray-100 py-4">
           <div className="max-w-7xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1055,10 +1051,35 @@ export default function TiendaPage({
     );
   }
 
+  // Enforce optimal section order: hero, trust_badges, productos_destacados, aumentos, categorias, por_que_elegirnos, rest
+  const sectionOrder = ["hero", "trust_badges", "productos_destacados"];
+  const afterAumentos = ["categorias_destacadas", "por_que_elegirnos"];
+
+  const orderedBloques: Bloque[] = [];
+  const used = new Set<string>();
+
+  // First: ordered sections
+  for (const tipo of sectionOrder) {
+    const b = bloques.find((bl) => bl.tipo === tipo);
+    if (b) { orderedBloques.push(b); used.add(b.id); }
+  }
+
+  // After aumentos: specific sections
+  const afterAumentosBloques: Bloque[] = [];
+  for (const tipo of afterAumentos) {
+    const b = bloques.find((bl) => bl.tipo === tipo);
+    if (b) { afterAumentosBloques.push(b); used.add(b.id); }
+  }
+
+  // Remaining blocks (banner_promo, texto_libre, imagen_banner, etc.)
+  const remaining = bloques.filter((b) => !used.has(b.id));
+
   return (
     <div className="min-h-screen bg-white">
-      {bloques.map((bloque) => renderBlock(bloque))}
+      {orderedBloques.map((bloque) => renderBlock(bloque))}
       <AumentosRecientesBlock />
+      {afterAumentosBloques.map((bloque) => renderBlock(bloque))}
+      {remaining.map((bloque) => renderBlock(bloque))}
     </div>
   );
 }
