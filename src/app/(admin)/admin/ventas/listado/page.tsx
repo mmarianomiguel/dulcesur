@@ -1119,11 +1119,11 @@ export default function ListadoVentasPage() {
     const fpLower = ((pedido as any).forma_pago || pedido.metodo_pago || "").toLowerCase();
     const isOnlineOrder = pedido._source === "pedidos" || (pedido as any).isOnline || (pedido as any).origen === "tienda" || (pedido as any).tipo_comprobante === "Pedido Web" || (pedido as any)._tipo_comprobante === "Pedido Web";
     if (fpLower === "mixto" && ptData) {
-      if (ptData.monto_efectivo > 0 && !pagos.some((p) => p.metodo === "Efectivo")) {
+      if (ptData.monto_efectivo > 0 && !pagos.some((p) => p.metodo.includes("Efectivo"))) {
         pagos.push({ metodo: "Efectivo (a cobrar)", monto: ptData.monto_efectivo });
       }
-      if (ptData.monto_transferencia > 0 && !pagos.some((p) => p.metodo === "Transferencia")) {
-        pagos.push({ metodo: "Transferencia", monto: ptData.monto_transferencia });
+      if (ptData.monto_transferencia > 0 && !pagos.some((p) => p.metodo.includes("Transferencia"))) {
+        pagos.push({ metodo: "Transferencia (a cobrar)", monto: ptData.monto_transferencia });
       }
     }
 
@@ -1850,11 +1850,8 @@ export default function ListadoVentasPage() {
     }).length;
   }, [allOrders, quickPeriod]);
 
-  // Unified stats
-  const unifiedTotal = filteredOrders.filter((o) => o.estado !== "cancelado").reduce((s, o) => {
-    const isNC = o._tipo_comprobante?.includes("Nota de Crédito");
-    return s + (isNC ? -o.total : o.total);
-  }, 0);
+  // Unified stats — NCs are already reflected in parent venta's total, don't subtract again
+  const unifiedTotal = filteredOrders.filter((o) => o.estado !== "cancelado" && !o._tipo_comprobante?.includes("Nota de Crédito")).reduce((s, o) => s + o.total, 0);
   const unifiedPendientes = filteredOrders.filter((o) => o.estado === "pendiente" || o.estado === "armado").length;
 
   // ══════════════════════════════════════════════════════════════
@@ -2077,7 +2074,7 @@ export default function ListadoVentasPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredOrders.slice(0, PAGE_SIZE * visiblePage).map((order, idx) => {
+          {filteredOrders.filter(o => !o._tipo_comprobante?.includes("Nota de Crédito") || !o._remito_origen_id).slice(0, PAGE_SIZE * visiblePage).map((order, idx) => {
             const est = estadoBadge[order.estado] || estadoBadge.pendiente;
             const isHistorial = order._source === "historial";
             const pago = formatPago(order.forma_pago || order.metodo_pago);
@@ -2125,7 +2122,6 @@ export default function ListadoVentasPage() {
                             const ncAmt = !isNC ? (ncPorVenta[order._ventaId || ""] || 0) : 0;
                             const cancelled = order.estado === "cancelado";
                             if (isNC) {
-                              // NC row: show as negative, and link to origin if available
                               return (
                                 <>
                                   <p className="text-base font-bold text-red-500">-{formatCurrency(order.total)}</p>
@@ -2135,19 +2131,19 @@ export default function ListadoVentasPage() {
                                 </>
                               );
                             }
-                            if (ncAmt > 0 && !cancelled) {
-                              return (
-                                <>
-                                  <p className="text-sm line-through text-muted-foreground">{formatCurrency(order.total)}</p>
-                                  <p className="text-[10px] text-red-500">NC -{formatCurrency(ncAmt)}</p>
-                                  <p className="text-lg font-bold">{formatCurrency(order.total - ncAmt)}</p>
-                                </>
-                              );
-                            }
+                            // Total shown is the stored total (already net of NC)
                             return (
-                              <p className={`text-lg font-bold ${cancelled ? "line-through text-muted-foreground" : ""}`}>
-                                {formatCurrency(order.total)}
-                              </p>
+                              <>
+                                <p className={`text-lg font-bold ${cancelled ? "line-through text-muted-foreground" : ""}`}>
+                                  {formatCurrency(order.total)}
+                                </p>
+                                {ncAmt > 0 && !cancelled && (
+                                  <p className="text-[10px] text-red-500 flex items-center justify-end gap-1">
+                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
+                                    NC -{formatCurrency(ncAmt)}
+                                  </p>
+                                )}
+                              </>
                             );
                           })()}
                           <p className="text-[10px] text-muted-foreground font-mono">#{order.numero}</p>
