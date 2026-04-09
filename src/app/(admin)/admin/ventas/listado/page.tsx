@@ -2953,29 +2953,62 @@ export default function ListadoVentasPage() {
                     </table>
                   </div>
 
-                  {/* Totals */}
-                  <div className="mt-3 space-y-1 text-sm text-right">
-                    {(descPct > 0 || recPct > 0 || envio > 0) && (
-                      <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
-                    )}
-                    {descPct > 0 && (
-                      <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
-                    )}
-                    {recPct > 0 && (() => {
-                      // Transfer surcharge: only on transfer portion, not full subtotal
-                      const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
-                      const mt = (poSelectedPedido as any).monto_transferencia || 0;
-                      const recargoBase = fp.includes("mixto") ? mt : (fp.includes("transfer") ? itemsSubtotal : 0);
-                      const recargoAmt = recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
-                      return recargoAmt > 0 ? (
-                        <p className="text-muted-foreground">Recargo transferencia ({recPct}%): <span className="font-medium text-violet-600">+{formatCurrency(recargoAmt)}</span></p>
-                      ) : null;
-                    })()}
-                    {envio > 0 && (
-                      <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
-                    )}
-                    <p className="text-base font-bold">Total: {formatCurrency(computedTotal)}</p>
-                  </div>
+                  {/* Totals + Payment Summary */}
+                  {(() => {
+                    const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
+                    const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
+                    const baseAfterNC = itemsSubtotal - ncTotal;
+                    // Surcharge base: for Mixto use stored monto_transferencia (capped to post-NC base);
+                    // for Transfer use full post-NC base; for Efectivo/CC no surcharge
+                    const mt = (poSelectedPedido as any).monto_transferencia || 0;
+                    const recargoBase = fp.includes("mixto") ? Math.min(mt, baseAfterNC) : (fp.includes("transfer") ? baseAfterNC : 0);
+                    const recargoAmt = recPct > 0 && recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
+                    return (
+                      <div className="mt-3 space-y-1 text-sm text-right border-t pt-3">
+                        {/* Always show subtotal */}
+                        <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
+                        {descPct > 0 && (
+                          <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
+                        )}
+                        {ncTotal > 0 && (
+                          <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-red-500">-{formatCurrency(ncTotal)}</span></p>
+                        )}
+                        {recargoAmt > 0 && (
+                          <p className="text-muted-foreground">
+                            Recargo transferencia ({recPct}%{fp.includes("mixto") ? ` s/ ${formatCurrency(recargoBase)}` : ""}):
+                            <span className="font-medium text-violet-600 ml-1">+{formatCurrency(recargoAmt)}</span>
+                          </p>
+                        )}
+                        {envio > 0 && (
+                          <p className="text-muted-foreground">Envío: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
+                        )}
+                        {/* Total = computedTotal (already correct in DB, don't subtract NC again) */}
+                        <p className="text-base font-bold pt-1 border-t">Total: {formatCurrency(computedTotal)}</p>
+
+                        {/* Payment detail */}
+                        {detailPagos.length > 0 && (
+                          <div className="pt-2 mt-2 border-t space-y-1 text-left">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Detalle de pago</p>
+                            {detailPagos.filter(p => !p.metodo.includes("Nota de Crédito")).map((p, i) => (
+                              <div key={i} className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">{p.metodo.includes("(a cobrar)") ? `\u23F3 ${p.metodo}` : `\u2713 ${p.metodo}`}</span>
+                                <span className={`font-medium ${p.metodo.includes("(a cobrar)") ? "text-amber-600" : "text-foreground"}`}>{formatCurrency(p.monto)}</span>
+                              </div>
+                            ))}
+                            {(() => {
+                              const totalPagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito")).reduce((s, p) => s + p.monto, 0);
+                              return totalPagado > 0 ? (
+                                <div className="flex items-center justify-between text-xs font-bold pt-1 border-t">
+                                  <span>Total cobrado</span>
+                                  <span>{formatCurrency(totalPagado)}</span>
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

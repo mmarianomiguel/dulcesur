@@ -122,7 +122,7 @@ export default function PedidosPage() {
       if (clienteId) {
         const { data: vd } = await supabase
           .from("ventas")
-          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, monto_pagado, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
+          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, subtotal, monto_pagado, monto_efectivo, monto_transferencia, recargo_porcentaje, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
           .eq("cliente_id", clienteId)
           .not("tipo_comprobante", "ilike", "Nota de Crédito%")
           .not("tipo_comprobante", "ilike", "Nota de Débito%")
@@ -778,14 +778,40 @@ export default function PedidosPage() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-gray-200">
-                    <td colSpan={4} className="py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider">
-                      Total
-                    </td>
-                    <td className="py-3 text-right font-bold text-primary text-base">
-                      {formatCurrency(pedido.total)}
-                    </td>
-                  </tr>
+                  {(() => {
+                    const itemsTotal = pedido.items.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
+                    const ncTotal = pedido.venta?.notas_credito?.reduce((s, nc) => s + nc.total, 0) || 0;
+                    const baseAfterNC = itemsTotal - ncTotal;
+                    const fp = (pedido.venta?.forma_pago || "").toLowerCase();
+                    const recPct = (pedido.venta as any)?.recargo_porcentaje || 0;
+                    const mt = (pedido.venta as any)?.monto_transferencia || 0;
+                    const recargoBase = fp.includes("mixto") ? Math.min(mt, baseAfterNC) : (fp.includes("transfer") ? baseAfterNC : 0);
+                    const recargoAmt = recPct > 0 && recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
+                    return (
+                      <>
+                        <tr className="border-t border-gray-200">
+                          <td colSpan={4} className="py-2 text-right text-gray-500 text-xs">Subtotal</td>
+                          <td className="py-2 text-right font-medium text-gray-700">{formatCurrency(itemsTotal)}</td>
+                        </tr>
+                        {ncTotal > 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-1 text-right text-red-500 text-xs">Nota de Crédito</td>
+                            <td className="py-1 text-right font-medium text-red-500">-{formatCurrency(ncTotal)}</td>
+                          </tr>
+                        )}
+                        {recargoAmt > 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-1 text-right text-violet-500 text-xs">Recargo transferencia ({recPct}%)</td>
+                            <td className="py-1 text-right font-medium text-violet-600">+{formatCurrency(recargoAmt)}</td>
+                          </tr>
+                        )}
+                        <tr className="border-t border-gray-200">
+                          <td colSpan={4} className="py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider">Total</td>
+                          <td className="py-3 text-right font-bold text-primary text-base">{formatCurrency(pedido.venta?.total || pedido.total)}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
                 </tfoot>
               </table>
             )}
@@ -834,7 +860,7 @@ export default function PedidosPage() {
               </div>
             )}
 
-            {/* Notas de crédito */}
+            {/* Notas de crédito — detail of credited items */}
             {pedido.venta?.notas_credito && pedido.venta.notas_credito.length > 0 && (
               <div className="mt-3 mb-4">
                 {pedido.venta.notas_credito.map((nc) => (
@@ -842,7 +868,7 @@ export default function PedidosPage() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 text-red-500" />
-                        <span className="text-sm font-semibold text-red-700">Nota de Crédito</span>
+                        <span className="text-sm font-semibold text-red-700">Nota de Crédito (detalle)</span>
                         <span className="text-xs text-red-500 font-mono">{nc.numero}</span>
                       </div>
                       <span className="text-sm font-bold text-red-600">-{formatCurrency(nc.total)}</span>
@@ -859,12 +885,7 @@ export default function PedidosPage() {
                     )}
                   </div>
                 ))}
-                <div className="flex justify-between items-center mt-3 pt-3 border-t border-red-200">
-                  <span className="text-sm font-semibold text-gray-700">Total final</span>
-                  <span className="text-lg font-bold text-primary">
-                    {formatCurrency(pedido.total - pedido.venta!.notas_credito.reduce((s, nc) => s + nc.total, 0))}
-                  </span>
-                </div>
+                {/* Total final already shown in the items tfoot breakdown above */}
               </div>
             )}
 
