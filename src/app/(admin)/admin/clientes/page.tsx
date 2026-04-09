@@ -437,7 +437,7 @@ export default function ClientesPage() {
     // Build queries
     let ventasQuery = supabase
       .from("ventas")
-      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, monto_pagado, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
+      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, estado, monto_pagado, remito_origen_id, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
       .eq("cliente_id", clienteId)
       .neq("estado", "anulada")
       .order("created_at", { ascending: false });
@@ -468,7 +468,8 @@ export default function ClientesPage() {
     setMovimientos(compras);
 
     const totalVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
-    const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
+    // Only count unlinked NCs (linked NCs are already reflected in parent venta's total)
+    const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito") && !v.remito_origen_id).reduce((s: number, v: any) => s + v.total, 0);
     setMovTotals({ ventas: totalVentas, nc: totalNC, totalComprado: totalVentas - totalNC });
 
     // === Tab Resumen (Libro Diario) — ALL ventas + CC payments ===
@@ -532,11 +533,15 @@ export default function ClientesPage() {
       const fp = v.forma_pago || "";
 
       if (isNC) {
-        // NC reduces debt → Haber
-        entries.push({
-          id: `v-${v.id}-haber`, fecha: v.fecha, created_at: v.created_at || v.fecha,
-          comprobante: comp, debe: 0, haber: v.total, forma_pago: fp, descripcion: "", venta_id: v.id,
-        });
+        // NC linked to a parent venta: the parent's total already reflects the NC deduction
+        // so we DON'T add it as a separate haber (that would double-subtract)
+        // Only show unlinked NCs (standalone credit notes not tied to any venta)
+        if (!v.remito_origen_id) {
+          entries.push({
+            id: `v-${v.id}-haber`, fecha: v.fecha, created_at: v.created_at || v.fecha,
+            comprobante: comp, debe: 0, haber: v.total, forma_pago: fp, descripcion: "", venta_id: v.id,
+          });
+        }
       } else {
         // Regular sale or ND → Debe (full amount)
         // Only show forma_pago on the DEBE row for CC/Pendiente (it signals the debt type)
