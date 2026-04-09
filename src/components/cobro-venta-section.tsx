@@ -222,18 +222,13 @@ export function CobroVentaSection({
   // ─── Computed values ───
   const recPct = recargoTransferencia || 0;
 
-  // If the order already has a defined payment method (online order), the total already includes
-  // the transfer surcharge — don't add it again. Only calculate surcharge when changing payment method.
-  const isOriginalMetodo = defaultMetodo && metodo.toLowerCase() === defaultMetodo.toLowerCase().replace("_", " ");
+  // Surcharge always calculated on montoVenta (callers must pass pre-surcharge base).
   const surcharge = useMemo(() => {
     if (recPct <= 0) return 0;
-    // Don't add surcharge if keeping original method (already included in total)
-    // Unless recalcSurcharge is set (e.g. NC adjusted the base amount)
-    if (isOriginalMetodo && !recalcSurcharge) return 0;
     if (metodo === "Transferencia") return Math.round(montoVenta * recPct) / 100;
     if (metodo === "Mixto") return Math.round(mixtoTransferencia * recPct) / 100;
     return 0;
-  }, [metodo, montoVenta, mixtoTransferencia, recPct, isOriginalMetodo]);
+  }, [metodo, montoVenta, mixtoTransferencia, recPct]);
 
   const saldoTotalAsignado = useMemo(
     () => saldoAllocations.reduce((s, a) => s + a.aplicar, 0),

@@ -2601,9 +2601,13 @@ export default function ListadoVentasPage() {
                   const actualPayments = ncTotal > 0
                     ? detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito")).reduce((s, p) => s + p.monto, 0)
                     : 0;
+                  const envio = poSelectedPedido.costo_envio || 0;
+                  // For transfer/mixto online orders with no partial payment, pass the pre-surcharge
+                  // base so CobroVentaSection adds the surcharge correctly (avoids double-charging).
+                  const isTransferOrder = !isHistorial && (fp.includes("transfer") || fp.includes("mixto"));
                   const montoBase = ncTotal > 0
                     ? Math.max(0, Math.round((itemsSubtotal - ncTotal - actualPayments) * 100) / 100)
-                    : pendiente;
+                    : (isTransferOrder && pagado === 0 ? itemsSubtotal + envio : pendiente);
                   const origEfectivo = (poSelectedPedido as any).monto_efectivo || 0;
                   const adjEfectivo = Math.min(origEfectivo, montoBase);
 

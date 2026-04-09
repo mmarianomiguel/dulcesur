@@ -1976,6 +1976,9 @@ export default function HojaDeRutaPage() {
             const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
             const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
+            // Pre-surcharge base: sum of items prices (no transfer surcharge baked in)
+            const itemsSubtotalGrupo = allVentas.reduce((s, vt) => s + vt.venta_items.reduce((si, i) => si + i.precio_unitario * i.cantidad, 0), 0);
+            const preDebeGrupo = Math.max(0, itemsSubtotalGrupo - totalNCGrupo);
             return (
               <div className="space-y-4">
                 {/* Summary header */}
@@ -2008,8 +2011,8 @@ export default function HojaDeRutaPage() {
                   clienteId={payVenta.cliente_id || ""}
                   clienteNombre={payVenta.clientes?.nombre || ""}
                   clienteSaldo={payVenta.clientes?.saldo || 0}
-                  montoVenta={totalDebeGrupo}
-                  subtotalItems={totalDebeGrupo}
+                  montoVenta={preDebeGrupo}
+                  subtotalItems={preDebeGrupo}
                   costoEnvio={0}
                   recargoTransferencia={porcentajeTransferencia}
                   cuentasBancarias={cuentasBancarias.map(c => ({ id: c.id, nombre: c.nombre, alias: (c as any).alias || "" }))}
@@ -2024,7 +2027,8 @@ export default function HojaDeRutaPage() {
                     const cuentaNombre = result.cuentaBancaria;
 
                     // Distribute payment across ventas FIFO
-                    let remaining = result.monto;
+                    // result.monto is pre-surcharge; add surcharge to get total collected
+                    let remaining = result.monto + (result.surcharge || 0);
                     const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
                     for (const v of allVentas) {
                       const deuda = Math.max(0, v.total - (pagadoPorVenta[v.id] || 0));
@@ -2037,19 +2041,21 @@ export default function HojaDeRutaPage() {
                     for (const { venta, paid } of perVenta) {
                       if (paid <= 0 && result.metodo !== "Cuenta Corriente") continue;
                       if (result.metodo === "Mixto") {
-                        const ratio = result.monto > 0 ? paid / result.monto : 0;
+                        // paid already includes surcharge (remaining = monto + surcharge)
+                        const totalWithSurcharge = result.monto + (result.surcharge || 0);
+                        const ratio = totalWithSurcharge > 0 ? paid / totalWithSurcharge : 0;
                         const efPart = Math.round(result.efectivo * ratio);
+                        // trPart includes the proportional surcharge — don't add more
                         const trPart = paid - efPart - Math.round((result.cuentaCorriente || 0) * ratio);
                         if (efPart > 0) {
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`, metodo_pago: "Efectivo", monto: efPart, referencia_id: venta.id, referencia_tipo: "venta" });
                         }
                         if (trPart > 0) {
-                          const trSurcharge = result.surcharge > 0 ? Math.round(trPart * (porcentajeTransferencia / 100)) : 0;
-                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: trPart + trSurcharge, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: trPart, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
                         }
                       } else if (result.metodo === "Transferencia") {
-                        const trSurcharge = result.surcharge > 0 ? Math.round(paid * (porcentajeTransferencia / 100)) : 0;
-                        await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: paid + trSurcharge, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
+                        // paid = pre-surcharge + surcharge already; don't add trSurcharge again
+                        await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: paid, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
                       } else if (result.metodo === "Cuenta Corriente") {
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Cuenta Corriente) — ${clienteNombre}`, metodo_pago: "Cuenta Corriente", monto: venta.total - (pagadoPorVenta[venta.id] || 0), referencia_id: venta.id, referencia_tipo: "venta" });
                       } else {
@@ -2062,7 +2068,8 @@ export default function HojaDeRutaPage() {
                     }
 
                     // CC portion (Mixto remainder or full CC) — atomic saldo
-                    const ccAmount = result.metodo === "Cuenta Corriente" ? totalDebeGrupo : result.cuentaCorriente;
+                    // For full CC, use pre-surcharge base (CC has no transfer surcharge)
+                    const ccAmount = result.metodo === "Cuenta Corriente" ? preDebeGrupo : result.cuentaCorriente;
                     if (ccAmount > 0 && payVenta.cliente_id) {
                       // Atomic increment
                       const { data: newSaldoCC } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: ccAmount });
