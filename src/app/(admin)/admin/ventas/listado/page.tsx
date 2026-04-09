@@ -2683,7 +2683,7 @@ export default function ListadoVentasPage() {
                         }
 
                         // Update venta
-                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + result.monto };
+                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + result.monto + (result.surcharge || 0) };
                         if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
                         if (result.surcharge > 0) {
                           ventaUpd.total = result.monto + result.surcharge;
@@ -3253,27 +3253,35 @@ export default function ListadoVentasPage() {
                       const clienteIdOrder = (order as any)._clienteId || (order as any).cliente_id;
                       const metodo = fp.toLowerCase().includes("cuenta") ? "Cuenta Corriente"
                         : fp.toLowerCase().includes("transfer") ? "Transferencia"
+                        : fp.toLowerCase().includes("mixto") ? "Mixto"
                         : "Efectivo";
 
                       if (ventaId) {
+                        // Compute pre-surcharge base from items (not stored total which may include surcharge)
+                        const rawBase = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0) + (order.costo_envio || 0);
+                        const orderBase = rawBase > 0 ? rawBase : order.total;
+
                         if (metodo === "Cuenta Corriente" && clienteIdOrder) {
-                          // CC: add to saldo + register in caja
-                          const { data: nuevoSaldoData } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteIdOrder, p_change: order.total });
+                          // CC: add to saldo (NO caja entry — CC is not cash in register)
+                          const { data: nuevoSaldoData } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteIdOrder, p_change: orderBase });
                           const newSaldo = nuevoSaldoData ?? 0;
-                          await supabase.from("cuenta_corriente").insert({ cliente_id: clienteIdOrder, fecha: hoy, comprobante: `Cobro #${order.numero}`, descripcion: "A cuenta corriente", debe: order.total, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: ventaId });
-                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Cuenta Corriente)`, metodo_pago: "Cuenta Corriente", monto: order.total, referencia_id: ventaId, referencia_tipo: "venta" });
+                          await supabase.from("cuenta_corriente").insert({ cliente_id: clienteIdOrder, fecha: hoy, comprobante: `Cobro #${order.numero}`, descripcion: "A cuenta corriente", debe: orderBase, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: ventaId });
+                        } else if (metodo === "Mixto") {
+                          // Mixto: use stored efectivo/transferencia split
+                          const me = (order as any).monto_efectivo || 0;
+                          const mt = (order as any).monto_transferencia || 0;
+                          const surchargeAmt = mt > 0 && recargoTransferencia > 0 ? Math.round(mt * recargoTransferencia / 100) : 0;
+                          if (me > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: me, referencia_id: ventaId, referencia_tipo: "venta" });
+                          if (mt > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Transferencia${surchargeAmt > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: mt + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta" });
+                          if (surchargeAmt > 0) await supabase.from("ventas").update({ total: me + mt + surchargeAmt }).eq("id", ventaId);
                         } else {
-                          // Efectivo or Transferencia: caja entry
-                          // Use pre-surcharge base (subtotal + envio) to avoid double-charging
-                          // online orders whose total already includes the transfer surcharge
-                          const orderBase = ((order as any).subtotal || 0) + ((order as any).costo_envio || 0) || order.total;
+                          // Efectivo or Transferencia
                           const surchargeAmt = metodo === "Transferencia" && recargoTransferencia > 0 ? Math.round(orderBase * recargoTransferencia / 100) : 0;
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}${surchargeAmt > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: metodo, monto: orderBase + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta" });
-                          if (surchargeAmt > 0) {
-                            await supabase.from("ventas").update({ total: orderBase + surchargeAmt }).eq("id", ventaId);
-                          }
+                          if (surchargeAmt > 0) await supabase.from("ventas").update({ total: orderBase + surchargeAmt }).eq("id", ventaId);
                         }
-                        await supabase.from("ventas").update({ forma_pago: metodo, monto_pagado: order.total, entregado: true, estado: "entregado" }).eq("id", ventaId);
+                        const finalTotal = metodo === "Transferencia" ? orderBase + Math.round(orderBase * recargoTransferencia / 100) : metodo === "Mixto" ? ((order as any).monto_efectivo || 0) + ((order as any).monto_transferencia || 0) + Math.round(((order as any).monto_transferencia || 0) * recargoTransferencia / 100) : orderBase;
+                        await supabase.from("ventas").update({ forma_pago: metodo, monto_pagado: finalTotal, entregado: true, estado: "entregado" }).eq("id", ventaId);
                         await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
                       }
                       await poHandleEstadoChange(order, "entregado");

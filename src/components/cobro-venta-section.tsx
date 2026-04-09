@@ -438,15 +438,14 @@ export function CobroVentaSection({
                 <div className="col-span-2 sm:col-span-1 space-y-1">
                   <label className="text-[10px] font-medium text-gray-500">Transferencia</label>
                   {(() => {
-                    // Only add display recargo if surcharge is active (not already included in total)
-                    const transfRecargo = !isOriginalMetodo && recPct > 0 ? Math.round(mixtoTransferencia * recPct / 100) : 0;
+                    const transfRecargo = recPct > 0 ? Math.round(mixtoTransferencia * recPct / 100) : 0;
                     return (
                       <div className="h-9 rounded-md border bg-gray-50 px-3 flex items-center justify-end text-sm font-medium text-gray-700">
                         {formatCurrency(mixtoTransferencia + transfRecargo)}
                       </div>
                     );
                   })()}
-                  {!isOriginalMetodo && recPct > 0 && mixtoTransferencia > 0 && (
+                  {recPct > 0 && mixtoTransferencia > 0 && (
                     <p className="text-[9px] text-emerald-600">inc. {recPct}% recargo</p>
                   )}
                 </div>

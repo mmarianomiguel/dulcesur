@@ -657,127 +657,7 @@ export default function HojaDeRutaPage() {
     setPayDialogOpen(true);
   };
 
-  const handleRegistrarPago = async () => {
-    if (!payVenta) return;
-    const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
-    const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
-
-    let totalPagando = payMetodo === "Mixto" ? payEfectivo + payTransferencia : payMetodo === "Cuenta Corriente" ? 0 : payMonto;
-    if (totalPagando <= 0 && payMetodo !== "Cuenta Corriente") return;
-
-    // Transfer surcharge — calculated per-venta in the loop below, not globally
-    const hasSurcharge = porcentajeTransferencia > 0 && (payMetodo === "Transferencia" || payMetodo === "Mixto");
-
-    setPaySaving(true);
-    const hoy = getArgentinaToday();
-    const hora = nowTimeARG();
-    const montoReal = Math.min(totalPagando, totalDebeGrupo);
-    const saldoPendiente = totalDebeGrupo - montoReal;
-    const cuentaSeleccionada = payCuentaBancariaId ? cuentasBancarias.find((c) => c.id === payCuentaBancariaId) : null;
-    const clienteNombre = payVenta.clientes?.nombre || "";
-    const nums = allVentas.map((v) => `#${v.numero}`).join(", ");
-
-    // Distribute payment across ventas — fill each venta's debt in order
-    let remaining = montoReal;
-    const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
-    for (const v of allVentas) {
-      const deuda = Math.max(0, v.total - (pagadoPorVenta[v.id] || 0));
-      const pays = Math.min(remaining, deuda);
-      perVenta.push({ venta: v, paid: pays, debtLeft: deuda - pays });
-      remaining -= pays;
-    }
-
-    // Register caja entries per venta
-    for (const { venta, paid } of perVenta) {
-      if (paid <= 0) continue;
-      if (payMetodo === "Mixto") {
-        // Split proportionally between ef and tr for this venta
-        const ratio = totalPagando > 0 ? paid / totalPagando : 0;
-        const efPart = Math.round(payEfectivo * ratio);
-        const trPart = paid - efPart;
-        if (efPart > 0) {
-          await supabase.from("caja_movimientos").insert({
-            fecha: hoy, hora, tipo: "ingreso",
-            descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`,
-            metodo_pago: "Efectivo", monto: efPart,
-            referencia_id: venta.id, referencia_tipo: "venta",
-          });
-        }
-        if (trPart > 0) {
-          const trSurcharge = hasSurcharge ? Math.round(trPart * (porcentajeTransferencia / 100)) : 0;
-          await supabase.from("caja_movimientos").insert({
-            fecha: hoy, hora, tipo: "ingreso",
-            descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
-            metodo_pago: "Transferencia", monto: trPart + trSurcharge,
-            referencia_id: venta.id, referencia_tipo: "venta",
-            ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
-          });
-        }
-      } else if (payMetodo === "Transferencia") {
-        const trSurcharge = hasSurcharge ? Math.round(paid * (porcentajeTransferencia / 100)) : 0;
-        await supabase.from("caja_movimientos").insert({
-          fecha: hoy, hora, tipo: "ingreso",
-          descripcion: `Cobro entrega #${venta.numero} (Transferencia${trSurcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaSeleccionada ? ` → ${cuentaSeleccionada.nombre}` : ""}`,
-          metodo_pago: "Transferencia", monto: paid + trSurcharge,
-          referencia_id: venta.id, referencia_tipo: "venta",
-          ...(cuentaSeleccionada ? { cuenta_bancaria: cuentaSeleccionada.nombre } : {}),
-        });
-      } else {
-        await supabase.from("caja_movimientos").insert({
-          fecha: hoy, hora, tipo: "ingreso",
-          descripcion: `Cobro entrega #${venta.numero} (${payMetodo}) — ${clienteNombre}`,
-          metodo_pago: payMetodo, monto: paid,
-          referencia_id: venta.id, referencia_tipo: "venta",
-        });
-      }
-      // Update forma_pago + cuenta_transferencia_alias (surcharge is already tracked in caja_movimiento monto)
-      const ventaUpdate: Record<string, any> = { forma_pago: payMetodo === "Cuenta Corriente" ? "Cuenta Corriente" : payMetodo };
-      if ((payMetodo === "Transferencia" || payMetodo === "Mixto") && cuentaSeleccionada) {
-        ventaUpdate.cuenta_transferencia_alias = cuentaSeleccionada.alias || cuentaSeleccionada.nombre;
-      }
-      // Update monto_pagado so the system knows this venta is paid
-      if (paid > 0) {
-        ventaUpdate.monto_pagado = (pagadoPorVenta[venta.id] || 0) + paid;
-      }
-      await supabase.from("ventas").update(ventaUpdate).eq("id", venta.id);
-    }
-
-    // For Cuenta Corriente: all goes to CC, update forma_pago for all ventas
-    if (payMetodo === "Cuenta Corriente") {
-      for (const v of allVentas) {
-        await supabase.from("ventas").update({ forma_pago: "Cuenta Corriente" }).eq("id", v.id);
-      }
-    }
-
-    // Pending balance → cuenta corriente (aggregated for the group)
-    if (saldoPendiente > 0 && payVenta.cliente_id) {
-      const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", payVenta.cliente_id).single();
-      let runningClientSaldo = freshCli?.saldo ?? payVenta.clientes?.saldo ?? 0;
-      for (const { venta, debtLeft } of perVenta) {
-        if (debtLeft <= 0) continue;
-        runningClientSaldo += debtLeft;
-        await supabase.from("cuenta_corriente").insert({
-          cliente_id: payVenta.cliente_id, fecha: hoy,
-          comprobante: `Saldo pendiente #${venta.numero}`,
-          descripcion: `Saldo pendiente de entrega — ${venta.numero}`,
-          debe: debtLeft, haber: 0, saldo: runningClientSaldo,
-          forma_pago: "Cuenta Corriente", venta_id: venta.id,
-        });
-      }
-      await supabase.from("clientes").update({ saldo: runningClientSaldo }).eq("id", payVenta.cliente_id);
-    }
-
-    // Mark as delivered — payment was registered so the order has been delivered
-    // (even if there's pending balance going to CC, the physical delivery happened)
-    for (const v of allVentas) {
-      await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
-      await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
-    }
-
-    setPaySaving(false);
-    setPayDialogOpen(false);
-    fetchVentas();
-  };
+  // handleRegistrarPago removed — replaced by CobroVentaSection onConfirmar
 
   const handleOrdenChange = (id: string, value: string) => {
     const num = parseInt(value, 10);
@@ -2057,13 +1937,17 @@ export default function HojaDeRutaPage() {
                         // paid = pre-surcharge + surcharge already; don't add trSurcharge again
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: paid, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
                       } else if (result.metodo === "Cuenta Corriente") {
-                        await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Cuenta Corriente) — ${clienteNombre}`, metodo_pago: "Cuenta Corriente", monto: venta.total - (pagadoPorVenta[venta.id] || 0), referencia_id: venta.id, referencia_tipo: "venta" });
+                        // CC does NOT go to caja — it's handled below in the CC section (cuenta_corriente)
                       } else {
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (${result.metodo}) — ${clienteNombre}`, metodo_pago: result.metodo, monto: paid, referencia_id: venta.id, referencia_tipo: "venta" });
                       }
                       // Update venta
                       const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: (pagadoPorVenta[venta.id] || 0) + paid };
                       if (cuentaNombre) ventaUpd.cuenta_transferencia_alias = cuentaNombre;
+                      // Update total to include surcharge (align with POS behavior)
+                      if (result.surcharge > 0) {
+                        ventaUpd.total = result.monto + result.surcharge;
+                      }
                       await supabase.from("ventas").update(ventaUpd).eq("id", venta.id);
                     }
 
