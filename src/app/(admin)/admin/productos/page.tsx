@@ -705,7 +705,6 @@ export default function ProductosPage() {
         visibilidad: form.visibilidad,
         destacado: form.destacado,
         imagen_url: form.imagen_url || null,
-        fecha_actualizacion: new Date().toISOString(),
         es_combo: isCombo,
         activo: true,
       };
@@ -713,9 +712,10 @@ export default function ProductosPage() {
       let productId: string;
 
       if (editingProduct) {
-        // Try to save previous price if price changed
+        // Only update fecha_actualizacion when price actually changed
         if (editingProduct.precio !== form.precio) {
           (payload as any).precio_anterior = editingProduct.precio;
+          payload.fecha_actualizacion = new Date().toISOString();
         }
         let { error } = await supabase.from("productos").update(payload).eq("id", editingProduct.id);
         // If precio_anterior column doesn't exist yet, retry without it
@@ -768,6 +768,7 @@ export default function ProductosPage() {
           });
         }
       } else {
+        payload.fecha_actualizacion = new Date().toISOString();
         const { data, error } = await supabase.from("productos").insert(payload).select("id").single();
         if (error || !data) {
           if (error?.code === "23505") throw new Error(`El código "${codigo}" ya está en uso.`);
@@ -1289,7 +1290,10 @@ export default function ProductosPage() {
               if (marcaId) updatePayload.marca_id = marcaId;
 
               if (Object.keys(updatePayload).length > 0) {
-                updatePayload.fecha_actualizacion = new Date().toISOString();
+                // Only update fecha_actualizacion when price/cost changed
+                if (updatePayload.precio || updatePayload.costo) {
+                  updatePayload.fecha_actualizacion = new Date().toISOString();
+                }
                 await supabase.from("productos").update(updatePayload).eq("id", existing.id);
                 // Sync Unidad presentation
                 if (updatePayload.precio || updatePayload.costo) {
