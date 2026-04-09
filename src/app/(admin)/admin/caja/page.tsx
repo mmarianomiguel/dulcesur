@@ -912,8 +912,11 @@ export default function CajaPage() {
       if (!sub || !recPct) continue;
       const hasTransferMov = movements.some(m => m.referencia_id === v.id && m.tipo === "ingreso" && m.metodo_pago === "Transferencia");
       if (hasTransferMov) {
+        // Surcharge only on the transfer portion, not the full subtotal
+        const mt = (v as any).monto_transferencia || 0;
         const discAmt = Math.round(sub * ((v as any).descuento_porcentaje || 0) / 100);
-        const recAmt = Math.round((sub - discAmt) * recPct / 100);
+        const base = v.forma_pago === "Mixto" && mt > 0 ? mt : (sub - discAmt);
+        const recAmt = Math.round(base * recPct / 100);
         totalTransferSurcharge += recAmt;
       }
     }

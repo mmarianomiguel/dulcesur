@@ -2961,6 +2961,16 @@ export default function ListadoVentasPage() {
                     {descPct > 0 && (
                       <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
                     )}
+                    {recPct > 0 && (() => {
+                      // Transfer surcharge: only on transfer portion, not full subtotal
+                      const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
+                      const mt = (poSelectedPedido as any).monto_transferencia || 0;
+                      const recargoBase = fp.includes("mixto") ? mt : (fp.includes("transfer") ? itemsSubtotal : 0);
+                      const recargoAmt = recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
+                      return recargoAmt > 0 ? (
+                        <p className="text-muted-foreground">Recargo transferencia ({recPct}%): <span className="font-medium text-violet-600">+{formatCurrency(recargoAmt)}</span></p>
+                      ) : null;
+                    })()}
                     {envio > 0 && (
                       <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
                     )}
