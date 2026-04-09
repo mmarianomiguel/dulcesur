@@ -231,7 +231,9 @@ export function VentaDetailDialog({
   const itemsSubtotal = editable && editItems
     ? editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0)
     : (data.subtotal || items.reduce((s, i) => s + i.subtotal, 0));
-  const ncTotal = (pagos || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
+  const ncTotal = (ncs || []).reduce((s, nc) => s + nc.total, 0);
+  const ncFromPagos = (pagos || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
+  const ncDisplay = ncTotal || ncFromPagos;
   const displayTotal = editable && editItems
     ? (() => {
         let t = itemsSubtotal + (envio || 0);
@@ -239,7 +241,7 @@ export function VentaDetailDialog({
         if (recPct > 0) t = Math.round(t * (1 + recPct / 100) * 100) / 100;
         return t;
       })()
-    : data.total - ncTotal;
+    : data.total; // stored total is already net of NC — don't subtract again
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const canCobrar = editable && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr") && !p.metodo.includes("(a cobrar)"));
@@ -735,25 +737,61 @@ export function VentaDetailDialog({
               </table>
             </div>
 
-            {/* Totals */}
-            <div className="mt-3 space-y-1 text-sm text-right">
-              {(descPct > 0 || recPct > 0 || envio > 0 || ncTotal > 0 || (isPedidoWeb && itemsSubtotal !== displayTotal)) && (
-                <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
-              )}
-              {descPct > 0 && (
-                <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
-              )}
-              {recPct > 0 && (
-                <p className="text-muted-foreground">Recargo ({recPct}%): <span className="font-medium text-foreground">+{formatCurrency(itemsSubtotal * recPct / 100)}</span></p>
-              )}
-              {envio > 0 && (
-                <p className="text-muted-foreground">Envio: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
-              )}
-              {ncTotal > 0 && !editable && (
-                <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-amber-600">-{formatCurrency(ncTotal)}</span></p>
-              )}
-              <p className="text-base font-bold">Total: {formatCurrency(displayTotal)}</p>
-            </div>
+            {/* Totals + Payment Summary */}
+            {(() => {
+              const fp = (data.forma_pago || data.metodo_pago || "").toLowerCase();
+              const mt = data.monto_transferencia || 0;
+              const baseAfterNC = itemsSubtotal - ncDisplay;
+              const recargoBase = recPct > 0
+                ? (fp.includes("mixto") ? Math.min(mt, baseAfterNC) : (fp.includes("transfer") ? baseAfterNC : 0))
+                : 0;
+              const recargoAmt = recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
+              const realPagos = (pagos || []).filter(p => !p.metodo.includes("Nota de Cr") && !p.metodo.includes("Pendiente"));
+              const totalCobrado = realPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
+              return (
+                <div className="mt-3 space-y-1 text-sm text-right border-t pt-3">
+                  <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
+                  {descPct > 0 && (
+                    <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
+                  )}
+                  {ncDisplay > 0 && (
+                    <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-red-500">-{formatCurrency(ncDisplay)}</span></p>
+                  )}
+                  {recargoAmt > 0 && (
+                    <p className="text-muted-foreground">
+                      Recargo transferencia ({recPct}%{fp.includes("mixto") ? ` s/ ${formatCurrency(recargoBase)}` : ""}):
+                      <span className="font-medium text-violet-600 ml-1">+{formatCurrency(recargoAmt)}</span>
+                    </p>
+                  )}
+                  {envio > 0 && (
+                    <p className="text-muted-foreground">Envío: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
+                  )}
+                  <p className="text-base font-bold pt-1 border-t">Total: {formatCurrency(displayTotal)}</p>
+
+                  {/* Payment detail */}
+                  {realPagos.length > 0 && !editable && (
+                    <div className="pt-2 mt-2 border-t space-y-1 text-left">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Detalle de pago</p>
+                      {realPagos.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            {p.metodo.includes("(a cobrar)") ? "\u23F3" : "\u2713"} {p.metodo}
+                            {p.cuenta_bancaria && <span className="text-[10px] text-muted-foreground ml-1">\u2192 {p.cuenta_bancaria}</span>}
+                          </span>
+                          <span className={`font-medium ${p.metodo.includes("(a cobrar)") ? "text-amber-600" : "text-foreground"}`}>{formatCurrency(p.monto)}</span>
+                        </div>
+                      ))}
+                      {totalCobrado > 0 && (
+                        <div className="flex items-center justify-between text-xs font-bold pt-1 border-t">
+                          <span>Total cobrado</span>
+                          <span>{formatCurrency(totalCobrado)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* ═══ NOTAS DE CRÉDITO ═══ */}

@@ -324,20 +324,26 @@ export default function CajaPage() {
   const [ventaDetail, setVentaDetail] = useState<Venta | null>(null);
   const [ventaDetailItems, setVentaDetailItems] = useState<any[]>([]);
   const [ventaDetailMovs, setVentaDetailMovs] = useState<any[]>([]);
+  const [ventaDetailNCs, setVentaDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
 
   const openVentaDetail = async (v: Venta) => {
-    // Clear previous data immediately so stale items/movs don't flash
     setVentaDetailItems([]);
     setVentaDetailMovs([]);
+    setVentaDetailNCs([]);
     setVentaDetail(v);
     setVentaDetailOpen(true);
-    const [{ data: items }, { data: movs }, { data: ccRows }] = await Promise.all([
+    const [{ data: items }, { data: movs }, { data: ccRows }, { data: ncVentas }] = await Promise.all([
       supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
       supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("referencia_id", v.id).order("created_at"),
       supabase.from("cuenta_corriente").select("debe").eq("venta_id", v.id).gt("debe", 0),
+      supabase.from("ventas").select("id, numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)").eq("remito_origen_id", v.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
     ]);
     setVentaDetailItems(items || []);
-    // Append CC amount as a synthetic "pago" entry so it shows in the detail
+    setVentaDetailNCs((ncVentas || []).map((nc: any) => ({
+      numero: nc.numero,
+      total: nc.total,
+      items: (nc.venta_items || []).map((i: any) => ({ descripcion: i.descripcion, cantidad: i.cantidad, precio_unitario: i.precio_unitario, subtotal: i.subtotal })),
+    })));
     const ccTotal = (ccRows || []).reduce((a: number, r: any) => a + (r.debe || 0), 0);
     const movsWithCC = [...(movs || [])];
     if (ccTotal > 0) {
@@ -2180,6 +2186,8 @@ export default function CajaPage() {
           vendedor: (ventaDetail as any).vendedor_id ? sellersMap[(ventaDetail as any).vendedor_id] || undefined : undefined,
           cuenta_transferencia_alias: (ventaDetail as any).cuenta_transferencia_alias || null,
           metodo_entrega: (ventaDetail as any).metodo_entrega || undefined,
+          monto_efectivo: (ventaDetail as any).monto_efectivo || 0,
+          monto_transferencia: (ventaDetail as any).monto_transferencia || 0,
           origen: (ventaDetail as any).origen === "tienda" ? "pedidos" : "historial",
         } : null}
         items={ventaDetailItems.map((item: any) => ({
@@ -2211,6 +2219,7 @@ export default function CajaPage() {
           if (pagos.length === 0 && ventaDetail.forma_pago) pagos.push({ metodo: ventaDetail.forma_pago, monto: ventaDetail.total });
           return pagos;
         })()}
+        ncs={ventaDetailNCs}
         footerExtra={ventaDetail && (ventaDetail.forma_pago === "Transferencia" || (ventaDetail.forma_pago === "Mixto" && (ventaDetail as any).monto_transferencia > 0)) && !(ventaDetail as any).cuenta_transferencia_alias && cajaCuentasBancarias.length > 0 ? (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-amber-600 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Asignar cuenta:</span>
