@@ -5,12 +5,12 @@ export const revalidate = 60;
 
 export const metadata = {
   title: "Aumentos Recientes",
-  description: "Productos que actualizaron su precio en los últimos 5 días.",
+  description: "Productos que actualizaron su precio en los últimos 3 días.",
 };
 
 export default async function AumentosRecientesPage() {
   const supabase = createServerSupabase();
-  const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data } = await supabase
     .from("productos")

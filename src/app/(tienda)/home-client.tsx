@@ -532,7 +532,7 @@ function AumentosRecientesBlock() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     supabase
       .from("productos")
       .select("id, nombre, precio, imagen_url, stock, activo, precio_anterior, fecha_actualizacion, categorias(id, nombre, restringida)")
