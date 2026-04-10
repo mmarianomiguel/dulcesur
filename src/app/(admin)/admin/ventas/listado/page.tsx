@@ -72,7 +72,7 @@ import type { ReceiptConfig, ReceiptLineItem, ReceiptSale } from "@/components/r
 import { PrintPreviewDialog } from "@/components/print-preview-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { CobroVentaSection } from "@/components/cobro-venta-section";
-import type { CobroVentaResult } from "@/components/cobro-venta-section";
+import type { CobroVentaResult, CobroPreview } from "@/components/cobro-venta-section";
 
 // ─── Historial types ───
 interface ClienteInfo {
@@ -275,6 +275,7 @@ export default function ListadoVentasPage() {
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
   const [recargoTransferencia, setRecargoTransferencia] = useState(2);
   const [clienteSaldo, setClienteSaldo] = useState(0);
+  const [cobroPreview, setCobroPreview] = useState<CobroPreview | null>(null);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
@@ -535,6 +536,7 @@ export default function ListadoVentasPage() {
     };
 
     setPoSelectedPedido(pseudoPedido);
+    setCobroPreview(null);
     setPoEditItems(pedidoItems.map((i) => ({ ...i })));
     setPoHasChanges(false);
     setEditandoPago(false);
@@ -1237,6 +1239,7 @@ export default function ListadoVentasPage() {
     const ptEfectivo = ptData?.monto_efectivo || (ventaData as any)?.monto_efectivo || 0;
     const ptTransferencia = ptData?.monto_transferencia || (ventaData as any)?.monto_transferencia || 0;
     setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId, monto_efectivo: ptEfectivo, monto_transferencia: ptTransferencia } as any);
+    setCobroPreview(null);
     setPoEditItems(items.map((i) => ({ ...i })));
     setPoHasChanges(false);
     setEditandoPago(false);
@@ -2681,6 +2684,7 @@ export default function ListadoVentasPage() {
                       defaultTransferencia={ncTotal > 0 ? Math.max(0, montoBase - adjEfectivo) : ((poSelectedPedido as any).monto_transferencia || 0)}
                       recalcSurcharge={ncTotal > 0}
                       defaultCuentaAlias={(poSelectedPedido as any).cuenta_transferencia_alias}
+                      onPreviewChange={setCobroPreview}
                       onConfirmar={async (result: CobroVentaResult) => {
                         const hoy = todayARG();
                         const hora = nowTimeARG();
@@ -3017,19 +3021,15 @@ export default function ListadoVentasPage() {
                     </table>
                   </div>
 
-                  {/* Totals + Payment Summary */}
+                  {/* Totals + Payment Summary — reactive to cobro selection */}
                   {(() => {
-                    const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
                     const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
-                    const baseAfterNC = itemsSubtotal - ncTotal;
-                    // Surcharge base: for Mixto use stored monto_transferencia (capped to post-NC base);
-                    // for Transfer use full post-NC base; for Efectivo/CC no surcharge
-                    const mt = (poSelectedPedido as any).monto_transferencia || 0;
-                    const recargoBase = fp.includes("mixto") ? Math.min(mt, baseAfterNC) : (fp.includes("transfer") ? baseAfterNC : 0);
-                    const recargoAmt = recPct > 0 && recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
+                    // Use cobroPreview (live from cobro section) when available, otherwise fall back to stored data
+                    const liveRecargo = cobroPreview ? cobroPreview.surcharge : 0;
+                    const liveTotal = cobroPreview ? cobroPreview.total : computedTotal;
+                    const liveMetodo = cobroPreview ? cobroPreview.metodo.toLowerCase() : ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
                     return (
                       <div className="mt-3 space-y-1 text-sm text-right border-t pt-3">
-                        {/* Always show subtotal */}
                         <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
                         {descPct > 0 && (
                           <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
@@ -3037,17 +3037,16 @@ export default function ListadoVentasPage() {
                         {ncTotal > 0 && (
                           <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-red-500">-{formatCurrency(ncTotal)}</span></p>
                         )}
-                        {recargoAmt > 0 && (
-                          <p className="text-muted-foreground">
-                            Recargo transferencia ({recPct}%{fp.includes("mixto") ? ` s/ ${formatCurrency(recargoBase)}` : ""}):
-                            <span className="font-medium text-violet-600 ml-1">+{formatCurrency(recargoAmt)}</span>
-                          </p>
-                        )}
                         {envio > 0 && (
                           <p className="text-muted-foreground">Envío: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
                         )}
-                        {/* Total = computedTotal (already correct in DB, don't subtract NC again) */}
-                        <p className="text-base font-bold pt-1 border-t">Total: {formatCurrency(computedTotal)}</p>
+                        {liveRecargo > 0 && (
+                          <p className="text-muted-foreground">
+                            Recargo transferencia ({recargoTransferencia}%):
+                            <span className="font-medium text-violet-600 ml-1">+{formatCurrency(liveRecargo)}</span>
+                          </p>
+                        )}
+                        <p className="text-base font-bold pt-1 border-t">Total: {formatCurrency(liveTotal)}</p>
 
                         {/* Payment detail */}
                         {detailPagos.length > 0 && (

@@ -64,6 +64,12 @@ export interface CobroVentaResult {
   cobrarEnEntrega?: boolean;
 }
 
+export interface CobroPreview {
+  metodo: string;
+  surcharge: number;
+  total: number;
+}
+
 interface Props {
   ventaId: string;
   clienteId: string;
@@ -81,6 +87,7 @@ interface Props {
   isEnvio?: boolean;
   recalcSurcharge?: boolean;
   onConfirmar: (result: CobroVentaResult) => Promise<void>;
+  onPreviewChange?: (preview: CobroPreview) => void;
 }
 
 type MetodoPago = "Efectivo" | "Transferencia" | "Mixto" | "Cuenta Corriente";
@@ -89,7 +96,7 @@ export function CobroVentaSection({
   ventaId, clienteId, clienteNombre, clienteSaldo, montoVenta,
   subtotalItems, costoEnvio, recargoTransferencia, cuentasBancarias, recalcSurcharge,
   defaultMetodo, defaultEfectivo, defaultTransferencia, defaultCuentaAlias,
-  isEnvio, onConfirmar,
+  isEnvio, onConfirmar, onPreviewChange,
 }: Props) {
   // ─── State ───
   const [metodo, setMetodo] = useState<MetodoPago>("Efectivo");
@@ -247,6 +254,11 @@ export function CobroVentaSection({
   const effectiveTr = metodo === "Transferencia" ? montoVenta : metodo === "Mixto" ? mixtoTransferencia : 0;
 
   const totalACobrar = (montoVenta + surcharge) + (cobrarSaldo ? saldoTotalAsignado : 0);
+
+  // Notify parent of preview changes (for reactive display)
+  useEffect(() => {
+    onPreviewChange?.({ metodo, surcharge, total: montoVenta + surcharge });
+  }, [metodo, surcharge, montoVenta, onPreviewChange]);
 
   // Show transfer UI?
   const showTransferUI = metodo === "Transferencia" || (metodo === "Mixto" && mixtoToggleTransferencia);
