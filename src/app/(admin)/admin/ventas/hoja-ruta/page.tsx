@@ -1906,6 +1906,13 @@ export default function HojaDeRutaPage() {
                     const clienteNombre = payVenta.clientes?.nombre || "";
                     const cuentaNombre = result.cuentaBancaria;
 
+                    // Guard: check venta is not anulada
+                    const { data: ventaEstadoCheck } = await supabase.from("ventas").select("estado").eq("id", payVenta.id).single();
+                    if (ventaEstadoCheck?.estado === "anulada") {
+                      alert("No se puede cobrar una venta anulada");
+                      return;
+                    }
+
                     // Distribute payment across ventas FIFO
                     // result.monto is pre-surcharge; add surcharge to get total collected
                     const totalCollected = result.monto + (result.surcharge || 0);

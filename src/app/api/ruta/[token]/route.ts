@@ -151,10 +151,11 @@ export async function POST(
     for (const ventaId of venta_ids) {
       const { data: venta } = await supabaseAdmin
         .from("ventas")
-        .select("id, numero, total, monto_pagado, cliente_id, forma_pago")
+        .select("id, numero, total, monto_pagado, cliente_id, forma_pago, estado")
         .eq("id", ventaId)
         .single();
       if (!venta) continue;
+      if ((venta as any).estado === "anulada") continue;
 
       const { data: movs } = await supabaseAdmin
         .from("caja_movimientos")

@@ -623,19 +623,71 @@ export default function ListadoVentasPage() {
         }
       }
 
-      // 3. Reverse caja_movimientos
-      const { data: cajaRows } = await supabase
+      // 3. Reverse ALL caja_movimientos linked to this venta (immutable ledger — append cancelacion entries)
+      // 3a. Direct payment entries (referencia_tipo = 'venta' or 'cobro_saldo')
+      const { data: cajaDirectRows } = await supabase
         .from("caja_movimientos")
         .select("*")
         .eq("referencia_id", v.id)
-        .eq("referencia_tipo", "venta");
-      for (const cm of cajaRows || []) {
+        .in("referencia_tipo", ["venta", "cobro_saldo"])
+        .eq("tipo", "ingreso");
+
+      // 3b. Cobro entries from atomic_register_cobro_v2 (referencia_tipo = 'cobro', referencia_id = cobro_id)
+      const { data: cobroItemRows } = await supabase
+        .from("cobro_items")
+        .select("cobro_id, monto_aplicado")
+        .eq("venta_id", v.id);
+      const cobroIds = (cobroItemRows || []).map((ci: any) => ci.cobro_id).filter(Boolean);
+      let cajaCobroRows: any[] = [];
+      if (cobroIds.length > 0) {
+        const { data: cobrosData } = await supabase
+          .from("caja_movimientos")
+          .select("*")
+          .in("referencia_id", cobroIds)
+          .eq("referencia_tipo", "cobro")
+          .eq("tipo", "ingreso");
+        cajaCobroRows = cobrosData || [];
+      }
+
+      // 3c. Collect all caja entries to reverse
+      const allCajaToReverse = [...(cajaDirectRows || []), ...cajaCobroRows];
+
+      // 3d. Check for already-reversed entries (idempotency — don't reverse twice)
+      const existingAnulacionIds = new Set<string>();
+      if (allCajaToReverse.length > 0) {
+        const { data: existingReversals } = await supabase
+          .from("caja_movimientos")
+          .select("referencia_id")
+          .eq("referencia_tipo", "anulacion")
+          .eq("tipo", "cancelacion")
+          .in("referencia_id", [v.id, ...cobroIds]);
+        for (const r of existingReversals || []) existingAnulacionIds.add((r as any).referencia_id);
+      }
+
+      // 3e. Insert cancelacion entries for each payment (append-only ledger)
+      for (const cm of allCajaToReverse) {
+        // For cobro entries, use the cobro_id as referencia; for direct, use venta.id
+        const refId = cobroIds.includes((cm as any).referencia_id) ? (cm as any).referencia_id : v.id;
+        // Skip if already reversed
+        if (existingAnulacionIds.has(refId)) continue;
+
+        // For cobro entries that cover multiple ventas, only reverse the portion allocated to this venta
+        let montoToReverse = (cm as any).monto;
+        if ((cm as any).referencia_tipo === "cobro" && cobroItemRows) {
+          const thisCobroItems = cobroItemRows.filter((ci: any) => ci.cobro_id === (cm as any).referencia_id);
+          const allocatedToThisVenta = thisCobroItems.reduce((s: number, ci: any) => s + (ci.monto_aplicado || 0), 0);
+          // If the cobro covers multiple ventas, only reverse the portion for this venta
+          if (allocatedToThisVenta > 0 && allocatedToThisVenta < montoToReverse) {
+            montoToReverse = allocatedToThisVenta;
+          }
+        }
+
         const { error: cajaErr } = await supabase.from("caja_movimientos").insert({
           fecha: hoy, hora,
           tipo: "cancelacion",
           descripcion: `Cancelación Venta #${v.numero}${motivoTexto}`,
           metodo_pago: (cm as any).metodo_pago,
-          monto: (cm as any).monto,
+          monto: montoToReverse,
           referencia_id: v.id,
           referencia_tipo: "anulacion",
           cuenta_bancaria: (cm as any).cuenta_bancaria || null,
@@ -645,13 +697,37 @@ export default function ListadoVentasPage() {
 
       // 4. Reverse cuenta_corriente entries and update client saldo via atomic RPC
       if (v.cliente_id) {
+        // 4a. CC entries linked directly to this venta
         const { data: ccRows } = await supabase
           .from("cuenta_corriente")
           .select("*")
           .eq("venta_id", v.id);
-        if (ccRows && ccRows.length > 0) {
+
+        // 4b. CC entries linked to cobros that allocated to this venta
+        let ccCobroRows: any[] = [];
+        if (cobroIds.length > 0) {
+          // The cobro RPC inserts CC with venta_id = NULL but comprobante = cobro numero
+          // Find cobro records to get their numeros
+          const { data: cobrosInfo } = await supabase
+            .from("cobros")
+            .select("id, numero")
+            .in("id", cobroIds);
+          if (cobrosInfo && cobrosInfo.length > 0) {
+            const cobroNumeros = cobrosInfo.map((c: any) => c.numero);
+            const { data: ccCobros } = await supabase
+              .from("cuenta_corriente")
+              .select("*")
+              .eq("cliente_id", v.cliente_id)
+              .in("comprobante", cobroNumeros);
+            ccCobroRows = ccCobros || [];
+          }
+        }
+
+        const allCCToReverse = [...(ccRows || []), ...ccCobroRows];
+
+        if (allCCToReverse.length > 0) {
           // Calculate total saldo change from reversing all CC entries
-          const totalChange = ccRows.reduce((acc, cc) => acc - (cc as any).debe + (cc as any).haber, 0);
+          const totalChange = allCCToReverse.reduce((acc, cc) => acc - (cc as any).debe + (cc as any).haber, 0);
 
           // Atomic saldo update via RPC
           const { data: nuevoSaldo, error: saldoErr } = await supabase.rpc("atomic_update_client_saldo", {
@@ -663,8 +739,8 @@ export default function ListadoVentasPage() {
           // Insert reversal CC entries with the new running saldo
           if (!saldoErr && nuevoSaldo != null) {
             let saldoRunning = nuevoSaldo;
-            for (let i = ccRows.length - 1; i >= 0; i--) {
-              const cc = ccRows[i];
+            for (let i = allCCToReverse.length - 1; i >= 0; i--) {
+              const cc = allCCToReverse[i];
               const reversalDebe = (cc as any).haber;
               const reversalHaber = (cc as any).debe;
               await supabase.from("cuenta_corriente").insert({
@@ -685,41 +761,27 @@ export default function ListadoVentasPage() {
         }
       }
 
-      // 5. If critical stock errors occurred, abort anulación
+      // 5. If errors occurred, abort anulación
       if (errores.length > 0) {
-        throw new Error(`No se pudo restaurar stock: ${errores.join(". ")}. Venta NO anulada.`);
+        throw new Error(`Error en anulación: ${errores.join(". ")}. Venta NO anulada.`);
       }
 
-      // 6. Mark venta as anulada
+      // 6. Race condition guard: re-fetch estado before marking
+      const { data: freshVenta } = await supabase.from("ventas").select("estado").eq("id", v.id).single();
+      if (freshVenta?.estado === "anulada") throw new Error("Esta venta ya fue anulada por otro usuario.");
+
+      // 7. Mark venta as anulada + reset monto_pagado
       const { error: anularErr } = await supabase.from("ventas").update({
         estado: "anulada",
+        monto_pagado: 0,
         observacion: v.observacion
           ? `${v.observacion} | ANULADA${motivoTexto}`
           : `ANULADA${motivoTexto}`,
       }).eq("id", v.id);
       if (anularErr) throw new Error(`Error marcando como anulada: ${anularErr.message}`);
 
-      // 7. Sync to pedidos_tienda so client sees "cancelado"
+      // 8. Sync to pedidos_tienda so client sees "cancelado"
       await supabase.from("pedidos_tienda").update({ estado: "cancelado" }).eq("numero", v.numero);
-
-      // 8. Create cancelacion caja_movimiento if original sale was paid (not Pendiente/CC)
-      //    and no caja_movimientos existed to reverse in step 3
-      if (
-        v.forma_pago !== "Pendiente" &&
-        v.forma_pago !== "Cuenta Corriente" &&
-        (!cajaRows || cajaRows.length === 0)
-      ) {
-        await supabase.from("caja_movimientos").insert({
-          fecha: hoy,
-          hora,
-          tipo: "cancelacion",
-          descripcion: `Anulación Venta #${v.numero}${motivoTexto}`,
-          metodo_pago: v.forma_pago,
-          monto: v.total,
-          referencia_id: v.id,
-          referencia_tipo: "anulacion",
-        });
-      }
 
       logAudit({
         userName: currentUser?.nombre || "Admin Sistema",
@@ -2643,6 +2705,13 @@ export default function ListadoVentasPage() {
                           if (poSelectedPedido.numero) await supabase.from("pedidos_tienda").update({ metodo_pago: result.metodo.toLowerCase().replace(" ", "_") }).eq("numero", poSelectedPedido.numero);
                           showAdminToast(`Método de pago actualizado a ${result.metodo}. Se cobrará en entrega.`, "success");
                           setPoSelectedPedido(null);
+                          return;
+                        }
+
+                        // Guard: check venta is not anulada
+                        const { data: ventaCheck } = await supabase.from("ventas").select("estado").eq("id", ventaId).single();
+                        if (ventaCheck?.estado === "anulada") {
+                          showAdminToast("No se puede cobrar una venta anulada", "error");
                           return;
                         }
 
