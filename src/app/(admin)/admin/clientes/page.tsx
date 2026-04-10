@@ -600,15 +600,20 @@ export default function ClientesPage() {
       // Use base timestamp for ordering within this operation group
       const baseTs = v.created_at || v.fecha;
 
+      // New style: show subtotal + recargo separately
+      // Applies to: ventas with NC, OR ventas created after 2026-04-09 22:00 (new format)
+      const NEW_STYLE_CUTOFF = "2026-04-09T22:00:00";
+      const isNewStyle = rec > 0 && sub > 0 && (hasNC || (v.created_at || "") >= NEW_STYLE_CUTOFF);
+
       // ── 1. PEDIDO → debe ──
-      if (hasNC && rec > 0 && sub > 0) {
+      if (isNewStyle) {
         // NEW STYLE: pedido = subtotal (items base, sin recargo)
         entries.push({
           id: `v-${v.id}-debe`, fecha: v.fecha, created_at: baseTs,
           comprobante: comp, debe: sub, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
         });
       } else {
-        // OLD STYLE / no NC: pedido = total (recargo baked in if any)
+        // OLD STYLE: pedido = total (recargo baked in if any)
         entries.push({
           id: `v-${v.id}-debe`, fecha: v.fecha, created_at: baseTs,
           comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
@@ -628,8 +633,8 @@ export default function ClientesPage() {
         handledNCIds.add(nc.id);
       }
 
-      // ── 3. RECARGO TRANSFERENCIA → debe (only for new style with NC) ──
-      if (hasNC && rec > 0 && sub > 0 && fullPayment > 0) {
+      // ── 3. RECARGO TRANSFERENCIA → debe (new style: NC or new ventas) ──
+      if (isNewStyle && fullPayment > 0) {
         const basePostNC = sub - ncForThis;
         const derivedRecargo = Math.max(0, Math.round((fullPayment - basePostNC) * 100) / 100);
         if (derivedRecargo > 0) {
@@ -756,7 +761,7 @@ export default function ClientesPage() {
 
     // Use EXACT same algorithm as fetchMovimientos (libro diario entries)
     const { data: allVentas } = await supabase.from("ventas")
-      .select("id, numero, total, subtotal, monto_pagado, tipo_comprobante, forma_pago, recargo_porcentaje, remito_origen_id")
+      .select("id, numero, total, subtotal, monto_pagado, tipo_comprobante, forma_pago, recargo_porcentaje, remito_origen_id, created_at")
       .eq("cliente_id", clienteId).neq("estado", "anulada");
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
@@ -814,8 +819,12 @@ export default function ClientesPage() {
       const montoPagado = v.monto_pagado || 0;
       const fullPayment = Math.max(cajaTotal, montoPagado);
 
+      // Same cutoff as resumen display
+      const NEW_STYLE_CUTOFF_R = "2026-04-09T22:00:00";
+      const isNewStyleR = rec > 0 && sub > 0 && (hasNC || ((v as any).created_at || "") >= NEW_STYLE_CUTOFF_R);
+
       // 1. PEDIDO (debe)
-      if (hasNC && rec > 0 && sub > 0) {
+      if (isNewStyleR) {
         totalDebe += sub; // new style: subtotal
       } else {
         totalDebe += v.total; // old style: total (recargo baked in)
@@ -824,14 +833,13 @@ export default function ClientesPage() {
       // 2. NC (haber) — linked NCs
       if (hasNC) {
         totalHaber += ncForThis;
-        // Mark as handled
         for (const ncv of allVentas.filter(x => x.tipo_comprobante?.includes("Nota de Crédito") && (x as any).remito_origen_id === v.id)) {
           handledNCIdsR.add(ncv.id);
         }
       }
 
-      // 3. RECARGO (debe) — only new style
-      if (hasNC && rec > 0 && sub > 0 && fullPayment > 0) {
+      // 3. RECARGO (debe) — new style
+      if (isNewStyleR && fullPayment > 0) {
         const basePostNC = sub - ncForThis;
         const derivedRecargo = Math.max(0, Math.round((fullPayment - basePostNC) * 100) / 100);
         totalDebe += derivedRecargo;
