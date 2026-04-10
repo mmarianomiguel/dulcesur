@@ -461,17 +461,18 @@ export default function VentasPage() {
   const recargoAmount = subtotal * (recargo / 100);
   const baseTotal = subtotal - descuentoAmount + recargoAmount;
 
-  // Calculate transfer surcharge
+  // Calculate transfer surcharge — ONLY on the current order portion, NEVER on saldo pendiente
+  const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
   const transferSurcharge = formaPago === "Transferencia"
     ? baseTotal * (porcentajeTransferencia / 100)
     : formaPago === "Mixto"
-      ? mixtoTransferencia * (porcentajeTransferencia / 100)
+      // Cap surcharge base at order amount: only the transfer portion covering THIS order
+      ? Math.min(mixtoTransferencia, Math.max(0, baseTotal - mixtoEfectivo - mixtoCuentaCorriente)) * (porcentajeTransferencia / 100)
       : 0;
 
   const total = baseTotal + transferSurcharge;
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
-  const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
   const totalACobrar = total + saldoPendienteCliente;
 
   // Mixto base: includes saldo pendiente when cobrarSaldo is checked
@@ -832,10 +833,13 @@ export default function VentasPage() {
       values[changedField] = changedValue;
 
       // Recalculate total with surcharge based on current transfer value
-      // Include saldo pendiente when cobrarSaldo is checked
+      // Surcharge only applies to the transfer portion covering THIS order (not saldo)
       const saldoExtra = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
       const currentTransfer = values["transferencia"] || 0;
-      const surcharge = currentTransfer * (porcentajeTransferencia / 100);
+      const currentEfectivo = values["efectivo"] || 0;
+      const currentCC = values["corriente"] || 0;
+      const transferForOrder = Math.min(currentTransfer, Math.max(0, baseTotal - currentEfectivo - currentCC));
+      const surcharge = transferForOrder * (porcentajeTransferencia / 100);
       const effectiveTotal = baseTotal + saldoExtra + surcharge;
 
       // Find the last active field that is NOT the changed field

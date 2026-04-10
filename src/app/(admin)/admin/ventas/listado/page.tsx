@@ -2648,24 +2648,19 @@ export default function ListadoVentasPage() {
                 {!isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
                   const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
                   const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
-                  const pendiente = Math.round((computedTotal - pagado) * 100) / 100;
-                  if (pendiente < 1) return null;
                   const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
                   if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
                   const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
 
-                  // When NC exists, base cobro on adjusted subtotal so surcharge recalculates
-                  // NC comes off subtotal → efectivo stays, transfer = new subtotal - efectivo
-                  const actualPayments = ncTotal > 0
-                    ? detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito")).reduce((s, p) => s + p.monto, 0)
-                    : 0;
+                  // Always compute montoBase from items (pre-surcharge), NEVER from storedTotal
+                  // which may already include a transfer surcharge from checkout.
+                  // This prevents double-surcharge when the stored total includes the 2%.
                   const envio = poSelectedPedido.costo_envio || 0;
-                  // For transfer/mixto online orders with no partial payment, pass the pre-surcharge
-                  // base so CobroVentaSection adds the surcharge correctly (avoids double-charging).
-                  const isTransferOrder = !isHistorial && (fp.includes("transfer") || fp.includes("mixto"));
-                  const montoBase = ncTotal > 0
-                    ? Math.max(0, Math.round((itemsSubtotal - ncTotal - actualPayments) * 100) / 100)
-                    : (isTransferOrder && pagado === 0 ? itemsSubtotal + envio : pendiente);
+                  const descuentoAmt = itemsSubtotal * (descPct / 100);
+                  const recargoAmt = itemsSubtotal * (recPct / 100);
+                  const preSurchargeBase = itemsSubtotal - descuentoAmt + recargoAmt + envio;
+                  const montoBase = Math.max(0, Math.round((preSurchargeBase - ncTotal - pagado) * 100) / 100);
+                  if (montoBase < 1) return null;
                   const origEfectivo = (poSelectedPedido as any).monto_efectivo || 0;
                   const adjEfectivo = Math.min(origEfectivo, montoBase);
 

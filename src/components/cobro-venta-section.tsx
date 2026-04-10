@@ -222,13 +222,19 @@ export function CobroVentaSection({
   // ─── Computed values ───
   const recPct = recargoTransferencia || 0;
 
-  // Surcharge always calculated on montoVenta (callers must pass pre-surcharge base).
+  // Surcharge calculated ONLY on the current order amount, never on saldo pendiente.
+  // For Transferencia: surcharge on montoVenta (the current order pending amount).
+  // For Mixto: surcharge only on the transfer portion covering THIS order (capped at order amount).
   const surcharge = useMemo(() => {
     if (recPct <= 0) return 0;
     if (metodo === "Transferencia") return Math.round(montoVenta * recPct) / 100;
-    if (metodo === "Mixto") return Math.round(mixtoTransferencia * recPct) / 100;
+    if (metodo === "Mixto") {
+      // Cap: surcharge only on transfer portion that covers the current order, not saldo
+      const transferForOrder = Math.min(mixtoTransferencia, Math.max(0, montoVenta - mixtoEfectivo - mixtoCuentaCorriente));
+      return Math.round(transferForOrder * recPct) / 100;
+    }
     return 0;
-  }, [metodo, montoVenta, mixtoTransferencia, recPct]);
+  }, [metodo, montoVenta, mixtoTransferencia, mixtoEfectivo, mixtoCuentaCorriente, recPct]);
 
   const saldoTotalAsignado = useMemo(
     () => saldoAllocations.reduce((s, a) => s + a.aplicar, 0),
@@ -509,7 +515,7 @@ export function CobroVentaSection({
             <div>
               <p className="text-xs font-medium text-violet-800">
                 {metodo === "Mixto"
-                  ? <>Recargo {recPct}% sobre porcion transferencia ({formatCurrency(mixtoTransferencia)})</>
+                  ? <>Recargo {recPct}% sobre porción transferencia ({formatCurrency(Math.min(mixtoTransferencia, Math.max(0, montoVenta - mixtoEfectivo - mixtoCuentaCorriente)))})</>
                   : <>Recargo transferencia <span className="font-bold">{recPct}%</span></>
                 }
               </p>
@@ -688,7 +694,7 @@ export function CobroVentaSection({
         )}
         {surcharge > 0 && (
           <div className="flex justify-between text-sm text-violet-600">
-            <span>Recargo transferencia ({recPct}%{metodo === "Mixto" ? ` s/ ${formatCurrency(mixtoTransferencia)}` : ""})</span>
+            <span>Recargo transferencia ({recPct}%{metodo === "Mixto" ? ` s/ ${formatCurrency(Math.min(mixtoTransferencia, Math.max(0, montoVenta - mixtoEfectivo - mixtoCuentaCorriente)))}` : ` s/ ${formatCurrency(montoVenta)}`})</span>
             <span className="font-medium">+{formatCurrency(surcharge)}</span>
           </div>
         )}
