@@ -1578,7 +1578,7 @@ export default function VentasPage() {
           : formaPago === "Efectivo" || formaPago === "Transferencia"
             ? total  // fully paid at POS
             : formaPago === "Mixto"
-              ? Math.min(total, Math.round((mixtoEfectivo + mixtoTransferencia) * 100) / 100)  // non-CC portion paid at POS, capped at venta total
+              ? Math.min(total, Math.round((mixtoEfectivo + mixtoTransferencia + transferSurcharge) * 100) / 100)  // non-CC portion + surcharge, capped at venta total
               : 0,  // CC or Pendiente — nothing paid yet
         ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
           cuenta_transferencia_id: cuentaBancariaId,
@@ -1743,7 +1743,7 @@ export default function VentasPage() {
             const oldDebtCollected = saldoRealAntesDeTodo; // pay off ALL old debt first
             const totalPaid = mixtoEfectivo + mixtoTransferencia;
             const paidForSale = totalPaid - oldDebtCollected; // what's left for this sale
-            const saleCCPortion = Math.max(0, Math.round((baseTotal - paidForSale) * 100) / 100); // unpaid portion of new sale
+            const saleCCPortion = Math.max(0, Math.round((total - paidForSale) * 100) / 100); // unpaid portion of new sale (uses total which includes surcharge)
 
             // 1. COBRO SALDO VIEJO — FIFO per-venta CC haber entries
             if (oldDebtCollected > 0) {

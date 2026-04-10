@@ -2661,7 +2661,8 @@ export default function ListadoVentasPage() {
                             entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia${result.surcharge > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: result.transferencia + result.surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
                           }
                         } else if (result.metodo === "Cuenta Corriente") {
-                          entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Cuenta Corriente)`, metodo_pago: "Cuenta Corriente", monto: result.monto, referencia_id: ventaId, referencia_tipo: "venta" });
+                          // CC does NOT go to caja — it's not real money in the register
+                          // CC is handled below in the CC section (cuenta_corriente + saldo update)
                         } else {
                           if (result.monto > 0) {
                             entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${result.surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: result.metodo, monto: result.metodo === "Transferencia" ? result.monto + result.surcharge : result.monto, referencia_id: ventaId, referencia_tipo: "venta", ...(result.metodo === "Transferencia" && result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
@@ -2681,7 +2682,8 @@ export default function ListadoVentasPage() {
                         // Update venta
                         const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + result.monto + (result.surcharge || 0) };
                         if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
-                        if (result.surcharge > 0) {
+                        if (result.surcharge > 0 && pagado === 0) {
+                          // Only update total on FIRST cobro (when no prior payments exist)
                           ventaUpd.total = result.monto + result.surcharge;
                         }
                         await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);

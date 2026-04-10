@@ -1908,10 +1908,15 @@ export default function HojaDeRutaPage() {
 
                     // Distribute payment across ventas FIFO
                     // result.monto is pre-surcharge; add surcharge to get total collected
-                    let remaining = result.monto + (result.surcharge || 0);
+                    const totalCollected = result.monto + (result.surcharge || 0);
+                    let remaining = totalCollected;
                     const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
                     for (const v of allVentas) {
-                      const deuda = Math.max(0, v.total - (pagadoPorVenta[v.id] || 0));
+                      // Use totalCollected as deuda cap when surcharge applies (so the surcharge fits)
+                      const storedTotal = v.total - (pagadoPorVenta[v.id] || 0);
+                      const surchargeForVenta = result.surcharge > 0 && allVentas.length === 1
+                        ? (result.surcharge || 0) : 0;
+                      const deuda = Math.max(0, storedTotal + surchargeForVenta);
                       const pays = Math.min(remaining, deuda);
                       perVenta.push({ venta: v, paid: pays, debtLeft: deuda - pays });
                       remaining = Math.round((remaining - pays) * 100) / 100;
