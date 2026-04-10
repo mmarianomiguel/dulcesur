@@ -2654,11 +2654,11 @@ export default function ListadoVentasPage() {
 
                   // Always compute montoBase from items (pre-surcharge), NEVER from storedTotal
                   // which may already include a transfer surcharge from checkout.
-                  // This prevents double-surcharge when the stored total includes the 2%.
+                  // NOTE: recargo_porcentaje often IS the transfer surcharge (2%) stored at checkout,
+                  // so we exclude it here — CobroVentaSection calculates the surcharge fresh.
                   const envio = poSelectedPedido.costo_envio || 0;
                   const descuentoAmt = itemsSubtotal * (descPct / 100);
-                  const recargoAmt = itemsSubtotal * (recPct / 100);
-                  const preSurchargeBase = itemsSubtotal - descuentoAmt + recargoAmt + envio;
+                  const preSurchargeBase = itemsSubtotal - descuentoAmt + envio;
                   const montoBase = Math.max(0, Math.round((preSurchargeBase - ncTotal - pagado) * 100) / 100);
                   if (montoBase < 1) return null;
                   const origEfectivo = (poSelectedPedido as any).monto_efectivo || 0;
