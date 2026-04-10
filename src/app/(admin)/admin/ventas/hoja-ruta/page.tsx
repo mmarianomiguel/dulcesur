@@ -1956,10 +1956,9 @@ export default function HojaDeRutaPage() {
                       // Update venta
                       const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: (pagadoPorVenta[venta.id] || 0) + paid };
                       if (cuentaNombre) ventaUpd.cuenta_transferencia_alias = cuentaNombre;
-                      // Update total to include surcharge (align with POS behavior)
-                      if (result.surcharge > 0) {
-                        ventaUpd.total = result.monto + result.surcharge;
-                      }
+                      // Always update total to match actual payment method.
+                      // Strips checkout surcharge if paying Efectivo, or sets correct surcharge.
+                      ventaUpd.total = result.monto + (result.surcharge || 0);
                       await supabase.from("ventas").update(ventaUpd).eq("id", venta.id);
                     }
 

@@ -2746,9 +2746,11 @@ export default function ListadoVentasPage() {
                         // Update venta
                         const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + result.monto + (result.surcharge || 0) };
                         if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
-                        if (result.surcharge > 0 && pagado === 0) {
-                          // Only update total on FIRST cobro (when no prior payments exist)
-                          ventaUpd.total = result.monto + result.surcharge;
+                        if (pagado === 0) {
+                          // On first cobro, always set total to match actual payment method.
+                          // Strips any surcharge baked in from checkout if paying Efectivo,
+                          // or sets correct surcharge if paying Transferencia/Mixto.
+                          ventaUpd.total = result.monto + (result.surcharge || 0);
                         }
                         await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
 
