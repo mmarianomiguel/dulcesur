@@ -282,6 +282,7 @@ export default function ListadoVentasPage() {
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
+  const [detailCobroSaldo, setDetailCobroSaldo] = useState<{ metodo: string; monto: number; fecha?: string }[]>([]);
   const [detailNCs, setDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
   const [editandoPago, setEditandoPago] = useState(false);
 
@@ -444,10 +445,11 @@ export default function ListadoVentasPage() {
   }, []);
 
   const openDetail = async (v: VentaRow) => {
-    const [{ data }, { data: movData }, { data: clienteData }] = await Promise.all([
+    const [{ data }, { data: movData }, { data: clienteData }, { data: cobroSaldoData }] = await Promise.all([
       supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
       supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion").eq("referencia_id", v.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
       v.cliente_id ? supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single() : Promise.resolve({ data: null }),
+      supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion, created_at").eq("referencia_id", v.id).eq("referencia_tipo", "cobro_saldo").eq("tipo", "ingreso"),
     ]);
     const vitems = (data as VentaItemRow[]) || [];
 
@@ -470,6 +472,12 @@ export default function ListadoVentasPage() {
       else if (v.entregado) pagosFromCaja.push({ metodo: v.forma_pago, monto: v.total });
     }
     setDetailPagos(pagosFromCaja);
+    // Cobro saldo entries (money collected for old debts as part of this sale)
+    const cobroSaldoEntries = (cobroSaldoData || []).map((cs: any) => ({
+      metodo: cs.metodo_pago, monto: cs.monto,
+      fecha: cs.created_at ? new Date(cs.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "",
+    }));
+    setDetailCobroSaldo(cobroSaldoEntries);
     setClienteSaldo((clienteData as any)?.saldo || 0);
 
     // Check for combos
@@ -1132,6 +1140,7 @@ export default function ListadoVentasPage() {
       { data: ptData },
       { data: clienteData },
       { data: cobroItemsData },
+      { data: cobroSaldoMovs },
     ] = await Promise.all([
       items.length === 0 && ventaId
         ? supabase.from("venta_items").select("*").eq("venta_id", ventaId).order("created_at")
@@ -1156,6 +1165,9 @@ export default function ListadoVentasPage() {
         : Promise.resolve({ data: null, error: null }),
       ventaId
         ? supabase.from("cobro_items").select("monto_aplicado, cobros(forma_pago)").eq("venta_id", ventaId)
+        : Promise.resolve({ data: [], error: null }),
+      ventaId
+        ? supabase.from("caja_movimientos").select("metodo_pago, monto, created_at").eq("referencia_id", ventaId).eq("referencia_tipo", "cobro_saldo").eq("tipo", "ingreso")
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -1267,6 +1279,10 @@ export default function ListadoVentasPage() {
 
     setDetailPagos(pagos);
     if (!ventaId) setDetailNCs([]);
+    setDetailCobroSaldo((cobroSaldoMovs || []).map((cs: any) => ({
+      metodo: cs.metodo_pago, monto: cs.monto,
+      fecha: cs.created_at ? new Date(cs.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "",
+    })));
     setClienteSaldo(clienteData?.saldo || 0);
     // Enrich pedido with payment split from pedidos_tienda (for Mixto pre-fill)
     const ptEfectivo = ptData?.monto_efectivo || (ventaData as any)?.monto_efectivo || 0;
@@ -2653,11 +2669,25 @@ export default function ListadoVentasPage() {
                                 )}
                               </div>
                             ))}
+                            {/* Cobro saldo anterior */}
+                            {detailCobroSaldo.length > 0 && (
+                              <div className="border-t pt-2 space-y-1">
+                                {detailCobroSaldo.map((cs, csi) => (
+                                  <div key={csi} className="flex items-center justify-between">
+                                    <span className="text-green-700 text-xs">
+                                      Cobro saldo anterior ({cs.metodo})
+                                      {cs.fecha && <span className="text-muted-foreground ml-1 text-[10px]">{cs.fecha}</span>}
+                                    </span>
+                                    <span className="font-medium text-green-600">{formatCurrency(cs.monto)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                             <div className="border-t pt-2 space-y-1">
-                              {cashTotal > 0 && (
+                              {(cashTotal + detailCobroSaldo.reduce((s, cs) => s + cs.monto, 0)) > 0 && (
                                 <div className="flex items-center justify-between">
                                   <span className="font-bold">Total cobrado</span>
-                                  <span className="font-bold text-base">{formatCurrency(cashTotal)}</span>
+                                  <span className="font-bold text-base">{formatCurrency(cashTotal + detailCobroSaldo.reduce((s, cs) => s + cs.monto, 0))}</span>
                                 </div>
                               )}
                               {saldoPendienteVenta > 0 && (
