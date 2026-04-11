@@ -1966,7 +1966,9 @@ export default function ListadoVentasPage() {
   }, [allOrders, quickPeriod]);
 
   // Unified stats — NCs are already reflected in parent venta's total, don't subtract again
-  const unifiedTotal = filteredOrders.filter((o) => o.estado !== "cancelado" && o.estado !== "anulada" && !o._tipo_comprobante?.includes("Nota de Crédito")).reduce((s, o) => s + o.total, 0);
+  const activeOrders = filteredOrders.filter((o) => o.estado !== "cancelado" && o.estado !== "anulada" && !o._tipo_comprobante?.includes("Nota de Crédito"));
+  const ncTotal = filteredOrders.filter((o) => o.estado !== "cancelado" && o.estado !== "anulada" && o._tipo_comprobante?.includes("Nota de Crédito")).reduce((s, o) => s + o.total, 0);
+  const unifiedTotal = activeOrders.reduce((s, o) => s + o.total, 0) - ncTotal;
   const unifiedPendientes = filteredOrders.filter((o) => o.estado === "pendiente" || o.estado === "armado").length;
 
   // ══════════════════════════════════════════════════════════════
