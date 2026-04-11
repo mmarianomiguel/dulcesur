@@ -432,11 +432,12 @@ export default function VentasPage() {
   const selectedClient = useMemo(() => clients.find((c) => c.id === clientId), [clients, clientId]);
 
   const filteredProducts = useMemo(() => {
-    const term = productSearch.toLowerCase();
+    const strip = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const term = strip(productSearch);
     if (!term) return products;
     return products.filter(
       (p) =>
-        p.nombre.toLowerCase().includes(term) ||
+        strip(p.nombre).includes(term) ||
         p.codigo.toLowerCase().includes(term) ||
         (presentacionesMap[p.id] || []).some((pr) =>
           (pr.codigo || "").toLowerCase().includes(term)
