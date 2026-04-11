@@ -525,37 +525,16 @@ export default function ClientesPage() {
       return tipo?.replace(/Factura\s*/i, "FC ").replace(/Remito\s*/i, "RM ") || "";
     };
 
-    // ═══ BUILD LIBRO DIARIO — Contable, explícito, sin cálculos implícitos ═══
+    // ═══ LIBRO DIARIO — Algoritmo simple y correcto ═══
     //
-    // Reglas:
-    // 1. PEDIDO: debe = subtotal (precio efectivo, sin recargo). Si no hay subtotal, usar total.
-    // 2. NOTA DE CRÉDITO: haber = NC total (reduce el saldo del pedido)
-    // 3. RECARGO TRANSFERENCIA: debe = monto de recargo (se calcula sobre lo transferido, no sobre todo)
-    //    derivado de: caja_total - (subtotal - NC_total). Solo si recargo_porcentaje > 0.
-    // 4. PAGO: haber = cada movimiento de caja (efectivo, transferencia, CC, etc.)
-    //
-    // Así: Pedido + Recargo - NC - Pagos = Saldo (debe ser 0 si está todo pagado)
+    // DEBE = venta.total (SIEMPRE, sin excepciones — incluye recargos)
+    // HABER = NC totals + pagos reales (caja_movimientos + CC cobros)
+    // SALDO = DEBE - HABER
 
-    // ═══ MOTOR CONTABLE — Orden: Pedido → NC → Recargo → Pago ═══
-    //
-    // REGLAS:
-    // 1. Pedido = subtotal base (sin recargo) → DEBE
-    // 2. NC = reduce subtotal → HABER (agrupada con su pedido padre)
-    // 3. Recargo transferencia = se aplica sobre lo transferido del subtotal ajustado → DEBE
-    // 4. Pago = cada movimiento de caja → HABER
-    //
-    // COMPATIBILIDAD HISTÓRICA:
-    // Si la venta NO tiene NC vinculada → "old style":
-    //   debe = total (recargo ya incluido), sin recargo separado
-    // Si la venta TIENE NC vinculada → "new style":
-    //   debe = subtotal, NC separada, recargo separado
-
-    // Pre-compute: NC totals + NC ventas by parent
-    const ncByParent = new Map<string, number>();
+    // Pre-compute: NC ventas by parent
     const ncVentasByParent = new Map<string, typeof ventas>();
     for (const v of ventas || []) {
       if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
-        ncByParent.set(v.remito_origen_id, (ncByParent.get(v.remito_origen_id) || 0) + v.total);
         const arr = ncVentasByParent.get(v.remito_origen_id) || [];
         arr.push(v);
         ncVentasByParent.set(v.remito_origen_id, arr);
@@ -569,12 +548,11 @@ export default function ClientesPage() {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
 
-      // Skip NCs that are linked to a parent — they're embedded in the parent's group
+      // Skip NCs linked to a parent — they're shown inline with parent
       if (isNC && v.remito_origen_id && handledNCIds.has(v.id)) continue;
-      // Skip standalone NCs here too — they're handled below
       if (isNC) {
         if (!v.remito_origen_id) {
-          // Standalone NC (not linked to any venta)
+          // Standalone NC
           const comp = `${shortCompType(v.tipo_comprobante)} ${v.numero}`.replace(/\s+/g, " ").trim();
           entries.push({
             id: `v-${v.id}-nc`, fecha: v.fecha, created_at: v.created_at || v.fecha,
@@ -589,65 +567,30 @@ export default function ClientesPage() {
       const fp = v.forma_pago || "";
       const cajaEntries = cajaByVenta.get(v.id);
       const cajaTotal = cajaEntries ? cajaEntries.reduce((s, e) => s + e.monto, 0) : 0;
-      const rec = (v as any).recargo_porcentaje || 0;
-      const sub = (v as any).subtotal || 0;
       const montoPagado = v.monto_pagado || 0;
-      const fullPayment = Math.max(cajaTotal, montoPagado);
-      const ncForThis = ncByParent.get(v.id) || 0;
-      const hasNC = ncForThis > 0;
       const debeFormaPago = (fp === "Cuenta Corriente" || fp === "Pendiente") ? fp : "";
-
-      // Use base timestamp for ordering within this operation group
       const baseTs = v.created_at || v.fecha;
 
-      // New style: show subtotal + recargo separately
-      // Applies to: ventas with NC, OR ventas created after 2026-04-09 22:00 (new format)
-      const NEW_STYLE_CUTOFF = "2026-04-09T22:00:00";
-      const isNewStyle = rec > 0 && sub > 0 && (hasNC || (v.created_at || "") >= NEW_STYLE_CUTOFF);
+      // ── 1. PEDIDO → debe = venta.total (siempre) ──
+      entries.push({
+        id: `v-${v.id}-debe`, fecha: v.fecha, created_at: baseTs,
+        comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
+      });
 
-      // ── 1. PEDIDO → debe ──
-      if (isNewStyle) {
-        // NEW STYLE: pedido = subtotal (items base, sin recargo)
-        entries.push({
-          id: `v-${v.id}-debe`, fecha: v.fecha, created_at: baseTs,
-          comprobante: comp, debe: sub, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
-        });
-      } else {
-        // OLD STYLE: pedido = total (recargo baked in if any)
-        entries.push({
-          id: `v-${v.id}-debe`, fecha: v.fecha, created_at: baseTs,
-          comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
-        });
-      }
-
-      // ── 2. NOTAS DE CRÉDITO → haber (grouped right after pedido) ──
+      // ── 2. NOTAS DE CRÉDITO → haber (grouped after pedido) ──
       const linkedNCs = ncVentasByParent.get(v.id) || [];
       for (const nc of linkedNCs) {
         const ncComp = `${shortCompType(nc.tipo_comprobante)} ${nc.numero}`.replace(/\s+/g, " ").trim();
         entries.push({
-          id: `v-${nc.id}-nc`, fecha: v.fecha, // Use PARENT fecha for grouping
-          created_at: baseTs + "T00:00:00.2", // After pedido, before recargo
+          id: `v-${nc.id}-nc`, fecha: v.fecha,
+          created_at: baseTs + "T00:00:00.2",
           comprobante: ncComp, debe: 0, haber: nc.total, forma_pago: nc.forma_pago || "",
           descripcion: "", venta_id: nc.id,
         });
         handledNCIds.add(nc.id);
       }
 
-      // ── 3. RECARGO TRANSFERENCIA → debe (new style: NC or new ventas) ──
-      if (isNewStyle && fullPayment > 0) {
-        const basePostNC = sub - ncForThis;
-        const derivedRecargo = Math.max(0, Math.round((fullPayment - basePostNC) * 100) / 100);
-        if (derivedRecargo > 0) {
-          entries.push({
-            id: `v-${v.id}-recargo`, fecha: v.fecha,
-            created_at: baseTs + "T00:00:00.3", // After NC, before pagos
-            comprobante: `Recargo transf. ${rec}%`, debe: derivedRecargo, haber: 0,
-            forma_pago: "", descripcion: "", venta_id: v.id,
-          });
-        }
-      }
-
-      // ── 4. PAGOS → haber ──
+      // ── 3. PAGOS → haber (from caja_movimientos) ──
       if (!isND) {
         if (cajaEntries && cajaEntries.length > 0) {
           for (let ci = 0; ci < cajaEntries.length; ci++) {
@@ -659,7 +602,7 @@ export default function ClientesPage() {
               descripcion: "", venta_id: v.id,
             });
           }
-          // Supplementary: payments outside caja
+          // If monto_pagado exceeds caja entries (e.g., cobro allocation)
           if (montoPagado > cajaTotal + 0.5) {
             const diff = Math.round((montoPagado - cajaTotal) * 100) / 100;
             entries.push({
@@ -680,33 +623,17 @@ export default function ClientesPage() {
       }
     }
 
-    // Add cuenta_corriente haber entries (CC payments — old cobros + new cobros)
-    // Skip CC habers that reference a venta already covered by caja_movimientos
-    // (POS cobrar saldo creates BOTH a caja entry AND a CC entry — avoid double-counting)
+    // Add CC haber entries (cobro_saldo payments against old debt)
+    // Dedup: skip CC habers for ventas already covered by caja_movimientos
     const ventasWithCaja = new Set(
       [...cajaByVenta.keys()].filter((vid) => cajaByVenta.get(vid)!.length > 0)
     );
 
     for (const cc of ccHaberData || []) {
-      // "Cobro saldo" entries have caja counterparts with referencia_tipo="cobro_saldo"
-      // which are NOT in cajaByVenta (only "venta" type is fetched), so they must NOT be skipped
       const isCobrosaldo = cc.comprobante?.startsWith("Cobro saldo");
 
-      // Skip non-cobrosaldo CC habers that reference a venta already covered by caja_movimientos
+      // Skip non-cobrosaldo CC habers that reference a venta with caja entries
       if (!isCobrosaldo && cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
-
-      // Skip orphaned "Cobro saldo - Venta #XXX" entries when the linked venta's caja
-      // already has excess (meaning the cobro saldo is already shown as caja excess)
-      if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) {
-        const numMatch = cc.comprobante.match(/#(\d+-\d+)/);
-        if (numMatch) {
-          const linkedVenta = (ventas || []).find((v: any) => v.numero === numMatch[1]);
-          if (linkedVenta && cajaByVenta.has(linkedVenta.id)) {
-            const ct = (cajaByVenta.get(linkedVenta.id) || []).reduce((s: number, e: any) => s + e.monto, 0);
-            if (ct > linkedVenta.total + 0.01) continue;
-          }
-        }
-      }
 
       entries.push({
         id: `cc-${cc.id}`, fecha: cc.fecha, created_at: cc.created_at || cc.fecha,
@@ -756,12 +683,13 @@ export default function ClientesPage() {
     const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
     const saldoActual = freshCli?.saldo ?? 0;
 
-    await supabase.from("cuenta_corriente").delete()
-      .eq("cliente_id", clienteId).eq("comprobante", "Ajuste recálculo");
+    // ═══ Recalcular saldo — algoritmo simple y correcto ═══
+    // DEBE = SUM(venta.total) para todas las ventas no-NC, no-anuladas
+    // HABER = SUM(NC.total) + SUM(pagos reales)
+    // SALDO = DEBE - HABER
 
-    // Use EXACT same algorithm as fetchMovimientos (libro diario entries)
     const { data: allVentas } = await supabase.from("ventas")
-      .select("id, numero, total, subtotal, monto_pagado, tipo_comprobante, forma_pago, recargo_porcentaje, remito_origen_id, created_at")
+      .select("id, numero, total, monto_pagado, tipo_comprobante, forma_pago, remito_origen_id")
       .eq("cliente_id", clienteId).neq("estado", "anulada");
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
@@ -772,32 +700,20 @@ export default function ClientesPage() {
 
     // Fetch caja_movimientos for all ventas
     const allVentaIds = allVentas.filter(v => !v.tipo_comprobante?.includes("Nota de Crédito")).map(v => v.id);
-    const cajaByVenta = new Map<string, { metodo_pago: string; monto: number }[]>();
+    const cajaByVenta = new Map<string, number>();
     for (let i = 0; i < allVentaIds.length; i += 100) {
       const batch = allVentaIds.slice(i, i + 100);
       const { data: cajaData } = await supabase.from("caja_movimientos")
-        .select("referencia_id, metodo_pago, monto").in("referencia_id", batch)
+        .select("referencia_id, monto").in("referencia_id", batch)
         .eq("referencia_tipo", "venta").eq("tipo", "ingreso");
       for (const cm of cajaData || []) {
         if (!cm.referencia_id) continue;
-        const arr = cajaByVenta.get(cm.referencia_id) || [];
-        arr.push({ metodo_pago: cm.metodo_pago, monto: cm.monto });
-        cajaByVenta.set(cm.referencia_id, arr);
-      }
-    }
-
-    // Build saldo using SAME logic as resumen (contable)
-    // NC by parent map
-    const ncByParentR = new Map<string, number>();
-    for (const v of allVentas) {
-      if (v.tipo_comprobante?.includes("Nota de Crédito") && (v as any).remito_origen_id) {
-        ncByParentR.set((v as any).remito_origen_id, (ncByParentR.get((v as any).remito_origen_id) || 0) + v.total);
+        cajaByVenta.set(cm.referencia_id, (cajaByVenta.get(cm.referencia_id) || 0) + cm.monto);
       }
     }
 
     let totalDebe = 0;
     let totalHaber = 0;
-    const handledNCIdsR = new Set<string>();
 
     for (const v of allVentas) {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
@@ -805,74 +721,35 @@ export default function ClientesPage() {
       const fp = v.forma_pago || "";
 
       if (isNC) {
-        // Linked NCs are handled with their parent below; standalone NCs counted here
-        if (!(v as any).remito_origen_id) totalHaber += v.total;
+        // NC = haber (reduce debt)
+        totalHaber += v.total;
         continue;
       }
 
-      const rec = (v as any).recargo_porcentaje || 0;
-      const sub = (v as any).subtotal || 0;
-      const ncForThis = ncByParentR.get(v.id) || 0;
-      const hasNC = ncForThis > 0;
-      const cajaEntries = cajaByVenta.get(v.id);
-      const cajaTotal = cajaEntries ? cajaEntries.reduce((s, e) => s + e.monto, 0) : 0;
-      const montoPagado = v.monto_pagado || 0;
-      const fullPayment = Math.max(cajaTotal, montoPagado);
+      // DEBE = venta.total (always)
+      totalDebe += v.total;
 
-      // Same cutoff as resumen display
-      const NEW_STYLE_CUTOFF_R = "2026-04-09T22:00:00";
-      const isNewStyleR = rec > 0 && sub > 0 && (hasNC || ((v as any).created_at || "") >= NEW_STYLE_CUTOFF_R);
-
-      // 1. PEDIDO (debe)
-      if (isNewStyleR) {
-        totalDebe += sub; // new style: subtotal
-      } else {
-        totalDebe += v.total; // old style: total (recargo baked in)
-      }
-
-      // 2. NC (haber) — linked NCs
-      if (hasNC) {
-        totalHaber += ncForThis;
-        for (const ncv of allVentas.filter(x => x.tipo_comprobante?.includes("Nota de Crédito") && (x as any).remito_origen_id === v.id)) {
-          handledNCIdsR.add(ncv.id);
-        }
-      }
-
-      // 3. RECARGO (debe) — new style
-      if (isNewStyleR && fullPayment > 0) {
-        const basePostNC = sub - ncForThis;
-        const derivedRecargo = Math.max(0, Math.round((fullPayment - basePostNC) * 100) / 100);
-        totalDebe += derivedRecargo;
-      }
-
-      // 4. PAGOS (haber)
+      // HABER = pagos reales
       if (!isND) {
+        const cajaTotal = cajaByVenta.get(v.id) || 0;
+        const montoPagado = v.monto_pagado || 0;
         if (cajaTotal > 0) {
           totalHaber += cajaTotal;
-          if (montoPagado > cajaTotal + 0.5) totalHaber += Math.round((montoPagado - cajaTotal) * 100) / 100;
+          // Extra from cobro allocations not in caja
+          if (montoPagado > cajaTotal + 0.5) {
+            totalHaber += Math.round((montoPagado - cajaTotal) * 100) / 100;
+          }
         } else if (fp !== "Cuenta Corriente" && fp !== "Pendiente" && montoPagado > 0) {
           totalHaber += montoPagado;
         }
       }
     }
 
-    // CC haber entries — same dedup as resumen
-    const ventasWithCaja = new Set(
-      [...cajaByVenta.keys()].filter((vid) => cajaByVenta.get(vid)!.length > 0)
-    );
+    // CC haber entries (cobro_saldo payments)
+    const ventasWithCajaSet = new Set([...cajaByVenta.keys()].filter(vid => (cajaByVenta.get(vid) || 0) > 0));
     for (const cc of ccAllData || []) {
       const isCobrosaldo = cc.comprobante?.startsWith("Cobro saldo");
-      if (!isCobrosaldo && cc.venta_id && ventasWithCaja.has(cc.venta_id)) continue;
-      if (!cc.venta_id && cc.comprobante?.includes("Cobro saldo - Venta #")) {
-        const numMatch = cc.comprobante.match(/#(\d+-\d+)/);
-        if (numMatch) {
-          const linkedVenta = allVentas.find((v: any) => v.numero === numMatch[1]);
-          if (linkedVenta && cajaByVenta.has(linkedVenta.id)) {
-            const ct = (cajaByVenta.get(linkedVenta.id) || []).reduce((s: number, e: any) => s + e.monto, 0);
-            if (ct > linkedVenta.total + 0.01) continue;
-          }
-        }
-      }
+      if (!isCobrosaldo && cc.venta_id && ventasWithCajaSet.has(cc.venta_id)) continue;
       totalHaber += cc.haber;
     }
 
