@@ -574,6 +574,11 @@ export default function ListadoVentasPage() {
       const items = (vitems as VentaItemRow[]) || [];
 
       // 2. Reverse stock for each item
+      // For regular ventas: stock was TAKEN (sale) → reverse ADDS back (+qty)
+      // For NCs: stock was RETURNED (devolucion) → reverse TAKES back out (-qty)
+      const isNCAnul = v.tipo_comprobante?.includes("Nota de Crédito");
+      const stockDirection = isNCAnul ? -1 : 1; // NC anulation: subtract; regular: add
+
       for (const item of items) {
         if (!item.producto_id) continue;
         const { data: prod, error: prodErr } = await supabase.from("productos").select("id, stock, es_combo").eq("id", item.producto_id).single();
@@ -588,8 +593,8 @@ export default function ListadoVentasPage() {
           for (const ci of comboItems || []) {
             const { data: compProd } = await supabase.from("productos").select("id, stock").eq("id", (ci as any).producto_id).single();
             if (!compProd) { errores.push(`Componente combo no encontrado`); continue; }
-            const unitsToRestore = item.cantidad * (ci as any).cantidad;
-            const newStock = compProd.stock + unitsToRestore;
+            const unitsChange = item.cantidad * (ci as any).cantidad * stockDirection;
+            const newStock = compProd.stock + unitsChange;
             const { error: updErr } = await supabase.from("productos").update({ stock: newStock }).eq("id", (ci as any).producto_id);
             if (updErr) { errores.push(`Error stock combo: ${updErr.message}`); continue; }
             await supabase.from("stock_movimientos").insert({
@@ -597,22 +602,21 @@ export default function ListadoVentasPage() {
               tipo: "anulacion",
               cantidad_antes: compProd.stock,
               cantidad_despues: newStock,
-              cantidad: unitsToRestore,
-              referencia: `Anulación Venta #${v.numero}`,
-              descripcion: `Anulación venta - ${(ci as any).productos?.nombre || item.descripcion}${motivoTexto}`,
+              cantidad: unitsChange,
+              referencia: `Anulación ${isNCAnul ? "NC" : "Venta"} #${v.numero}`,
+              descripcion: `Anulación ${isNCAnul ? "nota de crédito" : "venta"} - ${(ci as any).productos?.nombre || item.descripcion}${motivoTexto}`,
               usuario: currentUser?.nombre || "Admin Sistema",
               orden_id: v.id,
             });
           }
         } else {
-          // Regular product - fallback: parse units from presentacion name if unidades_por_presentacion is wrong
           let upp = item.unidades_por_presentacion || 1;
           if (upp === 1 && item.presentacion && item.presentacion !== "Unidad") {
             const match = item.presentacion.toLowerCase().match(/x\s*(\d+)/);
             if (match) upp = Number(match[1]);
           }
-          const unitsToRestore = item.cantidad * upp;
-          const newStock = prod.stock + unitsToRestore;
+          const unitsChange = item.cantidad * upp * stockDirection;
+          const newStock = prod.stock + unitsChange;
           const { error: updErr } = await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
           if (updErr) { errores.push(`Error stock ${item.descripcion}: ${updErr.message}`); continue; }
           await supabase.from("stock_movimientos").insert({
@@ -620,9 +624,9 @@ export default function ListadoVentasPage() {
             tipo: "anulacion",
             cantidad_antes: prod.stock,
             cantidad_despues: newStock,
-            cantidad: unitsToRestore,
-            referencia: `Anulación Venta #${v.numero}`,
-            descripcion: `Anulación venta - ${item.descripcion}${motivoTexto}`,
+            cantidad: unitsChange,
+            referencia: `Anulación ${isNCAnul ? "NC" : "Venta"} #${v.numero}`,
+            descripcion: `Anulación ${isNCAnul ? "nota de crédito" : "venta"} - ${item.descripcion}${motivoTexto}`,
             usuario: currentUser?.nombre || "Admin Sistema",
             orden_id: v.id,
           });
@@ -2376,7 +2380,7 @@ export default function ListadoVentasPage() {
                           </Button>
                         </>
                       )}
-                      {order.estado !== "cancelado" && !isNC && (
+                      {order.estado !== "cancelado" && (
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => {
                           if (isHistorial) {
                             const v = ventas.find((vr) => vr.id === order._ventaId);
