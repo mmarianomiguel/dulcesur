@@ -1940,8 +1940,7 @@ export default function HojaDeRutaPage() {
                     // CC portion is DEBT (goes to saldo), NOT payment — don't include in monto_pagado.
                     // Subtract saldo allocation from cash — that money pays old debt, not this venta.
                     const realCashCollected = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
-                    const saldoAllocTotal = result.cobrarSaldo ? result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0) : 0;
-                    const totalCollected = Math.max(0, realCashCollected - saldoAllocTotal);
+                    const totalCollected = realCashCollected;
                     let remaining = totalCollected;
                     const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
                     for (const v of allVentas) {
