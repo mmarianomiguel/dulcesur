@@ -2748,8 +2748,9 @@ export default function ListadoVentasPage() {
                           setClienteSaldo(saldoAfter);
                         }
 
-                        // Update venta
-                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + result.monto + (result.surcharge || 0) };
+                        // Update venta — only count real money received, NOT CC (which is debt)
+                        const realPaid = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
+                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + realPaid };
                         if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
                         if (pagado === 0) {
                           // On first cobro, always set total to match actual payment method.

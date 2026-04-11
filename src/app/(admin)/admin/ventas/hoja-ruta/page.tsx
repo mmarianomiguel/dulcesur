@@ -1935,9 +1935,11 @@ export default function HojaDeRutaPage() {
                       return;
                     }
 
-                    // Distribute payment across ventas FIFO
-                    // result.monto is pre-surcharge; add surcharge to get total collected
-                    const totalCollected = result.monto + (result.surcharge || 0);
+                    // Distribute REAL payment across ventas FIFO
+                    // Only count actual money received (efectivo + transferencia + surcharge).
+                    // CC portion is DEBT (goes to saldo), NOT payment — don't include in monto_pagado.
+                    const realCashCollected = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
+                    const totalCollected = realCashCollected;
                     let remaining = totalCollected;
                     const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
                     for (const v of allVentas) {
