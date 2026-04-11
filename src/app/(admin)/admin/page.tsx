@@ -488,7 +488,7 @@ export default function DashboardPage() {
       supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada"),
       Promise.all(monthQueries),
       supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1),
-      supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").order("created_at", { ascending: false }).limit(8),
+      supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").not("tipo_comprobante", "ilike", "Nota de Crédito%").not("tipo_comprobante", "ilike", "Nota de Débito%").order("created_at", { ascending: false }).limit(8),
     ]);
 
     // Start pedidos online fetch in parallel with processing below
