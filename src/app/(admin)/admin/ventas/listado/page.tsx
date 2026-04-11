@@ -770,9 +770,16 @@ export default function ListadoVentasPage() {
 
         const allCCToReverse = [...(ccRows || []), ...ccCobroRows, ...ccCobroSaldoRows];
 
-        if (allCCToReverse.length > 0) {
-          // Calculate total saldo change from reversing all CC entries
-          const totalChange = allCCToReverse.reduce((acc, cc) => acc - (cc as any).debe + (cc as any).haber, 0);
+        // Also account for cobro_saldo: those amounts were subtracted from saldo
+        // but their CC entries reference OLD ventas (not this one). Add them back.
+        const cobroSaldoAmount = allCajaToReverse
+          .filter((c: any) => c.referencia_tipo === "cobro_saldo")
+          .reduce((s: number, c: any) => s + c.monto, 0);
+
+        if (allCCToReverse.length > 0 || cobroSaldoAmount > 0) {
+          // Calculate total saldo change from reversing CC entries + cobro saldo
+          const ccChange = allCCToReverse.reduce((acc, cc) => acc - (cc as any).debe + (cc as any).haber, 0);
+          const totalChange = ccChange + cobroSaldoAmount; // cobro saldo adds back to saldo
 
           // Atomic saldo update via RPC
           const { data: nuevoSaldo, error: saldoErr } = await supabase.rpc("atomic_update_client_saldo", {
@@ -802,6 +809,37 @@ export default function ListadoVentasPage() {
               // Update running saldo for next entry
               saldoRunning = saldoRunning + reversalDebe - reversalHaber;
             }
+          }
+          // If cobro saldo was reversed, restore monto_pagado on old ventas + add CC entry
+          if (cobroSaldoAmount > 0) {
+            // Find the CC haber entries from cobro saldo (they have venta_id of OLD ventas)
+            const { data: cobroSaldoCCEntries } = await supabase
+              .from("cuenta_corriente")
+              .select("venta_id, haber")
+              .eq("cliente_id", v.cliente_id)
+              .gt("haber", 0)
+              .ilike("comprobante", "Cobro saldo%");
+            // Reduce monto_pagado on each old venta that was paid by the cobro
+            for (const ccEntry of cobroSaldoCCEntries || []) {
+              if (!ccEntry.venta_id || ccEntry.haber <= 0) continue;
+              const { data: oldVenta } = await supabase.from("ventas").select("monto_pagado").eq("id", ccEntry.venta_id).single();
+              if (oldVenta) {
+                const newMp = Math.max(0, (oldVenta.monto_pagado || 0) - ccEntry.haber);
+                await supabase.from("ventas").update({ monto_pagado: newMp }).eq("id", ccEntry.venta_id);
+              }
+            }
+            // CC entry to document the reversal
+            await supabase.from("cuenta_corriente").insert({
+              cliente_id: v.cliente_id,
+              fecha: hoy,
+              comprobante: `Anulación Venta #${v.numero}`,
+              descripcion: `Reversión cobro saldo anterior${motivoTexto}`,
+              debe: cobroSaldoAmount,
+              haber: 0,
+              saldo: nuevoSaldo,
+              forma_pago: "Anulación",
+              venta_id: v.id,
+            });
           }
         }
       }
