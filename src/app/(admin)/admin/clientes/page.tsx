@@ -572,15 +572,14 @@ export default function ClientesPage() {
       }
 
       // ── 3. PAGOS → haber ──
-      // Fuente de verdad: monto_pagado (incluye caja + cobros + todo).
-      // Para detalle: si hay caja entries, mostrar cada uno individualmente.
-      // Si no hay caja, mostrar monto_pagado como pago único.
-      // NUNCA sumar CC haber entries por separado — ya están en monto_pagado.
-      if (!isND && montoPagado > 0) {
+      // Cap: min(monto_pagado, total - NC) para que el running saldo no quede negativo
+      // cuando la venta fue pagada completa y después se hizo NC.
+      const ncTotalForThis = linkedNCs.reduce((s, nc) => s + nc.total, 0);
+      const maxPayable = Math.max(0, v.total - ncTotalForThis);
+      const cappedPaid = Math.min(montoPagado, maxPayable);
+      if (!isND && cappedPaid > 0) {
         if (cajaEntries && cajaEntries.length > 0) {
-          // Mostrar pagos individuales de caja, capeados a monto_pagado
-          // (la caja puede tener más si hubo un error de registro)
-          let remaining = montoPagado;
+          let remaining = cappedPaid;
           for (let ci = 0; ci < cajaEntries.length; ci++) {
             if (remaining <= 0) break;
             const ce = cajaEntries[ci];
@@ -603,11 +602,11 @@ export default function ClientesPage() {
             });
           }
         } else {
-          // Sin caja entries: mostrar monto_pagado directo
+          // Sin caja entries: mostrar pago capeado
           entries.push({
             id: `v-${v.id}-pago`, fecha: v.fecha,
             created_at: baseTs + "T00:00:00.4",
-            comprobante: comp, debe: 0, haber: montoPagado, forma_pago: fp || "Pago",
+            comprobante: comp, debe: 0, haber: cappedPaid, forma_pago: fp || "Pago",
             descripcion: "", venta_id: v.id,
           });
         }
