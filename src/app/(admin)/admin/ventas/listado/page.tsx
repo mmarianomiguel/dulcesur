@@ -2482,7 +2482,8 @@ export default function ListadoVentasPage() {
             const isNCType = poSelectedPedido._tipo_comprobante?.includes("Nota de Crédito");
             const isEditable = poSelectedPedido.estado === "pendiente" || poSelectedPedido.estado === "armado";
             const estBadge = estadoBadge[poSelectedPedido.estado] || estadoBadge.pendiente;
-            const itemsSubtotal = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
+            // Use item.subtotal (already includes item-level discounts) instead of precio_unitario * cantidad
+            const itemsSubtotal = poEditItems.reduce((s, i) => s + (i.subtotal ?? i.precio_unitario * i.cantidad), 0);
             const descPct = poSelectedPedido._descuento_porcentaje || 0;
             const recPct = poSelectedPedido._recargo_porcentaje || 0;
             const envio = poSelectedPedido.costo_envio || 0;
@@ -2646,8 +2647,9 @@ export default function ListadoVentasPage() {
                   </div>
                 </div>
 
-                {/* Registrar cobro — any order with pending amount */}
-                {!isCancelled && poSelectedPedido.estado !== "cancelado" && (() => {
+                {/* Registrar cobro — only for non-delivered, non-cancelled orders */}
+                {/* Once delivered, pending balances are handled from Cobranzas */}
+                {!isCancelled && !isDelivered && poSelectedPedido.estado !== "cancelado" && (() => {
                   const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
                   const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
                   const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
