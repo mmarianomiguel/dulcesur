@@ -498,13 +498,24 @@ export default function HojaDeRutaPage() {
     return { efectivo, totalTransferencias, transferencias, cuentaCorriente, deudores };
   })();
 
-  // Group historial by day
+  // Group historial by day, sorted by delivery time (earliest first)
   const historialByDay = (() => {
     const map: Record<string, VentaRow[]> = {};
     for (const v of filteredHistorial) {
       const day = v.fecha;
       if (!map[day]) map[day] = [];
       map[day].push(v);
+    }
+    // Sort each day's ventas by delivery hour (first payment timestamp), earliest first
+    for (const ventas of Object.values(map)) {
+      ventas.sort((a, b) => {
+        const aTime = (historialPagos[a.id] || []).find(p => !p.metodo.includes("Nota de Cr") && p.fecha_hora)?.fecha_hora || "";
+        const bTime = (historialPagos[b.id] || []).find(p => !p.metodo.includes("Nota de Cr") && p.fecha_hora)?.fecha_hora || "";
+        if (!aTime && !bTime) return 0;
+        if (!aTime) return 1;
+        if (!bTime) return -1;
+        return new Date(aTime).getTime() - new Date(bTime).getTime();
+      });
     }
     // Sort days descending
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
