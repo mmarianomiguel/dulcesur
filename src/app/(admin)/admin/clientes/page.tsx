@@ -569,11 +569,14 @@ export default function ClientesPage() {
         handledNCIds.add(nc.id);
       }
 
-      // ── 3. PAGOS → haber = monto_pagado (lo realmente cobrado) ──
-      if (!isND && montoPagado > 0) {
+      // ── 3. PAGOS → haber = monto_pagado, capeado a (total - NC) ──
+      // Si hay NC, monto_pagado puede incluir la parte cubierta por NC.
+      // Solo mostramos lo realmente cobrado en efectivo/transferencia.
+      const ncTotalForCap = linkedNCs.reduce((s, nc) => s + nc.total, 0);
+      const effectivePaid = Math.min(montoPagado, Math.max(0, v.total - ncTotalForCap));
+      if (!isND && effectivePaid > 0) {
         if (cajaEntries && cajaEntries.length > 0) {
-          // Mostrar pagos de caja, capeados a monto_pagado
-          let remaining = montoPagado;
+          let remaining = effectivePaid;
           for (let ci = 0; ci < cajaEntries.length; ci++) {
             if (remaining <= 0) break;
             const ce = cajaEntries[ci];
@@ -598,7 +601,7 @@ export default function ClientesPage() {
           entries.push({
             id: `v-${v.id}-pago`, fecha: v.fecha,
             created_at: baseTs + "T00:00:00.4",
-            comprobante: comp, debe: 0, haber: montoPagado, forma_pago: fp || "Pago",
+            comprobante: comp, debe: 0, haber: effectivePaid, forma_pago: fp || "Pago",
             descripcion: "", venta_id: v.id,
           });
         }
