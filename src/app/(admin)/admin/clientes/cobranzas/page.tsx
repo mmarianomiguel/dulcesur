@@ -308,27 +308,50 @@ export default function CobranzasPage() {
             const saldoFinal = movimientos[movimientos.length - 1].saldo;
 
             return (
-              <div className="overflow-x-auto border rounded-lg">
+              <div className="overflow-x-auto border rounded-xl overflow-hidden">
+                {(() => {
+                  const getTipo = (r: { comprobante: string | null; forma_pago: string | null; debe: number; haber: number; descripcion?: string | null }) => {
+                    const c = r.comprobante || "";
+                    const fp = r.forma_pago || "";
+                    const desc = r.descripcion || "";
+                    if (/NC\s/i.test(c) || desc.toLowerCase().includes("nota de cr")) return "nc";
+                    if (r.debe > 0 && (fp === "Cuenta Corriente" || fp === "Pendiente")) return "cc_pendiente";
+                    if (r.debe > 0) return "venta";
+                    if (fp === "Efectivo") return "efectivo";
+                    if (fp === "Transferencia") return "transferencia";
+                    if (desc.includes("Cobro") || c.startsWith("RE")) return "cobro";
+                    return "pago";
+                  };
+                  const badgeMap: Record<string, { label: string; cls: string }> = {
+                    venta: { label: "Venta", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
+                    nc: { label: "Nota de crédito", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
+                    efectivo: { label: "Efectivo", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+                    transferencia: { label: "Transferencia", cls: "bg-violet-50 text-violet-700 border border-violet-200" },
+                    cc_pendiente: { label: "Cta. Cte.", cls: "bg-orange-50 text-orange-700 border border-orange-200" },
+                    cobro: { label: "Cobro", cls: "bg-green-50 text-green-700 border border-green-200" },
+                    pago: { label: "Pago", cls: "bg-green-50 text-green-700 border border-green-200" },
+                  };
+                  return (
                 <table className="w-full text-sm">
-                  <thead>
+                  <thead className="sticky top-0 z-10">
                     <tr className="bg-muted/50 border-b">
-                      <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
-                      <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Comp.</th>
-                      <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
-                      <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
-                      <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
-                      <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
+                      <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[60px]">Fecha</th>
+                      <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[90px]">Comp.</th>
+                      <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[110px]">Tipo</th>
+                      <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Concepto</th>
+                      <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[90px]">Debe</th>
+                      <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[90px]">Haber</th>
+                      <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">Saldo</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Saldo inicial */}
                     {saldoInicial !== 0 && (
                       <tr className="border-b bg-muted/20">
-                        <td className="py-2 px-3 text-xs text-muted-foreground italic" colSpan={5}>
+                        <td className="py-2 px-3 text-xs text-muted-foreground italic" colSpan={6}>
                           Saldo al inicio del período
                         </td>
                         <td className={`py-2 px-3 text-right font-bold text-xs tabular-nums ${saldoInicial > 0 ? "text-orange-600" : "text-emerald-600"}`}>
-                          {saldoInicial > 0 ? formatCurrency(saldoInicial) : `${formatCurrency(Math.abs(saldoInicial))} a favor`}
+                          {saldoInicial > 0 ? formatCurrency(saldoInicial) : `−${formatCurrency(Math.abs(saldoInicial))}`}
                         </td>
                       </tr>
                     )}
@@ -336,33 +359,42 @@ export default function CobranzasPage() {
                       const prevDate = i > 0 ? movimientos[i - 1].fecha : null;
                       const isNewDate = m.fecha !== prevDate;
                       const sr = Math.round(m.saldo);
+                      const tipo = getTipo(m);
+                      const badge = badgeMap[tipo] || badgeMap.pago;
                       return (
-                        <tr key={m.id} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
+                        <tr key={m.id} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t-2 border-t-muted" : ""}`}>
                           <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
-                            {isNewDate ? new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
+                            {isNewDate ? new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}
                           </td>
                           <td className="py-2 px-3 text-xs font-mono whitespace-nowrap">{m.comprobante ? cleanComp(m.comprobante) : "—"}</td>
-                          <td className="py-2 px-3 text-xs text-muted-foreground">{m.descripcion ? cleanDesc(m.descripcion) : ""}</td>
+                          <td className="py-2 px-3">
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.cls}`}>{badge.label}</span>
+                          </td>
+                          <td className="py-2 px-3 text-xs text-muted-foreground truncate max-w-[180px]">{m.descripcion ? cleanDesc(m.descripcion) : ""}</td>
                           <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{m.debe > 0 ? formatCurrency(Math.round(m.debe)) : ""}</td>
                           <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">{m.haber > 0 ? formatCurrency(Math.round(m.haber)) : ""}</td>
-                          <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${sr > 0 ? "text-orange-600" : sr < 0 ? "text-emerald-600" : ""}`}>
-                            {sr > 0 ? formatCurrency(sr) : sr < 0 ? `${formatCurrency(Math.abs(sr))} a favor` : "$0"}
+                          <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${sr > 0 ? "text-orange-600" : sr < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                            {sr > 0 ? formatCurrency(sr) : sr < 0 ? `−${formatCurrency(Math.abs(sr))}` : "$0"}
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-muted/50 border-t font-bold text-xs">
-                      <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales del período</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(totalDebe))}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(totalHaber))}</td>
-                      <td className={`py-2.5 px-3 text-right tabular-nums ${saldoFinal > 0 ? "text-orange-600" : saldoFinal < 0 ? "text-emerald-600" : ""}`}>
-                        {saldoFinal > 0 ? formatCurrency(Math.round(saldoFinal)) : saldoFinal < 0 ? `${formatCurrency(Math.round(Math.abs(saldoFinal)))} a favor` : "$0"}
+                    <tr className="bg-muted/50 border-t">
+                      <td className="py-3 px-3" colSpan={4}>
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Totales del período</span>
+                      </td>
+                      <td className="py-3 px-3 text-right tabular-nums text-xs font-bold">{formatCurrency(Math.round(totalDebe))}</td>
+                      <td className="py-3 px-3 text-right tabular-nums text-xs font-bold text-emerald-600">{formatCurrency(Math.round(totalHaber))}</td>
+                      <td className={`py-3 px-3 text-right tabular-nums text-sm font-extrabold ${saldoFinal > 0 ? "text-orange-600" : saldoFinal < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                        {saldoFinal > 0 ? formatCurrency(Math.round(saldoFinal)) : saldoFinal < 0 ? `−${formatCurrency(Math.round(Math.abs(saldoFinal)))}` : "$0"}
                       </td>
                     </tr>
                   </tfoot>
                 </table>
+                  );
+                })()}
               </div>
             );
           })()}

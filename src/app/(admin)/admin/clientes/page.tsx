@@ -48,6 +48,7 @@ import {
   X,
   ExternalLink,
   ChevronDown,
+  ChevronRight,
   DollarSign,
   Eye,
   Download,
@@ -147,6 +148,8 @@ export default function ClientesPage() {
   const [movTab, setMovTab] = useState<"resumen" | "compras" | "cobros">("resumen");
   const [cobrosCliente, setCobrosCliente] = useState<any[]>([]);
   const [movCCFilter, setMovCCFilter] = useState("all");
+  const [ventaGroupMap, setVentaGroupMap] = useState<Map<string, any>>(new Map());
+  const [expandedVentaIds, setExpandedVentaIds] = useState<Set<string>>(new Set());
   // Payment from movimientos
   const [payMovOpen, setPayMovOpen] = useState(false);
   const [payMovVenta, setPayMovVenta] = useState<any>(null);
@@ -437,7 +440,7 @@ export default function ClientesPage() {
     // Build queries
     let ventasQuery = supabase
       .from("ventas")
-      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, subtotal, estado, monto_pagado, remito_origen_id, recargo_porcentaje, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
+      .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, subtotal, estado, monto_pagado, remito_origen_id, descuento_porcentaje, recargo_porcentaje, venta_items(descripcion, cantidad, presentacion, unidades_por_presentacion, precio_unitario, subtotal, producto_id)")
       .eq("cliente_id", clienteId)
       .neq("estado", "anulada")
       .order("created_at", { ascending: false });
@@ -497,6 +500,26 @@ export default function ClientesPage() {
       }
     }
 
+    // Fetch cobro allocations per venta (for "cobro posterior" detail)
+    const cobrosByVenta = new Map<string, { fecha: string; hora: string; monto: number; forma_pago: string; numero: string }[]>();
+    if (allVentaIds.length > 0) {
+      for (let i = 0; i < allVentaIds.length; i += 100) {
+        const batch = allVentaIds.slice(i, i + 100);
+        const { data: ciData } = await supabase
+          .from("cobro_items")
+          .select("venta_id, monto_aplicado, cobros(numero, fecha, hora, forma_pago)")
+          .in("venta_id", batch);
+        for (const ci of ciData || []) {
+          if (!ci.venta_id) continue;
+          const cobro = (ci as any).cobros;
+          if (!cobro) continue;
+          const arr = cobrosByVenta.get(ci.venta_id) || [];
+          arr.push({ fecha: cobro.fecha, hora: cobro.hora || "", monto: ci.monto_aplicado, forma_pago: cobro.forma_pago, numero: cobro.numero });
+          cobrosByVenta.set(ci.venta_id, arr);
+        }
+      }
+    }
+
     // Build libro diario entries
     const entries: { id: string; fecha: string; created_at: string; comprobante: string; debe: number; haber: number; forma_pago: string; descripcion: string; venta_id?: string }[] = [];
 
@@ -526,11 +549,14 @@ export default function ClientesPage() {
     }
     const handledNCIds = new Set<string>();
 
+    // ─── Build ventaGroupMap for expanded detail ───
+    const groupMap = new Map<string, any>();
+
     for (const v of ventas || []) {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
 
-      // Linked NCs: skip — shown as info under parent
+      // Linked NCs: skip — handled with parent
       if (isNC && v.remito_origen_id) continue;
       // Standalone NC (no parent): show as haber
       if (isNC) {
@@ -550,29 +576,39 @@ export default function ClientesPage() {
       const debeFormaPago = (fp === "Cuenta Corriente" || fp === "Pendiente") ? fp : "";
       const baseTs = v.created_at || v.fecha;
 
-      // ── 1. PEDIDO → debe = venta.total (ya incluye NC y recargos) ──
+      // ── NC baked-in detection ──
+      const linkedNCs = ncVentasByParent.get(v.id) || [];
+      const ncTotalForThis = linkedNCs.reduce((s, nc) => s + nc.total, 0);
+      const ncBakedIn = v.total < (v.subtotal || v.total) && linkedNCs.length > 0;
+
+      // ── 1. PEDIDO → debe = venta.total ──
       entries.push({
         id: `v-${v.id}-debe`, fecha: v.fecha, created_at: baseTs,
         comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
       });
 
-      // ── 2. NCs VINCULADAS → haber (muestra el monto que descuenta) ──
-      const linkedNCs = ncVentasByParent.get(v.id) || [];
-      const ncTotalForThis = linkedNCs.reduce((s, nc) => s + nc.total, 0);
-      for (const nc of linkedNCs) {
-        const ncComp = `${shortCompType(nc.tipo_comprobante)} ${nc.numero}`.replace(/\s+/g, " ").trim();
-        entries.push({
-          id: `v-${nc.id}-nc`, fecha: v.fecha,
-          created_at: baseTs + "T00:00:00.2",
-          comprobante: ncComp, debe: 0, haber: nc.total, forma_pago: nc.forma_pago || "",
-          descripcion: "", venta_id: nc.id,
-        });
-        handledNCIds.add(nc.id);
+      // ── 2. NCs VINCULADAS ──
+      if (ncBakedIn) {
+        // NC already in total — don't add as haber (would double count)
+        // Just mark as handled
+        for (const nc of linkedNCs) handledNCIds.add(nc.id);
+      } else {
+        // NC NOT in total — add as haber entries
+        for (const nc of linkedNCs) {
+          const ncComp = `${shortCompType(nc.tipo_comprobante)} ${nc.numero}`.replace(/\s+/g, " ").trim();
+          entries.push({
+            id: `v-${nc.id}-nc`, fecha: v.fecha,
+            created_at: baseTs + "T00:00:00.2",
+            comprobante: ncComp, debe: 0, haber: nc.total, forma_pago: nc.forma_pago || "",
+            descripcion: "", venta_id: v.id,
+          });
+          handledNCIds.add(nc.id);
+        }
       }
 
-      // ── 3. PAGOS → haber = monto_pagado, capeado a (total - NC) ──
-      // El pago real nunca excede lo que se debe después de la NC.
-      const effectivePaid = Math.min(montoPagado, Math.max(0, v.total - ncTotalForThis));
+      // ── 3. PAGOS → haber ──
+      const effectiveNCDeduction = ncBakedIn ? 0 : ncTotalForThis;
+      const effectivePaid = Math.min(montoPagado, Math.max(0, v.total - effectiveNCDeduction));
       if (!isND && effectivePaid > 0) {
         if (cajaEntries && cajaEntries.length > 0) {
           let remaining = effectivePaid;
@@ -605,6 +641,31 @@ export default function ClientesPage() {
           });
         }
       }
+
+      // ── Build group info for expanded detail ──
+      if (!isND) {
+        const cajaPayments = (cajaEntries || []).map(ce => ({ metodo_pago: ce.metodo_pago, monto: ce.monto }));
+        const saldoPendiente = Math.max(0, v.total - effectiveNCDeduction - effectivePaid);
+        groupMap.set(v.id, {
+          ventaId: v.id,
+          numero: v.numero,
+          subtotal: v.subtotal || v.total,
+          total: v.total,
+          descuento_porcentaje: (v as any).descuento_porcentaje || 0,
+          recargo_porcentaje: (v as any).recargo_porcentaje || 0,
+          forma_pago: fp,
+          tipo_comprobante: v.tipo_comprobante,
+          monto_pagado: montoPagado,
+          items: (v as any).venta_items || [],
+          linkedNCs: linkedNCs.map(nc => ({ id: nc.id, numero: nc.numero, total: nc.total, baked: ncBakedIn })),
+          cajaPayments,
+          cobrosPosteriores: cobrosByVenta.get(v.id) || [],
+          ncBakedIn,
+          ncTotal: ncTotalForThis,
+          effectivePaid,
+          saldoPendiente,
+        });
+      }
     }
 
     // Sort chronologically
@@ -620,23 +681,42 @@ export default function ClientesPage() {
       return { ...e, saldo: runSaldo };
     });
     setMovCCRows(ccRows);
+    setVentaGroupMap(groupMap);
+    setExpandedVentaIds(new Set());
 
     // Totales: consistente con las entries del libro
-    // PENDIENTE = SUM(total) - SUM(todas las NCs) = lo que se debe antes de pagos
-    // COBRADO = SUM(min(monto_pagado, total - NC_vinculada)) = lo pagado real
-    // SALDO = PENDIENTE - COBRADO
+    // Totales consistentes con NC baked-in detection
+    // Para NCs baked (total ya incluye NC): no restar NC del pendiente, no capear cobrado
+    // Para NCs no baked: restar NC del pendiente, capear cobrado
     const allNCs = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito"));
     const regularVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"));
-    const totalBruto = Math.round(regularVentas.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
-    const totalAllNC = Math.round(allNCs.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
-    const totalPendiente = Math.round((totalBruto - totalAllNC) * 100) / 100;
-    // Build linked NC map for cap
-    const ncByParentFooter = new Map<string, number>();
-    for (const nc of allNCs) { if (nc.remito_origen_id) ncByParentFooter.set(nc.remito_origen_id, (ncByParentFooter.get(nc.remito_origen_id) || 0) + nc.total); }
-    const totalCobrado = Math.round(regularVentas.reduce((s: number, v: any) => {
-      const ncFor = ncByParentFooter.get(v.id) || 0;
-      return s + Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncFor));
-    }, 0) * 100) / 100;
+    const ncByParentFooter = new Map<string, { total: number; baked: boolean }>();
+    for (const nc of allNCs) {
+      if (nc.remito_origen_id) {
+        const parent = regularVentas.find((rv: any) => rv.id === nc.remito_origen_id);
+        const baked = parent ? parent.total < (parent.subtotal || parent.total) : false;
+        const existing = ncByParentFooter.get(nc.remito_origen_id);
+        ncByParentFooter.set(nc.remito_origen_id, { total: (existing?.total || 0) + nc.total, baked });
+      }
+    }
+    let totalPendiente = 0;
+    let totalCobrado = 0;
+    for (const v of regularVentas) {
+      const ncInfo = ncByParentFooter.get(v.id);
+      if (ncInfo && !ncInfo.baked) {
+        // NC not baked: total is original, subtract NC
+        totalPendiente += v.total - ncInfo.total;
+        totalCobrado += Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncInfo.total));
+      } else {
+        // NC baked or no NC: total already reflects NC
+        totalPendiente += v.total;
+        totalCobrado += Math.min(v.monto_pagado || 0, v.total);
+      }
+    }
+    // Standalone NCs (no parent)
+    for (const nc of allNCs) { if (!nc.remito_origen_id) totalPendiente -= nc.total; }
+    totalPendiente = Math.round(totalPendiente * 100) / 100;
+    totalCobrado = Math.round(totalCobrado * 100) / 100;
     const saldoCalculado = Math.round((totalPendiente - totalCobrado) * 100) / 100;
     setMovCCTotals({ debe: totalPendiente, haber: totalCobrado, saldo: saldoCalculado, saldoInicial: 0 });
 
@@ -667,15 +747,20 @@ export default function ClientesPage() {
     // Standalone NCs (sin padre) se restan del pendiente.
 
     const { data: allVentas } = await supabase.from("ventas")
-      .select("id, numero, total, monto_pagado, tipo_comprobante, forma_pago, remito_origen_id")
+      .select("id, numero, total, subtotal, monto_pagado, tipo_comprobante, forma_pago, remito_origen_id")
       .eq("cliente_id", clienteId).neq("estado", "anulada");
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
-    // Build linked NC map
-    const ncByParentR = new Map<string, number>();
-    for (const v of allVentas) {
-      if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
-        ncByParentR.set(v.remito_origen_id, (ncByParentR.get(v.remito_origen_id) || 0) + v.total);
+    // Build linked NC map with baked-in detection
+    const ncByParentR = new Map<string, { total: number; baked: boolean }>();
+    const allNCsR = allVentas.filter(v => v.tipo_comprobante?.includes("Nota de Crédito"));
+    const regularR = allVentas.filter(v => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"));
+    for (const nc of allNCsR) {
+      if (nc.remito_origen_id) {
+        const parent = regularR.find(rv => rv.id === nc.remito_origen_id);
+        const baked = parent ? parent.total < (parent.subtotal || parent.total) : false;
+        const existing = ncByParentR.get(nc.remito_origen_id);
+        ncByParentR.set(nc.remito_origen_id, { total: (existing?.total || 0) + nc.total, baked });
       }
     }
 
@@ -687,18 +772,20 @@ export default function ClientesPage() {
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
 
       if (isNC) {
-        // NC = haber (reduce pendiente)
-        totalHaber += v.total;
+        // Standalone NCs (no parent)
+        if (!v.remito_origen_id) totalDebe -= v.total;
         continue;
       }
 
-      // DEBE = venta.total
       totalDebe += v.total;
-
-      // HABER = min(monto_pagado, total - NC_vinculada)
       if (!isND) {
-        const ncFor = ncByParentR.get(v.id) || 0;
-        totalHaber += Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncFor));
+        const ncInfo = ncByParentR.get(v.id);
+        if (ncInfo && !ncInfo.baked) {
+          totalDebe -= ncInfo.total;
+          totalHaber += Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncInfo.total));
+        } else {
+          totalHaber += Math.min(v.monto_pagado || 0, v.total);
+        }
       }
     }
 
@@ -1860,17 +1947,26 @@ export default function ClientesPage() {
                 const exportCCExcel = async () => {
                   if (!movClient || movCCRows.length === 0) return;
                   const XLSX = await import("xlsx");
+                  const tipoLabel = (r: any) => {
+                    const c = r.comprobante || ""; const fp = r.forma_pago || "";
+                    if (/^NC\s/i.test(c)) return "Nota de crédito";
+                    if (r.debe > 0 && (fp === "Cuenta Corriente" || fp === "Pendiente")) return "Cta. Cte.";
+                    if (r.debe > 0) return "Venta";
+                    if (fp === "Efectivo") return "Efectivo";
+                    if (fp === "Transferencia") return "Transferencia";
+                    return "Pago";
+                  };
                   const rows = movCCRows.map((r) => ({
                     Fecha: new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR"),
                     Comprobante: r.comprobante,
+                    Tipo: tipoLabel(r),
                     Debe: r.debe > 0 ? Math.round(r.debe) : "",
                     Haber: r.haber > 0 ? Math.round(r.haber) : "",
                     Saldo: Math.round(r.saldo),
                     "Cond. Pago": r.forma_pago || "",
-                    Obs: r.descripcion || "",
                   }));
                   const ws = XLSX.utils.json_to_sheet(rows);
-                  ws["!cols"] = [{ wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 20 }];
+                  ws["!cols"] = [{ wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, "Cuenta Corriente");
                   XLSX.writeFile(wb, `CC_${movClient.nombre.replace(/\s/g, "_")}_${todayARG()}.xlsx`);
@@ -1886,9 +1982,77 @@ export default function ClientesPage() {
                   return true;
                 });
 
+                // ─── Helpers de tipo y badge ───
+                const getTipo = (r: { comprobante: string; forma_pago: string; debe: number; haber: number; descripcion?: string }) => {
+                  const c = r.comprobante || "";
+                  const fp = r.forma_pago || "";
+                  if (/^NC\s/i.test(c)) return "nc";
+                  if (r.debe > 0 && (fp === "Cuenta Corriente" || fp === "Pendiente")) return "cc_pendiente";
+                  if (r.debe > 0) return "venta";
+                  if (fp === "Efectivo") return "efectivo";
+                  if (fp === "Transferencia") return "transferencia";
+                  if (fp === "Cobro" || (r.descripcion || "").includes("Cobro")) return "cobro";
+                  return "pago";
+                };
+                const badgeMap: Record<string, { label: string; cls: string }> = {
+                  venta: { label: "Venta", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
+                  nc: { label: "Nota de crédito", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
+                  efectivo: { label: "Efectivo", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+                  transferencia: { label: "Transferencia", cls: "bg-violet-50 text-violet-700 border border-violet-200" },
+                  cc_pendiente: { label: "Cta. Cte.", cls: "bg-orange-50 text-orange-700 border border-orange-200" },
+                  cobro: { label: "Cobro", cls: "bg-green-50 text-green-700 border border-green-200" },
+                  pago: { label: "Pago", cls: "bg-green-50 text-green-700 border border-green-200" },
+                };
+
+                // ─── Group rows by venta_id for card display ───
+                type CCGroup = { ventaId: string; rows: typeof filteredCCRows; debeTotal: number; haberTotal: number; lastSaldo: number };
+                const groups: CCGroup[] = [];
+                const usedIds = new Set<string>();
+                for (const row of filteredCCRows) {
+                  const vid = row.venta_id;
+                  if (vid && usedIds.has(vid)) continue;
+                  if (vid) {
+                    usedIds.add(vid);
+                    const sameVenta = filteredCCRows.filter(r => r.venta_id === vid);
+                    groups.push({
+                      ventaId: vid,
+                      rows: sameVenta,
+                      debeTotal: sameVenta.reduce((s, r) => s + r.debe, 0),
+                      haberTotal: sameVenta.reduce((s, r) => s + r.haber, 0),
+                      lastSaldo: sameVenta[sameVenta.length - 1].saldo,
+                    });
+                  } else {
+                    groups.push({
+                      ventaId: row.id,
+                      rows: [row],
+                      debeTotal: row.debe,
+                      haberTotal: row.haber,
+                      lastSaldo: row.saldo,
+                    });
+                  }
+                }
+                const toggleExpand = (vid: string) => {
+                  setExpandedVentaIds(prev => {
+                    const next = new Set(prev);
+                    next.has(vid) ? next.delete(vid) : next.add(vid);
+                    return next;
+                  });
+                };
+
                 return (
                   <>
-                    {/* Table */}
+                    {/* Client header badge */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-sm font-medium">{movClient?.nombre}</p>
+                        {movClient?.cuit && <p className="text-xs text-muted-foreground">CUIT: {movClient.cuit}</p>}
+                      </div>
+                      <div className={`px-3 py-1.5 rounded-full text-sm font-bold ${saldoAct > 0 ? "bg-orange-50 text-orange-600 border border-orange-200" : saldoAct < 0 ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : "bg-muted text-muted-foreground"}`}>
+                        {saldoAct > 0 ? `Debe ${formatCurrency(saldoAct)}` : saldoAct < 0 ? `A favor ${formatCurrency(Math.abs(saldoAct))}` : "Al día"}
+                      </div>
+                    </div>
+
+                    {/* Grouped transaction cards */}
                     {movLoading ? (
                       <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
                     ) : movCCRows.length === 0 ? (
@@ -1898,59 +2062,201 @@ export default function ClientesPage() {
                       </div>
                     ) : (
                       <div className="border rounded-xl overflow-hidden">
-                        <div className="max-h-[400px] overflow-y-auto">
-                          <table className="w-full text-[13px]">
-                            <thead className="sticky top-0 z-10">
-                              <tr className="bg-muted/50 border-b">
-                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[72px]">Fecha</th>
-                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Comprobante</th>
-                                <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">Debe</th>
-                                <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[100px]">Haber</th>
-                                <th className="text-right py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[110px]">Saldo</th>
-                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[110px]">Cond. Pago</th>
-                                <th className="text-left py-2.5 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground w-[60px]">Obs.</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filteredCCRows.map((row, i) => {
-                                const prevDate = i > 0 ? filteredCCRows[i - 1].fecha : null;
-                                const isNewDate = row.fecha !== prevDate;
-                                const sr = Math.round(row.saldo);
-                                const compIsNC = isNCComp(row.comprobante);
-                                const condPago = row.forma_pago || "";
-                                const isTransfer = condPago === "Transferencia";
-                                return (
-                                  <tr key={row.id || i} className={`border-b last:border-0 hover:bg-muted/30 ${isNewDate && i > 0 ? "border-t border-t-foreground/10" : ""}`}>
-                                    <td className="py-2 px-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">
-                                      {isNewDate ? new Date(row.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}
-                                    </td>
-                                    <td className="py-2 px-3 text-xs font-mono whitespace-nowrap">
-                                      {compIsNC ? (
-                                        <span className="inline-flex items-center gap-1.5">
-                                          {row.comprobante}
-                                          <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-100 text-red-600">NC</span>
-                                        </span>
-                                      ) : row.comprobante}
-                                    </td>
-                                    <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{row.debe > 0 ? formatCurrency(Math.round(row.debe)) : ""}</td>
-                                    <td className="py-2 px-3 text-right tabular-nums text-xs font-medium text-emerald-600">{row.haber > 0 ? formatCurrency(Math.round(row.haber)) : ""}</td>
-                                    <td className={`py-2 px-3 text-right tabular-nums text-xs font-bold ${saldoColor(sr)}`}>{fmtSaldo(sr)}</td>
-                                    <td className="py-2 px-3 text-xs text-muted-foreground">
-                                      {isTransfer ? (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400">Transferencia</span>
-                                      ) : condPago === "Cuenta Corriente" ? "Cuenta Corriente" : condPago}
-                                    </td>
-                                    <td className="py-2 px-3 text-xs text-muted-foreground truncate max-w-[60px]" title={row.descripcion || ""}>
-                                      {row.descripcion || ""}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                        <div className="max-h-[450px] overflow-y-auto">
+                          {/* Sticky header */}
+                          <div className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b grid grid-cols-[55px_1fr_90px_90px_90px_100px_28px] gap-1 py-2 px-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                            <span>Fecha</span>
+                            <span>Comprobante</span>
+                            <span>Tipo</span>
+                            <span className="text-right">Debe</span>
+                            <span className="text-right">Haber</span>
+                            <span className="text-right">Saldo</span>
+                            <span />
+                          </div>
+
+                          {/* Transaction groups */}
+                          {groups.map((g, gi) => {
+                            const mainRow = g.rows[0];
+                            const tipo = getTipo(mainRow);
+                            const badge = badgeMap[tipo] || badgeMap.pago;
+                            const isExpanded = expandedVentaIds.has(g.ventaId);
+                            const info = ventaGroupMap.get(g.ventaId);
+                            const hasDetail = g.rows.length > 1 || (info && (info.items.length > 0 || info.linkedNCs.length > 0));
+                            const prevGroup = gi > 0 ? groups[gi - 1] : null;
+                            const isNewDate = !prevGroup || prevGroup.rows[0].fecha !== mainRow.fecha;
+                            const sr = Math.round(g.lastSaldo);
+
+                            return (
+                              <div key={g.ventaId} className={isNewDate && gi > 0 ? "border-t-2 border-t-muted-foreground/10" : ""}>
+                                {/* Summary row */}
+                                <div
+                                  className={`grid grid-cols-[55px_1fr_90px_90px_90px_100px_28px] gap-1 py-2.5 px-3 items-center border-b hover:bg-muted/30 ${hasDetail ? "cursor-pointer" : ""}`}
+                                  onClick={() => hasDetail && toggleExpand(g.ventaId)}
+                                >
+                                  <span className="text-muted-foreground text-xs tabular-nums">
+                                    {isNewDate ? new Date(mainRow.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}
+                                  </span>
+                                  <span className="text-xs font-mono truncate">{mainRow.comprobante}</span>
+                                  <span><span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight ${badge.cls}`}>{badge.label}</span></span>
+                                  <span className="text-right tabular-nums text-xs font-medium">{g.debeTotal > 0 ? formatCurrency(Math.round(g.debeTotal)) : ""}</span>
+                                  <span className="text-right tabular-nums text-xs font-medium text-emerald-600">{g.haberTotal > 0 ? formatCurrency(Math.round(g.haberTotal)) : ""}</span>
+                                  <span className={`text-right tabular-nums text-xs font-bold ${sr > 0 ? "text-orange-600" : sr < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                                    {sr > 0 ? formatCurrency(sr) : sr < 0 ? `−${formatCurrency(Math.abs(sr))}` : "$0"}
+                                  </span>
+                                  <span className="flex justify-center">
+                                    {hasDetail ? (
+                                      <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                                    ) : null}
+                                  </span>
+                                </div>
+
+                                {/* Expanded detail */}
+                                {isExpanded && (
+                                  <div className="bg-muted/5 border-b px-4 py-3">
+                                    {info ? (() => {
+                                      // Calculate transfer surcharge breakdown
+                                      const transferPayments = info.cajaPayments.filter((p: any) => p.metodo_pago === "Transferencia");
+                                      const transferTotal = transferPayments.reduce((s: number, p: any) => s + p.monto, 0);
+                                      const efectivoPayments = info.cajaPayments.filter((p: any) => p.metodo_pago === "Efectivo");
+                                      const efectivoTotal = efectivoPayments.reduce((s: number, p: any) => s + p.monto, 0);
+                                      const ccPayments = info.cajaPayments.filter((p: any) => p.metodo_pago === "Cuenta Corriente");
+                                      const ccTotal = ccPayments.reduce((s: number, p: any) => s + p.monto, 0);
+                                      // Detect surcharge: use stored % or derive from total > subtotal when transfer exists
+                                      let recPct = info.recargo_porcentaje || 0;
+                                      if (recPct === 0 && transferTotal > 0 && info.total > info.subtotal) {
+                                        // Surcharge is baked in total but recargo_porcentaje wasn't stored
+                                        // Derive: surcharge = total - subtotal_after_discounts, pct = surcharge / transferBase * 100
+                                        const descAmt = info.descuento_porcentaje > 0 ? Math.round(info.subtotal * info.descuento_porcentaje / 100) : 0;
+                                        const ncAmt = info.linkedNCs.reduce((s: number, nc: any) => s + (nc.baked ? nc.total : 0), 0);
+                                        const expectedBase = info.subtotal - descAmt - ncAmt;
+                                        const impliedSurcharge = Math.max(0, info.total - expectedBase);
+                                        if (impliedSurcharge > 0) {
+                                          const impliedBase = transferTotal - impliedSurcharge;
+                                          recPct = impliedBase > 0 ? Math.round(impliedSurcharge / impliedBase * 10000) / 100 : 2;
+                                        }
+                                      }
+                                      // Surcharge: transferTotal includes surcharge. base = transferTotal / (1 + pct/100)
+                                      const transferBase = recPct > 0 && transferTotal > 0 ? Math.round(transferTotal / (1 + recPct / 100)) : transferTotal;
+                                      const surchargeAmount = transferTotal - transferBase;
+                                      // Cobro posterior: monto_pagado includes cobro allocations not in caja
+                                      const cajaTotal = efectivoTotal + transferTotal + ccTotal;
+                                      const cobroPosterior = Math.max(0, Math.round((info.effectivePaid - cajaTotal) * 100) / 100);
+                                      const totalCobrado = cajaTotal + cobroPosterior;
+
+                                      return (
+                                        <div className="text-xs max-w-lg space-y-2">
+                                          {/* Subtotal + adjustments */}
+                                          <div className="space-y-1">
+                                            <div className="flex justify-between">
+                                              <span className="text-muted-foreground">Subtotal venta</span>
+                                              <span className="font-medium">{formatCurrency(Math.round(info.subtotal))}</span>
+                                            </div>
+                                            {info.descuento_porcentaje > 0 && (
+                                              <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Descuento ({info.descuento_porcentaje}%)</span>
+                                                <span className="font-medium text-red-500">−{formatCurrency(Math.round(info.subtotal * info.descuento_porcentaje / 100))}</span>
+                                              </div>
+                                            )}
+                                            {info.linkedNCs.map((nc: any) => (
+                                              <div key={nc.id} className="flex justify-between">
+                                                <span className="text-amber-700">NC {nc.numero} {nc.baked ? "(aplicada)" : ""}</span>
+                                                <span className="font-medium text-amber-600">−{formatCurrency(Math.round(nc.total))}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+
+                                          {/* Payment breakdown */}
+                                          {(efectivoTotal > 0 || transferTotal > 0 || ccTotal > 0) && (
+                                            <div className="border-t pt-2 space-y-1">
+                                              {efectivoTotal > 0 && (
+                                                <div className="flex justify-between">
+                                                  <span className="text-muted-foreground">Efectivo</span>
+                                                  <span className="font-medium text-emerald-600">{formatCurrency(Math.round(efectivoTotal))}</span>
+                                                </div>
+                                              )}
+                                              {transferTotal > 0 && (
+                                                <>
+                                                  <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Transferencia</span>
+                                                    <span className="font-medium text-emerald-600">{formatCurrency(Math.round(transferBase))}</span>
+                                                  </div>
+                                                  {surchargeAmount > 0 && (
+                                                    <div className="flex justify-between">
+                                                      <span className="text-violet-600">Recargo transf. {recPct}% (s/{formatCurrency(Math.round(transferBase))})</span>
+                                                      <span className="font-medium text-violet-600">+{formatCurrency(Math.round(surchargeAmount))}</span>
+                                                    </div>
+                                                  )}
+                                                </>
+                                              )}
+                                              {ccTotal > 0 && (
+                                                <div className="flex justify-between">
+                                                  <span className="text-orange-600">Cuenta Corriente</span>
+                                                  <span className="font-medium text-orange-600">{formatCurrency(Math.round(ccTotal))}</span>
+                                                </div>
+                                              )}
+                                              {cobroPosterior > 0 && (
+                                                info.cobrosPosteriores && info.cobrosPosteriores.length > 0 ? (
+                                                  info.cobrosPosteriores.map((cb: any, cbi: number) => {
+                                                    const cbFecha = cb.fecha ? new Date(cb.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "";
+                                                    return (
+                                                      <div key={cbi} className="flex justify-between">
+                                                        <span className="text-green-700">
+                                                          Cobro #{cb.numero} — {cb.forma_pago}
+                                                          <span className="text-muted-foreground ml-1 text-[10px]">{cbFecha}{cb.hora ? ` ${cb.hora}` : ""}</span>
+                                                        </span>
+                                                        <span className="font-medium text-green-600">{formatCurrency(Math.round(cb.monto))}</span>
+                                                      </div>
+                                                    );
+                                                  })
+                                                ) : (
+                                                  <div className="flex justify-between">
+                                                    <span className="text-green-700">Cobro posterior</span>
+                                                    <span className="font-medium text-green-600">{formatCurrency(Math.round(cobroPosterior))}</span>
+                                                  </div>
+                                                )
+                                              )}
+                                              <div className="flex justify-between border-t pt-1 mt-1">
+                                                <span className="font-semibold">Total cobrado</span>
+                                                <span className="font-bold">{formatCurrency(Math.round(totalCobrado))}</span>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Pending balance */}
+                                          {info.saldoPendiente > 0 && (
+                                            <div className="flex justify-between border-t pt-1">
+                                              <span className="text-orange-600 font-medium">Saldo pendiente</span>
+                                              <span className="font-bold text-orange-600">{formatCurrency(Math.round(info.saldoPendiente))}</span>
+                                            </div>
+                                          )}
+
+                                          {/* Item count */}
+                                          {info.items.length > 0 && (
+                                            <p className="text-[10px] text-muted-foreground pt-1 border-t">{info.items.length} producto{info.items.length !== 1 ? "s" : ""}</p>
+                                          )}
+                                        </div>
+                                      );
+                                    })() : (
+                                      /* Rows without groupInfo */
+                                      <div className="space-y-1 text-xs">
+                                        {g.rows.map((r, ri) => (
+                                          <div key={ri} className="flex justify-between max-w-md">
+                                            <span className="text-muted-foreground">{r.forma_pago || r.comprobante}</span>
+                                            <span className={r.haber > 0 ? "text-emerald-600 font-medium" : "font-medium"}>
+                                              {r.debe > 0 ? formatCurrency(Math.round(r.debe)) : r.haber > 0 ? formatCurrency(Math.round(r.haber)) : ""}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
 
-                        {/* Totals footer — Pendiente / Cobrado / Saldo Deudor */}
+                        {/* Totals footer */}
                         <div className="bg-muted/50 border-t px-4 py-3">
                           <div className="flex items-center justify-end gap-3 sm:gap-6 flex-wrap">
                             <div className="text-right">
@@ -1962,8 +2268,10 @@ export default function ClientesPage() {
                               <p className="text-sm font-bold text-emerald-600 tabular-nums">{formatCurrency(Math.round(movCCTotals.haber))}</p>
                             </div>
                             <div className="text-right pl-4 border-l-2">
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Saldo deudor</p>
-                              <p className={`text-lg font-extrabold tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</p>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{saldoAct >= 0 ? "Saldo deudor" : "Saldo a favor"}</p>
+                              <p className={`text-lg font-extrabold tabular-nums ${saldoAct > 0 ? "text-orange-600" : saldoAct < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                                {saldoAct > 0 ? formatCurrency(saldoAct) : saldoAct < 0 ? formatCurrency(Math.abs(saldoAct)) : "$0"}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -1982,17 +2290,26 @@ export default function ClientesPage() {
                           if (!movClient || movCCRows.length === 0) return;
                           const win = window.open("", "_blank", "width=800,height=1100");
                           if (!win) return;
+                          const printTipo = (r: any) => {
+                            const c = r.comprobante || ""; const fp = r.forma_pago || "";
+                            if (/^NC\s/i.test(c)) return "NC";
+                            if (r.debe > 0 && (fp === "Cuenta Corriente" || fp === "Pendiente")) return "Cta.Cte.";
+                            if (r.debe > 0) return "Venta";
+                            if (fp === "Efectivo") return "Efectivo";
+                            if (fp === "Transferencia") return "Transf.";
+                            return "Pago";
+                          };
                           const rows = filteredCCRows.map((r, i) => {
                             const prev = i > 0 ? filteredCCRows[i - 1].fecha : null;
                             const showDate = r.fecha !== prev;
                             return `<tr style="border-bottom:1px solid #f1f5f9;${showDate && i > 0 ? "border-top:1px solid #e2e8f0;" : ""}">
                               <td style="padding:6px 10px;font-size:12px;color:#94a3b8;font-variant-numeric:tabular-nums;">${showDate ? new Date(r.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}</td>
                               <td style="padding:6px 10px;font-size:12px;font-family:monospace;">${r.comprobante}</td>
+                              <td style="padding:6px 10px;font-size:11px;color:#64748b;">${printTipo(r)}</td>
                               <td style="padding:6px 10px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;">${r.debe > 0 ? formatCurrency(Math.round(r.debe)) : ""}</td>
                               <td style="padding:6px 10px;text-align:right;font-size:12px;color:#059669;font-variant-numeric:tabular-nums;">${r.haber > 0 ? formatCurrency(Math.round(r.haber)) : ""}</td>
                               <td style="padding:6px 10px;text-align:right;font-size:12px;font-weight:bold;color:${Math.round(r.saldo) > 0 ? "#ea580c" : "#059669"};font-variant-numeric:tabular-nums;">${fmtSaldo(Math.round(r.saldo))}</td>
                               <td style="padding:6px 10px;font-size:12px;color:#64748b;">${r.forma_pago || ""}</td>
-                              <td style="padding:6px 10px;font-size:12px;color:#94a3b8;">${r.descripcion || ""}</td>
                             </tr>`;
                           }).join("");
                           win.document.write(`<!DOCTYPE html><html><head><title>Resumen — ${movClient.nombre}</title><style>@page{size:A4 landscape;margin:15mm;}body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#0f172a;}table{width:100%;border-collapse:collapse;}</style></head><body>
@@ -2001,16 +2318,16 @@ export default function ClientesPage() {
                             <table><thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
                               <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Fecha</th>
                               <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Comprobante</th>
+                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Tipo</th>
                               <th style="text-align:right;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Debe</th>
                               <th style="text-align:right;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Haber</th>
                               <th style="text-align:right;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Saldo</th>
-                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Cond. Pago</th>
-                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Obs.</th>
+                              <th style="text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Método</th>
                             </tr></thead><tbody>${rows}</tbody>
                             <tfoot><tr style="background:#f8fafc;border-top:2px solid #e2e8f0;">
-                              <td colspan="4" style="padding:10px;font-size:11px;font-weight:bold;">Saldo deudor</td>
+                              <td colspan="5" style="padding:10px;font-size:11px;font-weight:bold;">${saldoAct >= 0 ? "Saldo deudor" : "Saldo a favor"}</td>
                               <td style="padding:10px;text-align:right;font-size:16px;font-weight:800;color:${saldoAct > 0 ? "#ea580c" : "#059669"};">${fmtSaldo(saldoAct)}</td>
-                              <td colspan="2"></td>
+                              <td></td>
                             </tr></tfoot></table></body></html>`);
                           win.document.close();
                           win.print();
