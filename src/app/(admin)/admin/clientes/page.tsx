@@ -626,10 +626,18 @@ export default function ClientesPage() {
     });
     setMovCCRows(ccRows);
 
-    // Totales: calcular desde ventas directamente (no desde entries, para evitar doble conteo NC)
-    // PENDIENTE = SUM(total) de ventas - SUM(NC.total) = neto facturado
-    // COBRADO = SUM(monto_pagado) de ventas = total pagado
+    // Totales: calcular desde ventas directamente
+    // PENDIENTE = SUM(total) - SUM(NC) = neto facturado
+    // COBRADO = SUM(MIN(monto_pagado, total - NC_vinculada)) = pagado sin exceder lo adeudado
     // SALDO = PENDIENTE - COBRADO
+    //
+    // El cap evita que ventas pagadas completas + NC generen "saldo a favor" fantasma.
+    const ncTotalByParent = new Map<string, number>();
+    for (const v of ventas || []) {
+      if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
+        ncTotalByParent.set(v.remito_origen_id, (ncTotalByParent.get(v.remito_origen_id) || 0) + v.total);
+      }
+    }
     const ventasPendiente = (ventas || [])
       .filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"))
       .reduce((s: number, v: any) => s + v.total, 0);
@@ -638,7 +646,11 @@ export default function ClientesPage() {
       .reduce((s: number, v: any) => s + v.total, 0);
     const ventasCobrado = (ventas || [])
       .filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"))
-      .reduce((s: number, v: any) => s + (v.monto_pagado || 0), 0);
+      .reduce((s: number, v: any) => {
+        const ncForThis = ncTotalByParent.get(v.id) || 0;
+        const maxCobrable = Math.max(0, v.total - ncForThis);
+        return s + Math.min(v.monto_pagado || 0, maxCobrable);
+      }, 0);
     const totalPendiente = Math.round((ventasPendiente - ncTotalResumen) * 100) / 100;
     const totalCobrado = Math.round(ventasCobrado * 100) / 100;
     const saldoCalculado = Math.round((totalPendiente - totalCobrado) * 100) / 100;
@@ -676,6 +688,14 @@ export default function ClientesPage() {
       .eq("cliente_id", clienteId).neq("estado", "anulada");
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
+    // Build NC totals per parent venta
+    const ncByParentRecalc = new Map<string, number>();
+    for (const v of allVentas) {
+      if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
+        ncByParentRecalc.set(v.remito_origen_id, (ncByParentRecalc.get(v.remito_origen_id) || 0) + v.total);
+      }
+    }
+
     let totalDebe = 0;
     let totalHaber = 0;
 
@@ -684,7 +704,7 @@ export default function ClientesPage() {
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
 
       if (isNC) {
-        // NC reduce el pendiente (neto facturado), NO suman al cobrado
+        // NC reduce el pendiente (neto facturado)
         totalDebe -= v.total;
         continue;
       }
@@ -692,9 +712,12 @@ export default function ClientesPage() {
       // DEBE = venta.total
       totalDebe += v.total;
 
-      // HABER = monto_pagado (fuente de verdad única — incluye caja + cobros)
+      // HABER = MIN(monto_pagado, total - NC_vinculada)
+      // Cap para que ventas pagadas completas + NC no generen saldo a favor fantasma
       if (!isND) {
-        totalHaber += (v.monto_pagado || 0);
+        const ncForThis = ncByParentRecalc.get(v.id) || 0;
+        const maxCobrable = Math.max(0, v.total - ncForThis);
+        totalHaber += Math.min(v.monto_pagado || 0, maxCobrable);
       }
     }
 
