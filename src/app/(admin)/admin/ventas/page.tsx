@@ -294,11 +294,13 @@ export default function VentasPage() {
   // ---------- data fetch ----------
   // Light refresh: only products + presentaciones (for tab focus)
   const refreshProducts = useCallback(async () => {
-    const [{ data: prods }, { data: presData1 }, { data: presData2 }] = await Promise.all([
-      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").limit(10000),
+    const [{ data: prods1 }, { data: prods2 }, { data: presData1 }, { data: presData2 }] = await Promise.all([
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(0, 999),
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(1000, 2999),
       supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, costo, sku").order("id").range(0, 999),
       supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, costo, sku").order("id").range(1000, 2999),
     ]);
+    const prods = [...(prods1 || []), ...(prods2 || [])];
     const presData = [...(presData1 || []), ...(presData2 || [])];
     setProducts((prods || []) as unknown as Producto[]);
     const map: Record<string, Presentacion[]> = {};
@@ -312,10 +314,11 @@ export default function VentasPage() {
 
   const fetchData = useCallback(async () => {
     // Single batch: all data in one Promise.all
-    const [{ data: prods }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData },
+    const [{ data: prods1 }, { data: prods2 }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData },
            { data: allComboItems }, { data: descuentosData }, { data: presData1 }, { data: presData2 },
            { data: empData }, { data: tcData }] = await Promise.all([
-      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(0, 999),
+      supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(1000, 2999),
       supabase.from("clientes").select("id, codigo_cliente, nombre, email, telefono, saldo, situacion_iva, tipo_factura, tipo_documento, numero_documento, cuit, razon_social, domicilio, domicilio_comercial, domicilio_fiscal, localidad, provincia, codigo_postal, barrio, vendedor_id, observacion, zona_entrega, limite_credito").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo").eq("activo", true).eq("rol", "vendedor"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),
@@ -327,6 +330,7 @@ export default function VentasPage() {
       supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva, receipt_config").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
     ]);
+    const prods = [...(prods1 || []), ...(prods2 || [])];
     const presData = [...(presData1 || []), ...(presData2 || [])];
 
     setProducts((prods || []) as unknown as Producto[]);
