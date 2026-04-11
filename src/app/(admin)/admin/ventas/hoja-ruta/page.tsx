@@ -1938,8 +1938,10 @@ export default function HojaDeRutaPage() {
                     // Distribute REAL payment across ventas FIFO
                     // Only count actual money received (efectivo + transferencia + surcharge).
                     // CC portion is DEBT (goes to saldo), NOT payment — don't include in monto_pagado.
+                    // Subtract saldo allocation from cash — that money pays old debt, not this venta.
                     const realCashCollected = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
-                    const totalCollected = realCashCollected;
+                    const saldoAllocTotal = result.cobrarSaldo ? result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0) : 0;
+                    const totalCollected = Math.max(0, realCashCollected - saldoAllocTotal);
                     let remaining = totalCollected;
                     const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
                     for (const v of allVentas) {
@@ -1957,17 +1959,15 @@ export default function HojaDeRutaPage() {
                     for (const { venta, paid } of perVenta) {
                       if (paid <= 0 && result.metodo !== "Cuenta Corriente") continue;
                       if (result.metodo === "Mixto") {
-                        // paid already includes surcharge (remaining = monto + surcharge)
-                        const totalWithSurcharge = result.monto + (result.surcharge || 0);
-                        const ratio = totalWithSurcharge > 0 ? paid / totalWithSurcharge : 0;
-                        const efPart = Math.round(result.efectivo * ratio);
-                        // trPart includes the proportional surcharge — don't add more
-                        const trPart = paid - efPart - Math.round((result.cuentaCorriente || 0) * ratio);
-                        if (efPart > 0) {
-                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`, metodo_pago: "Efectivo", monto: efPart, referencia_id: venta.id, referencia_tipo: "venta" });
+                        // Use original amounts (not proportional ratio) — cap at paid
+                        const efForVenta = Math.min(result.efectivo || 0, paid);
+                        const trWithSurcharge = (result.transferencia || 0) + (result.surcharge || 0);
+                        const trForVenta = Math.min(trWithSurcharge, Math.max(0, paid - efForVenta));
+                        if (efForVenta > 0) {
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`, metodo_pago: "Efectivo", monto: efForVenta, referencia_id: venta.id, referencia_tipo: "venta" });
                         }
-                        if (trPart > 0) {
-                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: trPart, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
+                        if (trForVenta > 0) {
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: trForVenta, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
                         }
                       } else if (result.metodo === "Transferencia") {
                         // paid = pre-surcharge + surcharge already; don't add trSurcharge again
