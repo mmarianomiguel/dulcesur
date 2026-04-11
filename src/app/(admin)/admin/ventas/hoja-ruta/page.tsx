@@ -1921,6 +1921,20 @@ export default function HojaDeRutaPage() {
                       return;
                     }
 
+                    // Idempotency guard: prevent double cobro
+                    const ventaIdsToCheck = allVentas.map(v => v.id);
+                    const { count: existingCobros } = await supabase
+                      .from("caja_movimientos")
+                      .select("id", { count: "exact", head: true })
+                      .in("referencia_id", ventaIdsToCheck)
+                      .eq("referencia_tipo", "venta");
+                    if (existingCobros && existingCobros > 0) {
+                      alert("Estas ventas ya tienen cobro registrado. No se puede duplicar el pago.");
+                      setPayDialogOpen(false);
+                      fetchVentas();
+                      return;
+                    }
+
                     // Distribute payment across ventas FIFO
                     // result.monto is pre-surcharge; add surcharge to get total collected
                     const totalCollected = result.monto + (result.surcharge || 0);
@@ -1964,9 +1978,12 @@ export default function HojaDeRutaPage() {
                       // Update venta
                       const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: (pagadoPorVenta[venta.id] || 0) + paid };
                       if (cuentaNombre) ventaUpd.cuenta_transferencia_alias = cuentaNombre;
-                      // Always update total to match actual payment method.
-                      // Strips checkout surcharge if paying Efectivo, or sets correct surcharge.
-                      ventaUpd.total = result.monto + (result.surcharge || 0);
+                      // Only update total on FIRST cobro — adjusts for payment method change
+                      // (e.g., checkout had transfer surcharge but paying cash now).
+                      // On subsequent cobros, total must NOT change (it would corrupt the order total).
+                      if ((pagadoPorVenta[venta.id] || 0) === 0) {
+                        ventaUpd.total = result.monto + (result.surcharge || 0);
+                      }
                       await supabase.from("ventas").update(ventaUpd).eq("id", venta.id);
                     }
 
