@@ -179,11 +179,20 @@ export default function ReportesPage() {
       const descMap: Record<string, string[]> = {};
       for (const nc of ncVentas) {
         const ncItems = (items || []).filter((i: any) => i.venta_id === nc.id);
+        const origId = nc.remito_origen_id!;
+        const origItems = (items || []).filter((i: any) => i.venta_id === origId);
         const ncProfit = ncItems.reduce((a: number, i: any) => {
-          const cost = (i.costo_unitario && i.costo_unitario > 0) ? i.costo_unitario : 0;
+          let cost = (i.costo_unitario && i.costo_unitario > 0) ? i.costo_unitario : 0;
+          // Fallback: if NC item has no cost, use cost from original sale item
+          if (cost === 0 && origItems.length > 0) {
+            const origMatch = origItems.find((o: any) =>
+              (i.producto_id && o.producto_id === i.producto_id) ||
+              (i.descripcion && o.descripcion === i.descripcion)
+            );
+            if (origMatch) cost = (origMatch.costo_unitario && origMatch.costo_unitario > 0) ? origMatch.costo_unitario : 0;
+          }
           return a + ((Number(i.subtotal) || 0) - cost * i.cantidad);
         }, 0);
-        const origId = nc.remito_origen_id!;
         profitMap[origId] = (profitMap[origId] || 0) + ncProfit;
         if (!descMap[origId]) descMap[origId] = [];
         ncItems.forEach((i: any) => {
@@ -389,7 +398,17 @@ export default function ReportesPage() {
       const prodName = item.productos?.nombre || item.descripcion || "Producto";
       if (!groupMap[groupId].productos[prodId]) groupMap[groupId].productos[prodId] = { producto_id: prodId, nombre: prodName, unidades: 0, venta: 0, costo: 0, ganancia: 0 };
 
-      const costoPres = getItemCost(item);
+      let costoPres = getItemCost(item);
+      // Fallback: if NC item has no cost, use cost from original sale item
+      if (costoPres === 0 && ncVentaIds.has(item.venta_id)) {
+        const ncVenta = ventas.find(v => v.id === item.venta_id);
+        if (ncVenta?.remito_origen_id) {
+          const origMatch = (ventaItems as any[]).find((o: any) =>
+            o.venta_id === ncVenta.remito_origen_id && ((item.producto_id && o.producto_id === item.producto_id) || (item.descripcion && o.descripcion === item.descripcion))
+          );
+          if (origMatch) costoPres = getItemCost(origMatch);
+        }
+      }
       const unidadesPres = getUnidadesPres(item);
       const cantidad = Number(item.cantidad) || 0;
       const ventaItem = Number(item.subtotal) || 0;
@@ -449,8 +468,21 @@ export default function ReportesPage() {
   const filteredVentasGanancia = useMemo(() => {
     const filteredIds = new Set(filteredVentas.map((v) => v.id));
     const filteredNCIds = new Set(filteredVentas.filter(isNC).map(v => v.id));
+    // Map NC venta_id → original venta_id for cost fallback
+    const ncToOrig: Record<string, string> = {};
+    filteredVentas.filter(isNC).forEach(v => { if (v.remito_origen_id) ncToOrig[v.id] = v.remito_origen_id; });
     return ventaItems.filter((item) => filteredIds.has(item.venta_id)).reduce((a, item: any) => {
-      const costoPres = getItemCost(item);
+      let costoPres = getItemCost(item);
+      // Fallback: if NC item has no cost, use cost from original sale item
+      if (costoPres === 0 && filteredNCIds.has(item.venta_id)) {
+        const origId = ncToOrig[item.venta_id];
+        if (origId) {
+          const origMatch = ventaItems.find((o: any) =>
+            o.venta_id === origId && ((item.producto_id && o.producto_id === item.producto_id) || (item.descripcion && o.descripcion === item.descripcion))
+          );
+          if (origMatch) costoPres = getItemCost(origMatch);
+        }
+      }
       const ventaItem = Number(item.subtotal) || 0;
       const itemGanancia = ventaItem - costoPres * item.cantidad;
       return a + (filteredNCIds.has(item.venta_id) ? -itemGanancia : itemGanancia);

@@ -60,6 +60,7 @@ interface LineItem {
   presentacion: string;
   unidades_por_presentacion: number;
   alreadyReturned: boolean;
+  costo_unitario: number;
 }
 
 interface NotaCreditoRow extends Venta {
@@ -207,7 +208,7 @@ export default function NotaCreditoPage() {
     (async () => {
       const { data: origItems } = await supabase
         .from("venta_items")
-        .select("producto_id, codigo, descripcion, cantidad, unidad_medida, precio_unitario, subtotal, presentacion, unidades_por_presentacion")
+        .select("producto_id, codigo, descripcion, cantidad, unidad_medida, precio_unitario, subtotal, presentacion, unidades_por_presentacion, costo_unitario")
         .eq("venta_id", origenId);
 
       if (!origItems || origItems.length === 0) return;
@@ -252,6 +253,7 @@ export default function NotaCreditoPage() {
           presentacion: item.presentacion || "Unidad",
           unidades_por_presentacion: item.unidades_por_presentacion || 1,
           alreadyReturned: false,
+          costo_unitario: (item as any).costo_unitario || 0,
         });
       }
       setItems(loaded);
@@ -314,6 +316,7 @@ export default function NotaCreditoPage() {
         presentacion: "Unidad",
         unidades_por_presentacion: 1,
         alreadyReturned: false,
+        costo_unitario: product.costo || 0,
       }]);
     }
     setSearchOpen(false);
@@ -335,6 +338,7 @@ export default function NotaCreditoPage() {
       presentacion: "Unidad",
       unidades_por_presentacion: 1,
       alreadyReturned: false,
+      costo_unitario: 0,
     }]);
     setFreeDesc("");
     setFreePrice(0);
@@ -410,6 +414,7 @@ export default function NotaCreditoPage() {
         subtotal: i.subtotal,
         presentacion: i.presentacion,
         unidades_por_presentacion: i.unidades_por_presentacion,
+        costo_unitario: i.costo_unitario || 0,
       }))
     );
 
