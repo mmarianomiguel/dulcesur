@@ -1862,9 +1862,11 @@ export default function VentasPage() {
           // Skip caja for envío when cobrarEnEntrega — cobro confirmed from venta detail
           if (!cobrarEnEntrega) {
             // When cobrarSaldo is active, split caja entries: venta portion vs saldo cobro portion
+            // Use paidForSale (cash minus old debt) NOT baseTotal (full sale total)
             const totalNonCC = mixtoEntries.filter(e => e.metodo !== "Cuenta Corriente").reduce((s, e) => s + e.monto, 0);
-            const ventaPortion = cobrarSaldoInMixto ? Math.min(totalNonCC, baseTotal) : totalNonCC;
-            const saldoPortion = cobrarSaldoInMixto ? Math.max(0, totalNonCC - baseTotal) : 0;
+            const cashForThisSale = cobrarSaldoInMixto ? Math.max(0, totalNonCC - saldoRealAntesDeTodo) : totalNonCC;
+            const ventaPortion = cobrarSaldoInMixto ? cashForThisSale : totalNonCC;
+            const saldoPortion = cobrarSaldoInMixto ? Math.max(0, totalNonCC - cashForThisSale) : 0;
             let portionRemaining = ventaPortion;
 
             for (const entry of mixtoEntries) {
