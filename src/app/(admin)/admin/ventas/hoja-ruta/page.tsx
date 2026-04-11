@@ -352,7 +352,7 @@ export default function HojaDeRutaPage() {
     const { data, error } = await supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, updated_at, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", true)
       .gte("fecha", historialDateFrom)
@@ -506,11 +506,11 @@ export default function HojaDeRutaPage() {
       if (!map[day]) map[day] = [];
       map[day].push(v);
     }
-    // Sort each day's ventas by delivery hour (first payment timestamp), earliest first
+    // Sort each day's ventas by delivery time (updated_at = when marked as entregado), earliest first
     for (const ventas of Object.values(map)) {
       ventas.sort((a, b) => {
-        const aTime = (historialPagos[a.id] || []).find(p => !p.metodo.includes("Nota de Cr") && p.fecha_hora)?.fecha_hora || "";
-        const bTime = (historialPagos[b.id] || []).find(p => !p.metodo.includes("Nota de Cr") && p.fecha_hora)?.fecha_hora || "";
+        const aTime = (a as any).updated_at || "";
+        const bTime = (b as any).updated_at || "";
         if (!aTime && !bTime) return 0;
         if (!aTime) return 1;
         if (!bTime) return -1;
@@ -1256,9 +1256,9 @@ export default function HojaDeRutaPage() {
                                   </td>
                                   <td className="py-2.5 px-3 text-xs text-muted-foreground">
                                     {(() => {
-                                      const firstPago = pagos.find(p => !p.metodo.includes("Nota de Cr") && (p as any).fecha_hora);
-                                      if (!firstPago || !(firstPago as any).fecha_hora) return "—";
-                                      const d = new Date((firstPago as any).fecha_hora);
+                                      const ua = (venta as any).updated_at;
+                                      if (!ua) return "—";
+                                      const d = new Date(ua);
                                       return isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
                                     })()}
                                   </td>
