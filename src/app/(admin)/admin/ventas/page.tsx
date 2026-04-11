@@ -1773,9 +1773,11 @@ export default function VentasPage() {
             // ─── Combined flow: cobro saldo FIRST, then sale ───
             // Order matters for the libro diario: old debt cobro appears before new sale.
             const oldDebtCollected = saldoRealAntesDeTodo; // pay off ALL old debt first
-            const totalPaid = mixtoEfectivo + mixtoTransferencia;
+            // Include transferSurcharge in totalPaid — surcharge is part of the transfer payment,
+            // NOT debt. Without this, the surcharge leaks to CC.
+            const totalPaid = mixtoEfectivo + mixtoTransferencia + transferSurcharge;
             const paidForSale = totalPaid - oldDebtCollected; // what's left for this sale
-            const saleCCPortion = Math.max(0, Math.round((total - paidForSale) * 100) / 100); // unpaid portion of new sale (uses total which includes surcharge)
+            const saleCCPortion = Math.max(0, Math.round((total - paidForSale) * 100) / 100); // unpaid portion of new sale
 
             // 1. COBRO SALDO VIEJO — FIFO per-venta CC haber entries
             if (oldDebtCollected > 0) {

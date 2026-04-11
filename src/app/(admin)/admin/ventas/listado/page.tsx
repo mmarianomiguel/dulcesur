@@ -111,6 +111,7 @@ interface VentaRow {
   vendedor_id: string | null;
   origen: string | null;
   metodo_entrega: string | null;
+  monto_pagado: number;
   remito_origen_id: string | null;
   clientes: ClienteInfo | null;
 }
@@ -175,6 +176,7 @@ interface Pedido {
   _cuit?: string;
   _domicilio?: string;
   _comboIds?: Set<string>;
+  _monto_pagado?: number;
   _remito_origen_id?: string | null;
   isOnline?: boolean;
   forma_pago?: string;
@@ -533,6 +535,7 @@ export default function ListadoVentasPage() {
       _cuit: v.clientes?.cuit || "",
       _domicilio: v.clientes?.domicilio || "",
       _comboIds: comboIds,
+      _monto_pagado: v.monto_pagado || 0,
       isOnline: v.origen === "tienda" || v.tipo_comprobante === "Pedido Web",
     };
 
@@ -1237,7 +1240,8 @@ export default function ListadoVentasPage() {
     // Enrich pedido with payment split from pedidos_tienda (for Mixto pre-fill)
     const ptEfectivo = ptData?.monto_efectivo || (ventaData as any)?.monto_efectivo || 0;
     const ptTransferencia = ptData?.monto_transferencia || (ventaData as any)?.monto_transferencia || 0;
-    setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId, monto_efectivo: ptEfectivo, monto_transferencia: ptTransferencia } as any);
+    const ptMontoPagado = (ventaData as any)?.monto_pagado ?? 0;
+    setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId, monto_efectivo: ptEfectivo, monto_transferencia: ptTransferencia, _monto_pagado: ptMontoPagado } as any);
     setCobroPreview(null);
     setPoEditItems(items.map((i) => ({ ...i })));
     setPoHasChanges(false);
@@ -2579,14 +2583,24 @@ export default function ListadoVentasPage() {
                       {detailPagos.length > 0 ? (() => {
                         const ncPagos = detailPagos.filter(p => p.metodo.includes("Nota de Crédito"));
                         const realPagos = detailPagos.filter(p => !p.metodo.includes("Nota de Crédito") && !p.metodo.includes("(a cobrar)"));
-                        const ncTotal = ncPagos.reduce((s, p) => s + p.monto, 0);
-                        const pagadoTotal = realPagos.reduce((s, p) => s + p.monto, 0);
+                        const ccPagos = realPagos.filter(p => p.metodo === "Cuenta Corriente");
+                        const cashPagos = realPagos.filter(p => p.metodo !== "Cuenta Corriente");
+                        const cashTotal = cashPagos.reduce((s, p) => s + p.monto, 0);
+                        const ccTotal = ccPagos.reduce((s, p) => s + p.monto, 0);
+                        const montoPagadoVenta = (poSelectedPedido as any)._monto_pagado ?? (poSelectedPedido as any).monto_pagado ?? 0;
+                        const saldoPendienteVenta = Math.max(0, Math.round(((poSelectedPedido.total || 0) - montoPagadoVenta) * 100) / 100);
                         return (
                           <>
-                            {realPagos.map((p, i) => (
+                            {cashPagos.map((p, i) => (
                               <div key={i} className="flex items-center justify-between">
                                 <span className="text-muted-foreground">{p.metodo}</span>
                                 <span className="font-medium">{formatCurrency(p.monto)}</span>
+                              </div>
+                            ))}
+                            {ccPagos.map((p, i) => (
+                              <div key={`cc-${i}`} className="flex items-center justify-between">
+                                <span className="text-orange-600">Cuenta Corriente</span>
+                                <span className="font-medium text-orange-600">{formatCurrency(p.monto)}</span>
                               </div>
                             ))}
                             {ncPagos.map((p, i) => (
@@ -2607,9 +2621,19 @@ export default function ListadoVentasPage() {
                                 )}
                               </div>
                             ))}
-                            <div className="border-t pt-2 flex items-center justify-between">
-                              <span className="font-bold">Total</span>
-                              <span className="font-bold text-base">{formatCurrency(pagadoTotal)}</span>
+                            <div className="border-t pt-2 space-y-1">
+                              {cashTotal > 0 && (
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold">Total cobrado</span>
+                                  <span className="font-bold text-base">{formatCurrency(cashTotal)}</span>
+                                </div>
+                              )}
+                              {saldoPendienteVenta > 0 && (
+                                <div className="flex items-center justify-between text-orange-600">
+                                  <span className="font-medium text-xs">Saldo pendiente</span>
+                                  <span className="font-bold">{formatCurrency(saldoPendienteVenta)}</span>
+                                </div>
+                              )}
                             </div>
                           </>
                         );
@@ -2651,7 +2675,7 @@ export default function ListadoVentasPage() {
                 {/* Once delivered, pending balances are handled from Cobranzas */}
                 {!isCancelled && !isDelivered && poSelectedPedido.estado !== "cancelado" && (() => {
                   const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
-                  const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
+                  const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
                   const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
                   if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
                   const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
@@ -3056,18 +3080,33 @@ export default function ListadoVentasPage() {
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Detalle de pago</p>
                             {detailPagos.filter(p => !p.metodo.includes("Nota de Crédito")).map((p, i) => (
                               <div key={i} className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground">{p.metodo.includes("(a cobrar)") ? `\u23F3 ${p.metodo}` : `\u2713 ${p.metodo}`}</span>
-                                <span className={`font-medium ${p.metodo.includes("(a cobrar)") ? "text-amber-600" : "text-foreground"}`}>{formatCurrency(p.monto)}</span>
+                                <span className={`${p.metodo === "Cuenta Corriente" ? "text-orange-600" : "text-muted-foreground"}`}>
+                                  {p.metodo.includes("(a cobrar)") ? `\u23F3 ${p.metodo}` : `\u2713 ${p.metodo}`}
+                                </span>
+                                <span className={`font-medium ${p.metodo.includes("(a cobrar)") ? "text-amber-600" : p.metodo === "Cuenta Corriente" ? "text-orange-600" : "text-foreground"}`}>{formatCurrency(p.monto)}</span>
                               </div>
                             ))}
                             {(() => {
-                              const totalPagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito")).reduce((s, p) => s + p.monto, 0);
-                              return totalPagado > 0 ? (
-                                <div className="flex items-center justify-between text-xs font-bold pt-1 border-t">
-                                  <span>Total cobrado</span>
-                                  <span>{formatCurrency(totalPagado)}</span>
-                                </div>
-                              ) : null;
+                              // Total cobrado = solo efectivo + transferencia (CC es deuda, no cobro)
+                              const cashPaid = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito") && p.metodo !== "Cuenta Corriente").reduce((s, p) => s + p.monto, 0);
+                              const montoPagadoV = (poSelectedPedido as any)._monto_pagado ?? (poSelectedPedido as any).monto_pagado ?? 0;
+                              const pendiente = Math.max(0, Math.round(((poSelectedPedido.total || 0) - montoPagadoV) * 100) / 100);
+                              return (
+                                <>
+                                  {cashPaid > 0 && (
+                                    <div className="flex items-center justify-between text-xs font-bold pt-1 border-t">
+                                      <span>Total cobrado</span>
+                                      <span>{formatCurrency(cashPaid)}</span>
+                                    </div>
+                                  )}
+                                  {pendiente > 0 && (
+                                    <div className="flex items-center justify-between text-xs font-bold text-orange-600">
+                                      <span>Saldo pendiente</span>
+                                      <span>{formatCurrency(pendiente)}</span>
+                                    </div>
+                                  )}
+                                </>
+                              );
                             })()}
                           </div>
                         )}
