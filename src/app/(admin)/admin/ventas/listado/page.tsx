@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
+import { recalcFromVenta } from "@/lib/order-calc";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -896,16 +897,14 @@ export default function ListadoVentasPage() {
     setPrintLineItems(lineItems);
     // Build sale object and show preview
     const vendedorName = getVendedorNombre(v.vendedor_id) === "—" && (v.origen === "tienda" || v.tipo_comprobante?.toLowerCase().includes("web")) ? "Tienda Online" : getVendedorNombre(v.vendedor_id);
-    const descAmt = Math.round(v.subtotal * (v.descuento_porcentaje || 0) / 100);
-    const recAmt = Math.round((v.subtotal - descAmt) * (v.recargo_porcentaje || 0) / 100);
-    const surchargeCalc = Math.max(0, v.total - (v.subtotal - descAmt + recAmt));
+    const ventaCalc = recalcFromVenta({ subtotal: v.subtotal, descuento_porcentaje: v.descuento_porcentaje || 0, recargo_porcentaje: v.recargo_porcentaje || 0, total: v.total });
     setPrintSaleObj({
       numero: v.numero,
       total: v.total,
       subtotal: v.subtotal,
-      descuento: descAmt,
-      recargo: recAmt,
-      transferSurcharge: surchargeCalc,
+      descuento: ventaCalc.descuentoMonto,
+      recargo: ventaCalc.recargoMonto,
+      transferSurcharge: ventaCalc.transferSurcharge,
       tipoComprobante: v.tipo_comprobante,
       formaPago: derivedFormaPago,
       moneda: v.moneda || "ARS",

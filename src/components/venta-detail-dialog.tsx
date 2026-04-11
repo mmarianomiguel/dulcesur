@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/formatters";
+import { calculateOrderFinancials, recalcFromVenta } from "@/lib/order-calc";
 import { CobroVentaSection, type CobroVentaResult } from "@/components/cobro-venta-section";
 import {
   Receipt,
@@ -235,12 +236,12 @@ export function VentaDetailDialog({
   const ncFromPagos = (pagos || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
   const ncDisplay = ncTotal || ncFromPagos;
   const displayTotal = editable && editItems
-    ? (() => {
-        let t = itemsSubtotal + (envio || 0);
-        if (descPct > 0) t = Math.round(t * (1 - descPct / 100) * 100) / 100;
-        if (recPct > 0) t = Math.round(t * (1 + recPct / 100) * 100) / 100;
-        return t;
-      })()
+    ? calculateOrderFinancials({
+        items: editItems.map(i => ({ subtotal: i.subtotal })),
+        descuentoPorcentaje: descPct,
+        recargoPorcentaje: recPct,
+        costoEnvio: envio || 0,
+      }).totalFinal
     : data.total; // stored total is already net of NC — don't subtract again
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const canCobrar = editable && estado !== "cancelado";
@@ -740,27 +741,22 @@ export function VentaDetailDialog({
             {/* Totals + Payment Summary */}
             {(() => {
               const fp = (data.forma_pago || data.metodo_pago || "").toLowerCase();
-              const mt = data.monto_transferencia || 0;
-              const baseAfterNC = itemsSubtotal - ncDisplay;
-              const recargoBase = recPct > 0
-                ? (fp.includes("mixto") ? Math.min(mt, baseAfterNC) : (fp.includes("transfer") ? baseAfterNC : 0))
-                : 0;
-              const recargoAmt = recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
+              const ventaCalc = recalcFromVenta({ subtotal: itemsSubtotal, descuento_porcentaje: descPct, recargo_porcentaje: recPct, total: data.total });
               const realPagos = (pagos || []).filter(p => !p.metodo.includes("Nota de Cr") && !p.metodo.includes("Pendiente"));
               const totalCobrado = realPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
               return (
                 <div className="mt-3 space-y-1 text-sm text-right border-t pt-3">
                   <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
                   {descPct > 0 && (
-                    <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
+                    <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(ventaCalc.descuentoMonto)}</span></p>
                   )}
                   {ncDisplay > 0 && (
                     <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-red-500">-{formatCurrency(ncDisplay)}</span></p>
                   )}
-                  {recargoAmt > 0 && (
+                  {ventaCalc.transferSurcharge > 0 && (
                     <p className="text-muted-foreground">
-                      Recargo transferencia ({recPct}%{fp.includes("mixto") ? ` s/ ${formatCurrency(recargoBase)}` : ""}):
-                      <span className="font-medium text-violet-600 ml-1">+{formatCurrency(recargoAmt)}</span>
+                      Recargo transferencia ({recPct}%):
+                      <span className="font-medium text-violet-600 ml-1">+{formatCurrency(ventaCalc.transferSurcharge)}</span>
                     </p>
                   )}
                   {envio > 0 && (

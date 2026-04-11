@@ -2,6 +2,7 @@
 
 import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
+import { recalcFromVenta } from "@/lib/order-calc";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,6 +75,10 @@ interface VentaRow {
   fecha: string;
   forma_pago: string;
   total: number;
+  subtotal: number;
+  descuento_porcentaje: number;
+  recargo_porcentaje: number;
+  monto_pagado: number;
   estado: string;
   observacion: string | null;
   entregado: boolean;
@@ -156,7 +161,7 @@ export default function HojaDeRutaPage() {
     let query = supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -347,7 +352,7 @@ export default function HojaDeRutaPage() {
     const { data, error } = await supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", true)
       .gte("fecha", historialDateFrom)
@@ -1856,9 +1861,12 @@ export default function HojaDeRutaPage() {
             const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
             const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
-            // Pre-surcharge base: sum of items prices (no transfer surcharge baked in)
-            const itemsSubtotalGrupo = allVentas.reduce((s, vt) => s + vt.venta_items.reduce((si, i) => si + i.precio_unitario * i.cantidad, 0), 0);
-            const preDebeGrupo = Math.max(0, itemsSubtotalGrupo - totalNCGrupo);
+            // Pre-surcharge base: use recalcFromVenta to get the base without transfer surcharge
+            const itemsSubtotalGrupo = allVentas.reduce((s, vt) => {
+              const r = recalcFromVenta({ subtotal: vt.subtotal || 0, descuento_porcentaje: vt.descuento_porcentaje || 0, recargo_porcentaje: vt.recargo_porcentaje || 0, total: vt.total });
+              return s + (vt.subtotal || 0) - r.descuentoMonto + r.recargoMonto;
+            }, 0);
+            const preDebeGrupo = Math.max(0, itemsSubtotalGrupo - totalNCGrupo - totalPagadoReal);
             return (
               <div className="space-y-4">
                 {/* Summary header */}
@@ -1867,17 +1875,17 @@ export default function HojaDeRutaPage() {
                   {allVentas.length === 1 ? (
                     <>
                       <div className="flex justify-between"><span className="text-gray-500">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(itemsSubtotalGrupo)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(allVentas[0].total)}</span></div>
                     </>
                   ) : (
                     <>
                       {allVentas.map((v) => (
                         <div key={v.id} className="flex justify-between">
                           <span className="text-gray-500">#{v.numero}</span>
-                          <span className="font-medium">{formatCurrency(v.venta_items.reduce((si, i) => si + i.precio_unitario * i.cantidad, 0))}</span>
+                          <span className="font-medium">{formatCurrency(v.total)}</span>
                         </div>
                       ))}
-                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(itemsSubtotalGrupo)}</span></div>
+                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
                     </>
                   )}
                   {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}

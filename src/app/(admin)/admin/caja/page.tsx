@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { recalcFromVenta } from "@/lib/order-calc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -918,12 +919,8 @@ export default function CajaPage() {
       if (!sub || !recPct) continue;
       const hasTransferMov = movements.some(m => m.referencia_id === v.id && m.tipo === "ingreso" && m.metodo_pago === "Transferencia");
       if (hasTransferMov) {
-        // Surcharge only on the transfer portion, not the full subtotal
-        const mt = (v as any).monto_transferencia || 0;
-        const discAmt = Math.round(sub * ((v as any).descuento_porcentaje || 0) / 100);
-        const base = v.forma_pago === "Mixto" && mt > 0 ? mt : (sub - discAmt);
-        const recAmt = Math.round(base * recPct / 100);
-        totalTransferSurcharge += recAmt;
+        const vCalc = recalcFromVenta({ subtotal: sub, descuento_porcentaje: (v as any).descuento_porcentaje || 0, recargo_porcentaje: recPct, total: v.total });
+        totalTransferSurcharge += vCalc.transferSurcharge;
       }
     }
 

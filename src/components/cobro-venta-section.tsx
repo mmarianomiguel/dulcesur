@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/formatters";
+import { calcTransferSurcharge } from "@/lib/order-calc";
 import { Loader2 } from "lucide-react";
 
 // ─── SVG Icons (matching mockup exactly) ───
@@ -230,17 +231,14 @@ export function CobroVentaSection({
   const recPct = recargoTransferencia || 0;
 
   // Surcharge calculated ONLY on the current order amount, never on saldo pendiente.
-  // For Transferencia: surcharge on montoVenta (the current order pending amount).
-  // For Mixto: surcharge only on the transfer portion covering THIS order (capped at order amount).
   const surcharge = useMemo(() => {
-    if (recPct <= 0) return 0;
-    if (metodo === "Transferencia") return Math.round(montoVenta * recPct) / 100;
-    if (metodo === "Mixto") {
-      // Cap: surcharge only on transfer portion that covers the current order, not saldo
-      const transferForOrder = Math.min(mixtoTransferencia, Math.max(0, montoVenta - mixtoEfectivo - mixtoCuentaCorriente));
-      return Math.round(transferForOrder * recPct) / 100;
-    }
-    return 0;
+    return calcTransferSurcharge(montoVenta, {
+      formaPago: metodo,
+      porcentajeTransferencia: recPct,
+      mixtoEfectivo,
+      mixtoTransferencia,
+      mixtoCuentaCorriente,
+    });
   }, [metodo, montoVenta, mixtoTransferencia, mixtoEfectivo, mixtoCuentaCorriente, recPct]);
 
   const saldoTotalAsignado = useMemo(

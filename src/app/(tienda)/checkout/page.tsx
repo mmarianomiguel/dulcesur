@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
 import { formatCurrency } from "@/lib/formatters";
+import { calculateOrderFinancials, calcTransferSurcharge } from "@/lib/order-calc";
 import {
   User,
   Mail,
@@ -463,14 +464,19 @@ export default function CheckoutPage() {
     metodoEntrega === "retiro" ||
     (config && config.umbral_envio_gratis > 0 && subtotal >= config.umbral_envio_gratis);
   const costoEnvio = envioGratis ? 0 : metodoEntrega === "envio" ? costoEnvioBase : 0;
-  const recargoTransf = config && config.recargo_transferencia > 0
-    ? metodoPago === "transferencia"
-      ? Math.round(subtotal * (config.recargo_transferencia / 100))
-      : metodoPago === "mixto" && mixtoTransferencia > 0
-        ? Math.round(mixtoTransferencia * (config.recargo_transferencia / 100))
-        : 0
-    : 0;
-  const total = subtotal + costoEnvio + recargoTransf;
+  const checkoutCalc = calculateOrderFinancials({
+    items: items.map(i => ({ subtotal: i.precio * i.cantidad })),
+    descuentoPorcentaje: 0,
+    recargoPorcentaje: 0,
+    payment: {
+      formaPago: metodoPago === "transferencia" ? "Transferencia" : metodoPago === "mixto" ? "Mixto" : "Efectivo",
+      porcentajeTransferencia: config?.recargo_transferencia || 0,
+      mixtoTransferencia,
+    },
+    costoEnvio,
+  });
+  const recargoTransf = checkoutCalc.transferSurcharge;
+  const total = checkoutCalc.totalFinal;
 
   const getAddressText = (): string => {
     if (metodoEntrega !== "envio") return "";
@@ -626,11 +632,15 @@ export default function CheckoutPage() {
       if (pr.cantidad > 1) presPriceMap[`${pr.producto_id}_Caja (x${pr.cantidad})`] = realPrice;
     }
 
+    // Track original prices and discounts per item for receipt/display
+    const itemDiscountMap: Record<string, { originalPrice: number; discountPct: number }> = {};
+
     for (const item of items) {
       const prodId = item.id.split("_")[0];
       const pres = item.presentacion || "Unidad";
       // Get correct base price from DB
       let correctPrice = presPriceMap[`${prodId}_${pres}`] ?? prodPriceMap[prodId] ?? item.precio;
+      const originalPrice = correctPrice; // Save BEFORE discount
       // Apply best active discount using full matching logic (same as POS)
       const meta = prodMetaMap[prodId];
       let bestDiscount = 0;
@@ -667,17 +677,26 @@ export default function CheckoutPage() {
         correctPrice = Math.round(correctPrice * (1 - bestDiscount / 100));
       }
       item.precio = correctPrice;
+      // Store original price and discount for this item (keyed by cart item id)
+      itemDiscountMap[item.id] = { originalPrice, discountPct: bestDiscount };
     }
-    // Recalculate totals from validated prices
+    // Recalculate totals from validated prices using central engine
     const vSubtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
     const vEnvioGratis = metodoEntrega === "retiro" || (config && config.umbral_envio_gratis > 0 && vSubtotal >= config.umbral_envio_gratis);
     const vCostoEnvio = vEnvioGratis ? 0 : metodoEntrega === "envio" ? costoEnvioBase : 0;
-    const vRecargoTransf = config && config.recargo_transferencia > 0
-      ? metodoPago === "transferencia" ? Math.round(vSubtotal * (config.recargo_transferencia / 100))
-        : metodoPago === "mixto" && mixtoTransferencia > 0 ? Math.round(mixtoTransferencia * (config.recargo_transferencia / 100))
-          : 0
-      : 0;
-    const vTotal = vSubtotal + vCostoEnvio + vRecargoTransf;
+    const vCalc = calculateOrderFinancials({
+      items: items.map(i => ({ subtotal: i.precio * i.cantidad })),
+      descuentoPorcentaje: 0,
+      recargoPorcentaje: 0,
+      payment: {
+        formaPago: metodoPago === "transferencia" ? "Transferencia" : metodoPago === "mixto" ? "Mixto" : "Efectivo",
+        porcentajeTransferencia: config?.recargo_transferencia || 0,
+        mixtoTransferencia,
+      },
+      costoEnvio: vCostoEnvio,
+    });
+    const vRecargoTransf = vCalc.transferSurcharge;
+    const vTotal = vCalc.totalFinal;
 
     try {
       // Get next number with retry for unique constraint
@@ -724,16 +743,20 @@ export default function CheckoutPage() {
 
       if (error) throw error;
 
-      const itemRows = items.map((item) => ({
+      const itemRows = items.map((item) => {
+        const discInfo = itemDiscountMap[item.id] || { originalPrice: item.precio, discountPct: 0 };
+        return {
         pedido_id: pedido.id,
         producto_id: item.id.split("_")[0],
         nombre: item.nombre,
         presentacion: item.presentacion || "Unidad",
         cantidad: item.cantidad,
-        precio_unitario: item.precio,
-        subtotal: item.precio * item.cantidad,
+        precio_unitario: discInfo.originalPrice,
+        descuento: Math.round(discInfo.discountPct * 100) / 100,
+        subtotal: Math.round(discInfo.originalPrice * item.cantidad * (1 - discInfo.discountPct / 100)),
         unidades_por_presentacion: item.unidades_por_presentacion || 1,
-      }));
+        };
+      });
 
       const { error: itemsError } = await supabase.from("pedido_tienda_items").insert(itemRows);
       if (itemsError) throw itemsError;
@@ -767,7 +790,7 @@ export default function CheckoutPage() {
         moneda: "Peso",
         subtotal: vSubtotal,
         descuento_porcentaje: 0,
-        recargo_porcentaje: vRecargoTransf > 0 ? (config?.recargo_transferencia || 0) : 0,
+        recargo_porcentaje: 0,
         total: vTotal,
         monto_efectivo: metodoPago === "mixto" ? mixtoEfectivo : (metodoPago === "efectivo" ? vTotal : 0),
         monto_transferencia: metodoPago === "mixto" ? (mixtoTransferencia + vRecargoTransf) : (metodoPago === "transferencia" ? vTotal : 0),
@@ -792,13 +815,19 @@ export default function CheckoutPage() {
           const isCombo = (stockData || []).some((p: any) => p.id === prodId && p.es_combo);
           const presCost = presCostMap[prodId]?.[String(presUnitsVal)];
           const costoUnit = presCost ? presCost : isCombo ? (costoMap[prodId] || 0) : (costoMap[prodId] || 0) * presUnitsVal;
+          // Use original price + discount % (same as POS) so receipts show the discount
+          const discInfo = itemDiscountMap[item.id] || { originalPrice: item.precio, discountPct: 0 };
+          const precioOriginal = discInfo.originalPrice;
+          const descPct = Math.round(discInfo.discountPct * 100) / 100; // clean rounding
+          const subtotalItem = Math.round(precioOriginal * item.cantidad * (1 - descPct / 100));
           return {
             venta_id: venta.id,
             producto_id: prodId,
             descripcion: item.nombre.includes(item.presentacion || "") ? item.nombre : `${item.nombre} (${item.presentacion || "Unidad"})`,
             cantidad: item.cantidad,
-            precio_unitario: item.precio,
-            subtotal: item.precio * item.cantidad,
+            precio_unitario: precioOriginal,
+            descuento: descPct,
+            subtotal: subtotalItem,
             unidad_medida: presUnitsVal > 1 ? `x${presUnitsVal} un` : "Un",
             presentacion: item.presentacion || "Unidad",
             unidades_por_presentacion: presUnitsVal,

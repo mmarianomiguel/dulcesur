@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF } from "@/lib/formatters";
+import { recalcFromVenta } from "@/lib/order-calc";
 import { showAdminToast } from "@/components/admin-toast";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -367,13 +368,14 @@ export default function RemitosPage() {
     setPrintRemito(r);
     setPrintLineItems(lineItems);
     // Build sale object and show preview
+    const rCalc = recalcFromVenta({ subtotal: r.subtotal, descuento_porcentaje: r.descuento_porcentaje || 0, recargo_porcentaje: r.recargo_porcentaje || 0, total: r.total });
     setPrintSaleObj({
       numero: r.numero,
       total: r.total,
       subtotal: r.subtotal,
-      descuento: Math.round(r.subtotal * (r.descuento_porcentaje || 0) / 100),
-      recargo: Math.round(r.subtotal * (r.recargo_porcentaje || 0) / 100),
-      transferSurcharge: 0,
+      descuento: rCalc.descuentoMonto,
+      recargo: rCalc.recargoMonto,
+      transferSurcharge: rCalc.transferSurcharge,
       tipoComprobante: r.tipo_comprobante,
       formaPago: r.forma_pago,
       moneda: r.moneda || "ARS",

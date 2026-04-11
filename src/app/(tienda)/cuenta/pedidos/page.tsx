@@ -6,6 +6,7 @@ import { ArrowLeft, Package, ChevronDown, ChevronUp, ChevronRight, Calendar, Has
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
 import { formatCurrency } from "@/lib/formatters";
+import { recalcFromVenta } from "@/lib/order-calc";
 
 interface ComboComponent {
   producto_id: string;
@@ -21,6 +22,7 @@ interface PedidoItem {
   cantidad: number;
   precio_unitario: number;
   descuento?: number;
+  subtotal?: number;
   producto_id?: string;
   es_combo?: boolean;
   combo_items?: ComboComponent[];
@@ -106,7 +108,7 @@ export default function PedidosPage() {
       const [{ data: authRec, error: authErr }, { data }] = await Promise.all([
         supabase.from("clientes_auth").select("cliente_id").eq("id", id).single(),
         supabase.from("pedidos_tienda")
-          .select("id, numero, created_at, estado, total, metodo_pago, monto_efectivo, monto_transferencia, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, unidades_por_presentacion, producto_id)")
+          .select("id, numero, created_at, estado, total, metodo_pago, monto_efectivo, monto_transferencia, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, producto_id)")
           .eq("cliente_auth_id", id)
           .order("created_at", { ascending: false }),
       ]);
@@ -458,6 +460,7 @@ export default function PedidosPage() {
               cantidad: item.cantidad,
               precio_unitario: item.precio_unitario,
               descuento: item.descuento || 0,
+              subtotal: item.subtotal ?? (item.precio_unitario * item.cantidad),
               producto_id: item.producto_id || undefined,
               es_combo: !!(item.producto_id && comboMap[item.producto_id]),
               combo_items: item.producto_id ? comboMap[item.producto_id] || undefined : undefined,
@@ -683,6 +686,7 @@ export default function PedidosPage() {
                     cantidad: item.cantidad,
                     precio_unitario: item.precio_unitario,
                     descuento: item.descuento || 0,
+                    subtotal: item.subtotal,
                     es_combo: item.es_combo,
                     combo_items: item.combo_items,
                   })) : (pedido.venta?.items || []).map((item, idx) => ({
@@ -693,6 +697,7 @@ export default function PedidosPage() {
                     cantidad: item.cantidad,
                     precio_unitario: item.precio_unitario,
                     descuento: item.descuento || 0,
+                    subtotal: item.subtotal,
                     es_combo: item.es_combo,
                     combo_items: item.combo_items,
                   }))).map((item) => {
@@ -756,7 +761,7 @@ export default function PedidosPage() {
                         {(isBox || isMedio) && <span className="block text-[10px] text-gray-400">{item.presentacion}</span>}
                       </td>
                       <td className="py-3 text-right font-semibold text-gray-900">
-                        {formatCurrency(item.precio_unitario * item.cantidad)}
+                        {formatCurrency(item.subtotal ?? (item.precio_unitario * item.cantidad))}
                       </td>
                     </tr>
                     {hasComboDetail && isComboExpanded && item.combo_items!.map((ci, ciIdx) => (
@@ -779,30 +784,41 @@ export default function PedidosPage() {
                 </tbody>
                 <tfoot>
                   {(() => {
-                    const itemsTotal = pedido.items.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
+                    const itemsTotal = pedido.items.reduce((s, i) => s + (i.subtotal ?? (i.precio_unitario * i.cantidad)), 0);
                     const ncTotal = pedido.venta?.notas_credito?.reduce((s, nc) => s + nc.total, 0) || 0;
-                    const baseAfterNC = itemsTotal - ncTotal;
-                    const fp = (pedido.venta?.forma_pago || "").toLowerCase();
                     const recPct = (pedido.venta as any)?.recargo_porcentaje || 0;
-                    const mt = (pedido.venta as any)?.monto_transferencia || 0;
-                    const recargoBase = fp.includes("mixto") ? Math.min(mt, baseAfterNC) : (fp.includes("transfer") ? baseAfterNC : 0);
-                    const recargoAmt = recPct > 0 && recargoBase > 0 ? Math.round(recargoBase * recPct) / 100 : 0;
+                    const vCalc = pedido.venta ? recalcFromVenta({
+                      subtotal: (pedido.venta as any)?.subtotal || itemsTotal,
+                      descuento_porcentaje: (pedido.venta as any)?.descuento_porcentaje || 0,
+                      recargo_porcentaje: recPct,
+                      total: pedido.venta.total,
+                    }) : null;
+                    // Combined surcharge: recargoMonto (order-level or legacy transfer %) + transferSurcharge (residual)
+                    const recargoOrden = vCalc?.recargoMonto || 0;
+                    const recargoTransf = vCalc?.transferSurcharge || 0;
+                    const recargoTotal = recargoOrden + recargoTransf;
                     return (
                       <>
                         <tr className="border-t border-gray-200">
                           <td colSpan={4} className="py-2 text-right text-gray-500 text-xs">Subtotal</td>
                           <td className="py-2 text-right font-medium text-gray-700">{formatCurrency(itemsTotal)}</td>
                         </tr>
+                        {vCalc && vCalc.descuentoMonto > 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-1 text-right text-red-500 text-xs">Descuento ({(pedido.venta as any)?.descuento_porcentaje}%)</td>
+                            <td className="py-1 text-right font-medium text-red-500">-{formatCurrency(vCalc.descuentoMonto)}</td>
+                          </tr>
+                        )}
                         {ncTotal > 0 && (
                           <tr>
                             <td colSpan={4} className="py-1 text-right text-red-500 text-xs">Nota de Crédito</td>
                             <td className="py-1 text-right font-medium text-red-500">-{formatCurrency(ncTotal)}</td>
                           </tr>
                         )}
-                        {recargoAmt > 0 && (
+                        {recargoTotal > 0 && (
                           <tr>
-                            <td colSpan={4} className="py-1 text-right text-violet-500 text-xs">Recargo transferencia ({recPct}%)</td>
-                            <td className="py-1 text-right font-medium text-violet-600">+{formatCurrency(recargoAmt)}</td>
+                            <td colSpan={4} className="py-1 text-right text-violet-500 text-xs">Recargo transferencia</td>
+                            <td className="py-1 text-right font-medium text-violet-600">+{formatCurrency(recargoTotal)}</td>
                           </tr>
                         )}
                         <tr className="border-t border-gray-200">

@@ -1,6 +1,7 @@
 "use client";
 
 import { nowTimeARG, formatCurrency } from "@/lib/formatters";
+import { recalcFromVenta } from "@/lib/order-calc";
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,6 +67,7 @@ interface PedidoItem {
   presentacion: string;
   cantidad: number;
   precio_unitario: number;
+  descuento?: number;
   subtotal: number;
   unidades_por_presentacion: number;
 }
@@ -759,9 +761,11 @@ export default function PedidosOnlinePage() {
           else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
           else if (v.forma_pago === "Mixto") { pagoEf = v.monto_efectivo || 0; pagoTr = v.monto_transferencia || 0; }
         }
-        const descAmt = Math.round((v.subtotal || pedido.subtotal) * (v.descuento_porcentaje || 0) / 100);
-        const recAmt = Math.round(((v.subtotal || pedido.subtotal) - descAmt) * (v.recargo_porcentaje || 0) / 100);
-        const surchargeCalc = Math.max(0, v.total - ((v.subtotal || pedido.subtotal) - descAmt + recAmt));
+        const ventaSub = v.subtotal || pedido.subtotal;
+        const ventaCalc = recalcFromVenta({ subtotal: ventaSub, descuento_porcentaje: v.descuento_porcentaje || 0, recargo_porcentaje: v.recargo_porcentaje || 0, total: v.total });
+        const descAmt = ventaCalc.descuentoMonto;
+        const recAmt = ventaCalc.recargoMonto;
+        const surchargeCalc = ventaCalc.transferSurcharge;
         // Derive formaPago from actual caja_movimientos payments (overrides v.forma_pago which may be stale)
         let derivedFormaPago: string;
         if ((movs || []).length > 0) {
@@ -810,8 +814,8 @@ export default function PedidosOnlinePage() {
       qty: i.cantidad,
       unit: "Un",
       price: i.precio_unitario,
-      discount: 0,
-      subtotal: i.precio_unitario * i.cantidad,
+      discount: i.descuento || 0,
+      subtotal: i.subtotal ?? (i.precio_unitario * i.cantidad),
       presentacion: i.presentacion,
       unidades_por_presentacion: i.unidades_por_presentacion || 1,
       stock: 0,
@@ -1072,7 +1076,8 @@ export default function PedidosOnlinePage() {
           presentacion: i.presentacion,
           cantidad: i.cantidad,
           precio_unitario: i.precio_unitario,
-          subtotal: i.precio_unitario * i.cantidad,
+          descuento: i.descuento || 0,
+          subtotal: i.subtotal ?? (i.precio_unitario * i.cantidad),
           unidades_por_presentacion: i.unidades_por_presentacion,
         })) || []}
         pagos={detailPayments}

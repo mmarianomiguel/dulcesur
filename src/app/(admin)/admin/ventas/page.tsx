@@ -59,6 +59,7 @@ import {
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale } from "@/components/receipt-print-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { calculateOrderFinancials } from "@/lib/order-calc";
 
 // ---------- types ----------
 interface Presentacion {
@@ -456,21 +457,28 @@ export default function VentasPage() {
     );
   }, [clients, clientSearch]);
 
-  const subtotal = useMemo(() => items.reduce((acc, i) => acc + i.subtotal, 0), [items]);
-  const descuentoAmount = subtotal * (descuento / 100);
-  const recargoAmount = subtotal * (recargo / 100);
-  const baseTotal = subtotal - descuentoAmount + recargoAmount;
+  const orderCalc = useMemo(() => calculateOrderFinancials({
+    items: items.map(i => ({ subtotal: i.subtotal })),
+    descuentoPorcentaje: descuento,
+    recargoPorcentaje: recargo,
+    payment: {
+      formaPago,
+      porcentajeTransferencia,
+      mixtoEfectivo,
+      mixtoTransferencia,
+      mixtoCuentaCorriente,
+    },
+  }), [items, descuento, recargo, formaPago, porcentajeTransferencia, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente]);
+
+  const subtotal = orderCalc.subtotalBruto;
+  const descuentoAmount = orderCalc.descuentoMonto;
+  const recargoAmount = orderCalc.recargoMonto;
+  const baseTotal = orderCalc.totalBase;
+  const transferSurcharge = orderCalc.transferSurcharge;
+  const total = orderCalc.totalFinal;
 
   // Calculate transfer surcharge — ONLY on the current order portion, NEVER on saldo pendiente
   const saldoPendienteCliente = cobrarSaldo && selectedClient && selectedClient.saldo > 0 ? selectedClient.saldo : 0;
-  const transferSurcharge = formaPago === "Transferencia"
-    ? baseTotal * (porcentajeTransferencia / 100)
-    : formaPago === "Mixto"
-      // Cap surcharge base at order amount: only the transfer portion covering THIS order
-      ? Math.min(mixtoTransferencia, Math.max(0, baseTotal - mixtoEfectivo - mixtoCuentaCorriente)) * (porcentajeTransferencia / 100)
-      : 0;
-
-  const total = baseTotal + transferSurcharge;
 
   const cashReceivedNum = parseFloat(cashReceived) || 0;
   const totalACobrar = total + saldoPendienteCliente;

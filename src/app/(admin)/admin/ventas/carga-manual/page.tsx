@@ -2,6 +2,7 @@
 
 import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback } from "react";
+import { calculateOrderFinancials } from "@/lib/order-calc";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
@@ -274,10 +275,15 @@ export default function CargaManualPage() {
     );
   };
 
-  const subtotal = items.reduce((acc, i) => acc + i.subtotal, 0);
-  const descuentoAmount = subtotal * (descuento / 100);
-  const recargoAmount = (subtotal - descuentoAmount) * (recargo / 100);
-  const total = subtotal - descuentoAmount + recargoAmount;
+  const orderCalc = calculateOrderFinancials({
+    items: items.map(i => ({ subtotal: i.subtotal })),
+    descuentoPorcentaje: descuento,
+    recargoPorcentaje: recargo,
+  });
+  const subtotal = orderCalc.subtotalBruto;
+  const descuentoAmount = orderCalc.descuentoMonto;
+  const recargoAmount = orderCalc.recargoMonto;
+  const total = orderCalc.totalFinal;
 
   const handleSave = async () => {
     if (items.length === 0) return;
