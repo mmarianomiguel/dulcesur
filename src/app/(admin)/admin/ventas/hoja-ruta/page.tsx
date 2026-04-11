@@ -1990,11 +1990,13 @@ export default function HojaDeRutaPage() {
                     }
 
                     // CC portion (Mixto remainder or full CC) — atomic saldo
-                    // For full CC, use pre-surcharge base (CC has no transfer surcharge)
+                    // Combined with cobro saldo in a SINGLE RPC call to prevent race conditions.
                     const ccAmount = result.metodo === "Cuenta Corriente" ? preDebeGrupo : result.cuentaCorriente;
-                    if (ccAmount > 0 && payVenta.cliente_id) {
-                      // Atomic increment
-                      const { data: newSaldoCC } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: ccAmount });
+                    const saldoAllocTotalForRPC = result.cobrarSaldo ? result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0) : 0;
+                    const netSaldoChange = ccAmount - saldoAllocTotalForRPC; // +CC -cobro in one shot
+                    if ((ccAmount > 0 || saldoAllocTotalForRPC > 0) && payVenta.cliente_id) {
+                      // Single atomic saldo update: +CC -cobroSaldo
+                      const { data: newSaldoCC } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: netSaldoChange });
                       let runningSaldo = newSaldoCC ?? 0;
                       // Per-venta CC entries (saldo snapshots)
                       let ccUsed = 0;
@@ -2025,17 +2027,10 @@ export default function HojaDeRutaPage() {
                           referencia_tipo: "cobro_saldo",
                         });
 
-                        const { data: newSaldo2, error: saldoErr2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: -totalAllocated });
-                        let saldoAfter2: number;
-                        if (saldoErr2 || newSaldo2 == null) {
-                          // Fallback: direct update if RPC fails
-                          console.error("[Hoja Ruta] Error reduciendo saldo por cobro_saldo:", saldoErr2?.message);
-                          const { data: currCli } = await supabase.from("clientes").select("saldo").eq("id", payVenta.cliente_id).single();
-                          saldoAfter2 = Math.max(0, Math.round(((currCli?.saldo ?? 0) - totalAllocated) * 100) / 100);
-                          await supabase.from("clientes").update({ saldo: saldoAfter2 }).eq("id", payVenta.cliente_id);
-                        } else {
-                          saldoAfter2 = Math.max(0, newSaldo2);
-                        }
+                        // Saldo already updated in the combined RPC above (+CC -cobro)
+                        // Read current saldo for CC entry snapshots
+                        const { data: saldoNow } = await supabase.from("clientes").select("saldo").eq("id", payVenta.cliente_id).single();
+                        const saldoAfter2 = Math.max(0, saldoNow?.saldo ?? 0);
                         // Create per-venta CC haber entries (so each venta shows the cobro)
                         let runningSaldo2 = saldoAfter2 + totalAllocated; // reconstruct pre-update
                         for (const alloc of result.saldoAllocations) {
