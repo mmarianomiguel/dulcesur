@@ -368,12 +368,17 @@ export default function HojaDeRutaPage() {
     // Fetch payments for these orders + NC refunds
     if (rows.length > 0) {
       const ventaIds = rows.map((v) => v.id);
-      const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
+      const [{ data: movs }, { data: cobroSaldoMovs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
         supabase
           .from("caja_movimientos")
           .select("referencia_id, monto, metodo_pago, cuenta_bancaria, created_at")
           .eq("tipo", "ingreso")
           .eq("referencia_tipo", "venta")
+          .in("referencia_id", ventaIds),
+        supabase
+          .from("caja_movimientos")
+          .select("referencia_id, monto, metodo_pago, cuenta_bancaria, created_at")
+          .eq("referencia_tipo", "cobro_saldo")
           .in("referencia_id", ventaIds),
         supabase
           .from("ventas")
@@ -425,6 +430,11 @@ export default function HojaDeRutaPage() {
           if (!pagosMap[originalVentaId]) pagosMap[originalVentaId] = [];
           pagosMap[originalVentaId].push({ monto: nc.total, metodo: "Nota de Crédito" });
         }
+      });
+      // Add cobro saldo anterior entries
+      (cobroSaldoMovs || []).forEach((cs: any) => {
+        if (!pagosMap[cs.referencia_id]) pagosMap[cs.referencia_id] = [];
+        pagosMap[cs.referencia_id].push({ monto: Math.abs(cs.monto), metodo: "Cobro saldo anterior", cuenta_bancaria: cs.cuenta_bancaria || undefined, fecha_hora: cs.created_at || undefined });
       });
       setHistorialPagos(pagosMap);
     } else {
@@ -564,8 +574,9 @@ export default function HojaDeRutaPage() {
     setDetailVenta(venta);
     setDetailPagos([]);
     setDetailOpen(true);
-    const [{ data: movs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
+    const [{ data: movs }, { data: cobroSaldoMovs }, { data: ncDirect }, { data: facturas }] = await Promise.all([
       supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, cuenta_bancaria, created_at").eq("referencia_id", venta.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+      supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion, cuenta_bancaria, created_at").eq("referencia_id", venta.id).eq("referencia_tipo", "cobro_saldo"),
       supabase.from("ventas").select("id, total").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       supabase.from("ventas").select("id, remito_origen_id").eq("remito_origen_id", venta.id).ilike("tipo_comprobante", "Factura%"),
     ]);
@@ -586,6 +597,12 @@ export default function HojaDeRutaPage() {
     const ncTotal = [...(ncDirect || []), ...ncViaFactura].reduce((s: number, nc: any) => s + (nc.total || 0), 0);
     if (ncTotal > 0) {
       pagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
+    }
+    // Add cobro saldo anterior entries
+    if (cobroSaldoMovs && cobroSaldoMovs.length > 0) {
+      for (const cs of cobroSaldoMovs) {
+        pagos.push({ metodo: `Cobro saldo anterior`, monto: Math.abs(cs.monto), cuenta_bancaria: cs.cuenta_bancaria, fecha_hora: cs.created_at });
+      }
     }
     setDetailPagos(pagos);
   };

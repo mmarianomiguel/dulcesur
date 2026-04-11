@@ -242,10 +242,10 @@ export default function PedidosPage() {
         }
       }
 
-      // Build saldo map
+      // Build saldo map (exclude anulada — cancelled ventas have no pending debt)
       const saldoMap: Record<string, number> = {};
       for (const v of allVentas) {
-        saldoMap[v.id] = hadCCDebt[v.id] ? Math.max(0, v.total - (v.monto_pagado || 0)) : 0;
+        saldoMap[v.id] = (v.estado === "anulada") ? 0 : (hadCCDebt[v.id] ? Math.max(0, v.total - (v.monto_pagado || 0)) : 0);
       }
 
       // Process client CC habers

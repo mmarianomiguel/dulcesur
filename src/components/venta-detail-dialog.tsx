@@ -41,7 +41,8 @@ import {
   XCircle,
   Search,
 } from "lucide-react";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { supabase } from "@/lib/supabase";
 
 // ─── Types ───
 export interface VentaDetailItem {
@@ -204,6 +205,16 @@ export function VentaDetailDialog({
   const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [searchHighlight, setSearchHighlight] = useState(0);
+  const [configRecargoPct, setConfigRecargoPct] = useState(0);
+  const configFetched = useRef(false);
+
+  // Fetch recargo_transferencia from config once
+  useEffect(() => {
+    if (configFetched.current) return;
+    configFetched.current = true;
+    supabase.from("tienda_config").select("recargo_transferencia").limit(1).single()
+      .then(({ data: tc }) => { if (tc && (tc as any).recargo_transferencia > 0) setConfigRecargoPct((tc as any).recargo_transferencia); });
+  }, []);
 
   // Reset state when dialog opens/closes
   useEffect(() => {
@@ -755,7 +766,7 @@ export function VentaDetailDialog({
                   )}
                   {ventaCalc.transferSurcharge > 0 && (
                     <p className="text-muted-foreground">
-                      Recargo transferencia ({recPct}%):
+                      Recargo transferencia ({recPct || configRecargoPct}%):
                       <span className="font-medium text-violet-600 ml-1">+{formatCurrency(ventaCalc.transferSurcharge)}</span>
                     </p>
                   )}

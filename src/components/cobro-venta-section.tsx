@@ -546,7 +546,7 @@ export function CobroVentaSection({
             <IconBook className="w-4 h-4 text-blue-500 shrink-0" />
             <div>
               <p className="text-xs font-medium text-blue-800">Se carga {formatCurrency(montoVenta)} a la cuenta corriente del cliente</p>
-              <p className="text-[10px] text-blue-600">Saldo actual: {formatCurrency(clienteSaldo)} &rarr; Nuevo saldo: {formatCurrency(clienteSaldo + montoVenta)}</p>
+              <p className="text-[10px] text-blue-600">Saldo actual: {formatCurrency(clienteSaldo)} &rarr; Nuevo saldo: {formatCurrency(clienteSaldo + montoVenta - (cobrarSaldo ? saldoTotalAsignado : 0))}</p>
             </div>
           </div>
         </div>
@@ -559,7 +559,7 @@ export function CobroVentaSection({
             <IconBook className="w-4 h-4 text-blue-500 shrink-0" />
             <div>
               <p className="text-xs font-medium text-blue-800">{formatCurrency(mixtoCuentaCorriente)} queda en cuenta corriente</p>
-              <p className="text-[10px] text-blue-600">Saldo actual: {formatCurrency(clienteSaldo)} &rarr; Nuevo saldo: {formatCurrency(clienteSaldo + mixtoCuentaCorriente)}</p>
+              <p className="text-[10px] text-blue-600">Saldo actual: {formatCurrency(clienteSaldo)} &rarr; Nuevo saldo: {formatCurrency(clienteSaldo + mixtoCuentaCorriente - (cobrarSaldo ? saldoTotalAsignado : 0))}</p>
             </div>
           </div>
         </div>
