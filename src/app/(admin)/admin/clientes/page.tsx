@@ -506,11 +506,14 @@ export default function ClientesPage() {
       return tipo?.replace(/Factura\s*/i, "FC ").replace(/Remito\s*/i, "RM ") || "";
     };
 
-    // ═══ LIBRO DIARIO — Algoritmo simple y correcto ═══
+    // ═══ LIBRO DIARIO — Fórmula definitiva ═══
     //
-    // DEBE = venta.total (SIEMPRE, sin excepciones — incluye recargos)
-    // HABER = NC totals + pagos reales (caja_movimientos + CC cobros)
-    // SALDO = DEBE - HABER
+    // SALDO = venta.total - monto_pagado (SIEMPRE)
+    //
+    // El total ya incluye todo: recargos, NCs, ajustes.
+    // monto_pagado es lo realmente cobrado (efectivo + transferencia, sin CC).
+    // NCs vinculadas se muestran como INFO (sin debe/haber) porque ya están en el total.
+    // Standalone NCs (sin padre) se restan del debe.
 
     // Pre-compute: NC ventas by parent
     const ncVentasByParent = new Map<string, typeof ventas>();
@@ -521,65 +524,56 @@ export default function ClientesPage() {
         ncVentasByParent.set(v.remito_origen_id, arr);
       }
     }
-
-    // Track NC venta IDs that are handled inline (grouped with parent)
     const handledNCIds = new Set<string>();
 
     for (const v of ventas || []) {
       const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
 
-      // Skip NCs linked to a parent — they're shown inline with parent
-      if (isNC && v.remito_origen_id && handledNCIds.has(v.id)) continue;
+      // Linked NCs: skip — shown as info under parent
+      if (isNC && v.remito_origen_id) continue;
+      // Standalone NC (no parent): show as haber
       if (isNC) {
-        if (!v.remito_origen_id) {
-          // Standalone NC
-          const comp = `${shortCompType(v.tipo_comprobante)} ${v.numero}`.replace(/\s+/g, " ").trim();
-          entries.push({
-            id: `v-${v.id}-nc`, fecha: v.fecha, created_at: v.created_at || v.fecha,
-            comprobante: comp, debe: 0, haber: v.total, forma_pago: v.forma_pago || "",
-            descripcion: "", venta_id: v.id,
-          });
-        }
+        const comp = `${shortCompType(v.tipo_comprobante)} ${v.numero}`.replace(/\s+/g, " ").trim();
+        entries.push({
+          id: `v-${v.id}-nc`, fecha: v.fecha, created_at: v.created_at || v.fecha,
+          comprobante: comp, debe: 0, haber: v.total, forma_pago: v.forma_pago || "",
+          descripcion: "", venta_id: v.id,
+        });
         continue;
       }
 
       const comp = `${shortCompType(v.tipo_comprobante)} ${v.numero}`.replace(/\s+/g, " ").trim();
       const fp = v.forma_pago || "";
       const cajaEntries = cajaByVenta.get(v.id);
-      const cajaTotal = cajaEntries ? cajaEntries.reduce((s, e) => s + e.monto, 0) : 0;
       const montoPagado = v.monto_pagado || 0;
       const debeFormaPago = (fp === "Cuenta Corriente" || fp === "Pendiente") ? fp : "";
       const baseTs = v.created_at || v.fecha;
 
-      // ── 1. PEDIDO → debe = venta.total (siempre) ──
+      // ── 1. PEDIDO → debe = venta.total (ya incluye NC y recargos) ──
       entries.push({
         id: `v-${v.id}-debe`, fecha: v.fecha, created_at: baseTs,
         comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
       });
 
-      // ── 2. NOTAS DE CRÉDITO → haber (grouped after pedido) ──
+      // ── 2. NCs VINCULADAS → info only (no afectan debe/haber, ya están en el total) ──
       const linkedNCs = ncVentasByParent.get(v.id) || [];
       for (const nc of linkedNCs) {
         const ncComp = `${shortCompType(nc.tipo_comprobante)} ${nc.numero}`.replace(/\s+/g, " ").trim();
         entries.push({
-          id: `v-${nc.id}-nc`, fecha: v.fecha,
+          id: `v-${nc.id}-nc-info`, fecha: v.fecha,
           created_at: baseTs + "T00:00:00.2",
-          comprobante: ncComp, debe: 0, haber: nc.total, forma_pago: nc.forma_pago || "",
-          descripcion: "", venta_id: nc.id,
+          comprobante: ncComp, debe: 0, haber: 0, forma_pago: nc.forma_pago || "",
+          descripcion: `NC aplicada -${formatCurrency(nc.total)}`, venta_id: nc.id,
         });
         handledNCIds.add(nc.id);
       }
 
-      // ── 3. PAGOS → haber ──
-      // Cap: min(monto_pagado, total - NC) para que el running saldo no quede negativo
-      // cuando la venta fue pagada completa y después se hizo NC.
-      const ncTotalForThis = linkedNCs.reduce((s, nc) => s + nc.total, 0);
-      const maxPayable = Math.max(0, v.total - ncTotalForThis);
-      const cappedPaid = Math.min(montoPagado, maxPayable);
-      if (!isND && cappedPaid > 0) {
+      // ── 3. PAGOS → haber = monto_pagado (lo realmente cobrado) ──
+      if (!isND && montoPagado > 0) {
         if (cajaEntries && cajaEntries.length > 0) {
-          let remaining = cappedPaid;
+          // Mostrar pagos de caja, capeados a monto_pagado
+          let remaining = montoPagado;
           for (let ci = 0; ci < cajaEntries.length; ci++) {
             if (remaining <= 0) break;
             const ce = cajaEntries[ci];
@@ -592,7 +586,6 @@ export default function ClientesPage() {
             });
             remaining = Math.round((remaining - show) * 100) / 100;
           }
-          // Si queda remaining (cobro allocation no en caja)
           if (remaining > 0.5) {
             entries.push({
               id: `v-${v.id}-cobro`, fecha: v.fecha,
@@ -602,11 +595,10 @@ export default function ClientesPage() {
             });
           }
         } else {
-          // Sin caja entries: mostrar pago capeado
           entries.push({
             id: `v-${v.id}-pago`, fecha: v.fecha,
             created_at: baseTs + "T00:00:00.4",
-            comprobante: comp, debe: 0, haber: cappedPaid, forma_pago: fp || "Pago",
+            comprobante: comp, debe: 0, haber: montoPagado, forma_pago: fp || "Pago",
             descripcion: "", venta_id: v.id,
           });
         }
@@ -627,35 +619,16 @@ export default function ClientesPage() {
     });
     setMovCCRows(ccRows);
 
-    // Totales: calcular desde ventas directamente
-    // PENDIENTE = SUM(total) - SUM(NC) = neto facturado
-    // COBRADO = SUM(MIN(monto_pagado, total - NC_vinculada)) = pagado sin exceder lo adeudado
-    // SALDO = PENDIENTE - COBRADO
-    //
-    // El cap evita que ventas pagadas completas + NC generen "saldo a favor" fantasma.
-    const ncTotalByParent = new Map<string, number>();
-    for (const v of ventas || []) {
-      if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
-        ncTotalByParent.set(v.remito_origen_id, (ncTotalByParent.get(v.remito_origen_id) || 0) + v.total);
-      }
-    }
-    const ventasPendiente = (ventas || [])
-      .filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"))
-      .reduce((s: number, v: any) => s + v.total, 0);
-    const ncTotalResumen = (ventas || [])
-      .filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito"))
-      .reduce((s: number, v: any) => s + v.total, 0);
-    const ventasCobrado = (ventas || [])
-      .filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"))
-      .reduce((s: number, v: any) => {
-        const ncForThis = ncTotalByParent.get(v.id) || 0;
-        const maxCobrable = Math.max(0, v.total - ncForThis);
-        return s + Math.min(v.monto_pagado || 0, maxCobrable);
-      }, 0);
-    const totalPendiente = Math.round((ventasPendiente - ncTotalResumen) * 100) / 100;
-    const totalCobrado = Math.round(ventasCobrado * 100) / 100;
-    const saldoCalculado = Math.round((totalPendiente - totalCobrado) * 100) / 100;
-    setMovCCTotals({ debe: totalPendiente, haber: totalCobrado, saldo: saldoCalculado, saldoInicial: 0 });
+    // Totales: SALDO = SUM(total) - SUM(monto_pagado) para ventas no-NC, no-ND
+    // El total ya incluye todo (NCs vinculadas, recargos).
+    // Standalone NCs (sin padre) se restan del pendiente.
+    const regularVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"));
+    const standaloneNCs = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito") && !v.remito_origen_id);
+    const totalPendiente = Math.round(regularVentas.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
+    const totalStandaloneNC = Math.round(standaloneNCs.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
+    const totalCobrado = Math.round(regularVentas.reduce((s: number, v: any) => s + (v.monto_pagado || 0), 0) * 100) / 100;
+    const saldoCalculado = Math.round((totalPendiente - totalStandaloneNC - totalCobrado) * 100) / 100;
+    setMovCCTotals({ debe: totalPendiente - totalStandaloneNC, haber: totalCobrado, saldo: saldoCalculado, saldoInicial: 0 });
 
     // === Tab Cobros ===
     let cobrosQuery = supabase
@@ -679,23 +652,14 @@ export default function ClientesPage() {
     const { data: freshCli } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
     const saldoActual = freshCli?.saldo ?? 0;
 
-    // ═══ Recalcular saldo — algoritmo simple y correcto ═══
-    // PENDIENTE = SUM(venta.total) - SUM(NC.total) = neto facturado
-    // COBRADO = SUM(monto_pagado) = total pagado
-    // SALDO = PENDIENTE - COBRADO
+    // ═══ Recalcular saldo — SALDO = SUM(total) - SUM(monto_pagado) ═══
+    // total ya incluye NCs vinculadas y recargos.
+    // Standalone NCs (sin padre) se restan del pendiente.
 
     const { data: allVentas } = await supabase.from("ventas")
       .select("id, numero, total, monto_pagado, tipo_comprobante, forma_pago, remito_origen_id")
       .eq("cliente_id", clienteId).neq("estado", "anulada");
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
-
-    // Build NC totals per parent venta
-    const ncByParentRecalc = new Map<string, number>();
-    for (const v of allVentas) {
-      if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
-        ncByParentRecalc.set(v.remito_origen_id, (ncByParentRecalc.get(v.remito_origen_id) || 0) + v.total);
-      }
-    }
 
     let totalDebe = 0;
     let totalHaber = 0;
@@ -705,20 +669,17 @@ export default function ClientesPage() {
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
 
       if (isNC) {
-        // NC reduce el pendiente (neto facturado)
-        totalDebe -= v.total;
+        // Solo standalone NCs (sin padre) — las vinculadas ya están en el total del padre
+        if (!v.remito_origen_id) totalDebe -= v.total;
         continue;
       }
 
-      // DEBE = venta.total
+      // DEBE = venta.total (incluye todo: recargos, NC vinculada)
       totalDebe += v.total;
 
-      // HABER = MIN(monto_pagado, total - NC_vinculada)
-      // Cap para que ventas pagadas completas + NC no generen saldo a favor fantasma
+      // HABER = monto_pagado (lo realmente cobrado)
       if (!isND) {
-        const ncForThis = ncByParentRecalc.get(v.id) || 0;
-        const maxCobrable = Math.max(0, v.total - ncForThis);
-        totalHaber += Math.min(v.monto_pagado || 0, maxCobrable);
+        totalHaber += (v.monto_pagado || 0);
       }
     }
 

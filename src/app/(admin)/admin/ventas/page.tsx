@@ -1588,14 +1588,29 @@ export default function VentasPage() {
         observacion: despacho,
         metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
         lista_precio_id: listaPrecioId || null,
-        // monto_pagado: track how much was paid at POS (for pending invoice tracking)
+        // monto_pagado: how much was ACTUALLY paid for THIS sale (not old debt)
         // cobrarEnEntrega: 0 — cobro confirmed later from venta detail
+        // When cobrarSaldo is active, part of efectivo/transferencia pays old debt, not this sale.
         monto_pagado: cobrarEnEntrega
           ? 0
           : formaPago === "Efectivo" || formaPago === "Transferencia"
-            ? total  // fully paid at POS
+            ? (() => {
+                if (cobrarSaldo && saldoRealAntesDeTodo > 0) {
+                  // Part of the payment goes to old debt
+                  return Math.max(0, Math.round((total - saldoRealAntesDeTodo) * 100) / 100);
+                }
+                return total;
+              })()
             : formaPago === "Mixto"
-              ? Math.min(total, Math.round((mixtoEfectivo + mixtoTransferencia + transferSurcharge) * 100) / 100)  // non-CC portion + surcharge, capped at venta total
+              ? (() => {
+                  const cashForAll = mixtoEfectivo + mixtoTransferencia + transferSurcharge;
+                  if (cobrarSaldo && saldoRealAntesDeTodo > 0) {
+                    // Discount old debt from cash portion
+                    const cashForSale = Math.max(0, cashForAll - saldoRealAntesDeTodo);
+                    return Math.min(total, Math.round(cashForSale * 100) / 100);
+                  }
+                  return Math.min(total, Math.round(cashForAll * 100) / 100);
+                })()
               : 0,  // CC or Pendiente — nothing paid yet
         ...((formaPago === "Transferencia" || formaPago === "Mixto") && cuentaBancariaId ? {
           cuenta_transferencia_id: cuentaBancariaId,
