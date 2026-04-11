@@ -2025,8 +2025,17 @@ export default function HojaDeRutaPage() {
                           referencia_tipo: "cobro_saldo",
                         });
 
-                        const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: -totalAllocated });
-                        const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
+                        const { data: newSaldo2, error: saldoErr2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: payVenta.cliente_id, p_change: -totalAllocated });
+                        let saldoAfter2: number;
+                        if (saldoErr2 || newSaldo2 == null) {
+                          // Fallback: direct update if RPC fails
+                          console.error("[Hoja Ruta] Error reduciendo saldo por cobro_saldo:", saldoErr2?.message);
+                          const { data: currCli } = await supabase.from("clientes").select("saldo").eq("id", payVenta.cliente_id).single();
+                          saldoAfter2 = Math.max(0, Math.round(((currCli?.saldo ?? 0) - totalAllocated) * 100) / 100);
+                          await supabase.from("clientes").update({ saldo: saldoAfter2 }).eq("id", payVenta.cliente_id);
+                        } else {
+                          saldoAfter2 = Math.max(0, newSaldo2);
+                        }
                         // Create per-venta CC haber entries (so each venta shows the cobro)
                         let runningSaldo2 = saldoAfter2 + totalAllocated; // reconstruct pre-update
                         for (const alloc of result.saldoAllocations) {
