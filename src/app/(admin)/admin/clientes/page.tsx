@@ -556,24 +556,23 @@ export default function ClientesPage() {
         comprobante: comp, debe: v.total, haber: 0, forma_pago: debeFormaPago, descripcion: "", venta_id: v.id,
       });
 
-      // ── 2. NCs VINCULADAS → info only (no afectan debe/haber, ya están en el total) ──
+      // ── 2. NCs VINCULADAS → haber (muestra el monto que descuenta) ──
       const linkedNCs = ncVentasByParent.get(v.id) || [];
+      const ncTotalForThis = linkedNCs.reduce((s, nc) => s + nc.total, 0);
       for (const nc of linkedNCs) {
         const ncComp = `${shortCompType(nc.tipo_comprobante)} ${nc.numero}`.replace(/\s+/g, " ").trim();
         entries.push({
-          id: `v-${nc.id}-nc-info`, fecha: v.fecha,
+          id: `v-${nc.id}-nc`, fecha: v.fecha,
           created_at: baseTs + "T00:00:00.2",
-          comprobante: ncComp, debe: 0, haber: 0, forma_pago: nc.forma_pago || "",
-          descripcion: `NC aplicada -${formatCurrency(nc.total)}`, venta_id: nc.id,
+          comprobante: ncComp, debe: 0, haber: nc.total, forma_pago: nc.forma_pago || "",
+          descripcion: "", venta_id: nc.id,
         });
         handledNCIds.add(nc.id);
       }
 
       // ── 3. PAGOS → haber = monto_pagado, capeado a (total - NC) ──
-      // Si hay NC, monto_pagado puede incluir la parte cubierta por NC.
-      // Solo mostramos lo realmente cobrado en efectivo/transferencia.
-      const ncTotalForCap = linkedNCs.reduce((s, nc) => s + nc.total, 0);
-      const effectivePaid = Math.min(montoPagado, Math.max(0, v.total - ncTotalForCap));
+      // El pago real nunca excede lo que se debe después de la NC.
+      const effectivePaid = Math.min(montoPagado, Math.max(0, v.total - ncTotalForThis));
       if (!isND && effectivePaid > 0) {
         if (cajaEntries && cajaEntries.length > 0) {
           let remaining = effectivePaid;
@@ -622,16 +621,24 @@ export default function ClientesPage() {
     });
     setMovCCRows(ccRows);
 
-    // Totales: SALDO = SUM(total) - SUM(monto_pagado) para ventas no-NC, no-ND
-    // El total ya incluye todo (NCs vinculadas, recargos).
-    // Standalone NCs (sin padre) se restan del pendiente.
+    // Totales: consistente con las entries del libro
+    // PENDIENTE = SUM(total) - SUM(todas las NCs) = lo que se debe antes de pagos
+    // COBRADO = SUM(min(monto_pagado, total - NC_vinculada)) = lo pagado real
+    // SALDO = PENDIENTE - COBRADO
+    const allNCs = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito"));
     const regularVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"));
-    const standaloneNCs = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito") && !v.remito_origen_id);
-    const totalPendiente = Math.round(regularVentas.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
-    const totalStandaloneNC = Math.round(standaloneNCs.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
-    const totalCobrado = Math.round(regularVentas.reduce((s: number, v: any) => s + (v.monto_pagado || 0), 0) * 100) / 100;
-    const saldoCalculado = Math.round((totalPendiente - totalStandaloneNC - totalCobrado) * 100) / 100;
-    setMovCCTotals({ debe: totalPendiente - totalStandaloneNC, haber: totalCobrado, saldo: saldoCalculado, saldoInicial: 0 });
+    const totalBruto = Math.round(regularVentas.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
+    const totalAllNC = Math.round(allNCs.reduce((s: number, v: any) => s + v.total, 0) * 100) / 100;
+    const totalPendiente = Math.round((totalBruto - totalAllNC) * 100) / 100;
+    // Build linked NC map for cap
+    const ncByParentFooter = new Map<string, number>();
+    for (const nc of allNCs) { if (nc.remito_origen_id) ncByParentFooter.set(nc.remito_origen_id, (ncByParentFooter.get(nc.remito_origen_id) || 0) + nc.total); }
+    const totalCobrado = Math.round(regularVentas.reduce((s: number, v: any) => {
+      const ncFor = ncByParentFooter.get(v.id) || 0;
+      return s + Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncFor));
+    }, 0) * 100) / 100;
+    const saldoCalculado = Math.round((totalPendiente - totalCobrado) * 100) / 100;
+    setMovCCTotals({ debe: totalPendiente, haber: totalCobrado, saldo: saldoCalculado, saldoInicial: 0 });
 
     // === Tab Cobros ===
     let cobrosQuery = supabase
@@ -664,6 +671,14 @@ export default function ClientesPage() {
       .eq("cliente_id", clienteId).neq("estado", "anulada");
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
+    // Build linked NC map
+    const ncByParentR = new Map<string, number>();
+    for (const v of allVentas) {
+      if (v.tipo_comprobante?.includes("Nota de Crédito") && v.remito_origen_id) {
+        ncByParentR.set(v.remito_origen_id, (ncByParentR.get(v.remito_origen_id) || 0) + v.total);
+      }
+    }
+
     let totalDebe = 0;
     let totalHaber = 0;
 
@@ -672,17 +687,18 @@ export default function ClientesPage() {
       const isND = v.tipo_comprobante?.includes("Nota de Débito");
 
       if (isNC) {
-        // Solo standalone NCs (sin padre) — las vinculadas ya están en el total del padre
-        if (!v.remito_origen_id) totalDebe -= v.total;
+        // NC = haber (reduce pendiente)
+        totalHaber += v.total;
         continue;
       }
 
-      // DEBE = venta.total (incluye todo: recargos, NC vinculada)
+      // DEBE = venta.total
       totalDebe += v.total;
 
-      // HABER = monto_pagado (lo realmente cobrado)
+      // HABER = min(monto_pagado, total - NC_vinculada)
       if (!isND) {
-        totalHaber += (v.monto_pagado || 0);
+        const ncFor = ncByParentR.get(v.id) || 0;
+        totalHaber += Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncFor));
       }
     }
 
