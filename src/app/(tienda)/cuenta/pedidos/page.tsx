@@ -832,8 +832,8 @@ export default function PedidosPage() {
               </table>
             )}
 
-            {/* Payment breakdown */}
-            {pedido.venta && pedido.venta.pagos.length > 0 && (() => {
+            {/* Payment breakdown (hide for anulada — payments were reversed) */}
+            {pedido.venta && pedido.venta.estado !== "anulada" && pedido.venta.pagos.length > 0 && (() => {
               const pagos = pedido.venta.pagos;
               if (pagos.length === 0) return null;
               return (
@@ -869,7 +869,7 @@ export default function PedidosPage() {
               </div>
               );
             })()}
-            {pedido.venta && pedido.venta.pagos.length === 0 && pedido.venta.forma_pago && (
+            {pedido.venta && pedido.venta.estado !== "anulada" && pedido.venta.pagos.length === 0 && pedido.venta.forma_pago && (
               <div className="mt-3 bg-gray-50 rounded-xl p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Forma de pago</p>
                 <p className="text-sm text-gray-700">{pedido.venta.forma_pago}</p>
@@ -1124,8 +1124,8 @@ export default function PedidosPage() {
               </table>
             )}
 
-            {/* Payment breakdown */}
-            {v.pagos.length > 0 && (() => {
+            {/* Payment breakdown (hide for anulada — payments were reversed) */}
+            {v.estado !== "anulada" && v.pagos.length > 0 && (() => {
               const pagos = v.pagos;
               if (pagos.length === 0) return null;
               return (
@@ -1161,7 +1161,7 @@ export default function PedidosPage() {
               </div>
               );
             })()}
-            {v.pagos.length === 0 && v.forma_pago && (
+            {v.estado !== "anulada" && v.pagos.length === 0 && v.forma_pago && (
               <div className="mt-3 bg-gray-50 rounded-xl p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Forma de pago</p>
                 <p className="text-sm text-gray-700">{v.forma_pago}</p>
