@@ -2588,7 +2588,8 @@ export default function ListadoVentasPage() {
                         const cashTotal = cashPagos.reduce((s, p) => s + p.monto, 0);
                         const ccTotal = ccPagos.reduce((s, p) => s + p.monto, 0);
                         const montoPagadoVenta = (poSelectedPedido as any)._monto_pagado ?? (poSelectedPedido as any).monto_pagado ?? 0;
-                        const saldoPendienteVenta = Math.max(0, Math.round(((poSelectedPedido.total || 0) - montoPagadoVenta) * 100) / 100);
+                        const ncTotalDisplay = detailNCs.reduce((s, nc) => s + nc.total, 0);
+                        const saldoPendienteVenta = Math.max(0, Math.round(((poSelectedPedido.total || 0) - ncTotalDisplay - montoPagadoVenta) * 100) / 100);
                         return (
                           <>
                             {cashPagos.map((p, i) => (
@@ -3090,7 +3091,8 @@ export default function ListadoVentasPage() {
                               // Total cobrado = solo efectivo + transferencia (CC es deuda, no cobro)
                               const cashPaid = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito") && p.metodo !== "Cuenta Corriente").reduce((s, p) => s + p.monto, 0);
                               const montoPagadoV = (poSelectedPedido as any)._monto_pagado ?? (poSelectedPedido as any).monto_pagado ?? 0;
-                              const pendiente = Math.max(0, Math.round(((poSelectedPedido.total || 0) - montoPagadoV) * 100) / 100);
+                              const ncTotalV = detailNCs.reduce((s, nc) => s + nc.total, 0);
+                              const pendiente = Math.max(0, Math.round(((poSelectedPedido.total || 0) - ncTotalV - montoPagadoV) * 100) / 100);
                               return (
                                 <>
                                   {cashPaid > 0 && (
