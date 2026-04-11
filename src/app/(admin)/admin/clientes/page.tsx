@@ -578,25 +578,27 @@ export default function ClientesPage() {
       // NUNCA sumar CC haber entries por separado — ya están en monto_pagado.
       if (!isND && montoPagado > 0) {
         if (cajaEntries && cajaEntries.length > 0) {
-          // Mostrar pagos individuales de caja (hasta el límite de monto_pagado)
-          let cajaShown = 0;
+          // Mostrar pagos individuales de caja, capeados a monto_pagado
+          // (la caja puede tener más si hubo un error de registro)
+          let remaining = montoPagado;
           for (let ci = 0; ci < cajaEntries.length; ci++) {
+            if (remaining <= 0) break;
             const ce = cajaEntries[ci];
+            const show = Math.min(ce.monto, remaining);
             entries.push({
               id: `v-${v.id}-pago-${ci}`, fecha: v.fecha,
               created_at: baseTs + `T00:00:00.${4 + ci}`,
-              comprobante: comp, debe: 0, haber: ce.monto, forma_pago: ce.metodo_pago,
+              comprobante: comp, debe: 0, haber: show, forma_pago: ce.metodo_pago,
               descripcion: "", venta_id: v.id,
             });
-            cajaShown += ce.monto;
+            remaining = Math.round((remaining - show) * 100) / 100;
           }
-          // Si monto_pagado > caja (cobro allocation), mostrar la diferencia
-          const diff = Math.round((montoPagado - cajaShown) * 100) / 100;
-          if (diff > 0.5) {
+          // Si queda remaining (cobro allocation no en caja)
+          if (remaining > 0.5) {
             entries.push({
               id: `v-${v.id}-cobro`, fecha: v.fecha,
               created_at: baseTs + "T00:00:00.9",
-              comprobante: comp, debe: 0, haber: diff, forma_pago: "Cobro",
+              comprobante: comp, debe: 0, haber: remaining, forma_pago: "Cobro",
               descripcion: "Cobro aplicado", venta_id: v.id,
             });
           }
