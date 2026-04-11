@@ -642,6 +642,20 @@ export default function ListadoVentasPage() {
         .in("referencia_tipo", ["venta", "cobro_saldo"])
         .eq("tipo", "ingreso");
 
+      // 3a-fallback. Find cobro_saldo entries without referencia_id (old entries, search by description)
+      const cobroSaldoFromDesc: any[] = [];
+      if (!(cajaDirectRows || []).some((r: any) => r.referencia_tipo === "cobro_saldo")) {
+        const { data: descSearch } = await supabase
+          .from("caja_movimientos")
+          .select("*")
+          .eq("tipo", "ingreso")
+          .eq("referencia_tipo", "cobro_saldo")
+          .ilike("descripcion", `%Venta #${v.numero}%`);
+        if (descSearch && descSearch.length > 0) {
+          cobroSaldoFromDesc.push(...descSearch);
+        }
+      }
+
       // 3b. Cobro entries from atomic_register_cobro_v2 (referencia_tipo = 'cobro', referencia_id = cobro_id)
       const { data: cobroItemRows } = await supabase
         .from("cobro_items")
@@ -660,7 +674,7 @@ export default function ListadoVentasPage() {
       }
 
       // 3c. Collect all caja entries to reverse
-      const allCajaToReverse = [...(cajaDirectRows || []), ...cajaCobroRows];
+      const allCajaToReverse = [...(cajaDirectRows || []), ...cajaCobroRows, ...cobroSaldoFromDesc];
 
       // 3d. Check for already-reversed entries (idempotency — don't reverse twice)
       const existingAnulacionIds = new Set<string>();
@@ -733,7 +747,20 @@ export default function ListadoVentasPage() {
           }
         }
 
-        const allCCToReverse = [...(ccRows || []), ...ccCobroRows];
+        // 4c. CC entries from POS cobrar saldo (linked to OLD ventas, search by comprobante/desc)
+        let ccCobroSaldoRows: any[] = [];
+        const { data: ccSaldoSearch } = await supabase
+          .from("cuenta_corriente")
+          .select("*")
+          .eq("cliente_id", v.cliente_id)
+          .or(`comprobante.ilike.%Venta #${v.numero}%,descripcion.ilike.%Venta #${v.numero}%`);
+        if (ccSaldoSearch) {
+          // Only include entries NOT already in ccRows (avoid duplicates)
+          const existingIds = new Set((ccRows || []).map((r: any) => r.id));
+          ccCobroSaldoRows = ccSaldoSearch.filter((r: any) => !existingIds.has(r.id));
+        }
+
+        const allCCToReverse = [...(ccRows || []), ...ccCobroRows, ...ccCobroSaldoRows];
 
         if (allCCToReverse.length > 0) {
           // Calculate total saldo change from reversing all CC entries

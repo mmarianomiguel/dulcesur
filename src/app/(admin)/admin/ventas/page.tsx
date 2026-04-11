@@ -1895,6 +1895,7 @@ export default function VentasPage() {
                   fecha: hoy, hora, tipo: "ingreso",
                   descripcion: `Cobro saldo anterior — ${selectedClient?.nombre || ""} (Venta #${numero})`,
                   metodo_pago: entry.metodo, monto: saldoAmt,
+                  referencia_id: venta.id,
                   referencia_tipo: "cobro_saldo",
                   ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
                 });
@@ -1934,7 +1935,7 @@ export default function VentasPage() {
               descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
               metodo_pago: formaPago,
               monto: saldoPendiente,
-              referencia_id: null,
+              referencia_id: venta.id,
               referencia_tipo: "cobro_saldo",
             });
             // Atomic saldo update via RPC (negative = reduce debt from cobro)

@@ -2021,6 +2021,7 @@ export default function HojaDeRutaPage() {
                           descripcion: `Cobro saldo adeudado — ${clienteNombre} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
                           metodo_pago: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
                           monto: totalAllocated,
+                          referencia_id: payVenta.id,
                           referencia_tipo: "cobro_saldo",
                         });
 
