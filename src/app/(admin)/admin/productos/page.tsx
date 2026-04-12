@@ -136,6 +136,7 @@ function formatRelativeDate(dateStr: string): string {
   const days = Math.floor(
     (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)
   );
+  if (isNaN(days) || days < 0) return "—";
   if (days === 0) return "hoy";
   if (days === 1) return "ayer";
   if (days < 30) return `hace ${days} días`;
@@ -158,7 +159,8 @@ function getInitialsColor(nombre: string): { background: string; color: string }
     { background: "#FAEEDA", color: "#633806" },
     { background: "#E1F5EE", color: "#085041" },
   ];
-  const idx = nombre.charCodeAt(0) % colors.length;
+  const code = nombre ? nombre.charCodeAt(0) : 0;
+  const idx = Math.abs(code) % colors.length;
   return colors[idx];
 }
 
