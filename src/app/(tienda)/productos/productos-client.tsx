@@ -255,10 +255,6 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       : marcas.find((m) => slugify(m.nombre) === marcaSlug)?.id || null
     : null;
 
-  // Reset subcategory expanded state when active category changes
-  useEffect(() => {
-    setSubcatExpanded(false);
-  }, [categoriaId]);
 
   // Sync local price inputs with URL
   useEffect(() => {
