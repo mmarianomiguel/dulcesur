@@ -1800,6 +1800,22 @@ export default function ProductosPage() {
   // Precio oferta form toggle (1.3)
   const [showOfertaForm, setShowOfertaForm] = useState(false);
 
+  // Catalog health bar state
+  const [showProblemsView, setShowProblemsView] = useState(false);
+  const [problemsTab, setProblemsTab] = useState<
+    "sin_categoria" | "sin_imagen" | "precio_costo" | "sin_proveedor"
+  >("sin_categoria");
+
+  const catalogProblems = useMemo(() => {
+    const sinCategoria = products.filter((p) => !p.categoria_id).length;
+    const sinImagen = products.filter((p) => !(p as any).imagen_url).length;
+    const precioBajoCosto = products.filter(
+      (p) => p.costo > 0 && p.precio <= p.costo
+    ).length;
+    const sinProveedor = products.filter((p) => !prodProvMap[p.id]).length;
+    const total = sinCategoria + sinImagen + precioBajoCosto + sinProveedor;
+    return { sinCategoria, sinImagen, precioBajoCosto, sinProveedor, total };
+  }, [products, prodProvMap]);
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -1839,6 +1855,28 @@ export default function ProductosPage() {
           </Button>
         </div>
       </div>
+
+      {/* Catalog health bar */}
+      {catalogProblems.total > 0 && (
+        <button
+          onClick={() => setShowProblemsView(true)}
+          className="w-full flex items-center gap-3 px-4 py-2.5 bg-background border border-red-200 rounded-xl text-left hover:border-red-300 transition-colors mb-4"
+        >
+          <div className="w-2 h-2 rounded-full bg-red-500 shrink-0 animate-pulse" />
+          <span className="text-sm text-red-700 flex-1">
+            <strong>Catálogo con problemas:</strong>
+            {catalogProblems.sinCategoria > 0 &&
+              ` ${catalogProblems.sinCategoria} sin categoría ·`}
+            {catalogProblems.sinImagen > 0 &&
+              ` ${catalogProblems.sinImagen} sin imagen ·`}
+            {catalogProblems.precioBajoCosto > 0 &&
+              ` ${catalogProblems.precioBajoCosto} con precio < costo ·`}
+            {catalogProblems.sinProveedor > 0 &&
+              ` ${catalogProblems.sinProveedor} sin proveedor`}
+          </span>
+          <span className="text-xs text-primary underline shrink-0">Ver todos →</span>
+        </button>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
