@@ -1902,7 +1902,14 @@ export default function ProductosPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-colors ${
+            outOfStock > 0
+              ? "border-red-200 hover:border-red-300"
+              : "hover:bg-muted/40"
+          }`}
+          onClick={() => { setStockFilter("no"); setPage(1); }}
+        >
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
               <AlertTriangle className="w-5 h-5 text-red-500" />
