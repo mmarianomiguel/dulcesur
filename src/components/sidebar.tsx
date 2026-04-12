@@ -22,7 +22,7 @@ import {
   Building2,
   List,
   Banknote,
-  ClipboardList,
+
   BarChart3,
   PackageMinus,
   FileText,
@@ -96,16 +96,7 @@ const navigation: NavItem[] = [
     ],
   },
   { name: "Proveedores", href: "/admin/proveedores", icon: Truck },
-  {
-    name: "Compras",
-    href: "/admin/compras",
-    icon: Receipt,
-    children: [
-      { name: "Registrar", href: "/admin/compras" },
-      { name: "Pedidos", href: "/admin/compras/pedidos", icon: ClipboardList },
-      { name: "Reposicion", href: "/admin/compras/reposicion" },
-    ],
-  },
+  { name: "Compras", href: "/admin/compras", icon: Receipt },
   { name: "Caja", href: "/admin/caja", icon: Wallet },
   {
     name: "Stock",

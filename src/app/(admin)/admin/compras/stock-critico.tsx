@@ -32,71 +32,41 @@ import {
   XCircle,
   CheckCircle2,
   ArrowUpDown,
-  Save,
   Filter,
   X,
+  ArrowRight,
 } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { LoadingSpinner } from "@/components/loading-spinner";
 import { EmptyState } from "@/components/empty-state";
+import { showAdminToast } from "@/components/admin-toast";
+import type { ReposicionItem, Categoria, Subcategoria, Marca, ActiveTab } from "./types";
 
-/* ───────── types ───────── */
+/* ───────── props ───────── */
 
-interface ReposicionItem {
-  producto_id: string;
-  codigo: string;
-  nombre: string;
-  imagen_url: string | null;
-  categoria_id: string | null;
-  categoria: string;
-  subcategoria_id: string | null;
-  subcategoria: string;
-  marca_id: string | null;
-  marca: string;
-  stock: number;
-  stock_minimo: number;
-  stock_maximo: number;
-  costo: number;
-  proveedor_id: string | null;
-  proveedor_nombre: string | null;
-  precio_proveedor: number | null;
-  cantidad_minima_pedido: number;
-  nivel: "critico" | "bajo" | "ok";
-  faltante: number;
-  velDiaria: number;
-  diasStock: number | null;
+interface StockCriticoProps {
+  onHacerPedido: (proveedorId: string, items: ReposicionItem[]) => void;
+  onGenerarTodos: () => void;
+  setActiveTab: (tab: ActiveTab) => void;
 }
 
-interface Categoria {
-  id: string;
-  nombre: string;
-}
+/* ───────── proveedor group type ───────── */
 
-interface Subcategoria {
-  id: string;
-  nombre: string;
-  categoria_id: string;
-}
-
-interface Marca {
-  id: string;
-  nombre: string;
-}
-
-interface Proveedor {
-  id: string;
-  nombre: string;
+interface ProveedorGroup {
+  proveedorId: string | null;
+  proveedorNombre: string;
+  items: ReposicionItem[];
+  costoEstimado: number;
 }
 
 /* ───────── component ───────── */
 
-export default function ReposicionPage() {
+export default function StockCritico({ onHacerPedido, onGenerarTodos, setActiveTab }: StockCriticoProps) {
   const [items, setItems] = useState<ReposicionItem[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [subcategorias, setSubcategorias] = useState<Subcategoria[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [proveedores, setProveedores] = useState<{ id: string; nombre: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCategoria, setFilterCategoria] = useState("all");
@@ -138,6 +108,8 @@ export default function ReposicionPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  /* ── data fetching ── */
+
   const fetchData = useCallback(async () => {
     setLoading(true);
 
@@ -156,7 +128,7 @@ export default function ReposicionPage() {
     setCategorias((cats as Categoria[]) || []);
     setSubcategorias((subcats as Subcategoria[]) || []);
     setMarcas((mrs as Marca[]) || []);
-    setProveedores((provs as Proveedor[]) || []);
+    setProveedores((provs as { id: string; nombre: string }[]) || []);
 
     // Fetch sales velocity (last 30 days)
     const hace30 = new Date();
@@ -306,15 +278,45 @@ export default function ReposicionPage() {
 
   /* ── stats ── */
 
-  const criticos = items.filter((i) => i.nivel === "critico").length;
-  const bajos = items.filter((i) => i.nivel === "bajo").length;
-  const sinProveedor = items.filter((i) => i.nivel !== "ok" && !i.proveedor_id).length;
-  const costoReposicion = filtered.reduce((a, i) => {
-    const precio = i.precio_proveedor || i.costo;
-    return a + i.faltante * precio;
-  }, 0);
+  const stockItems = items;
+  const criticos = stockItems.filter((i) => i.nivel === "critico").length;
+  const bajos = stockItems.filter((i) => i.nivel === "bajo").length;
+  const sinProveedorCount = stockItems.filter((i) => i.nivel !== "ok" && !i.proveedor_id).length;
+  const costoTotal = stockItems
+    .filter((i) => i.nivel !== "ok")
+    .reduce((a, i) => a + i.faltante * (i.precio_proveedor || i.costo), 0);
 
-  /* ── generate pedidos ── */
+  /* ── grouped by proveedor ── */
+
+  const groups = useMemo(() => {
+    const map: Record<string, ProveedorGroup> = {};
+
+    for (const item of filtered) {
+      const key = item.proveedor_id || "__sin_proveedor__";
+      if (!map[key]) {
+        map[key] = {
+          proveedorId: item.proveedor_id,
+          proveedorNombre: item.proveedor_nombre || "Sin proveedor asignado",
+          items: [],
+          costoEstimado: 0,
+        };
+      }
+      map[key].items.push(item);
+      map[key].costoEstimado += item.faltante * (item.precio_proveedor || item.costo);
+    }
+
+    // Sort: proveedores with names first, "sin proveedor" at the end
+    const entries = Object.values(map);
+    entries.sort((a, b) => {
+      if (!a.proveedorId && b.proveedorId) return 1;
+      if (a.proveedorId && !b.proveedorId) return -1;
+      return a.proveedorNombre.localeCompare(b.proveedorNombre);
+    });
+
+    return entries;
+  }, [filtered]);
+
+  /* ── generate pedidos (all groups) ── */
 
   const handleGeneratePedidos = async () => {
     setGenerating(true);
@@ -329,18 +331,18 @@ export default function ReposicionPage() {
       }
 
       // Group by provider
-      const groups: Record<string, { nombre: string; items: ReposicionItem[] }> = {};
+      const provGroups: Record<string, { nombre: string; items: ReposicionItem[] }> = {};
       for (const item of itemsConProveedor) {
         if (!item.proveedor_id) continue;
-        if (!groups[item.proveedor_id]) {
-          groups[item.proveedor_id] = { nombre: item.proveedor_nombre || "", items: [] };
+        if (!provGroups[item.proveedor_id]) {
+          provGroups[item.proveedor_id] = { nombre: item.proveedor_nombre || "", items: [] };
         }
-        groups[item.proveedor_id].items.push(item);
+        provGroups[item.proveedor_id].items.push(item);
       }
 
       let pedidosCreados = 0;
 
-      for (const [provId, group] of Object.entries(groups)) {
+      for (const [provId, group] of Object.entries(provGroups)) {
         const totalEstimado = group.items.reduce((a, i) => {
           const precio = i.precio_proveedor || i.costo;
           return a + i.faltante * precio;
@@ -353,7 +355,7 @@ export default function ReposicionPage() {
             fecha: todayARG(),
             estado: "Borrador",
             costo_total_estimado: totalEstimado,
-            observacion: "Generado desde Dashboard de Reposicion",
+            observacion: "Generado desde Stock Critico",
           })
           .select("id")
           .single();
@@ -377,8 +379,12 @@ export default function ReposicionPage() {
 
       setGenerateResult({
         ok: true,
-        message: `Se crearon ${pedidosCreados} pedido(s) como borrador para ${Object.keys(groups).length} proveedor(es).`,
+        message: `Se crearon ${pedidosCreados} pedido(s) como borrador para ${Object.keys(provGroups).length} proveedor(es).`,
       });
+
+      if (pedidosCreados > 0) {
+        onGenerarTodos();
+      }
     } catch (err: any) {
       setGenerateResult({ ok: false, message: err?.message || "Error inesperado" });
     } finally {
@@ -392,18 +398,7 @@ export default function ReposicionPage() {
   /* ═══════════════════ RENDER ═══════════════════ */
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <PageHeader
-        title="Reposicion de Stock"
-        description="Productos con stock por debajo del minimo configurado"
-        actions={
-          <Button onClick={() => setShowGenerateDialog(true)} disabled={filtered.length === 0}>
-            <Sparkles className="w-4 h-4 mr-2" />
-            Generar Pedidos
-          </Button>
-        }
-      />
-
+    <div className="space-y-4 sm:space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
@@ -424,7 +419,7 @@ export default function ReposicionPage() {
         />
         <StatCard
           title="Sin proveedor"
-          value={sinProveedor}
+          value={sinProveedorCount}
           subtitle="No se pueden pedir"
           icon={Package}
           iconColor="text-gray-500"
@@ -432,8 +427,8 @@ export default function ReposicionPage() {
         />
         <StatCard
           title="Costo reposicion"
-          value={formatCurrency(costoReposicion)}
-          subtitle={`${filtered.length} productos`}
+          value={formatCurrency(costoTotal)}
+          subtitle={`${stockItems.filter((i) => i.nivel !== "ok").length} productos`}
           icon={ShoppingCart}
           iconColor="text-primary"
           iconBg="bg-primary/10"
@@ -486,6 +481,10 @@ export default function ReposicionPage() {
                 onClick={() => setSortBy((prev) => prev === "nivel" ? "faltante" : prev === "faltante" ? "nombre" : "nivel")}
               >
                 <ArrowUpDown className="w-4 h-4" />
+              </Button>
+              <Button onClick={() => setShowGenerateDialog(true)} disabled={filtered.length === 0}>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generar todos
               </Button>
             </div>
           </div>
@@ -641,161 +640,144 @@ export default function ReposicionPage() {
         </CardContent>
       </Card>
 
-      {/* Table */}
-      <Card>
-        <CardContent className="pt-0">
-          {loading ? (
-            <LoadingSpinner />
-          ) : filtered.length === 0 ? (
+      {/* Grouped by proveedor */}
+      {loading ? (
+        <LoadingSpinner />
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
             <EmptyState
               icon={CheckCircle2}
               title="Todo el stock esta en orden"
               description="No hay productos por debajo del minimo configurado"
             />
-          ) : (
-            <>
-            {/* Mobile card list */}
-            <div className="sm:hidden divide-y">
-              {filtered.map((item) => {
-                const precio = item.precio_proveedor || item.costo;
-                return (
-                  <div key={item.producto_id} className="py-3 px-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          {item.nivel === "critico" ? (
-                            <Badge variant="destructive" className="text-[10px] font-medium">SIN STOCK</Badge>
-                          ) : (
-                            <Badge className="text-[10px] font-medium bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500/20">BAJO</Badge>
-                          )}
-                          <span className="font-mono text-xs text-muted-foreground">{item.codigo}</span>
-                        </div>
-                        <p className="font-medium text-sm mt-1 truncate">{item.nombre}</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-muted-foreground block">Stock</span>
-                        <span className={item.nivel === "critico" ? "text-red-500 font-bold" : "text-amber-600 font-semibold"}>{item.stock}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block">Min / Max</span>
-                        <span>{item.stock_minimo} / {item.stock_maximo}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block">A pedir</span>
-                        <span className="font-semibold">{item.faltante}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-[10px] font-normal">{item.categoria}</Badge>
-                        {item.proveedor_nombre ? (
-                          <span className="text-muted-foreground">{item.proveedor_nombre}</span>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {groups.map((group) => {
+            const isSinProveedor = !group.proveedorId;
+
+            return (
+              <Card key={group.proveedorId || "__sin_proveedor__"} className={isSinProveedor ? "border-dashed opacity-80" : ""}>
+                <CardContent className="pt-6 space-y-4">
+                  {/* Group header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 flex-shrink-0">
+                        {isSinProveedor ? (
+                          <Package className="w-4 h-4 text-muted-foreground" />
                         ) : (
-                          <span className="text-muted-foreground italic">Sin proveedor</span>
+                          <ShoppingCart className="w-4 h-4 text-primary" />
                         )}
                       </div>
-                      <span className="font-semibold">{formatCurrency(item.faltante * precio)}</span>
+                      <div className="min-w-0">
+                        <h3 className={`font-semibold truncate ${isSinProveedor ? "text-muted-foreground italic" : ""}`}>
+                          {group.proveedorNombre}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {group.items.length} producto{group.items.length !== 1 ? "s" : ""}
+                          {" "}&middot;{" "}{formatCurrency(group.costoEstimado)} est.
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Estado</th>
-                    <th className="text-left py-3 px-4 font-medium">Codigo</th>
-                    <th className="text-left py-3 px-4 font-medium">Producto</th>
-                    <th className="text-left py-3 px-4 font-medium">Categoria</th>
-                    <th className="text-left py-3 px-4 font-medium hidden lg:table-cell">Marca</th>
-                    <th className="text-center py-3 px-4 font-medium">Stock</th>
-                    <th className="text-center py-3 px-4 font-medium">Min</th>
-                    <th className="text-center py-3 px-4 font-medium">Max</th>
-                    <th className="text-center py-3 px-4 font-medium">A pedir</th>
-                    <th className="text-center py-3 px-4 font-medium hidden xl:table-cell">Vel/día</th>
-                    <th className="text-center py-3 px-4 font-medium hidden xl:table-cell">Días Stock</th>
-                    <th className="text-left py-3 px-4 font-medium">Proveedor</th>
-                    <th className="text-right py-3 px-4 font-medium">Costo unit.</th>
-                    <th className="text-right py-3 px-4 font-medium">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((item) => {
-                    const precio = item.precio_proveedor || item.costo;
-                    return (
-                      <tr
-                        key={item.producto_id}
-                        className="border-b last:border-0 hover:bg-muted/50 transition-colors"
+                    {!isSinProveedor && (
+                      <Button
+                        size="sm"
+                        className="gap-2 flex-shrink-0"
+                        onClick={() => onHacerPedido(group.proveedorId!, group.items)}
                       >
-                        <td className="py-2.5 px-4">
-                          {item.nivel === "critico" ? (
-                            <Badge variant="destructive" className="text-[10px] font-medium">SIN STOCK</Badge>
-                          ) : (
-                            <Badge className="text-[10px] font-medium bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500/20">BAJO</Badge>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4 font-mono text-xs text-muted-foreground">{item.codigo}</td>
-                        <td className="py-2.5 px-4 font-medium">{item.nombre}</td>
-                        <td className="py-2.5 px-4">
-                          <Badge variant="secondary" className="text-[10px] font-normal">{item.categoria}</Badge>
-                        </td>
-                        <td className="py-2.5 px-4 hidden lg:table-cell text-muted-foreground">{item.marca || "\u2014"}</td>
-                        <td className="py-2.5 px-4 text-center">
-                          <span className={item.nivel === "critico" ? "text-red-500 font-bold" : "text-amber-600 font-semibold"}>
-                            {item.stock}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-4 text-center text-muted-foreground">{item.stock_minimo}</td>
-                        <td className="py-2.5 px-4 text-center text-muted-foreground">{item.stock_maximo}</td>
-                        <td className="py-2.5 px-4 text-center font-semibold">{item.faltante}</td>
-                        <td className="py-2.5 px-4 text-center hidden xl:table-cell text-muted-foreground">
-                          {item.velDiaria > 0 ? item.velDiaria : "—"}
-                        </td>
-                        <td className={`py-2.5 px-4 text-center hidden xl:table-cell font-medium ${item.diasStock !== null && item.diasStock <= 7 ? "text-red-600" : "text-muted-foreground"}`}>
-                          {item.diasStock !== null ? `${item.diasStock}d` : "—"}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          {item.proveedor_nombre ? (
-                            <span className="text-sm">{item.proveedor_nombre}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">Sin asignar</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4 text-right">
-                          {item.precio_proveedor ? (
-                            <span>{formatCurrency(item.precio_proveedor)}</span>
-                          ) : (
-                            <span className="text-muted-foreground">{formatCurrency(item.costo)}</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-semibold">
-                          {formatCurrency(item.faltante * precio)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        Hacer pedido
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
 
-              {/* Footer total */}
-              <div className="flex items-center justify-between border-t bg-muted/30 rounded-b-lg px-4 py-3">
-                <span className="text-xs text-muted-foreground">
-                  {filtered.length} producto(s) necesitan reposicion
+                  <Separator />
+
+                  {/* Products in group */}
+                  <div className="space-y-3">
+                    {group.items.map((item) => {
+                      const stockPct = item.stock_maximo > 0
+                        ? Math.min(100, Math.max(0, (item.stock / item.stock_maximo) * 100))
+                        : item.stock_minimo > 0
+                        ? Math.min(100, Math.max(0, (item.stock / item.stock_minimo) * 100))
+                        : 0;
+
+                      const barColor = item.nivel === "critico" ? "bg-red-500" : "bg-amber-400";
+
+                      return (
+                        <div key={item.producto_id} className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                          {/* Row 1: Name + code + badge */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {item.nivel === "critico" ? (
+                                <Badge variant="destructive" className="text-[10px] font-medium flex-shrink-0">SIN STOCK</Badge>
+                              ) : (
+                                <Badge className="text-[10px] font-medium flex-shrink-0 bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500/20">BAJO</Badge>
+                              )}
+                              <span className="font-medium text-sm truncate">{item.nombre}</span>
+                            </div>
+                            <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{item.codigo}</span>
+                          </div>
+
+                          {/* Row 2: Stock bar */}
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-bold w-12 text-right flex-shrink-0 ${item.nivel === "critico" ? "text-red-500" : "text-amber-600"}`}>
+                              {item.stock}
+                            </span>
+                            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${stockPct}%` }} />
+                            </div>
+                            <span className="text-xs text-muted-foreground flex-shrink-0 w-24 text-right">
+                              Min: {item.stock_minimo} / Max: {item.stock_maximo}
+                            </span>
+                          </div>
+
+                          {/* Row 3: Velocity, days, order qty */}
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            {item.velDiaria > 0 && (
+                              <span>Vel: {item.velDiaria}/dia</span>
+                            )}
+                            {item.diasStock !== null && (
+                              <span className={item.diasStock <= 7 ? "text-red-600 font-medium" : ""}>
+                                {item.diasStock} dias
+                              </span>
+                            )}
+                            {item.velDiaria === 0 && item.diasStock === null && (
+                              <span>Sin ventas recientes</span>
+                            )}
+                            <span className="ml-auto font-semibold text-foreground text-sm">
+                              Pedir {item.faltante} un.
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {/* Footer total */}
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  {filtered.length} producto(s) en {groups.length} grupo(s) necesitan reposicion
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">Total estimado:</span>
-                  <span className="text-lg font-bold">{formatCurrency(costoReposicion)}</span>
+                  <span className="text-lg font-bold">
+                    {formatCurrency(filtered.reduce((a, i) => a + i.faltante * (i.precio_proveedor || i.costo), 0))}
+                  </span>
                 </div>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Generate Pedidos Dialog */}
       <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
@@ -831,14 +813,16 @@ export default function ReposicionPage() {
                   </div>
                   <div className="flex justify-between border-t pt-1 mt-1">
                     <span className="text-muted-foreground font-medium">Costo total estimado</span>
-                    <span className="font-bold">{formatCurrency(costoReposicion)}</span>
+                    <span className="font-bold">
+                      {formatCurrency(filtered.filter((i) => i.proveedor_id).reduce((a, i) => a + i.faltante * (i.precio_proveedor || i.costo), 0))}
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>Cancelar</Button>
                   <Button onClick={handleGeneratePedidos} disabled={generating}>
-                    {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                     Generar Pedidos
                   </Button>
                 </div>
@@ -862,7 +846,7 @@ export default function ReposicionPage() {
                     Cerrar
                   </Button>
                   {generateResult.ok && (
-                    <Button onClick={() => window.location.href = "/admin/compras/pedidos"}>
+                    <Button onClick={() => { setShowGenerateDialog(false); setGenerateResult(null); setActiveTab("pedidos"); }}>
                       Ver Pedidos
                     </Button>
                   )}
