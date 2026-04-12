@@ -639,6 +639,168 @@ function AumentosRecientesBlock() {
   );
 }
 
+function MasVendidosBlock({ config }: { config: Record<string, any> }) {
+  const { filtrarCategorias } = useCategoriasPermitidas();
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const limit = config.max_items || 8;
+  const titulo = config.titulo || "Los Más Vendidos";
+
+  useEffect(() => {
+    supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url, stock, es_combo, activo, categorias(id, nombre, restringida), precio_anterior, created_at")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .gt("stock", 0)
+      .order("stock", { ascending: false })
+      .limit(limit * 3)
+      .then(({ data }) => {
+        setProductos((data as any[]) || []);
+        setLoaded(true);
+      });
+  }, [limit]);
+
+  if (!loaded) return null;
+
+  const filtered = productos.filter((p) => {
+    const cat = (p as any).categorias;
+    if (!cat) return true;
+    return filtrarCategorias([cat]).length > 0;
+  }).slice(0, limit);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <section className="py-8 md:py-10">
+      <div className="max-w-7xl mx-auto px-4">
+        <SectionTitle>{titulo}</SectionTitle>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {filtered.map((prod) => (
+            <Link
+              key={prod.id}
+              href={`/productos/${productSlug(prod.nombre, prod.id)}`}
+              className="group rounded-2xl border border-gray-100 bg-white hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden flex flex-col"
+            >
+              <div className="relative aspect-square bg-gray-50 overflow-hidden">
+                {prod.imagen_url ? (
+                  <Image
+                    src={prod.imagen_url}
+                    alt={prod.nombre}
+                    fill
+                    sizes="(max-width: 768px) 50vw, 25vw"
+                    loading="lazy"
+                    className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Package className="w-10 h-10 text-gray-200" />
+                  </div>
+                )}
+              </div>
+              <div className="p-3 flex flex-col gap-1 flex-1">
+                {(prod as any).categorias?.nombre && (
+                  <span className="text-[10px] text-primary/70 font-medium">{(prod as any).categorias.nombre}</span>
+                )}
+                <p className="text-xs font-medium text-gray-800 line-clamp-2 min-h-[2rem]">{prod.nombre}</p>
+                <p className="text-sm font-bold text-gray-900 mt-auto pt-1">{formatCurrency(prod.precio)}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+        <div className="text-center mt-6">
+          <Link
+            href="/productos"
+            className="inline-block border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white rounded-full px-8 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95"
+          >
+            Ver todos los productos
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UltimasUnidadesBlock({ config }: { config: Record<string, any> }) {
+  const { filtrarCategorias } = useCategoriasPermitidas();
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const limit = config.max_items || 8;
+  const umbral = config.umbral_stock || 5;
+  const titulo = config.titulo || "Últimas Unidades";
+
+  useEffect(() => {
+    supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url, stock, activo, categorias(id, nombre, restringida)")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .eq("es_combo", false)
+      .gt("stock", 0)
+      .lte("stock", umbral)
+      .order("stock", { ascending: true })
+      .limit(limit * 3)
+      .then(({ data }) => {
+        setProductos((data as any[]) || []);
+        setLoaded(true);
+      });
+  }, [limit, umbral]);
+
+  if (!loaded) return null;
+
+  const filtered = productos.filter((p) => {
+    const cat = (p as any).categorias;
+    if (!cat) return true;
+    return filtrarCategorias([cat]).length > 0;
+  }).slice(0, limit);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <section className="py-8 md:py-10 bg-red-50/40 border-t border-red-100">
+      <div className="max-w-7xl mx-auto px-4">
+        <SectionTitle>{titulo}</SectionTitle>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {filtered.map((prod) => (
+            <Link
+              key={prod.id}
+              href={`/productos/${productSlug(prod.nombre, prod.id)}`}
+              className="group rounded-2xl border border-red-100 bg-white hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden flex flex-col"
+            >
+              <div className="relative aspect-square bg-gray-50 overflow-hidden">
+                {prod.imagen_url ? (
+                  <Image
+                    src={prod.imagen_url}
+                    alt={prod.nombre}
+                    fill
+                    sizes="(max-width: 768px) 50vw, 25vw"
+                    loading="lazy"
+                    className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Package className="w-10 h-10 text-gray-200" />
+                  </div>
+                )}
+                <span className="absolute bottom-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  ¡Últimas {prod.stock}!
+                </span>
+              </div>
+              <div className="p-3 flex flex-col gap-1 flex-1">
+                {(prod as any).categorias?.nombre && (
+                  <span className="text-[10px] text-red-500 font-medium">{(prod as any).categorias.nombre}</span>
+                )}
+                <p className="text-xs font-medium text-gray-800 line-clamp-2 min-h-[2rem]">{prod.nombre}</p>
+                <p className="text-sm font-bold text-gray-900 mt-auto pt-1">{formatCurrency(prod.precio)}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BannerPromoBlock({ config }: { config: Record<string, any> }) {
   const colorFondo = config.color_fondo || "hsl(var(--primary))";
 
@@ -1003,6 +1165,10 @@ export default function TiendaPage({
         return <TextoLibreBlock key={bloque.id} config={config} />;
       case "imagen_banner":
         return <ImagenBannerBlock key={bloque.id} config={config} />;
+      case "mas_vendidos":
+        return <MasVendidosBlock key={bloque.id} config={config} />;
+      case "ultimas_unidades":
+        return <UltimasUnidadesBlock key={bloque.id} config={config} />;
       default:
         return null;
     }
