@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { showToast } from "@/components/tienda/toast";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import {
   Package,
   ShoppingCart,
@@ -343,9 +343,7 @@ function ProductosDestacadosBlock({
 
   const isNew = (prod: Producto) => {
     if (diasNuevo <= 0) return false;
-    const created = new Date((prod as any).created_at);
-    const daysAgo = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-    return daysAgo <= diasNuevo;
+    return daysSinceAR((prod as any).created_at) <= diasNuevo;
   };
 
   return (

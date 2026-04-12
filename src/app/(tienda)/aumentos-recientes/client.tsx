@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { TrendingUp, Package, ArrowLeft, Search, X } from "lucide-react";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import { productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 
@@ -137,7 +137,7 @@ export default function AumentosRecientesClient({ productos }: { productos: Prod
                 const diff = prod.precio - pa;
                 const pct = Math.round((diff / pa) * 100);
                 const diasAtras = prod.fecha_actualizacion
-                  ? Math.floor((Date.now() - new Date(prod.fecha_actualizacion).getTime()) / (1000 * 60 * 60 * 24))
+                  ? daysSinceAR(prod.fecha_actualizacion)
                   : null;
 
                 return (
