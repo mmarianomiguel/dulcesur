@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo, Fragment } from "react";
 import { todayARG, formatCurrency, formatRelativeDate } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
+import { buildStockUpdate } from "@/lib/stock-utils";
 import { supabase } from "@/lib/supabase";
 import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
@@ -395,7 +396,7 @@ export default function ProductosPage() {
       const allRows: any[] = [];
       let from = 0;
       while (true) {
-        const { data } = await supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, precio_oferta, precio_oferta_hasta, tags, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(from, from + PAGE_SIZE - 1);
+        const { data } = await supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, precio_oferta, precio_oferta_hasta, tags, fecha_sin_stock, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(from, from + PAGE_SIZE - 1);
         if (!data || data.length === 0) break;
         allRows.push(...data);
         if (data.length < PAGE_SIZE) break;
@@ -788,6 +789,11 @@ export default function ProductosPage() {
         if (editingProduct.precio !== form.precio) {
           (payload as any).precio_anterior = editingProduct.precio;
           payload.fecha_actualizacion = new Date().toISOString();
+        }
+        // Track fecha_sin_stock when stock changes
+        const stockUpdate = buildStockUpdate(form.stock, editingProduct.stock);
+        if ("fecha_sin_stock" in stockUpdate) {
+          payload.fecha_sin_stock = stockUpdate.fecha_sin_stock;
         }
         let { error } = await supabase.from("productos").update(payload).eq("id", editingProduct.id);
         // If precio_anterior column doesn't exist yet, retry without it
@@ -1614,7 +1620,7 @@ export default function ProductosPage() {
     else if (tipo === "sumar") stockNuevo = currentStock + cantidad;
     else stockNuevo = Math.max(0, currentStock - cantidad);
     const diff = stockNuevo - currentStock;
-    await supabase.from("productos").update({ stock: stockNuevo }).eq("id", productId);
+    await supabase.from("productos").update(buildStockUpdate(stockNuevo, currentStock)).eq("id", productId);
     await supabase.from("stock_movimientos").insert({
       producto_id: productId, tipo: motivo,
       cantidad_antes: currentStock, cantidad_despues: stockNuevo, cantidad: diff,
@@ -2223,9 +2229,14 @@ export default function ProductosPage() {
                                 return es <= 0 && p.visibilidad !== "oculto";
                               });
                               const ids = sinStock.map((p) => p.id);
-                              for (let i = 0; i < ids.length; i += 50) await supabase.from("productos").update({ visibilidad: "oculto" }).in("id", ids.slice(i, i + 50));
-                              setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, visibilidad: "oculto" } : p));
-                              showAdminToast(`${sinStock.length} productos ocultos`, "success");
+                              // Setear fecha_sin_stock a hace 30 días para forzar ocultado por el sistema de visibilidad
+                              const fechaVieja = new Date();
+                              fechaVieja.setDate(fechaVieja.getDate() - 30);
+                              for (let i = 0; i < ids.length; i += 50) {
+                                await supabase.from("productos").update({ fecha_sin_stock: fechaVieja.toISOString() }).in("id", ids.slice(i, i + 50));
+                              }
+                              setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, fecha_sin_stock: fechaVieja.toISOString() } as any : p));
+                              showAdminToast(`${sinStock.length} productos ocultados de la tienda`, "success");
                             },
                           });
                         }}>
@@ -2545,7 +2556,14 @@ export default function ProductosPage() {
                     <div className="shrink-0 text-right">
                       <p className="font-semibold text-sm">{formatCurrency(product.precio)}</p>
                       {displayStock === 0 ? (
-                        <span className="text-[11px] text-red-500 font-medium">Sin stock</span>
+                        <>
+                          <span className="text-[11px] text-red-500 font-medium">Sin stock</span>
+                          {(product as any).fecha_sin_stock && (
+                            <span className="text-[10px] text-gray-400 block">
+                              hace {Math.floor((Date.now() - new Date((product as any).fecha_sin_stock).getTime()) / (1000 * 60 * 60 * 24))}d
+                            </span>
+                          )}
+                        </>
                       ) : displayStock <= (product.stock_minimo || 5) ? (
                         <span className="text-[11px] text-orange-500 font-medium">Stock: {displayStock}</span>
                       ) : (

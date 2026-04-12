@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { buildStockUpdate } from "@/lib/stock-utils";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -370,7 +371,7 @@ export default function AutoconsumoPage() {
 
     const { error: errStock } = await supabase
       .from("productos")
-      .update({ stock: stockDespues })
+      .update(buildStockUpdate(stockDespues, stockAntes))
       .eq("id", producto.id);
 
     if (errStock) {

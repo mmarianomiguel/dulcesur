@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { buildStockUpdate } from "@/lib/stock-utils";
 import { showAdminToast } from "@/components/admin-toast";
 import { formatCurrency, todayARG, nowTimeARG } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
@@ -181,7 +182,7 @@ export default function DetalleCompra({
           const newStock = prod.stock - unitsToRevert;
           await supabase
             .from("productos")
-            .update({ stock: newStock })
+            .update(buildStockUpdate(newStock, prod.stock))
             .eq("id", item.producto_id);
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id,
@@ -306,7 +307,7 @@ export default function DetalleCompra({
         const newStock = stockAntes - item.cantidad_devolver;
         await supabase
           .from("productos")
-          .update({ stock: newStock })
+          .update(buildStockUpdate(newStock, stockAntes))
           .eq("id", item.producto_id);
 
         await supabase.from("stock_movimientos").insert({
@@ -628,7 +629,7 @@ export default function DetalleCompra({
                       const newStock = stockAntes + item.cantidad;
                       await supabase
                         .from("productos")
-                        .update({ stock: newStock })
+                        .update(buildStockUpdate(newStock, stockAntes))
                         .eq("id", item.producto_id);
                       await supabase.from("stock_movimientos").insert({
                         producto_id: item.producto_id,

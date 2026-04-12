@@ -305,7 +305,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
         const allRows: any[] = [];
         let from = 0;
         while (true) {
-          const { data } = await supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible").range(from, from + PAGE - 1);
+          const { data } = await supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, fecha_sin_stock").eq("activo", true).eq("visibilidad", "visible").range(from, from + PAGE - 1);
           if (!data || data.length === 0) break;
           allRows.push(...data);
           if (data.length < PAGE) break;
@@ -327,7 +327,10 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       setDiasOcultarSinStock(dias);
       const cutoff = dias > 0 ? cutoffARG(dias) : null;
       const visibleProds = cutoff
-        ? allProds.filter((p: any) => p.stock > 0 || (p.updated_at && p.updated_at > cutoff))
+        ? allProds.filter((p: any) =>
+            p.stock > 0 ||
+            (p.fecha_sin_stock && p.fecha_sin_stock > cutoff)
+          )
         : allProds;
 
       // Build count maps from the single products query
@@ -407,7 +410,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       setLoading(true);
       let query = supabase
         .from("productos")
-        .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" });
+        .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, fecha_sin_stock, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" });
 
       query = query.eq("activo", true).eq("visibilidad", "visible");
 
@@ -438,11 +441,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       // Hide out-of-stock products not updated in X days (unless filtering for sin_stock)
       // Combos have stock=0 in the table (calculated dynamically), so exclude them from this filter
       if (disponibilidad === "" && diasOcultarSinStock > 0) {
-        const nowAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
-        nowAR.setHours(0, 0, 0, 0);
-        nowAR.setDate(nowAR.getDate() - diasOcultarSinStock);
-        const cutoff = nowAR.toISOString();
-        query = query.or(`stock.gt.0,updated_at.gt.${cutoff},es_combo.eq.true`);
+        const cutoff = cutoffARG(diasOcultarSinStock);
+        // Mostrar si: tiene stock, o si se quedó sin stock hace menos de N días, o nunca se quedó sin stock, o es combo
+        query = query.or(
+          `stock.gt.0,fecha_sin_stock.gt.${cutoff},fecha_sin_stock.is.null,es_combo.eq.true`
+        );
       }
       if (disponibilidad === "en_stock") query = query.gt("stock", 0);
       if (disponibilidad === "sin_stock") query = query.eq("stock", 0);

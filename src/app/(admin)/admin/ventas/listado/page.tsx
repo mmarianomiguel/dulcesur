@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { buildStockUpdate } from "@/lib/stock-utils";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
 import { recalcFromVenta } from "@/lib/order-calc";
@@ -603,7 +604,7 @@ export default function ListadoVentasPage() {
             if (!compProd) { errores.push(`Componente combo no encontrado`); continue; }
             const unitsChange = item.cantidad * (ci as any).cantidad * stockDirection;
             const newStock = compProd.stock + unitsChange;
-            const { error: updErr } = await supabase.from("productos").update({ stock: newStock }).eq("id", (ci as any).producto_id);
+            const { error: updErr } = await supabase.from("productos").update(buildStockUpdate(newStock, compProd.stock)).eq("id", (ci as any).producto_id);
             if (updErr) { errores.push(`Error stock combo: ${updErr.message}`); continue; }
             await supabase.from("stock_movimientos").insert({
               producto_id: (ci as any).producto_id,
@@ -625,7 +626,7 @@ export default function ListadoVentasPage() {
           }
           const unitsChange = item.cantidad * upp * stockDirection;
           const newStock = prod.stock + unitsChange;
-          const { error: updErr } = await supabase.from("productos").update({ stock: newStock }).eq("id", item.producto_id);
+          const { error: updErr } = await supabase.from("productos").update(buildStockUpdate(newStock, prod.stock)).eq("id", item.producto_id);
           if (updErr) { errores.push(`Error stock ${item.descripcion}: ${updErr.message}`); continue; }
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id,
@@ -1485,7 +1486,7 @@ export default function ListadoVentasPage() {
         if (prodErr || !prod) { errores.push(`Producto ${productoId} no encontrado`); continue; }
         const stockAntes = prod.stock;
         const stockDespues = stockAntes + diff;
-        const { error: updErr } = await supabase.from("productos").update({ stock: stockDespues }).eq("id", productoId);
+        const { error: updErr } = await supabase.from("productos").update(buildStockUpdate(stockDespues, stockAntes)).eq("id", productoId);
         if (updErr) { errores.push(`Error stock: ${updErr.message}`); continue; }
         await supabase.from("stock_movimientos").insert({
           producto_id: productoId,

@@ -4,6 +4,7 @@ import { showAdminToast } from "@/components/admin-toast";
 import { useEffect, useState, useCallback } from "react";
 import { calculateOrderFinancials } from "@/lib/order-calc";
 import { supabase } from "@/lib/supabase";
+import { buildStockUpdate } from "@/lib/stock-utils";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import type { Cliente, Producto, Usuario, Venta } from "@/types/database";
@@ -416,7 +417,7 @@ export default function CargaManualPage() {
               : freshProd.stock - totalUnits;
             await supabase
               .from("productos")
-              .update({ stock: newStock })
+              .update(buildStockUpdate(newStock, freshProd.stock))
               .eq("id", item.producto_id);
             await supabase.from("stock_movimientos").insert({
               producto_id: item.producto_id,

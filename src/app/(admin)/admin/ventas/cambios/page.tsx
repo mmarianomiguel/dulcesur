@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { buildStockUpdate } from "@/lib/stock-utils";
 import { todayARG, formatCurrency } from "@/lib/formatters";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -254,7 +255,7 @@ export default function CambiosPage() {
         const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
         const stockAntes = prod?.stock ?? 0;
         const stockDespues = stockAntes + item.cantidad;
-        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+        await supabase.from("productos").update(buildStockUpdate(stockDespues, stockAntes)).eq("id", item.producto_id);
         await supabase.from("stock_movimientos").insert({
           producto_id: item.producto_id,
           tipo: "devolucion",
@@ -273,7 +274,7 @@ export default function CambiosPage() {
         const { data: prod } = await supabase.from("productos").select("stock").eq("id", item.producto_id).single();
         const stockAntes = prod?.stock ?? 0;
         const stockDespues = stockAntes - item.cantidad;
-        await supabase.from("productos").update({ stock: stockDespues }).eq("id", item.producto_id);
+        await supabase.from("productos").update(buildStockUpdate(stockDespues, stockAntes)).eq("id", item.producto_id);
         await supabase.from("stock_movimientos").insert({
           producto_id: item.producto_id,
           tipo: "Venta",

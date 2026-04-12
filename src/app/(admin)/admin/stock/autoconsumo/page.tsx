@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { buildStockUpdate } from "@/lib/stock-utils";
 import {
   formatCurrency,
   todayARG,
@@ -321,7 +322,7 @@ export default function AutoconsumoPage() {
     // Decrement stock
     await supabase
       .from("productos")
-      .update({ stock: stockDespues })
+      .update(buildStockUpdate(stockDespues, stockAntes))
       .eq("id", selectedProduct.id);
 
     // Register stock movement
@@ -642,7 +643,7 @@ export default function AutoconsumoPage() {
                                             const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
                                             const stockAntes = prod?.stock ?? 0;
                                             const newStock = stockAntes + c.cantidad;
-                                            await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
+                                            await supabase.from("productos").update(buildStockUpdate(newStock, stockAntes)).eq("id", c.producto_id);
                                             await supabase.from("stock_movimientos").insert({
                                               producto_id: c.producto_id,
                                               tipo: "ajuste",
@@ -725,7 +726,7 @@ export default function AutoconsumoPage() {
                                     const { data: prod } = await supabase.from("productos").select("stock").eq("id", c.producto_id).single();
                                     const stockAntes = prod?.stock ?? 0;
                                     const newStock = stockAntes + c.cantidad;
-                                    await supabase.from("productos").update({ stock: newStock }).eq("id", c.producto_id);
+                                    await supabase.from("productos").update(buildStockUpdate(newStock, stockAntes)).eq("id", c.producto_id);
                                     await supabase.from("stock_movimientos").insert({
                                       producto_id: c.producto_id,
                                       tipo: "ajuste",
