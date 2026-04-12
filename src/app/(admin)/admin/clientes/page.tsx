@@ -920,10 +920,16 @@ export default function ClientesPage() {
   const totalPendiente = useMemo(() => clientsConDeuda.reduce((a, c) => a + c.saldo, 0), [clientsConDeuda]);
 
   const filteredCobranzas = useMemo(() => {
-    if (!cobranzasSearch) return clientsConDeuda;
-    const s = norm(cobranzasSearch);
-    return clientsConDeuda.filter((c) => norm(c.nombre).includes(s));
-  }, [clientsConDeuda, cobranzasSearch]);
+    let result = clientsConDeuda;
+    if (cobranzasSearch) {
+      const s = norm(cobranzasSearch);
+      result = result.filter((c) => norm(c.nombre).includes(s));
+    }
+    if (cobranzaSort === "antiguedad") {
+      return [...result].sort((a, b) => (deudaDetalle[b.id]?.diasDeuda || 0) - (deudaDetalle[a.id]?.diasDeuda || 0));
+    }
+    return result; // default: mayor saldo (ya viene ordenado de clientsConDeuda)
+  }, [clientsConDeuda, cobranzasSearch, cobranzaSort, deudaDetalle]);
 
   const fetchDeudaDetalle = useCallback(async (deudores: Cliente[]) => {
     if (deudores.length === 0) { setDeudaDetalle({}); return; }
@@ -1620,13 +1626,25 @@ export default function ClientesPage() {
 
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-end justify-between gap-4">
+              <div className="flex items-end flex-wrap justify-between gap-4">
                 <div className="space-y-1.5 flex-1">
                   <span className="text-xs text-muted-foreground font-semibold tracking-wide">BUSCAR</span>
                   <div className="relative max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input placeholder="Filtrar cliente..." value={cobranzasSearch} onChange={(e) => setCobranzasSearch(e.target.value)} className="pl-9" />
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-xs text-muted-foreground font-semibold tracking-wide">ORDENAR POR</span>
+                  <Select value={cobranzaSort} onValueChange={(v) => setCobranzaSort(v as "monto" | "antiguedad")}>
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monto">Mayor deuda</SelectItem>
+                      <SelectItem value="antiguedad">Más antiguo</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button variant="outline" size="sm" onClick={async () => {
                   const { data: allClients } = await supabase.from("clientes").select("id, nombre, saldo").eq("activo", true);
