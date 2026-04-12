@@ -224,6 +224,7 @@ export default function ListadoVentasPage() {
   const [filterOrigen, setFilterOrigen] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
+  const [filterBanco, setFilterBanco] = useState("all");
   const [quickPeriod, setQuickPeriod] = useState<"today" | "week" | "month" | "custom">("today");
   const [filterMode, setFilterMode] = useState<"day" | "month" | "range" | "all">("range");
   const [filterDay, setFilterDay] = useState(todayARG());
@@ -317,6 +318,7 @@ export default function ListadoVentasPage() {
     else if (filterOrigen === "tienda") query = query.eq("origen", "tienda");
     if (filterType !== "all") query = query.eq("tipo_comprobante", filterType);
     if (filterPayment !== "all") query = query.eq("forma_pago", filterPayment);
+    if (filterBanco !== "all") query = query.eq("cuenta_transferencia_alias", filterBanco);
 
     if (quickPeriod === "today") {
       query = query.eq("fecha", todayARG());
@@ -398,7 +400,7 @@ export default function ListadoVentasPage() {
     }
 
     setLoading(false);
-  }, [quickPeriod, filterOrigen, filterType, filterPayment, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
+  }, [quickPeriod, filterOrigen, filterType, filterPayment, filterBanco, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
 
   useEffect(() => { fetchVentas(); }, [fetchVentas]);
   // Fetch all reference data in parallel on mount
@@ -2178,6 +2180,11 @@ export default function ListadoVentasPage() {
         const pago = (o.forma_pago || o.metodo_pago || "").toLowerCase();
         if (filterPayment.toLowerCase() !== pago) return false;
       }
+      // Banco filter
+      if (filterBanco !== "all") {
+        const alias = (o as any).cuenta_transferencia_alias || "";
+        if (alias !== filterBanco) return false;
+      }
       // Search filter
       if (searchClient) {
         const q = norm(searchClient);
@@ -2189,7 +2196,7 @@ export default function ListadoVentasPage() {
       }
       return true;
     });
-  }, [allOrders, filterSource, poFilterEstado, filterPayment, searchClient, quickPeriod]);
+  }, [allOrders, filterSource, poFilterEstado, filterPayment, filterBanco, searchClient, quickPeriod]);
 
   // Count online orders hidden because delivery is in the future (only relevant in "today" view)
   const hiddenFutureOrders = useMemo(() => {
@@ -2379,9 +2386,9 @@ export default function ListadoVentasPage() {
             <div className="hidden sm:block w-px h-6 bg-border mt-2" />
 
             {/* Forma de cobro */}
-            <div className="flex items-center gap-1.5 pt-2">
+            <div className="flex items-center gap-1.5 pt-2 flex-wrap">
               <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Cobro</span>
-              <Select value={filterPayment} onValueChange={(v) => setFilterPayment(v ?? "all")}>
+              <Select value={filterPayment} onValueChange={(v) => { setFilterPayment(v ?? "all"); setFilterBanco("all"); }}>
                 <SelectTrigger className="h-7 w-auto min-w-[90px] text-xs border-dashed">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
@@ -2393,6 +2400,21 @@ export default function ListadoVentasPage() {
                   <SelectItem value="Mixto">Mixto</SelectItem>
                 </SelectContent>
               </Select>
+              {(filterPayment === "Transferencia" || filterPayment === "Mixto") && cuentasBancarias.length > 0 && (
+                <Select value={filterBanco} onValueChange={(v) => setFilterBanco(v ?? "all")}>
+                  <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs border-dashed border-blue-300 text-blue-700">
+                    <SelectValue placeholder="Todos los bancos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los bancos</SelectItem>
+                    {cuentasBancarias.map((c: any) => (
+                      <SelectItem key={c.id} value={c.alias || c.nombre}>
+                        {c.nombre}{c.alias ? ` — ${c.alias}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Tipo comprobante */}
