@@ -70,6 +70,8 @@ import {
   Star,
   Tag,
   MoreHorizontal,
+  Printer,
+  DollarSign,
 } from "lucide-react";
 
 import { ImageUpload } from "@/components/image-upload";
@@ -219,6 +221,12 @@ export default function ProductosPage() {
 
   const [quickViewProduct, setQuickViewProduct] =
     useState<ProductoWithRelations | null>(null);
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    product: ProductoWithRelations;
+  } | null>(null);
 
   // Mass selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -505,6 +513,18 @@ export default function ProductosPage() {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [contextMenu]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -1622,6 +1642,24 @@ export default function ProductosPage() {
     const velDiariaMap: Record<string, number> = {};
     for (const [id, total] of Object.entries(map)) velDiariaMap[id] = Math.round((total / 30) * 10) / 10;
     setVelMap(velDiariaMap);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, product: ProductoWithRelations) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 200;
+    const menuHeight = 340;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuWidth > viewportWidth - 8) x = viewportWidth - menuWidth - 8;
+    if (y + menuHeight > viewportHeight - 8) y = viewportHeight - menuHeight - 8;
+    setContextMenu({ x, y, product });
+  };
+
+  const openHistory = (product: ProductoWithRelations) => {
+    setQuickViewProduct(product);
   };
 
   const toggleSelect = (id: string) => {
