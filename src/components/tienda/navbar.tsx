@@ -374,7 +374,7 @@ export default function TiendaNavbar() {
                       <p className="mt-0.5 text-xs font-medium text-red-500">⚠ Saldo pendiente {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(clienteSaldo)}</p>
                     )}
                   </div>
-                  <Link href="/historial" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><Package className="h-4 w-4 text-gray-400" />Mis pedidos</Link>
+                  <Link href="/cuenta/pedidos" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><Package className="h-4 w-4 text-gray-400" />Mis pedidos</Link>
                   <Link href="/cuenta" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><User className="h-4 w-4 text-gray-400" />Mi cuenta</Link>
                   <div className="my-1 border-t border-gray-100" />
                   <button onClick={() => { localStorage.removeItem("cliente_auth"); setClienteId(null); setClienteNombre(null); setClienteSaldo(null); setDropdownOpen(false); window.location.href = "/"; }} className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-gray-400 hover:bg-gray-50 hover:text-red-500">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { User, Package, LogOut, AlertCircle, ChevronRight, Bell } from "lucide-react";
+import { User, Package, AlertCircle, ChevronRight, Bell } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 
@@ -36,6 +36,8 @@ export default function CuentaPage() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [error, setError] = useState("");
   const [orderCount, setOrderCount] = useState(0);
+  const [clienteSaldo, setClienteSaldo] = useState<number | null>(null);
+  const [ultimoPedido, setUltimoPedido] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string>("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png");
   const [logoError, setLogoError] = useState(false);
 
@@ -64,9 +66,10 @@ export default function CuentaPage() {
       // Verify client, load logo, and count orders all in parallel
       Promise.all([
         supabase.from("tienda_config").select("logo_url").limit(1).single(),
-        supabase.from("clientes_auth").select("id, nombre, email").eq("id", parsed.id).single(),
+        supabase.from("clientes_auth").select("id, nombre, email, cliente_id").eq("id", parsed.id).single(),
         supabase.from("pedidos_tienda").select("id", { count: "exact", head: true }).eq("cliente_auth_id", parsed.id),
-      ]).then(([{ data: logoData }, { data: clienteDB, error: clienteErr }, { count }]) => {
+        supabase.from("pedidos_tienda").select("created_at").eq("cliente_auth_id", parsed.id).order("created_at", { ascending: false }).limit(1),
+      ]).then(async ([{ data: logoData }, { data: clienteDB, error: clienteErr }, { count }, { data: ultimoData }]) => {
         if (logoData?.logo_url) setLogoUrl(logoData.logo_url);
         if (clienteErr || !clienteDB) {
           localStorage.removeItem("cliente_auth");
@@ -79,6 +82,18 @@ export default function CuentaPage() {
         setCheckingAuth(false);
         localStorage.setItem("cliente_auth", JSON.stringify(fresh));
         if (count !== null) setOrderCount(count);
+        if (ultimoData && ultimoData.length > 0) {
+          const fecha = new Date(ultimoData[0].created_at);
+          setUltimoPedido(fecha.toLocaleDateString("es-AR", { day: "numeric", month: "short" }));
+        }
+        if ((clienteDB as any).cliente_id) {
+          const { data: clienteData } = await supabase
+            .from("clientes")
+            .select("saldo")
+            .eq("id", (clienteDB as any).cliente_id)
+            .single();
+          if (clienteData) setClienteSaldo((clienteData as any).saldo ?? 0);
+        }
       });
     } else {
       // Load logo only
@@ -447,96 +462,120 @@ export default function CuentaPage() {
 
   const initials = cliente.nombre
     .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
     .map((n) => n[0])
     .join("")
-    .toUpperCase()
-    .slice(0, 2);
+    .toUpperCase();
+
+  const primerNombre = cliente.nombre.trim().split(" ")[0];
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      {/* Welcome header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white text-xl font-bold shrink-0">
-            {initials}
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-gray-900 truncate">
-              Hola, {cliente.nombre.split(" ")[0]}
-            </h1>
-            <p className="text-gray-400 text-sm mt-0.5">{cliente.email}</p>
-          </div>
+    <div className="max-w-lg mx-auto px-4 py-8 space-y-4">
+
+      {/* Header */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3">
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white text-base font-bold shrink-0">
+          {initials}
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold text-gray-900">Hola, {primerNombre}</h1>
+          <p className="text-xs text-gray-400 truncate">{cliente.email}</p>
         </div>
       </div>
 
-      {/* Navigation links */}
-      <div className="space-y-3">
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4">
+          <p className="text-xs text-gray-400 font-medium mb-1">Pedidos</p>
+          <p className="text-2xl font-bold text-gray-900">{orderCount}</p>
+          {ultimoPedido && <p className="text-[10px] text-gray-400 mt-0.5">Último: {ultimoPedido}</p>}
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 p-4">
+          <p className="text-xs text-gray-400 font-medium mb-1">Cuenta</p>
+          {clienteSaldo === null ? (
+            <p className="text-sm text-gray-300 mt-1">—</p>
+          ) : clienteSaldo > 0 ? (
+            <p className="text-base font-bold text-orange-500 mt-1">
+              {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(clienteSaldo)}
+            </p>
+          ) : (
+            <p className="text-base font-semibold text-green-600 mt-1">✓ Al día</p>
+          )}
+          {clienteSaldo !== null && clienteSaldo > 0 && (
+            <p className="text-[10px] text-orange-400 mt-0.5">Saldo pendiente</p>
+          )}
+        </div>
+      </div>
+
+      {/* Aviso saldo — solo si tiene deuda */}
+      {clienteSaldo !== null && clienteSaldo > 0 && (
+        <div className="flex items-center gap-2.5 bg-orange-50 border border-orange-100 rounded-xl px-4 py-2.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+          <p className="text-xs text-orange-700 flex-1">Tenés un saldo pendiente con la tienda</p>
+          <p className="text-xs font-bold text-orange-600">
+            {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(clienteSaldo)}
+          </p>
+        </div>
+      )}
+
+      {/* Nav links */}
+      <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
         <Link
           href="/cuenta/perfil"
-          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-primary/20 hover:shadow-md transition-all duration-200 p-5 group"
+          className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors group"
         >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-purple-50 rounded-xl flex items-center justify-center">
-              <User className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 group-hover:text-primary transition-colors">Mi Perfil</h2>
-              <p className="text-gray-400 text-sm">Datos personales, dirección y contraseña</p>
-            </div>
+          <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+            <User className="w-4 h-4 text-purple-600" />
           </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 group-hover:text-primary transition-colors">Mi Perfil</p>
+            <p className="text-xs text-gray-400">Datos y dirección de envío</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" />
         </Link>
 
         <Link
           href="/cuenta/pedidos"
-          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-primary/20 hover:shadow-md transition-all duration-200 p-5 group"
+          className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors group"
         >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-primary/5 rounded-xl flex items-center justify-center">
-              <Package className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 group-hover:text-primary transition-colors">Mis Pedidos</h2>
-              <p className="text-gray-400 text-sm">
-                {orderCount > 0 ? `${orderCount} ${orderCount === 1 ? "pedido" : "pedidos"} realizados` : "Historial de compras"}
-              </p>
-            </div>
+          <div className="w-9 h-9 rounded-xl bg-primary/5 flex items-center justify-center shrink-0">
+            <Package className="w-4 h-4 text-primary" />
           </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 group-hover:text-primary transition-colors">Mis Pedidos</p>
+            <p className="text-xs text-gray-400">
+              {orderCount > 0 ? `${orderCount} ${orderCount === 1 ? "pedido" : "pedidos"} realizados` : "Historial de compras"}
+            </p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" />
         </Link>
 
         <Link
           href="/cuenta/notificaciones"
-          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-primary/20 hover:shadow-md transition-all duration-200 p-5 group"
+          className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors group"
         >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center">
-              <Bell className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 group-hover:text-primary transition-colors">Notificaciones</h2>
-              <p className="text-gray-400 text-sm">Preferencias y historial de notificaciones</p>
-            </div>
+          <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+            <Bell className="w-4 h-4 text-amber-500" />
           </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 group-hover:text-primary transition-colors">Notificaciones</p>
+            <p className="text-xs text-gray-400">Preferencias y alertas</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" />
         </Link>
+      </div>
 
+      {/* Cerrar sesión */}
+      <div className="text-center pt-2">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center justify-between bg-white rounded-2xl border border-gray-100 hover:border-red-200 hover:shadow-md transition-all duration-200 p-5 group text-left"
+          className="text-sm text-gray-400 hover:text-red-500 transition-colors"
         >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-red-50 rounded-xl flex items-center justify-center">
-              <LogOut className="w-5 h-5 text-red-500" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 group-hover:text-red-500 transition-colors">Cerrar sesión</h2>
-              <p className="text-gray-400 text-sm">Salir de tu cuenta</p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-red-400 transition-colors" />
+          Cerrar sesión
         </button>
       </div>
+
     </div>
   );
 }
