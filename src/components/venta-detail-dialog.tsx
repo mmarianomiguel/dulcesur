@@ -612,7 +612,7 @@ export function VentaDetailDialog({
                               <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => addProduct(p)}>
                                 + Unidad
                               </Button>
-                              {allVariants.filter((pr) => (pr.unidades_por_presentacion ?? pr.cantidad ?? 1) !== 1).map((pr, i) => (
+                              {allVariants.filter((pr) => (pr.unidades_por_presentacion ?? 1) !== 1).map((pr, i) => (
                                 <Button
                                   key={i}
                                   size="sm"
