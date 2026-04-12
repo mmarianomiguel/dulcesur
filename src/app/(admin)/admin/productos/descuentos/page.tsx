@@ -312,49 +312,108 @@ export default function DescuentosPage() {
               <Button variant="outline" className="mt-3" onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> Crear descuento</Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium">Nombre</th>
-                    <th className="text-left px-4 py-3 font-medium">Descuento</th>
-                    <th className="text-left px-4 py-3 font-medium">Vigencia</th>
-                    <th className="text-left px-4 py-3 font-medium">Aplica a</th>
-                    <th className="text-left px-4 py-3 font-medium">Presentación</th>
-                    <th className="text-left px-4 py-3 font-medium">Estado</th>
-                    <th className="text-right px-4 py-3 font-medium">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {descuentos.map((d) => {
-                    const estado = getEstado(d);
-                    return (
-                      <tr key={d.id} className={`border-b hover:bg-muted/30 ${estado === "vencido" ? "opacity-60" : ""}`}>
-                        <td className="px-4 py-3 font-medium">{d.nombre}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant="secondary">
-                            {d.tipo_descuento === "precio_fijo" ? <><DollarSign className="w-3 h-3 mr-1" />{formatCurrency(d.precio_fijo || 0)}</> : <><Percent className="w-3 h-3 mr-1" />{Number(d.porcentaje)}%</>}
-                          </Badge>
-                          {d.clientes_ids?.length > 0 && <Badge variant="outline" className="ml-1.5 text-blue-600 border-blue-200"><Users className="w-3 h-3 mr-1" />{d.clientes_ids.length}</Badge>}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{d.fecha_fin ? `${formatDate(d.fecha_inicio)} - ${formatDate(d.fecha_fin)}` : "Permanente"}</td>
-                        <td className="px-4 py-3 capitalize">{aplicaALabel(d.aplica_a)}</td>
-                        <td className="px-4 py-3 capitalize">{presentacionLabel(d.presentacion)}</td>
-                        <td className="px-4 py-3">{estadoBadge(estado)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(d)}><Pencil className="w-4 h-4" /></Button>
-                            <Button variant="ghost" size="icon" onClick={() => toggleActivo(d)}>
-                              {d.activo ? <ToggleRight className="w-4 h-4 text-green-600" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(d.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="p-4 space-y-2">
+              <div className="space-y-2">
+                {descuentos.map((d) => {
+                  const estado = getEstado(d);
+                  return (
+                    <div
+                      key={d.id}
+                      className={`flex items-start gap-3 px-4 py-3.5 border rounded-xl cursor-pointer hover:border-primary/30 transition-all bg-background ${
+                        estado === "vencido" || estado === "inactivo"
+                          ? "opacity-60"
+                          : ""
+                      }`}
+                      onClick={() => openEdit(d)}
+                    >
+                      {/* Value badge */}
+                      <div className="flex-shrink-0 min-w-[52px] text-center px-2 py-2 rounded-lg bg-primary/[0.08] border border-primary/15">
+                        <p className="text-base font-semibold text-primary">
+                          {d.tipo_descuento === "precio_fijo"
+                            ? formatCurrency(d.precio_fijo || 0)
+                            : `${Number(d.porcentaje)}%`}
+                        </p>
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">{d.nombre}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          {estadoBadge(estado)}
+                          <span className="text-muted-foreground text-[10px]">·</span>
+                          <span className="text-xs text-muted-foreground">
+                            {aplicaALabel(d.aplica_a)}
+                          </span>
+                          {d.aplica_a === "productos" &&
+                            d.productos_ids?.length > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                ({d.productos_ids.length})
+                              </span>
+                            )}
+                          <span className="text-muted-foreground text-[10px]">·</span>
+                          <span className="text-xs text-muted-foreground">
+                            {presentacionLabel(d.presentacion)}
+                          </span>
+                          <span className="text-muted-foreground text-[10px]">·</span>
+                          <span className="text-xs text-muted-foreground">
+                            {d.fecha_fin
+                              ? `${formatDate(d.fecha_inicio)} → ${formatDate(d.fecha_fin)}`
+                              : "Permanente"}
+                          </span>
+                          {d.clientes_ids?.length > 0 && (
+                            <>
+                              <span className="text-muted-foreground text-[10px]">·</span>
+                              <span className="text-xs text-blue-600 font-medium">
+                                {d.clientes_ids.length} cliente(s) exclusivo(s)
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div
+                        className="flex items-center gap-1 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => openEdit(d)}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => toggleActivo(d)}
+                        >
+                          {d.activo ? (
+                            <ToggleRight className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <ToggleLeft className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 hover:text-destructive"
+                          onClick={() => handleDelete(d.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {descuentos.length === 0 && !loading && (
+                  <p className="text-center text-sm text-muted-foreground py-8">
+                    No hay descuentos creados.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
