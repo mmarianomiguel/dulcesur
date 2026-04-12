@@ -236,17 +236,9 @@ export default function ProductosPage() {
   const [actionConfirm, setActionConfirm] = useState<{ open: boolean; title: string; message: string; variant: "destructive" | "default"; onConfirm: () => void }>({ open: false, title: "", message: "", variant: "default", onConfirm: () => {} });
   const [deleting, setDeleting] = useState(false);
 
-  // History dialog state
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyProduct, setHistoryProduct] = useState<ProductoWithRelations | null>(null);
+  // History items state (used by unified historial tab)
   const [historyItems, setHistoryItems] = useState<MovimientoItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
-  // Price history dialog state
-  const [phDialogOpen, setPhDialogOpen] = useState(false);
-  const [phProduct, setPhProduct] = useState<ProductoWithRelations | null>(null);
-  const [phData, setPhData] = useState<{ id: string; precio_anterior: number; precio_nuevo: number; costo_anterior: number; costo_nuevo: number; usuario: string; created_at: string }[]>([]);
-  const [phLoading, setPhLoading] = useState(false);
+  const [historialFilter, setHistorialFilter] = useState<"todos" | "precios" | "stock">("todos");
 
   // Order detail dialog state
   const [ordenDetailOpen, setOrdenDetailOpen] = useState(false);
@@ -699,9 +691,26 @@ export default function ProductosPage() {
     setEditTab("info");
     setDialogOpen(true);
 
-    // Lazy-load price history and discounts in background (non-blocking)
-    supabase.from("precio_historial").select("*").eq("producto_id", p.id).order("created_at", { ascending: false }).limit(20)
-      .then(({ data }) => setPriceHistory((data || []) as any));
+    // Lazy-load price history + stock movements in parallel (non-blocking)
+    Promise.all([
+      supabase
+        .from("precio_historial")
+        .select("*")
+        .eq("producto_id", p.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("stock_movimientos")
+        .select(
+          "id, tipo, cantidad_antes, cantidad_despues, cantidad, referencia, descripcion, usuario, created_at, orden_id"
+        )
+        .eq("producto_id", p.id)
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]).then(([{ data: ph }, { data: sm }]) => {
+      setPriceHistory((ph || []) as any);
+      setHistoryItems((sm || []) as any);
+    });
     supabase.from("descuentos").select("*").eq("activo", true)
       .then(({ data: allDesc }) => {
         const today = new Date().toISOString().split("T")[0];
@@ -714,20 +723,6 @@ export default function ProductosPage() {
           return false;
         }));
       });
-  };
-
-  const openPriceHistory = async (p: ProductoWithRelations) => {
-    setPhProduct(p);
-    setPhLoading(true);
-    setPhDialogOpen(true);
-    const { data } = await supabase
-      .from("precio_historial")
-      .select("*")
-      .eq("producto_id", p.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setPhData((data || []) as any);
-    setPhLoading(false);
   };
 
   const handleSave = async () => {
@@ -1007,91 +1002,6 @@ export default function ProductosPage() {
 
     setEditTab("info");
     setDialogOpen(true);
-  };
-
-  // History
-  const openHistory = async (p: ProductoWithRelations) => {
-    setHistoryProduct(p);
-    setHistoryLoading(true);
-    setHistoryOpen(true);
-    setHistoryItems([]);
-
-    // Fetch movements for this product
-    const { data } = await supabase
-      .from("stock_movimientos")
-      .select("id, tipo, cantidad_antes, cantidad_despues, cantidad, referencia, descripcion, usuario, created_at, orden_id")
-      .eq("producto_id", p.id)
-      .order("created_at", { ascending: false });
-
-    let allMovs = (data as any[]) || [];
-
-    // For combo products: also fetch movements from component products
-    if ((p as any).es_combo) {
-      const { data: comboItems } = await supabase
-        .from("combo_items")
-        .select("producto_id, productos!combo_items_producto_id_fkey(nombre)")
-        .eq("combo_id", p.id);
-      if (comboItems && comboItems.length > 0) {
-        const componentNameMap: Record<string, string> = {};
-        comboItems.forEach((ci: any) => {
-          componentNameMap[ci.producto_id] = ci.productos?.nombre || "Componente";
-        });
-        const componentIds = comboItems.map((ci: any) => ci.producto_id);
-
-        // Get all orden_ids from combo's own movements to correlate
-        const comboOrdenIds = allMovs.filter((m: any) => m.orden_id).map((m: any) => m.orden_id);
-
-        // Fetch component movements: by description match OR by shared orden_id
-        const queries = [
-          supabase
-            .from("stock_movimientos")
-            .select("id, tipo, cantidad_antes, cantidad_despues, cantidad, referencia, descripcion, usuario, created_at, orden_id, producto_id")
-            .in("producto_id", componentIds)
-            .order("created_at", { ascending: false }),
-        ];
-
-        const [{ data: allComponentMovs }] = await Promise.all(queries);
-
-        if (allComponentMovs) {
-          // Filter: movements that reference this combo (by name or shared orden_id)
-          const comboNameLower = p.nombre.toLowerCase();
-          const ordenIdSet = new Set(comboOrdenIds);
-          const relevantMovs = allComponentMovs.filter((m: any) => {
-            if (m.descripcion && m.descripcion.toLowerCase().includes(comboNameLower)) return true;
-            if (m.orden_id && ordenIdSet.has(m.orden_id)) return true;
-            return false;
-          });
-
-          // Tag component movements with product name
-          const taggedMovs = relevantMovs.map((m: any) => ({
-            ...m,
-            descripcion: `[${componentNameMap[m.producto_id] || "Componente"}] ${m.descripcion || ""}`,
-          }));
-
-          // Deduplicate by id
-          const existingIds = new Set(allMovs.map((m: any) => m.id));
-          const newMovs = taggedMovs.filter((m: any) => !existingIds.has(m.id));
-          allMovs = [...allMovs, ...newMovs];
-          allMovs.sort((a: any, b: any) => (b.created_at || "").localeCompare(a.created_at || ""));
-        }
-      }
-    }
-
-    const items: MovimientoItem[] = allMovs.map((item: any) => ({
-      id: item.id,
-      tipo: item.tipo || "ajuste",
-      cantidad_antes: item.cantidad_antes ?? 0,
-      cantidad_despues: item.cantidad_despues ?? 0,
-      cantidad: item.cantidad ?? 0,
-      referencia: item.referencia || null,
-      descripcion: item.descripcion || null,
-      usuario: item.usuario || null,
-      created_at: item.created_at || "",
-      orden_id: item.orden_id || null,
-    }));
-
-    setHistoryItems(items);
-    setHistoryLoading(false);
   };
 
   // Export Excel
@@ -1821,6 +1731,58 @@ export default function ProductosPage() {
     const total = sinCategoria + sinImagen + precioBajoCosto + sinProveedor;
     return { sinCategoria, sinImagen, precioBajoCosto, sinProveedor, total };
   }, [products, prodProvMap]);
+
+  const unifiedHistory = useMemo(() => {
+    type HistItem = {
+      id: string;
+      tipo: string;
+      descripcion: string;
+      fecha: string;
+      usuario: string;
+      valor: string;
+    };
+    const items: HistItem[] = [];
+
+    priceHistory.forEach((h) => {
+      const up = h.precio_nuevo > h.precio_anterior;
+      items.push({
+        id: `precio-${h.id}`,
+        tipo: up ? "precio_subida" : "precio_bajada",
+        descripcion: `Precio ${up ? "subido" : "bajado"}: ${formatCurrency(
+          h.precio_anterior
+        )} → ${formatCurrency(h.precio_nuevo)}`,
+        fecha: h.created_at,
+        usuario: h.usuario || "Admin",
+        valor: `${up ? "+" : ""}${Math.round(
+          ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior) * 100
+        )}%`,
+      });
+    });
+
+    historyItems.forEach((h) => {
+      const isVenta = h.tipo.toLowerCase().includes("venta");
+      const isCompra = h.tipo.toLowerCase().includes("compra");
+      items.push({
+        id: `stock-${h.id}`,
+        tipo: isVenta ? "venta" : isCompra ? "compra" : "ajuste",
+        descripcion: h.descripcion || h.referencia || h.tipo,
+        fecha: h.created_at,
+        usuario: h.usuario || "Sistema",
+        valor: `${h.cantidad > 0 ? "+" : ""}${h.cantidad} un.`,
+      });
+    });
+
+    return items
+      .filter((i) => {
+        if (historialFilter === "precios") return i.tipo.startsWith("precio");
+        if (historialFilter === "stock") return !i.tipo.startsWith("precio");
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      );
+  }, [priceHistory, historyItems, historialFilter]);
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -2604,12 +2566,6 @@ export default function ProductosPage() {
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => openEdit(product)}>
                               <Edit className="w-3.5 h-3.5 mr-2" /> Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openHistory(product)}>
-                              <Clock className="w-3.5 h-3.5 mr-2" /> Historial stock
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openPriceHistory(product)}>
-                              <TrendingUp className="w-3.5 h-3.5 mr-2" /> Historial precios
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleDuplicate(product)}>
                               <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
@@ -3985,73 +3941,77 @@ export default function ProductosPage() {
             {/* TAB: historial */}
             <div className={editingProduct && editTab !== "historial" ? "hidden" : ""}>
               <div className="space-y-4">
-                {priceHistory.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        Historial de precios
-                      </h3>
-                      <Badge variant="secondary" className="text-xs">{priceHistory.length} cambios</Badge>
+                {/* Filter pills */}
+                <div className="flex gap-2">
+                  {(["todos", "precios", "stock"] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setHistorialFilter(f)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                        historialFilter === f
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      {f === "todos" ? "Todos" : f === "precios" ? "Precios" : "Stock"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Unified list */}
+                <div className="space-y-0 divide-y">
+                  {unifiedHistory.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 py-3">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
+                          item.tipo === "precio_subida"
+                            ? "bg-amber-50 text-amber-700"
+                            : item.tipo === "precio_bajada"
+                            ? "bg-green-50 text-green-700"
+                            : item.tipo === "venta"
+                            ? "bg-red-50 text-red-700"
+                            : item.tipo === "compra"
+                            ? "bg-green-50 text-green-700"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {item.tipo === "precio_subida"
+                          ? "↑$"
+                          : item.tipo === "precio_bajada"
+                          ? "↓$"
+                          : item.tipo === "venta"
+                          ? "−"
+                          : item.tipo === "compra"
+                          ? "+"
+                          : "~"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.descripcion}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {formatRelativeDate(item.fecha)} · {item.usuario}
+                        </p>
+                      </div>
+                      <div
+                        className={`text-sm font-semibold shrink-0 ${
+                          item.tipo === "precio_subida"
+                            ? "text-amber-600"
+                            : item.tipo === "compra"
+                            ? "text-green-600"
+                            : item.tipo === "venta"
+                            ? "text-red-600"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {item.valor}
+                      </div>
                     </div>
-                    <div className="space-y-3">
-                      {priceHistory.map((h, i) => {
-                        const precioChange = h.precio_nuevo - h.precio_anterior;
-                        const costoChange = h.costo_nuevo - h.costo_anterior;
-                        return (
-                          <div key={h.id} className="border rounded-xl p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${precioChange > 0 ? "bg-red-500" : precioChange < 0 ? "bg-emerald-500" : "bg-muted-foreground"}`} />
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(h.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" })}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  {new Date(h.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                              </div>
-                              {h.usuario && <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{h.usuario}</span>}
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Precio</p>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-muted-foreground line-through">{formatCurrency(h.precio_anterior)}</span>
-                                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                                  <span className="text-sm font-semibold">{formatCurrency(h.precio_nuevo)}</span>
-                                  {precioChange !== 0 && (
-                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${precioChange > 0 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
-                                      {precioChange > 0 ? "+" : ""}{((precioChange / (h.precio_anterior || 1)) * 100).toFixed(1)}%
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Costo</p>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-muted-foreground line-through">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "\u2014"}</span>
-                                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                                  <span className="text-sm font-semibold">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "\u2014"}</span>
-                                  {costoChange !== 0 && h.costo_anterior > 0 && (
-                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${costoChange > 0 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
-                                      {costoChange > 0 ? "+" : ""}{((costoChange / (h.costo_anterior || 1)) * 100).toFixed(1)}%
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <Clock className="w-10 h-10 mb-3 opacity-30" />
-                    <p className="text-sm font-medium">Sin historial de precios</p>
-                    <p className="text-xs mt-1">Los cambios de precio se registrarán aquí</p>
-                  </div>
-                )}
+                  ))}
+                  {unifiedHistory.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      Sin registros
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
             {/* END TAB: historial */}
@@ -4100,245 +4060,6 @@ export default function ProductosPage() {
               <Button variant="outline" className="flex-1" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
               <Button variant="destructive" className="flex-1" onClick={confirmDelete}>Sí, eliminar</Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={phDialogOpen} onOpenChange={setPhDialogOpen}>
-        <DialogContent className="max-w-xl max-h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
-          <div className="px-6 py-4 border-b bg-gradient-to-r from-violet-50 to-purple-50">
-            <DialogHeader className="p-0 space-y-0">
-              <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-violet-600" />
-                Historial de Precios
-              </DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground mt-1">{phProduct?.nombre || "---"}</p>
-            {phData.length > 0 && (
-              <div className="flex gap-4 mt-3">
-                <div className="bg-white rounded-lg px-3 py-1.5 border">
-                  <p className="text-[10px] text-muted-foreground">Precio actual</p>
-                  <p className="text-sm font-bold">{formatCurrency(phData[0]?.precio_nuevo || 0)}</p>
-                </div>
-                <div className="bg-white rounded-lg px-3 py-1.5 border">
-                  <p className="text-[10px] text-muted-foreground">Costo actual</p>
-                  <p className="text-sm font-bold">{formatCurrency(phData[0]?.costo_nuevo || 0)}</p>
-                </div>
-                <div className="bg-white rounded-lg px-3 py-1.5 border">
-                  <p className="text-[10px] text-muted-foreground">Margen actual</p>
-                  <p className="text-sm font-bold">{phData[0]?.costo_nuevo > 0 ? `${(((phData[0]?.precio_nuevo - phData[0]?.costo_nuevo) / phData[0]?.costo_nuevo) * 100).toFixed(1)}%` : "—"}</p>
-                </div>
-                <div className="bg-white rounded-lg px-3 py-1.5 border">
-                  <p className="text-[10px] text-muted-foreground">Cambios</p>
-                  <p className="text-sm font-bold">{phData.length}</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {phLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : phData.length === 0 ? (
-              <div className="text-center py-12 text-sm text-muted-foreground">
-                No hay cambios de precio registrados
-              </div>
-            ) : (
-              <div className="relative">
-                {/* Timeline line */}
-                <div className="absolute left-[18px] top-4 bottom-4 w-px bg-gray-200" />
-
-                <div className="space-y-0">
-                  {phData.map((h, idx) => {
-                    const priceDiff = h.precio_anterior > 0 ? ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior) * 100 : 0;
-                    const costDiff = h.costo_anterior > 0 ? ((h.costo_nuevo - h.costo_anterior) / h.costo_anterior) * 100 : 0;
-                    const isUp = priceDiff > 0;
-                    const fecha = new Date(h.created_at);
-                    return (
-                      <div key={h.id} className="relative flex gap-4 pb-5 last:pb-0">
-                        {/* Timeline dot */}
-                        <div className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isUp ? "bg-red-100" : priceDiff < 0 ? "bg-green-100" : "bg-gray-100"}`}>
-                          {isUp ? <ArrowUp className="w-4 h-4 text-red-600" /> : priceDiff < 0 ? <ArrowDown className="w-4 h-4 text-green-600" /> : <span className="w-2 h-2 rounded-full bg-gray-400" />}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <span className="text-xs text-muted-foreground">
-                              {fecha.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
-                              {" · "}
-                              {fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{h.usuario || "Admin"}</span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            {/* Precio */}
-                            <div className={`rounded-lg p-2.5 border ${isUp ? "bg-red-50 border-red-200" : priceDiff < 0 ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-medium text-muted-foreground uppercase">Precio</span>
-                                {priceDiff !== 0 && (
-                                  <span className={`text-[11px] font-bold ${isUp ? "text-red-600" : "text-green-600"}`}>
-                                    {isUp ? "+" : ""}{priceDiff.toFixed(1)}%
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs text-muted-foreground line-through">{formatCurrency(h.precio_anterior)}</span>
-                                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
-                                <span className="text-sm font-bold">{formatCurrency(h.precio_nuevo)}</span>
-                              </div>
-                            </div>
-
-                            {/* Costo */}
-                            <div className="rounded-lg p-2.5 border bg-blue-50/50 border-blue-200/50">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-medium text-muted-foreground uppercase">Costo</span>
-                                {costDiff !== 0 && (
-                                  <span className={`text-[11px] font-bold ${costDiff > 0 ? "text-orange-600" : "text-blue-600"}`}>
-                                    {costDiff > 0 ? "+" : ""}{costDiff.toFixed(1)}%
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs text-muted-foreground line-through">{h.costo_anterior ? formatCurrency(h.costo_anterior) : "—"}</span>
-                                <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
-                                <span className="text-sm font-bold">{h.costo_nuevo ? formatCurrency(h.costo_nuevo) : "—"}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
-          <div className="px-6 py-4 border-b bg-muted/30">
-            <DialogHeader className="p-0 space-y-0">
-              <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                <Clock className="w-5 h-5 text-muted-foreground" />
-                Historial de Movimientos
-              </DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground mt-1">
-              Producto: {historyProduct?.nombre || "---"}
-            </p>
-          </div>
-
-          <div className="px-6 py-3 border-b flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {historyItems.length} movimiento(s)
-            </p>
-            <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => setHistoryOpen(false)}>
-              <X className="w-3.5 h-3.5" /> Cerrar
-            </Button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {historyLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : historyItems.length === 0 ? (
-              <div className="text-center py-12 text-sm text-muted-foreground">
-                No hay movimientos registrados
-              </div>
-            ) : (() => {
-              // Group movements by orden_id to collapse combo components
-              const groups: { key: string; items: typeof historyItems }[] = [];
-              const seen = new Set<string>();
-              for (const item of historyItems) {
-                const key = item.orden_id || item.id;
-                if (item.orden_id && seen.has(item.orden_id)) {
-                  const g = groups.find((g) => g.key === item.orden_id);
-                  if (g) g.items.push(item);
-                } else {
-                  if (item.orden_id) seen.add(item.orden_id);
-                  groups.push({ key, items: [item] });
-                }
-              }
-              return groups.map((group) => {
-                const first = group.items[0];
-                const isGrouped = group.items.length > 1;
-                const tipoLower = first.tipo.toLowerCase();
-                const isAnulacion = tipoLower.includes("anulacion") || tipoLower.includes("anulación");
-                const isDevolucion = tipoLower.includes("devolucion") || tipoLower.includes("devolución");
-                const isVenta = tipoLower.includes("venta");
-                const isCompra = tipoLower.includes("compra");
-                const totalDiff = group.items.reduce((s, i) => s + (i.cantidad_despues - i.cantidad_antes), 0);
-                const isPositive = totalDiff >= 0;
-
-                const badgeConfig = isAnulacion
-                  ? { label: "Anulación", className: "bg-orange-100 text-orange-700 border-orange-200", icon: <RefreshCw className="w-3 h-3" /> }
-                  : isDevolucion
-                  ? { label: "Devolución", className: "bg-blue-100 text-blue-700 border-blue-200", icon: <RefreshCw className="w-3 h-3" /> }
-                  : isCompra
-                  ? { label: "Compra", className: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <Package className="w-3 h-3" /> }
-                  : isVenta
-                  ? { label: "Venta", className: "bg-red-100 text-red-700 border-red-200", icon: <ShoppingBag className="w-3 h-3" /> }
-                  : { label: "Ajuste", className: "bg-gray-100 text-gray-700 border-gray-200", icon: <Settings className="w-3 h-3" /> };
-
-                return (
-                  <div key={group.key} className="border rounded-lg p-3 bg-white">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className={`text-xs gap-1 ${badgeConfig.className}`}>
-                            {badgeConfig.icon}
-                            {badgeConfig.label}
-                          </Badge>
-                          {first.referencia && <span className="text-xs text-muted-foreground">{first.referencia}</span>}
-                        </div>
-                        {isGrouped ? (
-                          <div className="space-y-0.5 mt-1">
-                            {group.items.map((item, i) => {
-                              const d = item.cantidad_despues - item.cantidad_antes;
-                              // Extract component name from description
-                              const compName = item.descripcion?.match(/\[(.+?)\]/)?.[1] || item.descripcion || "";
-                              return (
-                                <p key={i} className="text-xs text-muted-foreground flex items-center gap-2">
-                                  <span className="truncate max-w-[250px]">{compName}</span>
-                                  <span className={`font-mono font-medium ${d >= 0 ? "text-emerald-600" : "text-red-500"}`}>{d >= 0 ? "+" : ""}{d}</span>
-                                  <span className="text-[10px] text-gray-400">({item.cantidad_antes}→{item.cantidad_despues})</span>
-                                </p>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            {first.cantidad_antes} → {first.cantidad_despues}
-                            {first.descripcion && <span className="ml-2">{first.descripcion}</span>}
-                          </p>
-                        )}
-                        {first.orden_id && (isVenta || isCompra || isAnulacion || isDevolucion) && (
-                          <button type="button" onClick={() => openOrdenDetail(first.orden_id!)} className="text-xs text-blue-600 hover:underline">
-                            Ver orden
-                          </button>
-                        )}
-                      </div>
-                      <div className="text-right shrink-0 space-y-0.5">
-                        <p className={`text-sm font-semibold ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
-                          {isPositive ? "+" : ""}{totalDiff} uds
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {first.created_at ? new Date(first.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                        </p>
-                        {first.usuario && <p className="text-[11px] text-muted-foreground">{first.usuario}</p>}
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
           </div>
         </DialogContent>
       </Dialog>
