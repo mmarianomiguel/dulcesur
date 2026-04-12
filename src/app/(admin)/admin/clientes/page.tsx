@@ -58,6 +58,8 @@ import {
   Printer,
   RefreshCw,
   MessageSquare,
+  TrendingUp,
+  ShoppingBag,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CobroAllocationDialog, CobroResult } from "@/components/cobro-allocation-dialog";
@@ -145,7 +147,12 @@ export default function ClientesPage() {
   const [movTotals, setMovTotals] = useState({ ventas: 0, nc: 0, totalComprado: 0 });
   const [movCCTotals, setMovCCTotals] = useState({ debe: 0, haber: 0, saldo: 0, saldoInicial: 0 });
   const [movExpanded, setMovExpanded] = useState<string | null>(null);
-  const [movTab, setMovTab] = useState<"resumen" | "compras" | "cobros">("resumen");
+  const [movTab, setMovTab] = useState<"resumen" | "compras" | "cobros" | "estadisticas">("resumen");
+  const [clienteStats, setClienteStats] = useState<{
+    totalComprado: number; cantidadCompras: number; ticketPromedio: number;
+    primeraCompra: string | null; ultimaCompra: string | null;
+    topProductos: { nombre: string; cantidad: number }[];
+  } | null>(null);
   const [cobrosCliente, setCobrosCliente] = useState<any[]>([]);
   const [movCCFilter, setMovCCFilter] = useState("all");
   const [ventaGroupMap, setVentaGroupMap] = useState<Map<string, any>>(new Map());
@@ -470,8 +477,38 @@ export default function ClientesPage() {
     }
     setMovimientos(compras);
 
-    const totalVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
+    const soloVentas = (ventas || []).filter((v: any) => !v.tipo_comprobante?.includes("Nota de Crédito"));
+    const totalVentas = soloVentas.reduce((s: number, v: any) => s + v.total, 0);
     const totalNC = (ventas || []).filter((v: any) => v.tipo_comprobante?.includes("Nota de Crédito")).reduce((s: number, v: any) => s + v.total, 0);
+
+    // Compute stats only on initial load (no date filter = full history)
+    if (!desde && !hasta) {
+      const fechas = soloVentas.map((v: any) => v.fecha).filter(Boolean).sort();
+      const cantCompras = soloVentas.length;
+      const totalHist = soloVentas.reduce((s: number, v: any) => s + v.total, 0);
+
+      // Top 3 products by quantity from venta_items
+      const prodMap: Record<string, number> = {};
+      for (const v of soloVentas) {
+        for (const item of ((v as any).venta_items || [])) {
+          const name = item.descripcion || "Sin nombre";
+          prodMap[name] = (prodMap[name] || 0) + (item.cantidad || 1);
+        }
+      }
+      const topProductos = Object.entries(prodMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([nombre, cantidad]) => ({ nombre, cantidad }));
+
+      setClienteStats({
+        totalComprado: totalHist,
+        cantidadCompras: cantCompras,
+        ticketPromedio: cantCompras > 0 ? Math.round(totalHist / cantCompras) : 0,
+        primeraCompra: fechas[0] || null,
+        ultimaCompra: fechas[fechas.length - 1] || null,
+        topProductos,
+      });
+    }
     setMovTotals({ ventas: totalVentas, nc: totalNC, totalComprado: totalVentas - totalNC });
 
     // === Tab Resumen (Libro Diario) ===
@@ -1798,7 +1835,7 @@ export default function ClientesPage() {
             </div>
 
             {/* Tabs */}
-            <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "resumen" | "compras" | "cobros")} className="">
+            <Tabs value={movTab} onValueChange={(v) => setMovTab(v as "resumen" | "compras" | "cobros" | "estadisticas")} className="">
             <div className="flex gap-6 border-b">
               <button
                 onClick={() => setMovTab("resumen")}
@@ -1817,6 +1854,12 @@ export default function ClientesPage() {
                 className={`pb-2.5 text-[13px] px-0.5 border-b-2 transition-colors ${movTab === "cobros" ? "text-foreground border-foreground font-semibold" : "text-muted-foreground border-transparent hover:text-foreground/70"}`}
               >
                 Cobros {cobrosCliente.length > 0 && <span className="ml-1 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">{cobrosCliente.length}</span>}
+              </button>
+              <button
+                onClick={() => setMovTab("estadisticas")}
+                className={`pb-2.5 text-[13px] px-0.5 border-b-2 transition-colors ${movTab === "estadisticas" ? "text-foreground border-foreground font-semibold" : "text-muted-foreground border-transparent hover:text-foreground/70"}`}
+              >
+                Estadísticas
               </button>
             </div>
 
@@ -2426,7 +2469,77 @@ export default function ClientesPage() {
               )}
             </TabsContent>
 
-            {/* Old resumen tab removed — now unified into the CC tab above */}
+            {/* ══════ TAB ESTADÍSTICAS ══════ */}
+            <TabsContent value="estadisticas" className="mt-0 px-6 pt-4 pb-6">
+              {!clienteStats ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {/* Stats cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Total comprado</p>
+                      <p className="text-lg font-bold">{formatCurrency(clienteStats.totalComprado)}</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Cantidad de compras</p>
+                      <p className="text-lg font-bold">{clienteStats.cantidadCompras}</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Ticket promedio</p>
+                      <p className="text-lg font-bold">{formatCurrency(clienteStats.ticketPromedio)}</p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Primera compra</p>
+                      <p className="text-sm font-semibold">
+                        {clienteStats.primeraCompra
+                          ? new Date(clienteStats.primeraCompra + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
+                          : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <p className="text-xs text-muted-foreground">Última compra</p>
+                      <p className="text-sm font-semibold">
+                        {clienteStats.ultimaCompra
+                          ? new Date(clienteStats.ultimaCompra + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Top products */}
+                  {clienteStats.topProductos.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                        Productos más comprados
+                      </h4>
+                      <div className="space-y-2">
+                        {clienteStats.topProductos.map((p, i) => (
+                          <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                              i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-gray-100 text-gray-600" : "bg-orange-50 text-orange-600"
+                            }`}>
+                              {i + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{p.nombre}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground shrink-0">
+                              <ShoppingBag className="w-3.5 h-3.5" />
+                              {p.cantidad} un.
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
           </Tabs>
           </div>
         </DialogContent>
