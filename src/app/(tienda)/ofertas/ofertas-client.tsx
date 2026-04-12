@@ -220,6 +220,7 @@ export default function OfertasClient() {
           const boxPres = sortedPres.find((p) => p.cantidad > 1);
           const boxIdx = sortedPres.findIndex((p) => p.cantidad > 1);
 
+          // C1) Descuento implícito: precio caja < precio unitario × cantidad
           if (unitPres && boxPres && unitPres.precio > 0 && boxPres.precio > 0) {
             const expectedPrice = unitPres.precio * boxPres.cantidad;
             if (boxPres.precio < expectedPrice) {
@@ -233,12 +234,15 @@ export default function OfertasClient() {
             }
           }
 
+          // C2) Descuentos de tabla con presentacion="caja" sin cliente específico
           for (const d of allDesc) {
             if (d.presentacion !== "caja") continue;
             if (d.clientes_ids && d.clientes_ids.length > 0) continue;
             if (d.cantidad_minima && d.cantidad_minima > 0) continue;
             if (d.excluir_combos && prod.es_combo) continue;
-            if (d.productos_excluidos_ids?.includes(prod.id)) continue;
+            if ((d.productos_excluidos_ids || []).includes(prod.id)) continue;
+
+            // El producto DEBE tener una presentación mayor para que aplique
             if (!boxPres) continue;
 
             let aplica = false;
@@ -250,12 +254,20 @@ export default function OfertasClient() {
             if (!aplica) continue;
 
             const pct = Number(d.porcentaje);
-            const precioConDesc = Math.round(boxPres.precio * (1 - pct / 100));
+            // Aplicar descuento sobre el precio de la presentación mayor
+            const precioBase = boxPres.precio > 0 ? boxPres.precio : prod.precio * boxPres.cantidad;
+            const precioConDesc = Math.round(precioBase * (1 - pct / 100));
+            // Calcular ahorro real vs comprar unidades sueltas
             const precioUnitRef = (unitPres?.precio || prod.precio) * boxPres.cantidad;
-            const savePct = precioUnitRef > 0 ? Math.round((1 - precioConDesc / precioUnitRef) * 100) : pct;
+            const savePct = precioUnitRef > 0
+              ? Math.round((1 - precioConDesc / precioUnitRef) * 100)
+              : pct;
+
             if (savePct > mejorPct) {
-              mejorPct = savePct; precioFinal = precioConDesc;
-              descId = d.id; descNombre = d.nombre;
+              mejorPct = savePct;
+              precioFinal = precioConDesc;
+              descId = d.id;
+              descNombre = d.nombre;
               fechaFin = d.fecha_fin ?? null;
               Object.assign(prod, { _presIndexConDescuento: boxIdx });
             }
