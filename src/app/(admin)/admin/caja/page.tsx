@@ -158,6 +158,319 @@ async function cerrarTurno(
   return data as TurnoCaja;
 }
 
+// ─── Turno Historial Dialog (extracted to avoid duplication) ───
+
+function TurnoHistorialDialog({
+  open,
+  onOpenChange,
+  histDetail,
+  histTurnos,
+  histLoading,
+  histMovs,
+  histVentas,
+  openHistDetail,
+  setHistDetail,
+  exportTurnoPDF,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  histDetail: TurnoCaja | null;
+  histTurnos: TurnoCaja[];
+  histLoading: boolean;
+  histMovs: CajaMovimiento[];
+  histVentas: Venta[];
+  openHistDetail: (t: TurnoCaja) => void;
+  setHistDetail: (t: TurnoCaja | null) => void;
+  exportTurnoPDF: (t: TurnoCaja, ventas: Venta[], movs: CajaMovimiento[]) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <History className="w-5 h-5" />
+            Historial de Turnos
+          </DialogTitle>
+        </DialogHeader>
+
+        {histDetail ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">
+                ← Volver al listado
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => exportTurnoPDF(histDetail, histVentas, histMovs)}>
+                Descargar PDF
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Turno</p>
+                <p className="font-bold">#{histDetail.numero}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Fecha</p>
+                <p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Operador</p>
+                <p className="font-bold">{histDetail.operador}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Horario</p>
+                <p className="font-bold">{histDetail.hora_apertura?.substring(0, 5)} - {histDetail.hora_cierre?.substring(0, 5) || "?"}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="rounded-lg border p-2 sm:p-3 bg-emerald-50 dark:bg-emerald-950/20">
+                <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. inicial</p>
+                <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_inicial)}</p>
+              </div>
+              <div className="rounded-lg border p-2 sm:p-3 bg-blue-50 dark:bg-blue-950/20">
+                <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. real</p>
+                <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_real || 0)}</p>
+              </div>
+              <div className={`rounded-lg border p-3 ${(histDetail.diferencia || 0) === 0 ? "bg-muted/30" : (histDetail.diferencia || 0) > 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+                <p className="text-xs text-muted-foreground">Diferencia</p>
+                <p className={`font-bold ${(histDetail.diferencia || 0) > 0 ? "text-emerald-600" : (histDetail.diferencia || 0) < 0 ? "text-red-500" : ""}`}>
+                  {formatCurrency(histDetail.diferencia || 0)}
+                </p>
+              </div>
+            </div>
+
+            {histDetail.notas && (
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground mb-1">Notas</p>
+                <p className="text-sm">{histDetail.notas}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Ventas ({histVentas.length})</h4>
+                {histVentas.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin ventas</p>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">N°</th><th className="text-left py-2 px-3">Pago</th><th className="text-right py-2 px-3">Total</th></tr></thead>
+                      <tbody>
+                        {histVentas.map((v) => (
+                          <tr key={v.id} className="border-b last:border-0">
+                            <td className="py-1.5 px-3 font-mono">{v.numero}</td>
+                            <td className="py-1.5 px-3"><Badge variant="outline" className="text-[10px]">{v.forma_pago}</Badge></td>
+                            <td className="py-1.5 px-3 text-right font-semibold">{formatCurrency(v.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="border-t px-3 py-1.5 text-right text-xs font-bold">
+                      Total: {formatCurrency(histVentas.reduce((a, v) => a + v.total, 0))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {/* Desglose por método de pago */}
+                {(() => {
+                  const hVentasConMov = new Set(histMovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id));
+                  const hVentasSinMov = histVentas.filter((v) => !hVentasConMov.has(v.id));
+                  const hEfectivo = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
+                    + hVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
+                    + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
+                  const hTransf = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
+                    + hVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
+                    + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => {
+                      const tr = (v as any).monto_transferencia || 0;
+                      if (tr > 0) return a + tr;
+                      const ef = (v as any).monto_efectivo || 0;
+                      const cc = (v as any).monto_cuenta_corriente || 0;
+                      const rest = v.total - ef - cc;
+                      return a + (rest > 0 ? rest : 0);
+                    }, 0);
+                  // Per-account
+                  const hPorCuenta: Record<string, number> = {};
+                  histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
+                    .forEach((m) => { const c = (m as any).cuenta_bancaria || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + m.monto; });
+                  for (const v of hVentasSinMov) {
+                    const ef = (v as any).monto_efectivo || 0;
+                    const cc = (v as any).monto_cuenta_corriente || 0;
+                    const tr = (v as any).monto_transferencia || 0;
+                    let mt = 0;
+                    if (v.forma_pago === "Transferencia") mt = v.total;
+                    else if (v.forma_pago === "Mixto") mt = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
+                    if (mt > 0) { const c = (v as any).cuenta_transferencia_alias || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + mt; }
+                  }
+                  if (hEfectivo === 0 && hTransf === 0) return null;
+                  return (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Desglose por Método</h4>
+                      <div className="rounded-lg border p-3 space-y-2">
+                        {hEfectivo > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Efectivo</span>
+                            <span className="font-semibold">{formatCurrency(hEfectivo)}</span>
+                          </div>
+                        )}
+                        {hTransf > 0 && (
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Transferencia</span>
+                              <span className="font-semibold">{formatCurrency(hTransf)}</span>
+                            </div>
+                            {Object.entries(hPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
+                              <div key={cuenta} className="flex justify-between text-xs pl-3">
+                                <span className="text-muted-foreground">→ {cuenta}</span>
+                                <span className="font-medium">{formatCurrency(monto)}</span>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Notas de crédito */}
+                {(() => {
+                  const ncMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
+                  if (ncMovs.length === 0) return null;
+                  const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                  const porMetodo: Record<string, number> = {};
+                  ncMovs.forEach((m) => { const k = m.metodo_pago || "Efectivo"; porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto); });
+                  return (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Notas de Crédito (devoluciones)</h4>
+                      <div className="rounded-lg border p-3 bg-red-50 dark:bg-red-950/20 space-y-1">
+                        <p className="font-bold text-lg text-red-600">-{formatCurrency(totalNC)}</p>
+                        {Object.entries(porMetodo).map(([metodo, monto]) => (
+                          <div key={metodo} className="flex justify-between text-xs text-red-500">
+                            <span>→ {metodo}</span>
+                            <span>-{formatCurrency(monto)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Anulaciones */}
+                {(() => {
+                  const anulMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
+                  if (anulMovs.length === 0) return null;
+                  const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                  return (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Anulaciones</h4>
+                      <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/20 space-y-1">
+                        <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
+                        {anulMovs.map((m) => (
+                          <div key={m.id} className="flex justify-between text-xs text-orange-600">
+                            <span className="truncate mr-2">{m.descripcion} ({m.metodo_pago || "Efectivo"})</span>
+                            <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">Movimientos ({histMovs.length})</h4>
+                  {histMovs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Sin movimientos</p>
+                  ) : (
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">Hora</th><th className="text-left py-2 px-3">Desc</th><th className="text-right py-2 px-3">Monto</th></tr></thead>
+                        <tbody>
+                          {histMovs.map((m) => (
+                            <tr key={m.id} className="border-b last:border-0">
+                              <td className="py-1.5 px-3 text-muted-foreground">{m.hora?.substring(0, 5)}</td>
+                              <td className="py-1.5 px-3">{m.descripcion}</td>
+                              <td className={`py-1.5 px-3 text-right font-semibold ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
+                                {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : histLoading ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : histTurnos.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No hay turnos cerrados</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y">
+              {histTurnos.map((t) => (
+                <div key={t.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 cursor-pointer" onClick={() => openHistDetail(t)}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-medium">#{t.numero}</span>
+                      <span className="text-xs text-muted-foreground">{t.operador}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} · {t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold">{formatCurrency(t.efectivo_real || 0)}</p>
+                    <p className={`text-xs font-medium ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(t.diferencia || 0)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-muted-foreground">
+                    <th className="text-left py-2 px-3 font-medium">Turno</th>
+                    <th className="text-left py-2 px-3 font-medium">Fecha</th>
+                    <th className="text-left py-2 px-3 font-medium">Operador</th>
+                    <th className="text-left py-2 px-3 font-medium">Horario</th>
+                    <th className="text-right py-2 px-3 font-medium">Ef. Real</th>
+                    <th className="text-right py-2 px-3 font-medium">Diferencia</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {histTurnos.map((t) => (
+                    <tr key={t.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openHistDetail(t)}>
+                      <td className="py-2 px-3 font-mono text-xs">#{t.numero}</td>
+                      <td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                      <td className="py-2 px-3">{t.operador}</td>
+                      <td className="py-2 px-3 text-muted-foreground text-xs">{t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}</td>
+                      <td className="py-2 px-3 text-right font-semibold">{formatCurrency(t.efectivo_real || 0)}</td>
+                      <td className={`py-2 px-3 text-right font-semibold ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>
+                        {formatCurrency(t.diferencia || 0)}
+                      </td>
+                      <td className="py-2 px-3"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Component ───
 
 export default function CajaPage() {
@@ -1022,152 +1335,18 @@ export default function CajaPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Historial Dialog (accessible before opening turno) */}
-        <Dialog open={histOpen} onOpenChange={setHistOpen}>
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <History className="w-5 h-5" />
-                Historial de Turnos
-              </DialogTitle>
-            </DialogHeader>
-            {histDetail ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">← Volver al listado</Button>
-                  <Button variant="outline" size="sm" onClick={() => exportTurnoPDF(histDetail, histVentas, histMovs)}>
-                    Descargar PDF
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                  <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Turno</p><p className="font-bold">#{histDetail.numero}</p></div>
-                  <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p></div>
-                  <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Operador</p><p className="font-bold">{histDetail.operador}</p></div>
-                  <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Horario</p><p className="font-bold">{histDetail.hora_apertura?.substring(0, 5)} - {histDetail.hora_cierre?.substring(0, 5) || "?"}</p></div>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-lg border p-3 bg-emerald-50 dark:bg-emerald-950/20"><p className="text-xs text-muted-foreground">Efectivo inicial</p><p className="font-bold">{formatCurrency(histDetail.efectivo_inicial)}</p></div>
-                  <div className="rounded-lg border p-3 bg-blue-50 dark:bg-blue-950/20"><p className="text-xs text-muted-foreground">Efectivo real</p><p className="font-bold">{formatCurrency(histDetail.efectivo_real || 0)}</p></div>
-                  <div className={`rounded-lg border p-3 ${(histDetail.diferencia || 0) === 0 ? "bg-muted/30" : (histDetail.diferencia || 0) > 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
-                    <p className="text-xs text-muted-foreground">Diferencia</p>
-                    <p className={`font-bold ${(histDetail.diferencia || 0) > 0 ? "text-emerald-600" : (histDetail.diferencia || 0) < 0 ? "text-red-500" : ""}`}>{formatCurrency(histDetail.diferencia || 0)}</p>
-                  </div>
-                </div>
-                {histDetail.notas && <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground mb-1">Notas</p><p className="text-sm">{histDetail.notas}</p></div>}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="text-sm font-semibold mb-2">Ventas ({histVentas.length})</h4>
-                    {histVentas.length === 0 ? <p className="text-xs text-muted-foreground">Sin ventas</p> : (
-                      <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">N°</th><th className="text-left py-2 px-3">Pago</th><th className="text-right py-2 px-3">Total</th></tr></thead>
-                          <tbody>{histVentas.map((v) => (<tr key={v.id} className="border-b last:border-0"><td className="py-1.5 px-3 font-mono">{v.numero}</td><td className="py-1.5 px-3"><Badge variant="outline" className="text-[10px]">{v.forma_pago}</Badge></td><td className="py-1.5 px-3 text-right font-semibold">{formatCurrency(v.total)}</td></tr>))}</tbody>
-                        </table>
-                        <div className="border-t px-3 py-1.5 text-right text-xs font-bold">Total: {formatCurrency(histVentas.reduce((a, v) => a + v.total, 0))}</div>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold mb-2">Transferencias</h4>
-                    {(() => {
-                      const transfMovs = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia");
-                      const totalTransf = transfMovs.reduce((a, m) => a + m.monto, 0);
-                      return totalTransf > 0 ? (
-                        <div className="rounded-lg border p-3 bg-blue-50 dark:bg-blue-950/20">
-                          <p className="text-xs text-muted-foreground mb-1">Total transferencias</p>
-                          <p className="font-bold text-lg">{formatCurrency(totalTransf)}</p>
-                        </div>
-                      ) : <p className="text-xs text-muted-foreground">Sin transferencias</p>;
-                    })()}
-                    {(() => {
-                      const ncMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
-                      if (ncMovs.length === 0) return null;
-                      const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
-                      const porMetodo: Record<string, number> = {};
-                      ncMovs.forEach((m) => { const k = m.metodo_pago || "Efectivo"; porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto); });
-                      return (
-                        <>
-                          <h4 className="text-sm font-semibold mt-4 mb-2">Notas de Crédito</h4>
-                          <div className="rounded-lg border p-3 bg-red-50 dark:bg-red-950/20 space-y-1">
-                            <p className="font-bold text-lg text-red-600">-{formatCurrency(totalNC)}</p>
-                            {Object.entries(porMetodo).map(([metodo, monto]) => (
-                              <div key={metodo} className="flex justify-between text-xs text-red-500">
-                                <span>→ {metodo}</span>
-                                <span>-{formatCurrency(monto)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      );
-                    })()}
-                    {(() => {
-                      const anulMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
-                      if (anulMovs.length === 0) return null;
-                      const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
-                      return (
-                        <>
-                          <h4 className="text-sm font-semibold mt-4 mb-2">Anulaciones</h4>
-                          <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/20 space-y-1">
-                            <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
-                            {anulMovs.map((m) => (
-                              <div key={m.id} className="flex justify-between text-xs text-orange-600">
-                                <span className="truncate mr-2">{m.descripcion} ({m.metodo_pago || "Efectivo"})</span>
-                                <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      );
-                    })()}
-                    <h4 className="text-sm font-semibold mt-4 mb-2">Movimientos ({histMovs.length})</h4>
-                    {histMovs.length === 0 ? <p className="text-xs text-muted-foreground">Sin movimientos</p> : (
-                      <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">Hora</th><th className="text-left py-2 px-3">Desc</th><th className="text-right py-2 px-3">Monto</th></tr></thead>
-                          <tbody>{histMovs.map((m) => (<tr key={m.id} className="border-b last:border-0"><td className="py-1.5 px-3 text-muted-foreground">{m.hora?.substring(0, 5)}</td><td className="py-1.5 px-3">{m.descripcion}</td><td className={`py-1.5 px-3 text-right font-semibold ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>{m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}</td></tr>))}</tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : histLoading ? (
-              <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-            ) : histTurnos.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground"><Clock className="w-8 h-8 mx-auto mb-2 opacity-30" /><p className="text-sm">No hay turnos cerrados</p></div>
-            ) : (
-              <>
-              {/* Mobile card list */}
-              <div className="sm:hidden divide-y">
-                {histTurnos.map((t) => (
-                  <div key={t.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 cursor-pointer" onClick={() => openHistDetail(t)}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-medium">#{t.numero}</span>
-                        <span className="text-xs text-muted-foreground">{t.operador}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} · {t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-semibold">{formatCurrency(t.efectivo_real || 0)}</p>
-                      <p className={`text-xs font-medium ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(t.diferencia || 0)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {/* Desktop table */}
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b text-muted-foreground"><th className="text-left py-2 px-3 font-medium">Turno</th><th className="text-left py-2 px-3 font-medium">Fecha</th><th className="text-left py-2 px-3 font-medium">Operador</th><th className="text-left py-2 px-3 font-medium">Horario</th><th className="text-right py-2 px-3 font-medium">Ef. Real</th><th className="text-right py-2 px-3 font-medium">Diferencia</th><th className="w-10"></th></tr></thead>
-                  <tbody>{histTurnos.map((t) => (<tr key={t.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openHistDetail(t)}><td className="py-2 px-3 font-mono text-xs">#{t.numero}</td><td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td><td className="py-2 px-3">{t.operador}</td><td className="py-2 px-3 text-muted-foreground text-xs">{t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}</td><td className="py-2 px-3 text-right font-semibold">{formatCurrency(t.efectivo_real || 0)}</td><td className={`py-2 px-3 text-right font-semibold ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(t.diferencia || 0)}</td><td className="py-2 px-3"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td></tr>))}</tbody>
-                </table>
-              </div>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+        <TurnoHistorialDialog
+          open={histOpen}
+          onOpenChange={setHistOpen}
+          histDetail={histDetail}
+          histTurnos={histTurnos}
+          histLoading={histLoading}
+          histMovs={histMovs}
+          histVentas={histVentas}
+          openHistDetail={openHistDetail}
+          setHistDetail={setHistDetail}
+          exportTurnoPDF={exportTurnoPDF}
+        />
       </div>
     );
   }
@@ -1676,268 +1855,18 @@ export default function CajaPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Historial Dialog ─── */}
-      <Dialog open={histOpen} onOpenChange={setHistOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="w-5 h-5" />
-              Historial de Turnos
-            </DialogTitle>
-          </DialogHeader>
-
-          {histDetail ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">
-                  ← Volver al listado
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => exportTurnoPDF(histDetail, histVentas, histMovs)}>
-                  Descargar PDF
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Turno</p>
-                  <p className="font-bold">#{histDetail.numero}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Fecha</p>
-                  <p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Operador</p>
-                  <p className="font-bold">{histDetail.operador}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Horario</p>
-                  <p className="font-bold">{histDetail.hora_apertura?.substring(0, 5)} - {histDetail.hora_cierre?.substring(0, 5) || "?"}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div className="rounded-lg border p-2 sm:p-3 bg-emerald-50 dark:bg-emerald-950/20">
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. inicial</p>
-                  <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_inicial)}</p>
-                </div>
-                <div className="rounded-lg border p-2 sm:p-3 bg-blue-50 dark:bg-blue-950/20">
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. real</p>
-                  <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_real || 0)}</p>
-                </div>
-                <div className={`rounded-lg border p-3 ${(histDetail.diferencia || 0) === 0 ? "bg-muted/30" : (histDetail.diferencia || 0) > 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
-                  <p className="text-xs text-muted-foreground">Diferencia</p>
-                  <p className={`font-bold ${(histDetail.diferencia || 0) > 0 ? "text-emerald-600" : (histDetail.diferencia || 0) < 0 ? "text-red-500" : ""}`}>
-                    {formatCurrency(histDetail.diferencia || 0)}
-                  </p>
-                </div>
-              </div>
-
-              {histDetail.notas && (
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground mb-1">Notas</p>
-                  <p className="text-sm">{histDetail.notas}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-sm font-semibold mb-2">Ventas ({histVentas.length})</h4>
-                  {histVentas.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin ventas</p>
-                  ) : (
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full text-xs">
-                        <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">N°</th><th className="text-left py-2 px-3">Pago</th><th className="text-right py-2 px-3">Total</th></tr></thead>
-                        <tbody>
-                          {histVentas.map((v) => (
-                            <tr key={v.id} className="border-b last:border-0">
-                              <td className="py-1.5 px-3 font-mono">{v.numero}</td>
-                              <td className="py-1.5 px-3"><Badge variant="outline" className="text-[10px]">{v.forma_pago}</Badge></td>
-                              <td className="py-1.5 px-3 text-right font-semibold">{formatCurrency(v.total)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div className="border-t px-3 py-1.5 text-right text-xs font-bold">
-                        Total: {formatCurrency(histVentas.reduce((a, v) => a + v.total, 0))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-4">
-                  {/* Desglose por método de pago */}
-                  {(() => {
-                    const hVentasConMov = new Set(histMovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id));
-                    const hVentasSinMov = histVentas.filter((v) => !hVentasConMov.has(v.id));
-                    const hEfectivo = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
-                      + hVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
-                      + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
-                    const hTransf = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
-                      + hVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
-                      + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => {
-                        const tr = (v as any).monto_transferencia || 0;
-                        if (tr > 0) return a + tr;
-                        const ef = (v as any).monto_efectivo || 0;
-                        const cc = (v as any).monto_cuenta_corriente || 0;
-                        const rest = v.total - ef - cc;
-                        return a + (rest > 0 ? rest : 0);
-                      }, 0);
-                    // Per-account
-                    const hPorCuenta: Record<string, number> = {};
-                    histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
-                      .forEach((m) => { const c = (m as any).cuenta_bancaria || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + m.monto; });
-                    for (const v of hVentasSinMov) {
-                      const ef = (v as any).monto_efectivo || 0;
-                      const cc = (v as any).monto_cuenta_corriente || 0;
-                      const tr = (v as any).monto_transferencia || 0;
-                      let mt = 0;
-                      if (v.forma_pago === "Transferencia") mt = v.total;
-                      else if (v.forma_pago === "Mixto") mt = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
-                      if (mt > 0) { const c = (v as any).cuenta_transferencia_alias || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + mt; }
-                    }
-                    if (hEfectivo === 0 && hTransf === 0) return null;
-                    return (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2">Desglose por Método</h4>
-                        <div className="rounded-lg border p-3 space-y-2">
-                          {hEfectivo > 0 && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Efectivo</span>
-                              <span className="font-semibold">{formatCurrency(hEfectivo)}</span>
-                            </div>
-                          )}
-                          {hTransf > 0 && (
-                            <>
-                              <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Transferencia</span>
-                                <span className="font-semibold">{formatCurrency(hTransf)}</span>
-                              </div>
-                              {Object.entries(hPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
-                                <div key={cuenta} className="flex justify-between text-xs pl-3">
-                                  <span className="text-muted-foreground">→ {cuenta}</span>
-                                  <span className="font-medium">{formatCurrency(monto)}</span>
-                                </div>
-                              ))}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Notas de crédito */}
-                  {(() => {
-                    const ncMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
-                    if (ncMovs.length === 0) return null;
-                    const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
-                    const porMetodo: Record<string, number> = {};
-                    ncMovs.forEach((m) => { const k = m.metodo_pago || "Efectivo"; porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto); });
-                    return (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2">Notas de Crédito (devoluciones)</h4>
-                        <div className="rounded-lg border p-3 bg-red-50 dark:bg-red-950/20 space-y-1">
-                          <p className="font-bold text-lg text-red-600">-{formatCurrency(totalNC)}</p>
-                          {Object.entries(porMetodo).map(([metodo, monto]) => (
-                            <div key={metodo} className="flex justify-between text-xs text-red-500">
-                              <span>→ {metodo}</span>
-                              <span>-{formatCurrency(monto)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Anulaciones */}
-                  {(() => {
-                    const anulMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
-                    if (anulMovs.length === 0) return null;
-                    const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
-                    return (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2">Anulaciones</h4>
-                        <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/20 space-y-1">
-                          <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
-                          {anulMovs.map((m) => (
-                            <div key={m.id} className="flex justify-between text-xs text-orange-600">
-                              <span className="truncate mr-2">{m.descripcion} ({m.metodo_pago || "Efectivo"})</span>
-                              <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  <div>
-                    <h4 className="text-sm font-semibold mb-2">Movimientos ({histMovs.length})</h4>
-                    {histMovs.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Sin movimientos</p>
-                    ) : (
-                      <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">Hora</th><th className="text-left py-2 px-3">Desc</th><th className="text-right py-2 px-3">Monto</th></tr></thead>
-                          <tbody>
-                            {histMovs.map((m) => (
-                              <tr key={m.id} className="border-b last:border-0">
-                                <td className="py-1.5 px-3 text-muted-foreground">{m.hora?.substring(0, 5)}</td>
-                                <td className="py-1.5 px-3">{m.descripcion}</td>
-                                <td className={`py-1.5 px-3 text-right font-semibold ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
-                                  {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : histLoading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-          ) : histTurnos.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No hay turnos cerrados</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 px-3 font-medium">Turno</th>
-                    <th className="text-left py-2 px-3 font-medium">Fecha</th>
-                    <th className="text-left py-2 px-3 font-medium">Operador</th>
-                    <th className="text-left py-2 px-3 font-medium">Horario</th>
-                    <th className="text-right py-2 px-3 font-medium">Ef. Real</th>
-                    <th className="text-right py-2 px-3 font-medium">Diferencia</th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {histTurnos.map((t) => (
-                    <tr key={t.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => openHistDetail(t)}>
-                      <td className="py-2 px-3 font-mono text-xs">#{t.numero}</td>
-                      <td className="py-2 px-3">{new Date(t.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                      <td className="py-2 px-3">{t.operador}</td>
-                      <td className="py-2 px-3 text-muted-foreground text-xs">{t.hora_apertura?.substring(0, 5)} - {t.hora_cierre?.substring(0, 5) || "?"}</td>
-                      <td className="py-2 px-3 text-right font-semibold">{formatCurrency(t.efectivo_real || 0)}</td>
-                      <td className={`py-2 px-3 text-right font-semibold ${(t.diferencia || 0) > 0 ? "text-emerald-600" : (t.diferencia || 0) < 0 ? "text-red-500" : "text-muted-foreground"}`}>
-                        {formatCurrency(t.diferencia || 0)}
-                      </td>
-                      <td className="py-2 px-3"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <TurnoHistorialDialog
+        open={histOpen}
+        onOpenChange={setHistOpen}
+        histDetail={histDetail}
+        histTurnos={histTurnos}
+        histLoading={histLoading}
+        histMovs={histMovs}
+        histVentas={histVentas}
+        openHistDetail={openHistDetail}
+        setHistDetail={setHistDetail}
+        exportTurnoPDF={exportTurnoPDF}
+      />
 
       {/* ─── Cerrar Turno Dialog ─── */}
       <Dialog open={cierreDialog.open} onOpenChange={cierreDialog.setOpen}>
