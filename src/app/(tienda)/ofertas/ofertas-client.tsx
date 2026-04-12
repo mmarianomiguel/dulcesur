@@ -76,7 +76,13 @@ function diasHasta(fechaFin: string): number {
   return Math.ceil((fin.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-export default function OfertasClient() {
+interface OfertasClientProps {
+  initialProductos: any[];
+  initialDescuentos: any[];
+  initialPresentaciones: any[];
+}
+
+export default function OfertasClient({ initialProductos, initialDescuentos, initialPresentaciones }: OfertasClientProps) {
   const [allProductos, setAllProductos] = useState<ProductoConDescuento[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -121,7 +127,6 @@ export default function OfertasClient() {
         if (raw) {
           const p = JSON.parse(raw);
           if (p?.id) {
-            // Resolver el cliente_id real (distinto del auth_id)
             const { data: authRec } = await supabase
               .from("clientes_auth")
               .select("cliente_id")
@@ -132,57 +137,9 @@ export default function OfertasClient() {
         }
       } catch {}
 
-      // Primero traer descuentos y productos en paralelo
-      const [{ data: prods }, descuentosResult] = await Promise.all([
-        supabase
-          .from("productos")
-          .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, stock, es_combo, categoria_id, subcategoria_id, marca_id, categorias(id, nombre, restringida)")
-          .eq("activo", true)
-          .eq("visibilidad", "visible")
-          .gt("stock", 0)
-          .limit(2000),
-        Promise.all([
-          supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).is("fecha_fin", null),
-          supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).gte("fecha_fin", today),
-        ]).then(([{ data: d1 }, { data: d2 }]) => ({
-          data: [...(d1 || []), ...(d2 || [])],
-        })),
-      ]);
-
-      const allDesc = (descuentosResult.data || []) as Descuento[];
-
-      // Recolectar IDs de productos que pueden tener descuento
-      // para traer solo las presentaciones necesarias
-      const prodIdsConDescuento = new Set<string>();
-      const allProdsArr = (prods || []) as any[];
-
-      for (const d of allDesc) {
-        if (d.presentacion !== "caja") continue; // solo necesitamos pres para descuentos de caja
-        for (const prod of allProdsArr) {
-          let aplica = false;
-          if (d.aplica_a === "todos") aplica = true;
-          else if (d.aplica_a === "productos") aplica = (d.productos_ids || []).includes(prod.id);
-          else if (d.aplica_a === "categorias") aplica = (d.categorias_ids || []).includes(prod.categoria_id);
-          else if (d.aplica_a === "subcategorias") aplica = !!prod.subcategoria_id && (d.subcategorias_ids || []).includes(prod.subcategoria_id);
-          else if (d.aplica_a === "marcas") aplica = !!prod.marca_id && (d.marcas_ids || []).includes(prod.marca_id);
-          if (aplica) prodIdsConDescuento.add(prod.id);
-        }
-      }
-
-      // También traer presentaciones de todos los productos para detectar
-      // descuentos implícitos (precio caja < precio unitario × cantidad)
-      // Pero limitar a máximo 500 productos más relevantes
-      const todosLosIds = allProdsArr.map((p: any) => p.id);
-      const idsParaPres = [...new Set([...prodIdsConDescuento, ...todosLosIds])].slice(0, 500);
-
-      const { data: pres } = await supabase
-        .from("presentaciones")
-        .select("producto_id, nombre, cantidad, precio")
-        .in("producto_id", idsParaPres)
-        .order("cantidad");
-
-      const allProds = allProdsArr;
-      const allPres = (pres || []) as any[];
+      const allDesc = initialDescuentos as Descuento[];
+      const allProds = initialProductos;
+      const allPres = initialPresentaciones;
 
       const presMap: Record<string, { nombre: string; cantidad: number; precio: number }[]> = {};
       for (const pr of allPres) {
@@ -405,7 +362,7 @@ export default function OfertasClient() {
       }
       if (Object.keys(initialQty).length > 0) setQuantities(initialQty);
     })();
-  }, []);
+  }, [initialProductos, initialDescuentos, initialPresentaciones]);
 
   // Countdown para descuentos que vencen hoy
   const descuentoVenceHoy = useMemo(() => {
