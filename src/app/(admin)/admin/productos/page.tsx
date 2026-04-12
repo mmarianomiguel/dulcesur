@@ -1753,9 +1753,11 @@ export default function ProductosPage() {
         )} → ${formatCurrency(h.precio_nuevo)}`,
         fecha: h.created_at,
         usuario: h.usuario || "Admin",
-        valor: `${up ? "+" : ""}${Math.round(
-          ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior) * 100
-        )}%`,
+        valor: h.precio_anterior > 0
+          ? `${up ? "+" : ""}${Math.round(
+              ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior) * 100
+            )}%`
+          : "—",
       });
     });
 
