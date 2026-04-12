@@ -3208,6 +3208,33 @@ export default function ProductosPage() {
                 </div>
               )}
 
+              {/* Last price update */}
+              {editingProduct?.fecha_actualizacion && (
+                <p className="text-xs text-muted-foreground">
+                  Precio actualizado por última vez{" "}
+                  <span
+                    className={`font-medium ${
+                      Math.floor(
+                        (Date.now() -
+                          new Date(editingProduct.fecha_actualizacion).getTime()) /
+                          (1000 * 60 * 60 * 24)
+                      ) > 30
+                        ? "text-amber-600"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {formatRelativeDate(editingProduct.fecha_actualizacion)}
+                  </span>
+                  {Math.floor(
+                    (Date.now() -
+                      new Date(editingProduct.fecha_actualizacion).getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  ) > 30 && (
+                    <span className="text-amber-600"> — puede estar desactualizado</span>
+                  )}
+                </p>
+              )}
+
               {/* Precio de oferta (1.3) */}
               <div className="border rounded-xl overflow-hidden">
                 <button
