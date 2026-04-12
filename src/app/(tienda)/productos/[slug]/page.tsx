@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import { addRecentlyViewed } from "@/hooks/use-recently-viewed";
@@ -639,7 +639,7 @@ export default function ProductoDetallePage() {
                 const pa = (producto as any).precio_anterior;
                 if (currentDiscount > 0 || !pa || pa <= 0 || pa === producto.precio) return null;
                 const dateStr = producto.fecha_actualizacion || producto.updated_at;
-                if (!dateStr || (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
+                if (!dateStr || daysSinceAR(dateStr) > 3) return null;
                 return producto.precio > pa
                   ? <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full">Precio actualizado</span>
                   : <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">Precio rebajado</span>;
@@ -924,7 +924,7 @@ export default function ProductoDetallePage() {
                   return null;
                 })();
                 // Check if product is "new" (created < 7 days ago)
-                const isNew = rel.created_at && (Date.now() - new Date(rel.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                const isNew = rel.created_at && daysSinceAR(rel.created_at) <= 7;
 
                 return (
                   <div
