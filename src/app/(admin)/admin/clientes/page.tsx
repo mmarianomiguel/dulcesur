@@ -1682,8 +1682,19 @@ export default function ClientesPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm">{c.nombre}</p>
                         {c.cuit && <p className="text-xs text-muted-foreground font-mono mt-0.5">{c.cuit}</p>}
+                        {(() => {
+                          const dias = deudaDetalle[c.id]?.diasDeuda || 0;
+                          if (dias === 0) return null;
+                          const color = dias > 30 ? "text-red-500 font-medium" : dias > 7 ? "text-amber-600" : "text-muted-foreground";
+                          return <p className={`text-xs mt-0.5 ${color}`}>hace {dias} día{dias !== 1 ? "s" : ""}</p>;
+                        })()}
                       </div>
-                      <span className="font-bold text-orange-500 text-sm shrink-0">{formatCurrency(c.saldo)}</span>
+                      <div className="text-right shrink-0">
+                        <span className="font-bold text-orange-500 text-sm">{formatCurrency(c.saldo)}</span>
+                        {(deudaDetalle[c.id]?.cantFacturas || 0) > 1 && (
+                          <p className="text-xs text-muted-foreground">{deudaDetalle[c.id].cantFacturas} facturas</p>
+                        )}
+                      </div>
                       <div className="flex gap-1 shrink-0">
                         <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openMovimientos(c)} title="Resumen"><Eye className="w-4 h-4" /></Button>
                         <Button size="icon" className="h-9 w-9" onClick={() => { setCobroClient(c); setCobroOpen(true); }} title="Cobrar"><DollarSign className="w-4 h-4" /></Button>
@@ -1709,9 +1720,22 @@ export default function ClientesPage() {
                     <tbody>
                       {filteredCobranzas.map((c) => (
                         <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="py-3 px-4 font-medium">{c.nombre}</td>
+                          <td className="py-3 px-4">
+                            <p className="font-medium">{c.nombre}</p>
+                            {(() => {
+                              const dias = deudaDetalle[c.id]?.diasDeuda || 0;
+                              if (dias === 0) return null;
+                              const color = dias > 30 ? "text-red-500 font-medium" : dias > 7 ? "text-amber-600" : "text-muted-foreground";
+                              return <p className={`text-xs mt-0.5 ${color}`}>hace {dias} día{dias !== 1 ? "s" : ""}</p>;
+                            })()}
+                          </td>
                           <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{c.cuit || "—"}</td>
-                          <td className="py-3 px-4 text-right font-semibold text-orange-500">{formatCurrency(c.saldo)}</td>
+                          <td className="py-3 px-4 text-right">
+                            <p className="font-semibold text-orange-500">{formatCurrency(c.saldo)}</p>
+                            {(deudaDetalle[c.id]?.cantFacturas || 0) > 1 && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{deudaDetalle[c.id].cantFacturas} facturas</p>
+                            )}
+                          </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex justify-end gap-2">
                               <Button variant="outline" size="sm" onClick={() => openMovimientos(c)}>
