@@ -374,6 +374,8 @@ export default function ProductosPage() {
   const [formMarcaOpen, setFormMarcaOpen] = useState(false);
 
   const [selectedProveedores, setSelectedProveedores] = useState<string[]>([]);
+  const [provSearch, setProvSearch] = useState("");
+  const [provOpen, setProvOpen] = useState(false);
   const [prodProvMap, setProdProvMap] = useState<Record<string, string>>({});
   const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
 
@@ -3708,46 +3710,88 @@ export default function ProductosPage() {
 
             {/* TAB: info (proveedores) */}
             <div className={editingProduct && editTab !== "info" ? "hidden" : ""}>
-            {/* Section 5: Proveedores - compact */}
+            {/* Section 5: Proveedores - searchable combobox */}
             {!isCombo && <div>
-              <h3 className="text-sm font-medium mb-3 text-muted-foreground">Proveedores</h3>
-              {selectedProveedores.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {selectedProveedores.map((id) => {
-                    const prov = proveedores.find((p) => p.id === id);
-                    return prov ? (
-                      <span key={id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-                        {prov.nombre}
-                        <button type="button" onClick={() => toggleProveedor(id)} className="hover:text-destructive ml-0.5">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ) : null;
-                  })}
-                </div>
-              )}
-              <div className="border rounded-lg p-2 max-h-32 overflow-y-auto">
-                <div className="flex flex-wrap gap-1.5">
-                  {proveedores.length === 0 && (
-                    <p className="text-sm text-muted-foreground p-1">No hay proveedores cargados</p>
+              {/* Proveedor — searchable */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Proveedores</Label>
+                {selectedProveedores.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2 mt-1">
+                    {selectedProveedores.map((id) => {
+                      const prov = proveedores.find((p) => p.id === id);
+                      return prov ? (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                        >
+                          {prov.nombre}
+                          <button
+                            type="button"
+                            onClick={() => toggleProveedor(id)}
+                            className="hover:text-destructive ml-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar proveedor..."
+                    value={provSearch}
+                    onChange={(e) => {
+                      setProvSearch(e.target.value);
+                      setProvOpen(true);
+                    }}
+                    onFocus={() => setProvOpen(true)}
+                    className="pl-8 h-9 text-sm"
+                  />
+                  {provOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-[49]"
+                        onClick={() => setProvOpen(false)}
+                      />
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                        {proveedores
+                          .filter(
+                            (p) =>
+                              !selectedProveedores.includes(p.id) &&
+                              p.nombre
+                                .toLowerCase()
+                                .includes(provSearch.toLowerCase())
+                          )
+                          .map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
+                              onClick={() => {
+                                toggleProveedor(p.id);
+                                setProvSearch("");
+                                setProvOpen(false);
+                              }}
+                            >
+                              {p.nombre}
+                            </button>
+                          ))}
+                        {proveedores.filter(
+                          (p) =>
+                            !selectedProveedores.includes(p.id) &&
+                            p.nombre
+                              .toLowerCase()
+                              .includes(provSearch.toLowerCase())
+                        ).length === 0 && (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">
+                            Sin resultados
+                          </p>
+                        )}
+                      </div>
+                    </>
                   )}
-                  {proveedores.map((prov) => {
-                    const isSelected = selectedProveedores.includes(prov.id);
-                    return (
-                      <button
-                        key={prov.id}
-                        type="button"
-                        onClick={() => toggleProveedor(prov.id)}
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          isSelected
-                            ? "bg-primary/10 text-primary border-primary/30"
-                            : "bg-muted/50 text-muted-foreground border-transparent hover:bg-muted hover:border-border"
-                        }`}
-                      >
-                        {prov.nombre}
-                      </button>
-                    );
-                  })}
                 </div>
               </div>
             </div>
