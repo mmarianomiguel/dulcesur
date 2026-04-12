@@ -648,38 +648,108 @@ export default function HojaDeRutaPage() {
       pdf.setTextColor(120);
       pdf.text("N°", margin, y);
       pdf.text("Cliente", margin + 22, y);
-      pdf.text("Método", margin + 90, y);
-      pdf.text("Total", margin + 125, y, { align: "right" });
-      pdf.text("Cobrado", margin + 150, y, { align: "right" });
-      pdf.text("Debe", w - margin, y, { align: "right" });
+      pdf.text("Pago (método · cuenta)", margin + 82, y);
+      pdf.text("Total", margin + 148, y, { align: "right" });
+      pdf.text("Cobrado", margin + 165, y, { align: "right" });
+      pdf.text("Debe", margin + 183, y, { align: "right" });
+      pdf.text("Hora", w - margin, y, { align: "right" });
       y += 4;
+      pdf.setTextColor(0);
       pdf.setTextColor(0);
       pdf.setDrawColor(220);
       pdf.line(margin, y - 1, w - margin, y - 1);
       pdf.setFont("helvetica", "normal");
 
       for (const v of dayVentas) {
-        if (y > 275) { pdf.addPage(); y = 20; }
+        if (y > 265) { pdf.addPage(); y = 20; }
         const pagos = historialPagos[v.id] || [];
-        const cobradoSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+        const pagosSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr"));
+        const cobradoSinNC = pagosSinNC.reduce((a, p) => a + p.monto, 0);
         const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
         const neto = v.total - ncMonto;
         const debe = Math.max(0, neto - cobradoSinNC);
-        const metodos = [...new Set(pagos.filter(p => !p.metodo.includes("Nota de Cr")).map(p => p.metodo))].join(", ") || "—";
 
-        pdf.text(v.numero || "—", margin, y);
-        pdf.text((v.clientes?.nombre || "Sin cliente").substring(0, 30), margin + 22, y);
-        pdf.text(metodos.substring(0, 18), margin + 90, y);
-        pdf.text(fmtCur(neto), margin + 125, y, { align: "right" });
-        pdf.text(fmtCur(cobradoSinNC), margin + 150, y, { align: "right" });
-        if (debe > 0) {
-          pdf.setTextColor(200, 100, 0);
-          pdf.text(fmtCur(debe), w - margin, y, { align: "right" });
-          pdf.setTextColor(0);
+        // Hora del primer pago
+        const firstPagoConHora = pagosSinNC.find(p => (p as any).fecha_hora);
+        const horaEntrega = firstPagoConHora ? (() => {
+          const d = new Date((firstPagoConHora as any).fecha_hora);
+          return isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+        })() : "—";
+
+        // Calcular altura de fila según cantidad de líneas de pago
+        const pagoLines: { text: string; color: [number,number,number]; indent: number }[] = [];
+        if (pagosSinNC.length === 0) {
+          pagoLines.push({ text: "Sin cobro registrado", color: [156, 163, 175], indent: 0 });
         } else {
-          pdf.text("—", w - margin, y, { align: "right" });
+          for (const p of pagosSinNC) {
+            const metodosColor: [number,number,number] = p.metodo === "Transferencia" ? [37, 99, 235] : p.metodo === "Efectivo" ? [22, 101, 52] : [55, 65, 81];
+            pagoLines.push({ text: `${p.metodo}  ${fmtCur(p.monto)}`, color: metodosColor, indent: 0 });
+            if (p.metodo === "Transferencia" && (p as any).cuenta_bancaria) {
+              pagoLines.push({ text: `→ ${(p as any).cuenta_bancaria}`, color: [59, 130, 246], indent: 3 });
+            }
+          }
         }
-        y += 4.5;
+        if (ncMonto > 0) {
+          pagoLines.push({ text: `NC -${fmtCur(ncMonto)}`, color: [180, 83, 9], indent: 0 });
+        }
+
+        const rowHeight = Math.max(4.5, pagoLines.length * 3.8);
+        if (y + rowHeight > 275) { pdf.addPage(); y = 20; }
+
+        // Número de venta
+        pdf.setFontSize(8);
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(80);
+        pdf.text((v.numero || "—").slice(-8), margin, y);
+
+        // Cliente
+        pdf.setTextColor(0);
+        pdf.setFont("helvetica", "bold");
+        pdf.text((v.clientes?.nombre || "Sin cliente").substring(0, 22), margin + 22, y);
+        pdf.setFont("helvetica", "normal");
+
+        // Pagos — desglosados línea por línea
+        let lineY = y;
+        for (const pl of pagoLines) {
+          pdf.setTextColor(...pl.color);
+          pdf.setFontSize(7.5);
+          pdf.text(pl.text.substring(0, 32), margin + 82 + pl.indent, lineY);
+          lineY += 3.8;
+        }
+        pdf.setFontSize(8);
+
+        // Total neto
+        pdf.setTextColor(0);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(fmtCur(neto), margin + 148, y, { align: "right" });
+        pdf.setFont("helvetica", "normal");
+
+        // Cobrado
+        if (cobradoSinNC > 0) {
+          pdf.setTextColor(22, 101, 52);
+          pdf.text(fmtCur(cobradoSinNC), margin + 165, y, { align: "right" });
+        } else {
+          pdf.setTextColor(156, 163, 175);
+          pdf.text("$0", margin + 165, y, { align: "right" });
+        }
+
+        // Debe
+        if (debe > 0) {
+          pdf.setTextColor(194, 65, 12);
+          pdf.setFont("helvetica", "bold");
+          pdf.text(fmtCur(debe), margin + 183, y, { align: "right" });
+          pdf.setFont("helvetica", "normal");
+        } else {
+          pdf.setTextColor(156, 163, 175);
+          pdf.text("—", margin + 183, y, { align: "right" });
+        }
+
+        // Hora
+        pdf.setTextColor(107, 114, 128);
+        pdf.text(horaEntrega, w - margin, y, { align: "right" });
+
+        pdf.setTextColor(0);
+        y += rowHeight + 1;
       }
       y += 4;
     }
