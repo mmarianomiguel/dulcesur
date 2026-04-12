@@ -110,6 +110,7 @@ export default function TiendaNavbar() {
         .select("categoria_id, marca_id, marcas(id, nombre)")
         .eq("activo", true)
         .eq("visibilidad", "visible")
+        .limit(500)
         .not("marca_id", "is", null);
 
       const mMap: Record<string, Map<string, string>> = {};
@@ -126,6 +127,12 @@ export default function TiendaNavbar() {
       }
       setMarcasMap(mResult);
     })();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
   }, []);
 
   // Lock body scroll when mobile menu is open
@@ -188,7 +195,7 @@ export default function TiendaNavbar() {
   };
 
   const handleCatLeave = () => {
-    closeTimer.current = setTimeout(() => setHoveredCat(null), 150);
+    closeTimer.current = setTimeout(() => setHoveredCat(null), 250);
   };
 
   const handleMenuEnter = () => {
@@ -196,7 +203,7 @@ export default function TiendaNavbar() {
   };
 
   const handleMenuLeave = () => {
-    closeTimer.current = setTimeout(() => setHoveredCat(null), 150);
+    closeTimer.current = setTimeout(() => setHoveredCat(null), 250);
   };
 
   return (
