@@ -385,7 +385,7 @@ export default function TiendaNavbar() {
             </div>
 
             {/* Notifications */}
-            {clienteId && <NotificationBell clienteId={clienteId} />}
+            {clienteId && <NotificationBell clienteId={Number(clienteId)} />}
 
             {/* Cart */}
             <button

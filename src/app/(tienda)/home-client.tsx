@@ -845,6 +845,7 @@ interface HomeClientProps {
   initialMasVendidos?: any[];
   initialUltimasUnidades?: any[];
   initialTopVendidos?: any[];
+  initialTopPresMap?: Record<string, any[]>;
   initialNuevosIngresos?: any[];
 }
 
@@ -858,13 +859,14 @@ export default function TiendaPage({
   initialMasVendidos = [],
   initialUltimasUnidades = [],
   initialTopVendidos = [],
+  initialTopPresMap = {},
   initialNuevosIngresos = [],
 }: HomeClientProps = {}) {
   const hasInitial = !!initialBloques;
   const [bloques, setBloques] = useState<Bloque[]>(initialBloques || []);
   const [categorias, setCategorias] = useState<Categoria[]>(initialCategorias || []);
   const [productos, setProductos] = useState<Producto[]>(initialProductos || []);
-  const [presMap, setPresMap] = useState<Record<string, any[]>>(initialPresMap || {});
+  const [presMap, setPresMap] = useState<Record<string, any[]>>({ ...(initialPresMap || {}), ...(initialTopPresMap || {}) });
   const [loading, setLoading] = useState(!hasInitial);
   const [diasNuevo, setDiasNuevo] = useState(initialDiasNuevo);
 

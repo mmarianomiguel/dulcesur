@@ -234,7 +234,7 @@ export default async function TiendaHomePage() {
   if (topIds.length > 0) {
     const { data: mvData } = await supabase
       .from("productos")
-      .select("id, nombre, precio, imagen_url, stock, activo, es_combo, categorias(id, nombre)")
+      .select("id, nombre, precio, imagen_url, stock, activo, es_combo, precio_anterior, categorias(id, nombre)")
       .eq("activo", true)
       .eq("visibilidad", "visible")
       .gt("stock", 0)
@@ -242,6 +242,21 @@ export default async function TiendaHomePage() {
     topVendidosProds = topIds
       .map(id => (mvData || []).find((p: any) => p.id === id))
       .filter(Boolean);
+  }
+
+  // Presentaciones para top vendidos
+  const topPresMap: Record<string, any[]> = {};
+  if (topVendidosProds.length > 0) {
+    const topProdIds = topVendidosProds.map((p: any) => p.id);
+    const { data: topPresData } = await supabase
+      .from("presentaciones")
+      .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
+      .in("producto_id", topProdIds)
+      .order("cantidad");
+    (topPresData || []).forEach((p: any) => {
+      if (!topPresMap[p.producto_id]) topPresMap[p.producto_id] = [];
+      topPresMap[p.producto_id].push(p);
+    });
   }
 
   // Nuevos ingresos
@@ -277,6 +292,7 @@ export default async function TiendaHomePage() {
       initialMasVendidos={masVendidosData || []}
       initialUltimasUnidades={ultimasUnidadesData || []}
       initialTopVendidos={topVendidosProds}
+      initialTopPresMap={topPresMap}
       initialNuevosIngresos={nuevosIngresos}
     />
   );
