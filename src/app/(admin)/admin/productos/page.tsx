@@ -2544,27 +2544,29 @@ export default function ProductosPage() {
                     return (
                     <Fragment key={product.id}>
                     <tr
-                      onClick={() =>
-                        setQuickViewProduct(
-                          quickViewProduct?.id === product.id ? null : product
-                        )
-                      }
-                      className={`border-b last:border-0 transition-colors cursor-pointer ${
+                      onContextMenu={(e) => handleContextMenu(e, product)}
+                      className={`border-b last:border-0 transition-colors ${
                         isSelected
                           ? "bg-accent"
                           : quickViewProduct?.id === product.id
                           ? "bg-primary/5"
-                          : "hover:bg-muted/50"
+                          : ""
                       }`}
                     >
-                      <td className="py-3 px-2">
-                        <button onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }}>
-                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
-                            {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                          </div>
-                        </button>
+                      <td
+                        className="py-3 px-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => toggleSelect(product.id)}
+                        title="Seleccionar"
+                      >
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
+                          {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+                        </div>
                       </td>
-                      <td className="py-3 px-2">
+                      <td
+                        className="py-3 px-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => toggleSelect(product.id)}
+                        title="Seleccionar"
+                      >
                         {product.imagen_url ? (
                           <img src={product.imagen_url} alt="" className="w-8 h-8 rounded object-cover" />
                         ) : (
@@ -2576,12 +2578,30 @@ export default function ProductosPage() {
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">
-                        {product.codigo}
+                      <td
+                        className="py-3 px-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => toggleSelect(product.id)}
+                        title="Seleccionar"
+                      >
+                        <span className="font-mono text-xs text-muted-foreground select-none">
+                          {product.codigo}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 font-medium max-w-xs">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="truncate max-w-[250px]" title={product.nombre}>{product.nombre}</span>
+                      <td
+                        className="py-3 px-4 font-medium max-w-xs cursor-pointer"
+                        onClick={() => setQuickViewProduct(quickViewProduct?.id === product.id ? null : product)}
+                        onDoubleClick={() => openEdit(product)}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap group">
+                          <span
+                            className="truncate max-w-[250px] hover:text-primary transition-colors"
+                            title={product.nombre}
+                          >
+                            {product.nombre}
+                          </span>
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-primary/60">
+                            ▾ vista rápida
+                          </span>
                           {product.visibilidad === "oculto" && (
                             <button
                               title="Oculto en la tienda — click para mostrar"
