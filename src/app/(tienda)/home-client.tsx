@@ -316,6 +316,8 @@ function ProductosDestacadosBlock({
   loading,
   agregarAlCarrito,
   diasNuevo,
+  masVendidos = [],
+  nuevosIngresos = [],
 }: {
   config: Record<string, any>;
   productos: Producto[];
@@ -323,17 +325,14 @@ function ProductosDestacadosBlock({
   loading: boolean;
   agregarAlCarrito: (p: Producto, qty: number) => void;
   diasNuevo: number;
+  masVendidos?: any[];
+  nuevosIngresos?: any[];
 }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
-  const titulo = config.titulo_seccion || "Productos Destacados";
+  const titulo = config.titulo_seccion || "Productos";
   const maxItems = config.max_items || 8;
 
-  // Filter out products from restricted categories
-  const visibleProds = productos.filter((p) => {
-    if (!p.categorias) return true;
-    return filtrarCategorias([p.categorias]).length > 0;
-  }).slice(0, maxItems);
-
+  const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">("destacados");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
 
@@ -341,180 +340,145 @@ function ProductosDestacadosBlock({
   const setQty = (id: string, val: number) =>
     setQuantities((prev) => ({ ...prev, [id]: Math.max(1, val) }));
 
-  const isNew = (prod: Producto) => {
-    if (diasNuevo <= 0) return false;
-    const days = daysSinceAR((prod as any).created_at);
-    return days >= 0 && days <= diasNuevo;
+  const filterCats = (list: any[]) =>
+    list.filter((p: any) => {
+      if (!p.categorias) return true;
+      return filtrarCategorias([p.categorias]).length > 0;
+    }).slice(0, maxItems);
+
+  const destacados = filterCats(productos);
+  const vendidos = filterCats(masVendidos);
+  const nuevos = filterCats(nuevosIngresos);
+
+  const activeProds: any[] =
+    activeTab === "destacados" ? destacados :
+    activeTab === "mas_vendidos" ? vendidos :
+    nuevos;
+
+  const tabs = [
+    { key: "destacados" as const, label: "Destacados", icon: Star, count: destacados.length },
+    { key: "mas_vendidos" as const, label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
+    { key: "nuevos" as const, label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
+  ].filter((t) => t.count > 0);
+
+  const renderProductCard = (prod: any) => {
+    const qty = getQty(prod.id);
+    const sinStock = prod.stock <= 0;
+    const pres = presMap[prod.id];
+    const presIdx = selectedPres[prod.id] ?? 0;
+    const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
+    const price = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
+    const presUnits = activePres ? activePres.cantidad : 1;
+    const maxQty = Math.floor(prod.stock / Math.max(0.01, presUnits));
+
+    return (
+      <div key={prod.id} className="card-product animate-fade-in-up group relative overflow-hidden rounded-2xl border border-gray-100 bg-white flex flex-col">
+        <Link href={`/productos/${productSlug(prod.nombre, prod.id)}`}>
+          <div className="relative aspect-square bg-gray-50 overflow-hidden">
+            {prod.imagen_url ? (
+              <Image src={prod.imagen_url} alt={prod.nombre} fill sizes="(max-width: 768px) 50vw, 25vw" loading="lazy" className="card-product-img object-contain p-4" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center"><Package className="w-12 h-12 text-gray-300" /></div>
+            )}
+            {sinStock && (
+              <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                <span className="bg-gray-800 text-white text-xs font-semibold px-3 py-1 rounded-full">Sin stock</span>
+              </div>
+            )}
+            <div className="absolute top-2 left-2 flex flex-col gap-1">
+              {prod.es_combo && (
+                <span className="bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">COMBO</span>
+              )}
+              {activeTab === "nuevos" && !sinStock && (
+                <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Nuevo</span>
+              )}
+              {activeTab === "mas_vendidos" && !sinStock && (
+                <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5">
+                  <TrendingUp className="w-2.5 h-2.5" /> Top
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="p-4">
+            {prod.categorias && (
+              <span className="inline-block text-[11px] font-medium text-primary bg-primary/5 rounded-full px-2.5 py-0.5">{prod.categorias.nombre}</span>
+            )}
+            <p className="text-sm font-medium text-gray-800 line-clamp-2 mt-1.5 min-h-[2.5rem]">{prod.nombre}</p>
+            {pres && pres.length > 1 && (
+              <div className="flex gap-1 mt-2 flex-wrap">
+                {[...pres].sort((a: any, b: any) => a.cantidad - b.cantidad).map((pr: any, idx: number) => (
+                  <button key={pr.id} onClick={(e) => { e.preventDefault(); setSelectedPres((p) => ({ ...p, [prod.id]: idx })); }}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition ${presIdx === idx ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"}`}
+                  >{pr.nombre || (pr.cantidad === 1 ? "Unidad" : `Caja x${pr.cantidad}`)}</button>
+                ))}
+              </div>
+            )}
+            <p className="text-xl font-bold text-gray-900 mt-2">{formatCurrency(price)}</p>
+          </div>
+        </Link>
+        <div className="px-4 pb-4 mt-auto">
+          {sinStock ? (
+            <button disabled className="w-full bg-gray-100 text-gray-400 text-sm py-2.5 rounded-xl font-medium cursor-not-allowed">Sin stock</button>
+          ) : maxQty > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                  <button onClick={() => setQty(prod.id, qty - 1)} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><Minus className="w-3 h-3" /></button>
+                  <span className="w-7 text-center text-sm font-medium tabular-nums">{qty}</span>
+                  <button onClick={() => setQty(prod.id, Math.min(qty + 1, maxQty))} disabled={qty >= maxQty} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-30"><Plus className="w-3 h-3" /></button>
+                </div>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(price * qty)}</span>
+              </div>
+              <button onClick={() => { agregarAlCarrito(prod as Producto, qty); setQty(prod.id, 1); }}
+                className="btn-add-cart w-full bg-gray-900 hover:bg-primary text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors duration-200">
+                <ShoppingCart className="w-3.5 h-3.5" /> Agregar
+              </button>
+            </div>
+          ) : (
+            <p className="text-center text-xs text-orange-500 font-medium py-2">Quedan {prod.stock}</p>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
     <section className="py-8 md:py-10 bg-gray-50/50">
       <div className="max-w-7xl mx-auto px-4">
-        <SectionTitle>{titulo}</SectionTitle>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">{titulo}</h2>
+          {!loading && tabs.length > 1 && (
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 self-start sm:self-auto">
+              {tabs.map(({ key, label, icon: Icon }) => (
+                <button key={key} onClick={() => setActiveTab(key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    activeTab === key ? "bg-gray-900 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  }`}>
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{label}</span>
+                  <span className="sm:hidden">{label.split(" ")[0]}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="w-12 h-0.5 bg-primary rounded-full mb-6 -mt-3" />
 
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: maxItems }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
+            {Array.from({ length: maxItems }).map((_, i) => (<SkeletonCard key={i} />))}
           </div>
+        ) : activeProds.length === 0 ? (
+          <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-children">
-            {visibleProds.map((prod) => {
-              const qty = getQty(prod.id);
-              const sinStock = prod.stock <= 0;
-              const nuevo = isNew(prod);
-              return (
-                <div
-                  key={prod.id}
-                  className="card-product animate-fade-in-up group relative overflow-hidden rounded-2xl border border-gray-100 bg-white flex flex-col"
-                >
-                  <Link href={`/productos/${productSlug(prod.nombre, prod.id)}`}>
-                    {/* image */}
-                    <div className="relative aspect-square bg-gray-50 overflow-hidden">
-                      {prod.imagen_url ? (
-                        <Image
-                          src={prod.imagen_url}
-                          alt={prod.nombre}
-                          fill
-                          sizes="(max-width: 768px) 50vw, 25vw"
-                          loading="lazy"
-                          className="card-product-img object-contain p-4"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package className="w-12 h-12 text-gray-300" />
-                        </div>
-                      )}
-                      {sinStock && (
-                        <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
-                          <span className="bg-gray-800 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                            Sin stock
-                          </span>
-                        </div>
-                      )}
-                      {/* Badges */}
-                      <div className="absolute top-2 left-2 flex flex-col gap-1">
-                        {prod.es_combo && (
-                          <span className="bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                            COMBO
-                          </span>
-                        )}
-                        {nuevo && !sinStock && !prod.es_combo && (
-                          <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                            Nuevo
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* content */}
-                    <div className="p-4">
-                      {prod.categorias && (
-                        <span className="inline-block text-[11px] font-medium text-primary bg-primary/5 rounded-full px-2.5 py-0.5">
-                          {prod.categorias.nombre}
-                        </span>
-                      )}
-                      <p className="text-sm font-medium text-gray-800 line-clamp-2 mt-1.5 min-h-[2.5rem]">
-                        {prod.nombre}
-                      </p>
-                      {/* Presentation pills */}
-                      {(() => {
-                        const pres = presMap[prod.id];
-                        const presIdx = selectedPres[prod.id] ?? 0;
-                        const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
-                        const price = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
-                        return (
-                          <>
-                            {pres && pres.length > 1 && (
-                              <div className="flex gap-1 mt-2 flex-wrap">
-                                {pres.sort((a: any, b: any) => a.cantidad - b.cantidad).map((pr: any, idx: number) => (
-                                  <button
-                                    key={pr.id}
-                                    onClick={(e) => { e.preventDefault(); setSelectedPres((p) => ({ ...p, [prod.id]: idx })); }}
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition ${
-                                      presIdx === idx ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"
-                                    }`}
-                                  >
-                                    {pr.nombre || (pr.cantidad === 1 ? "Unidad" : `Caja x${pr.cantidad}`)}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            <p className="text-xl font-bold text-gray-900 mt-2">{formatCurrency(price)}</p>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </Link>
-
-                  {/* add to cart */}
-                  <div className="px-4 pb-4 mt-auto">
-                    {sinStock ? (
-                      <button
-                        disabled
-                        className="w-full bg-gray-100 text-gray-400 text-sm py-2.5 rounded-xl font-medium cursor-not-allowed"
-                      >
-                        Sin stock
-                      </button>
-                    ) : (
-                      <div className="flex flex-col gap-1.5">
-                        {(() => {
-                        const pres = presMap[prod.id];
-                        const presIdx = selectedPres[prod.id] ?? 0;
-                        const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
-                        const price = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
-                        const presUnits = activePres ? activePres.cantidad : 1;
-                        const maxQty = Math.floor(prod.stock / Math.max(0.01, presUnits));
-                        return maxQty > 0 ? (
-                          <>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
-                                <button
-                                  onClick={() => setQty(prod.id, qty - 1)}
-                                  className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </button>
-                                <span className="w-7 text-center text-sm font-medium tabular-nums">{qty}</span>
-                                <button
-                                  onClick={() => setQty(prod.id, Math.min(qty + 1, maxQty))}
-                                  disabled={qty >= maxQty}
-                                  className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-30"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <span className="text-sm font-bold text-gray-900">{formatCurrency(price * qty)}</span>
-                            </div>
-                            <button
-                              onClick={() => { agregarAlCarrito(prod, qty); setQty(prod.id, 1); }}
-                              className="btn-add-cart w-full bg-gray-900 hover:bg-primary text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors duration-200"
-                            >
-                              <ShoppingCart className="w-3.5 h-3.5" />
-                              Agregar
-                            </button>
-                          </>
-                        ) : (
-                          <p className="text-center text-xs text-orange-500 font-medium py-2">Quedan {prod.stock}</p>
-                        );
-                      })()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {activeProds.map(renderProductCard)}
           </div>
         )}
 
-        {/* view all link */}
-        {!loading && visibleProds.length > 0 && (
+        {!loading && activeProds.length > 0 && (
           <div className="text-center mt-6">
-            <Link
-              href="/productos"
-              className="inline-block border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white rounded-full px-8 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95"
-            >
+            <Link href="/productos" className="inline-block border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white rounded-full px-8 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95">
               Ver todos los productos
             </Link>
           </div>
@@ -880,6 +844,8 @@ interface HomeClientProps {
   initialAumentos?: any[];
   initialMasVendidos?: any[];
   initialUltimasUnidades?: any[];
+  initialTopVendidos?: any[];
+  initialNuevosIngresos?: any[];
 }
 
 export default function TiendaPage({
@@ -891,6 +857,8 @@ export default function TiendaPage({
   initialAumentos = [],
   initialMasVendidos = [],
   initialUltimasUnidades = [],
+  initialTopVendidos = [],
+  initialNuevosIngresos = [],
 }: HomeClientProps = {}) {
   const hasInitial = !!initialBloques;
   const [bloques, setBloques] = useState<Bloque[]>(initialBloques || []);
@@ -1102,6 +1070,8 @@ export default function TiendaPage({
             loading={loading}
             agregarAlCarrito={agregarAlCarrito}
             diasNuevo={diasNuevo}
+            masVendidos={initialTopVendidos}
+            nuevosIngresos={initialNuevosIngresos}
           />
         );
       case "banner_promo":

@@ -178,15 +178,78 @@ export default async function TiendaHomePage() {
     .order("stock", { ascending: true })
     .limit(24);
 
-  const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }] = await Promise.all([
+  // Más vendidos (tabs): top productos por ventas en 30 días
+  const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  const hace30 = new Date(ahoraAR);
+  hace30.setDate(hace30.getDate() - 30);
+
+  const hace4dias = new Date(ahoraAR);
+  hace4dias.setDate(hace4dias.getDate() - 4);
+  hace4dias.setHours(0, 0, 0, 0);
+
+  const hace7dias = new Date(ahoraAR);
+  hace7dias.setDate(hace7dias.getDate() - 7);
+  hace7dias.setHours(0, 0, 0, 0);
+
+  const topVentasPromise = supabase
+    .from("venta_items")
+    .select("producto_id, cantidad")
+    .gte("created_at", hace30.toISOString())
+    .limit(5000);
+
+  const nuevosPromise = supabase
+    .from("productos")
+    .select("id, nombre, precio, imagen_url, stock, activo, es_combo, created_at, updated_at, categorias(id, nombre)")
+    .eq("activo", true)
+    .eq("visibilidad", "visible")
+    .gt("stock", 0)
+    .or(`created_at.gte.${hace4dias.toISOString()},updated_at.gte.${hace7dias.toISOString()}`)
+    .order("created_at", { ascending: false })
+    .limit(32);
+
+  const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }, { data: topVentaItems }, { data: nuevosRaw }] = await Promise.all([
     catPromise,
     prodPromise,
     aumentosPromise,
     masVendidosPromise,
     ultimasUnidadesPromise,
+    topVentasPromise,
+    nuevosPromise,
   ]);
 
   const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+
+  // Procesar más vendidos (tabs)
+  const ventaMap: Record<string, number> = {};
+  for (const vi of topVentaItems || []) {
+    if (!vi.producto_id) continue;
+    ventaMap[vi.producto_id] = (ventaMap[vi.producto_id] || 0) + Number(vi.cantidad);
+  }
+  const topIds = Object.entries(ventaMap)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 16)
+    .map(([id]) => id);
+
+  let topVendidosProds: any[] = [];
+  if (topIds.length > 0) {
+    const { data: mvData } = await supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url, stock, activo, es_combo, categorias(id, nombre)")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .gt("stock", 0)
+      .in("id", topIds);
+    topVendidosProds = topIds
+      .map(id => (mvData || []).find((p: any) => p.id === id))
+      .filter(Boolean);
+  }
+
+  // Nuevos ingresos
+  const nuevosIngresos = (nuevosRaw || []).filter((p: any) => {
+    const creadoReciente = new Date(p.created_at) >= hace4dias;
+    const stockRecuperado = new Date(p.updated_at) >= hace7dias && p.stock > 0;
+    return creadoReciente || stockRecuperado;
+  }).slice(0, 16);
 
   // 3. Fetch presentaciones for products (needs product IDs from step 2)
   const presMap: Record<string, any[]> = {};
@@ -213,6 +276,8 @@ export default async function TiendaHomePage() {
       initialAumentos={aumentos}
       initialMasVendidos={masVendidosData || []}
       initialUltimasUnidades={ultimasUnidadesData || []}
+      initialTopVendidos={topVendidosProds}
+      initialNuevosIngresos={nuevosIngresos}
     />
   );
 }
