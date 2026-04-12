@@ -421,229 +421,442 @@ export default function DescuentosPage() {
 
       {/* Create/Edit Dialog — two-column layout */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
-          <DialogHeader className="px-6 py-4 border-b bg-muted/30 shrink-0">
-            <DialogTitle>{editId ? "Editar descuento" : "Nuevo descuento"}</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b bg-muted/30">
+            <DialogTitle>{editId ? "Editar descuento" : "Crear descuento"}</DialogTitle>
+            <Button variant="ghost" size="icon" onClick={() => { setDialogOpen(false); resetWizard(); }}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="flex flex-col sm:flex-row">
-              {/* Left column — form fields */}
-              <div className="flex-1 p-6 space-y-5 overflow-y-auto">
+          <div className="flex flex-1 overflow-hidden min-h-0">
+            {/* ── Left column (scrollable form) ── */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 border-r">
 
-                {/* 1. Información básica */}
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Nombre del descuento *</Label>
-                    <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Promo caja cerrada harinas" className="mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Descripción (opcional)</Label>
-                    <Textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={2} className="mt-1 resize-none text-sm" />
-                  </div>
+              {/* 1. Name + description */}
+              <div className="space-y-2">
+                <Label>Nombre del descuento *</Label>
+                <Input
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Ej: Promo caja cerrada harinas"
+                />
+                <Textarea
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  placeholder="Descripción (opcional)"
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+              </div>
+
+              {/* 2. Tipo + valor */}
+              <div className="space-y-3">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Tipo de descuento
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: "porcentaje", label: "Porcentaje", sub: "Ej: 20% off" },
+                    { value: "precio_fijo", label: "Precio fijo", sub: "Ej: $5.000 por unidad" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setTipoDescuento(opt.value)}
+                      className={`p-3 rounded-lg border-2 text-left transition-all ${
+                        tipoDescuento === opt.value
+                          ? "border-primary bg-primary/5"
+                          : "border-muted hover:border-muted-foreground/30"
+                      }`}
+                    >
+                      <p className="text-sm font-medium">{opt.label}</p>
+                      <p className="text-xs text-muted-foreground">{opt.sub}</p>
+                    </button>
+                  ))}
                 </div>
 
-                <Separator />
-
-                {/* 2. Tipo y valor */}
-                <div className="space-y-3">
-                  <Label className="text-xs text-muted-foreground font-semibold">Tipo de descuento</Label>
-                  <div className="flex gap-2">
-                    <button onClick={() => setTipoDescuento("porcentaje")} className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${tipoDescuento === "porcentaje" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>Porcentaje</button>
-                    <button onClick={() => setTipoDescuento("precio_fijo")} className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${tipoDescuento === "precio_fijo" ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>Precio fijo</button>
-                  </div>
-                  {tipoDescuento === "porcentaje" ? (
-                    <div className="space-y-2">
-                      <Input type="number" min={1} max={100} value={porcentaje} onChange={(e) => setPorcentaje(Math.max(1, Math.min(100, Number(e.target.value))))} className="text-center text-lg font-semibold" />
-                      <div className="flex flex-wrap gap-1.5">
-                        {QUICK_PERCENTS.map((p) => (
-                          <button key={p} onClick={() => setPorcentaje(p)} className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${porcentaje === p ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>{p}%</button>
-                        ))}
-                      </div>
+                {tipoDescuento === "porcentaje" ? (
+                  <div className="space-y-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={porcentaje}
+                      onChange={(e) =>
+                        setPorcentaje(Math.min(100, Math.max(0, Number(e.target.value))))
+                      }
+                      className="w-32 text-center text-xl font-semibold h-12"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {QUICK_PERCENTS.map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setPorcentaje(v)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                            porcentaje === v
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {v}%
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Precio fijo</Label>
-                      <div className="relative mt-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                        <Input type="number" min={0} value={precioFijo ?? ""} onChange={(e) => setPrecioFijo(e.target.value ? Number(e.target.value) : null)} className="pl-7 text-lg font-semibold" placeholder="0" />
-                      </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={precioFijo ?? ""}
+                      onChange={(e) =>
+                        setPrecioFijo(e.target.value ? Number(e.target.value) : null)
+                      }
+                      placeholder="0"
+                      className="w-40"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Vigencia */}
+              <div className="space-y-3">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Vigencia
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Desde *</Label>
+                    <Input
+                      type="date"
+                      value={fechaInicio}
+                      onChange={(e) => setFechaInicio(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Hasta (vacío = permanente)</Label>
+                    <Input
+                      type="date"
+                      value={fechaFin}
+                      onChange={(e) => setFechaFin(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: "7 días", days: 7 },
+                    { label: "15 días", days: 15 },
+                    { label: "30 días", days: 30 },
+                    { label: "90 días", days: 90 },
+                    { label: "Permanente", days: null },
+                  ].map(({ label, days }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => addDuration(days)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border hover:border-primary/50 transition-all"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. Aplica a */}
+              <div className="space-y-3">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Aplica a
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "todos", label: "Todos los productos" },
+                    { value: "categorias", label: "Categorías" },
+                    { value: "subcategorias", label: "Subcategorías" },
+                    { value: "productos", label: "Productos específicos" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setAplicaA(opt.value)}
+                      className={`p-2.5 rounded-lg border text-sm font-medium text-left transition-all ${
+                        aplicaA === opt.value
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border hover:border-primary/30"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Category picker */}
+                {aplicaA === "categorias" && (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Buscar categoría..."
+                      value={catSearch}
+                      onChange={(e) => setCatSearch(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <div className="border rounded-lg max-h-40 overflow-y-auto">
+                      {filteredCats.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/50 ${
+                            categoriasIds.includes(c.id) ? "bg-primary/5" : ""
+                          }`}
+                          onClick={() => toggleCatSelect(c.id)}
+                        >
+                          <span>{c.nombre}</span>
+                          {categoriasIds.includes(c.id) && (
+                            <Check className="w-3.5 h-3.5 text-primary" />
+                          )}
+                        </button>
+                      ))}
                     </div>
-                  )}
-                </div>
-
-                <Separator />
-
-                {/* 3. Vigencia */}
-                <div className="space-y-3">
-                  <Label className="text-xs text-muted-foreground font-semibold">Vigencia</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label className="text-xs text-muted-foreground">Desde *</Label><Input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="mt-1" /></div>
-                    <div><Label className="text-xs text-muted-foreground">Hasta (vacío = permanente)</Label><Input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className="mt-1" /></div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[{ label: "7 días", days: 7 }, { label: "15 días", days: 15 }, { label: "30 días", days: 30 }, { label: "90 días", days: 90 }, { label: "Permanente", days: null }].map(({ label, days }) => (
-                      <button key={label} onClick={() => addDuration(days)} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border hover:border-primary/50 transition-all">{label}</button>
-                    ))}
-                  </div>
-                </div>
+                )}
 
-                <Separator />
-
-                {/* 4. Aplica a */}
-                <div className="space-y-3">
-                  <Label className="text-xs text-muted-foreground font-semibold">Aplica a</Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                    {(["todos", "categorias", "subcategorias", "productos"] as const).map((v) => (
-                      <button key={v} onClick={() => setAplicaA(v)} className={`py-2 rounded-lg text-xs font-medium border transition-all ${aplicaA === v ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/50"}`}>
-                        {aplicaALabel(v)}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Category/Subcategory selector */}
-                  {(aplicaA === "categorias" || aplicaA === "subcategorias") && (
-                    <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                        <Input placeholder="Buscar categoría..." value={catSearch} onChange={(e) => setCatSearch(e.target.value)} className="h-8 text-xs pl-8" />
-                      </div>
-                      {filteredCats.map((cat) => {
-                        const subs = subsForCat(cat.id);
-                        const isExpanded = expandedCats.includes(cat.id);
-                        const isCatSelected = aplicaA === "categorias" && categoriasIds.includes(cat.id);
-                        return (
-                          <div key={cat.id}>
-                            <div className="flex items-center gap-2 py-1">
-                              {aplicaA === "subcategorias" && subs.length > 0 && (
-                                <button onClick={() => toggleCatExpand(cat.id)}><ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} /></button>
-                              )}
-                              <button onClick={() => aplicaA === "categorias" ? toggleCatSelect(cat.id) : toggleCatExpand(cat.id)} className="flex items-center gap-2 flex-1 text-left">
-                                {aplicaA === "categorias" && (
-                                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${isCatSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
-                                    {isCatSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                                  </div>
-                                )}
-                                <span className="text-sm">{cat.nombre}</span>
+                {/* Subcategory picker */}
+                {aplicaA === "subcategorias" && (
+                  <div className="space-y-2">
+                    {categorias.map((cat) => {
+                      const subs = subsForCat(cat.id);
+                      if (subs.length === 0) return null;
+                      return (
+                        <div key={cat.id}>
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">
+                            {cat.nombre}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {subs.map((s) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() =>
+                                  setSubcategoriasIds((prev) =>
+                                    prev.includes(s.id)
+                                      ? prev.filter((x) => x !== s.id)
+                                      : [...prev, s.id]
+                                  )
+                                }
+                                className={`px-2.5 py-1 rounded-full text-xs border transition-all ${
+                                  subcategoriasIds.includes(s.id)
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "border-border hover:border-primary/50"
+                                }`}
+                              >
+                                {s.nombre}
                               </button>
-                            </div>
-                            {aplicaA === "subcategorias" && isExpanded && subs.map((sub) => {
-                              const isSubSelected = subcategoriasIds.includes(sub.id);
-                              return (
-                                <button key={sub.id} onClick={() => setSubcategoriasIds((prev) => prev.includes(sub.id) ? prev.filter((x) => x !== sub.id) : [...prev, sub.id])} className="flex items-center gap-2 pl-8 py-1 w-full text-left">
-                                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${isSubSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
-                                    {isSubSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                                  </div>
-                                  <span className="text-sm">{sub.nombre}</span>
-                                </button>
-                              );
-                            })}
+                            ))}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Product selector */}
-                  {aplicaA === "productos" && (
-                    <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                        <Input placeholder="Buscar producto..." value={prodSearch} onChange={(e) => setProdSearch(e.target.value)} className="h-8 text-xs pl-8" />
-                      </div>
-                      {productosIds.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pb-2 border-b">
-                          {productosIds.map((id) => {
-                            const p = productosAll.find((pr) => pr.id === id);
-                            return (
-                              <Badge key={id} variant="secondary" className="gap-1 pr-1">
-                                {p?.nombre || id.slice(0, 8)}
-                                <button onClick={() => setProductosIds((prev) => prev.filter((x) => x !== id))} className="hover:bg-muted rounded-full p-0.5"><X className="w-3 h-3" /></button>
-                              </Badge>
-                            );
-                          })}
                         </div>
-                      )}
-                      {filteredProds.slice(0, 50).map((p) => {
-                        const isSelected = productosIds.includes(p.id);
-                        return (
-                          <button key={p.id} onClick={() => setProductosIds((prev) => isSelected ? prev.filter((x) => x !== p.id) : [...prev, p.id])} className="flex items-center gap-2 py-1 w-full text-left">
-                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
-                              {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
-                            </div>
-                            <span className="text-xs font-mono text-muted-foreground w-20 shrink-0 truncate">{p.codigo}</span>
-                            <span className="text-sm truncate">{p.nombre}</span>
-                          </button>
-                        );
-                      })}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Product picker */}
+                {aplicaA === "productos" && (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Buscar producto..."
+                      value={prodSearch}
+                      onChange={(e) => setProdSearch(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <div className="border rounded-lg max-h-40 overflow-y-auto">
+                      {filteredProds.slice(0, 50).map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/50 ${
+                            productosIds.includes(p.id) ? "bg-primary/5" : ""
+                          }`}
+                          onClick={() =>
+                            setProductosIds((prev) =>
+                              prev.includes(p.id)
+                                ? prev.filter((x) => x !== p.id)
+                                : [...prev, p.id]
+                            )
+                          }
+                        >
+                          <span className="truncate">{p.nombre}</span>
+                          <span className="text-xs text-muted-foreground font-mono ml-2">
+                            {p.codigo}
+                          </span>
+                          {productosIds.includes(p.id) && (
+                            <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-1" />
+                          )}
+                        </button>
+                      ))}
                     </div>
-                  )}
+                    {productosIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {productosIds.length} seleccionado(s)
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Additional options */}
+              <div className="border rounded-xl overflow-hidden">
+                <div className="px-4 py-3 bg-muted/30">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Opciones adicionales
+                  </p>
                 </div>
-
-                <Separator />
-
-                {/* 5. Opciones adicionales */}
-                <div className="space-y-0 divide-y border rounded-lg overflow-hidden">
+                <div className="divide-y">
                   {/* Presentación */}
                   <div className="flex items-center justify-between px-4 py-3">
-                    <div><p className="text-sm font-medium">Presentación</p><p className="text-xs text-muted-foreground">{presentacionLabel(presentacion)}</p></div>
-                    <div className="flex gap-1">
-                      {(["todas", "unidad", "caja"] as const).map((v) => (
-                        <button key={v} onClick={() => setPresentacion(v)} className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${presentacion === v ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}>
-                          {v === "todas" ? "Todas" : v === "unidad" ? "Unidad" : "Caja"}
+                    <p className="text-sm font-medium">Presentación</p>
+                    <div className="flex gap-1.5">
+                      {[
+                        { v: "todas", l: "Todas" },
+                        { v: "unidad", l: "Unidad" },
+                        { v: "caja", l: "Caja" },
+                      ].map(({ v, l }) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setPresentacion(v)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                            presentacion === v
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border hover:border-primary/30"
+                          }`}
+                        >
+                          {l}
                         </button>
                       ))}
                     </div>
                   </div>
 
                   {/* Cantidad mínima */}
-                  <div className="px-4 py-3 flex items-center justify-between">
-                    <div><p className="text-sm font-medium">Cantidad mínima</p><p className="text-xs text-muted-foreground">Solo aplica si compra N+ unidades</p></div>
-                    <Input type="number" min={0} value={cantidadMinima ?? ""} onChange={(e) => setCantidadMinima(e.target.value ? Number(e.target.value) : null)} placeholder="Sin límite" className="w-24 text-center" />
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium">Cantidad mínima</p>
+                      <p className="text-xs text-muted-foreground">
+                        Aplica si compra N+ unidades
+                      </p>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={cantidadMinima ?? ""}
+                      onChange={(e) =>
+                        setCantidadMinima(
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      placeholder="Sin límite"
+                      className="w-24 text-center h-8 text-sm"
+                    />
                   </div>
 
                   {/* Excluir combos */}
-                  <div className="px-4 py-3 flex items-center justify-between">
-                    <div><p className="text-sm font-medium">Excluir combos</p><p className="text-xs text-muted-foreground">No aplicar a productos tipo combo</p></div>
-                    <button type="button" onClick={() => setExcluirCombos(!excluirCombos)} className={`relative w-10 h-5 rounded-full transition-colors ${excluirCombos ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${excluirCombos ? "translate-x-5" : ""}`} />
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <p className="text-sm font-medium">Excluir combos</p>
+                    <button
+                      type="button"
+                      onClick={() => setExcluirCombos(!excluirCombos)}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${
+                        excluirCombos ? "bg-primary" : "bg-muted-foreground/30"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          excluirCombos ? "translate-x-5" : ""
+                        }`}
+                      />
                     </button>
                   </div>
 
                   {/* Clientes exclusivos */}
-                  <div>
-                    <div className="px-4 py-3 flex items-center justify-between">
+                  <div className="px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium">Clientes exclusivos</p>
-                        <p className="text-xs text-muted-foreground">{clientesIds.length > 0 ? `${clientesIds.length} cliente(s) — oculto para el resto` : "Visible para todos"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {clientesIds.length > 0
+                            ? `${clientesIds.length} cliente(s) — oculto para el resto`
+                            : "Visible para todos"}
+                        </p>
                       </div>
-                      <button type="button" onClick={() => setShowClienteSearch(!showClienteSearch)} className="text-xs text-primary hover:underline">
-                        {showClienteSearch ? "Cerrar" : clientesIds.length > 0 ? "Editar" : "Seleccionar"}
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline"
+                        onClick={() => setShowClienteSearch(!showClienteSearch)}
+                      >
+                        {showClienteSearch
+                          ? "Cerrar"
+                          : clientesIds.length > 0
+                          ? "Editar"
+                          : "Seleccionar"}
                       </button>
                     </div>
                     {showClienteSearch && (
-                      <div className="px-4 pb-3 space-y-2">
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Buscar cliente..."
+                          value={clienteSearch}
+                          onChange={(e) => setClienteSearch(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                        {clienteSearch.length >= 2 && (
+                          <div className="border rounded-lg max-h-32 overflow-y-auto">
+                            {clientesAll
+                              .filter(
+                                (c) =>
+                                  norm(c.nombre).includes(norm(clienteSearch)) &&
+                                  !clientesIds.includes(c.id)
+                              )
+                              .map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  className="flex items-center w-full px-3 py-1.5 text-sm hover:bg-muted/50 text-left"
+                                  onClick={() => {
+                                    setClientesIds((prev) => [...prev, c.id]);
+                                    setClienteSearch("");
+                                  }}
+                                >
+                                  {c.nombre}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                         {clientesIds.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
                             {clientesIds.map((id) => {
                               const c = clientesAll.find((cl) => cl.id === id);
                               return (
-                                <Badge key={id} variant="secondary" className="gap-1 pr-1 bg-blue-50 text-blue-700 border-blue-200">
+                                <Badge
+                                  key={id}
+                                  variant="secondary"
+                                  className="gap-1 pr-1 bg-blue-50 text-blue-700 border-blue-200"
+                                >
                                   {c?.nombre || id.slice(0, 8)}
-                                  <button onClick={() => setClientesIds((prev) => prev.filter((x) => x !== id))} className="hover:bg-blue-200 rounded-full p-0.5"><X className="w-3 h-3" /></button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setClientesIds((prev) =>
+                                        prev.filter((x) => x !== id)
+                                      )
+                                    }
+                                    className="hover:text-red-600 ml-0.5"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
                                 </Badge>
                               );
                             })}
-                          </div>
-                        )}
-                        <Input placeholder="Buscar cliente por nombre o CUIT..." value={clienteSearch} onChange={(e) => setClienteSearch(e.target.value)} className="h-8 text-sm" />
-                        {clienteSearch.trim() && (
-                          <div className="max-h-32 overflow-y-auto space-y-0.5">
-                            {clientesAll.filter((c) => norm(c.nombre).includes(norm(clienteSearch)) || (c.cuit && c.cuit.includes(clienteSearch))).slice(0, 20).map((c) => (
-                              <button key={c.id} onClick={() => { if (!clientesIds.includes(c.id)) setClientesIds([...clientesIds, c.id]); setClienteSearch(""); }} className="flex items-center gap-2 w-full text-left py-1 px-2 rounded hover:bg-muted text-sm">
-                                <span>{c.nombre}</span>{c.cuit && <span className="text-xs text-muted-foreground">{c.cuit}</span>}
-                              </button>
-                            ))}
                           </div>
                         )}
                       </div>
@@ -652,38 +865,84 @@ export default function DescuentosPage() {
 
                   {/* Excluir productos */}
                   {aplicaA !== "productos" && (
-                    <div>
-                      <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="px-4 py-3 space-y-2">
+                      <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium">Excluir productos</p>
-                          <p className="text-xs text-muted-foreground">{productosExcluidosIds.length > 0 ? `${productosExcluidosIds.length} excluido(s)` : "Ninguno"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {productosExcluidosIds.length > 0
+                              ? `${productosExcluidosIds.length} excluido(s)`
+                              : "Ninguno"}
+                          </p>
                         </div>
-                        <button type="button" onClick={() => setShowExclSearch(!showExclSearch)} className="text-xs text-primary hover:underline">{showExclSearch ? "Cerrar" : "Gestionar"}</button>
+                        <button
+                          type="button"
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => setShowExclSearch(!showExclSearch)}
+                        >
+                          Gestionar
+                        </button>
                       </div>
                       {showExclSearch && (
-                        <div className="px-4 pb-3 space-y-2">
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="Buscar producto a excluir..."
+                            value={exclSearch}
+                            onChange={(e) => setExclSearch(e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                          {exclSearch.length >= 2 && (
+                            <div className="border rounded-lg max-h-32 overflow-y-auto">
+                              {productosAll
+                                .filter(
+                                  (p) =>
+                                    (norm(p.nombre).includes(norm(exclSearch)) ||
+                                      norm(p.codigo).includes(norm(exclSearch))) &&
+                                    !productosExcluidosIds.includes(p.id)
+                                )
+                                .slice(0, 20)
+                                .map((p) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    className="flex items-center w-full px-3 py-1.5 text-sm hover:bg-muted/50 text-left gap-2"
+                                    onClick={() => {
+                                      setProductosExcluidosIds((prev) => [
+                                        ...prev,
+                                        p.id,
+                                      ]);
+                                      setExclSearch("");
+                                    }}
+                                  >
+                                    <span className="truncate">{p.nombre}</span>
+                                    <span className="text-xs text-muted-foreground font-mono">
+                                      {p.codigo}
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
                           {productosExcluidosIds.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                               {productosExcluidosIds.map((id) => {
-                                const p = productosAll.find((pr) => pr.id === id);
+                                const p = productosAll.find((x) => x.id === id);
                                 return (
-                                  <Badge key={id} variant="secondary" className="gap-1 pr-1 bg-red-50 text-red-700 border-red-200">
+                                  <Badge key={id} variant="secondary" className="gap-1 pr-1">
                                     {p?.nombre || id.slice(0, 8)}
-                                    <button onClick={() => setProductosExcluidosIds((prev) => prev.filter((x) => x !== id))} className="hover:bg-red-200 rounded-full p-0.5"><X className="w-3 h-3" /></button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setProductosExcluidosIds((prev) =>
+                                          prev.filter((x) => x !== id)
+                                        )
+                                      }
+                                      className="hover:text-red-600 ml-0.5"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
                                   </Badge>
                                 );
                               })}
-                            </div>
-                          )}
-                          <Input placeholder="Buscar producto..." value={exclSearch} onChange={(e) => setExclSearch(e.target.value)} className="h-8 text-sm" />
-                          {exclSearch.trim() && (
-                            <div className="max-h-32 overflow-y-auto space-y-0.5">
-                              {productosAll.filter((p) => norm(p.nombre).includes(norm(exclSearch)) || norm(p.codigo).includes(norm(exclSearch))).slice(0, 20).map((p) => (
-                                <button key={p.id} onClick={() => { if (!productosExcluidosIds.includes(p.id)) setProductosExcluidosIds([...productosExcluidosIds, p.id]); setExclSearch(""); }} className="flex items-center gap-2 w-full text-left py-1 px-2 rounded hover:bg-muted text-sm">
-                                  <span className="font-mono text-xs text-muted-foreground w-20 truncate">{p.codigo}</span>
-                                  <span>{p.nombre}</span>
-                                </button>
-                              ))}
                             </div>
                           )}
                         </div>
@@ -692,51 +951,98 @@ export default function DescuentosPage() {
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Right column — live summary */}
-              <div className="w-full sm:w-56 shrink-0 bg-muted/30 p-4 space-y-4 border-t sm:border-t-0 sm:border-l">
-                <div className="text-center bg-white rounded-lg p-3 border">
-                  <div className="text-2xl font-bold text-primary">
-                    {tipoDescuento === "precio_fijo" ? formatCurrency(precioFijo || 0) : `${porcentaje}%`}
+            {/* ── Right column (live summary) ── */}
+            <div className="w-52 shrink-0 p-4 space-y-4 overflow-y-auto bg-muted/20">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Resumen
+              </p>
+
+              <div className="bg-background border rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold text-primary">
+                  {tipoDescuento === "precio_fijo"
+                    ? formatCurrency(precioFijo || 0)
+                    : `${porcentaje}%`}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">de descuento</p>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                {[
+                  { k: "Aplica a", v: aplicaALabel(aplicaA) },
+                  { k: "Presentación", v: presentacionLabel(presentacion) },
+                  {
+                    k: "Vigencia",
+                    v: fechaFin ? `Hasta ${formatDate(fechaFin)}` : "Permanente",
+                  },
+                  {
+                    k: "Clientes",
+                    v:
+                      clientesIds.length > 0
+                        ? `${clientesIds.length} exclusivos`
+                        : "Todos",
+                  },
+                  ...(cantidadMinima
+                    ? [{ k: "Mín.", v: `${cantidadMinima} unidades` }]
+                    : []),
+                ].map(({ k, v }) => (
+                  <div key={k} className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{k}</span>
+                    <span className="font-medium text-right truncate max-w-[100px]">
+                      {v}
+                    </span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">de descuento</div>
-                </div>
+                ))}
+              </div>
 
-                <div className="space-y-2 text-xs">
-                  {[
-                    { key: "Aplica a", val: aplicaALabel(aplicaA) + (aplicaA === "categorias" && categoriasIds.length > 0 ? ` (${categoriasIds.length})` : aplicaA === "productos" && productosIds.length > 0 ? ` (${productosIds.length})` : "") },
-                    { key: "Vigencia", val: fechaFin ? `Hasta ${formatDate(fechaFin)}` : "Permanente" },
-                    { key: "Presentación", val: presentacionLabel(presentacion) },
-                    { key: "Clientes", val: clientesIds.length > 0 ? `${clientesIds.length} exclusivos` : "Todos" },
-                    ...(cantidadMinima ? [{ key: "Mín.", val: `${cantidadMinima} unidades` }] : []),
-                    ...(productosExcluidosIds.length > 0 ? [{ key: "Excluidos", val: `${productosExcluidosIds.length} productos` }] : []),
-                  ].map(({ key, val }) => (
-                    <div key={key} className="flex justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">{key}</span>
-                      <span className="font-medium text-right truncate">{val}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="pt-2 border-t space-y-1.5">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Estado al guardar</p>
-                  <div className="flex gap-1.5">
-                    <button onClick={() => setActivo(true)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${activo ? "bg-emerald-600 text-white border-emerald-600" : "border-border text-muted-foreground"}`}>Activo</button>
-                    <button onClick={() => setActivo(false)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${!activo ? "bg-muted text-muted-foreground border-border" : "border-border text-muted-foreground"}`}>Inactivo</button>
-                  </div>
+              {/* Estado */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                  Estado al guardar
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setActivo(true)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      activo
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : "border-border text-muted-foreground hover:border-emerald-300"
+                    }`}
+                  >
+                    Activo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivo(false)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      !activo
+                        ? "bg-muted border-border"
+                        : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    Inactivo
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center px-6 py-3 border-t bg-muted/30 shrink-0">
-            <div className="text-xs text-muted-foreground">
-              {saveError && <span className="text-red-500">{saveError}</span>}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => { setDialogOpen(false); resetWizard(); }}>Cancelar</Button>
-              <Button onClick={handleSave} disabled={saving || !nombre.trim() || !fechaInicio}>
+          <div className="flex justify-between items-center px-5 py-3 border-t bg-muted/20">
+            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+            <div className="flex gap-2 ml-auto">
+              <Button
+                variant="ghost"
+                onClick={() => { setDialogOpen(false); resetWizard(); }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={saving || !nombre.trim() || !fechaInicio}
+              >
                 {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {editId ? "Guardar cambios" : "Crear descuento"}
               </Button>
