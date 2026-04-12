@@ -343,7 +343,8 @@ function ProductosDestacadosBlock({
 
   const isNew = (prod: Producto) => {
     if (diasNuevo <= 0) return false;
-    return daysSinceAR((prod as any).created_at) <= diasNuevo;
+    const days = daysSinceAR((prod as any).created_at);
+    return days >= 0 && days <= diasNuevo;
   };
 
   return (
