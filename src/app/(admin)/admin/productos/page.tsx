@@ -4647,6 +4647,7 @@ export default function ProductosPage() {
           className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[200px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
         >
           {/* Header: nombre del producto */}
           <div className="px-3 py-2 border-b">
@@ -4702,19 +4703,22 @@ export default function ProductosPage() {
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
               onClick={() => {
-                const newVisibilidad = contextMenu.product.visibilidad === "oculto" ? "visible" : "oculto";
-                supabase.from("productos").update({ visibilidad: newVisibilidad }).eq("id", contextMenu.product.id).then(() => {
-                  setProducts((prev) => prev.map((p) =>
-                    p.id === contextMenu.product.id ? { ...p, visibilidad: newVisibilidad } : p
-                  ));
-                  showAdminToast(
-                    newVisibilidad === "visible"
-                      ? `${contextMenu.product.nombre} visible en la tienda`
-                      : `${contextMenu.product.nombre} oculto de la tienda`,
-                    "success"
-                  );
-                });
+                const product = contextMenu.product;
+                const newVisibilidad = product.visibilidad === "oculto" ? "visible" : "oculto";
                 setContextMenu(null);
+                supabase.from("productos").update({ visibilidad: newVisibilidad }).eq("id", product.id)
+                  .then(({ error }) => {
+                    if (error) { showAdminToast("Error al actualizar visibilidad", "error"); return; }
+                    setProducts((prev) => prev.map((p) =>
+                      p.id === product.id ? { ...p, visibilidad: newVisibilidad } : p
+                    ));
+                    showAdminToast(
+                      newVisibilidad === "visible"
+                        ? `${product.nombre} visible en la tienda`
+                        : `${product.nombre} oculto de la tienda`,
+                      "success"
+                    );
+                  });
               }}
             >
               {contextMenu.product.visibilidad === "oculto" ? (
@@ -4726,14 +4730,17 @@ export default function ProductosPage() {
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
               onClick={() => {
-                const newVal = !(contextMenu.product as any).destacado;
-                supabase.from("productos").update({ destacado: newVal }).eq("id", contextMenu.product.id).then(() => {
-                  setProducts((prev) => prev.map((p) =>
-                    p.id === contextMenu.product.id ? { ...p, destacado: newVal } as any : p
-                  ));
-                  showAdminToast(newVal ? "Marcado como destacado" : "Quitado de destacados", "success");
-                });
+                const product = contextMenu.product;
+                const newVal = !(product as any).destacado;
                 setContextMenu(null);
+                supabase.from("productos").update({ destacado: newVal }).eq("id", product.id)
+                  .then(({ error }) => {
+                    if (error) { showAdminToast("Error al actualizar destacado", "error"); return; }
+                    setProducts((prev) => prev.map((p) =>
+                      p.id === product.id ? { ...p, destacado: newVal } as any : p
+                    ));
+                    showAdminToast(newVal ? "Marcado como destacado" : "Quitado de destacados", "success");
+                  });
               }}
             >
               <Star className="w-3.5 h-3.5 text-muted-foreground" />
