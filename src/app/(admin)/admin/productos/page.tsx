@@ -2433,8 +2433,11 @@ export default function ProductosPage() {
                         {product.imagen_url ? (
                           <img src={product.imagen_url} alt="" className="w-8 h-8 rounded object-cover" />
                         ) : (
-                          <div className="w-8 h-8 rounded bg-muted flex items-center justify-center">
-                            <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                          <div
+                            className="w-8 h-8 rounded flex items-center justify-center text-[10px] font-semibold shrink-0"
+                            style={getInitialsColor(product.nombre)}
+                          >
+                            {getProductInitials(product.nombre)}
                           </div>
                         )}
                       </td>
@@ -2903,6 +2906,9 @@ export default function ProductosPage() {
                   <ImageUpload
                     value={form.imagen_url || undefined}
                     onChange={(url) => setForm((prev) => ({ ...prev, imagen_url: url }))}
+                    productName={form.nombre || "?"}
+                    getInitialsColor={getInitialsColor}
+                    getProductInitials={getProductInitials}
                   />
                 </div>
                 <div className="flex-1 space-y-3">

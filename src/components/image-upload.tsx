@@ -8,6 +8,9 @@ interface ImageUploadProps {
   value?: string;
   onChange: (url: string) => void;
   className?: string;
+  productName?: string;
+  getInitialsColor?: (name: string) => React.CSSProperties;
+  getProductInitials?: (name: string) => string;
 }
 
 /** Compress image client-side before uploading */
@@ -43,7 +46,7 @@ function compressImage(file: File, maxWidth = 1200, quality = 0.8): Promise<File
   });
 }
 
-export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
+export function ImageUpload({ value, onChange, className, productName, getInitialsColor, getProductInitials }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -173,10 +176,10 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
         </div>
       ) : (
         <div
-          className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+          className={`flex flex-col items-center justify-center w-full cursor-pointer transition-colors ${
             dragOver
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-muted-foreground/50"
+              : ""
           }`}
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => {
@@ -187,7 +190,7 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
           onDrop={handleDrop}
         >
           {uploading ? (
-            <>
+            <div className="w-full h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center">
               <Loader2 className="w-8 h-8 text-muted-foreground animate-spin mb-2" />
               <span className="text-sm text-muted-foreground">Subiendo...</span>
               {progress > 0 && (
@@ -195,14 +198,22 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
                   <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
                 </div>
               )}
-            </>
+            </div>
+          ) : getInitialsColor && getProductInitials && productName ? (
+            <div
+              className="w-[90px] h-[90px] rounded-xl flex flex-col items-center justify-center text-xl font-semibold"
+              style={getInitialsColor(productName || "?")}
+            >
+              {getProductInitials(productName || "?")}
+              <span className="text-[9px] font-normal mt-1 opacity-60">Sin imagen</span>
+            </div>
           ) : (
-            <>
+            <div className="w-full h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center border-muted-foreground/25 hover:border-muted-foreground/50">
               <ImageIcon className="w-8 h-8 text-muted-foreground mb-2" />
               <span className="text-sm text-muted-foreground">
                 Arrastra una imagen o haz clic para seleccionar
               </span>
-            </>
+            </div>
           )}
         </div>
       )}
