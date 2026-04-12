@@ -75,6 +75,7 @@ import { PrintPreviewDialog } from "@/components/print-preview-dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { CobroVentaSection } from "@/components/cobro-venta-section";
 import type { CobroVentaResult, CobroPreview } from "@/components/cobro-venta-section";
+import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 
 // ─── Historial types ───
 interface ClienteInfo {
@@ -298,6 +299,7 @@ export default function ListadoVentasPage() {
   const [poProductResults, setPoProductResults] = useState<ProductoSearch[]>([]);
   const [poSearchingProducts, setPoSearchingProducts] = useState(false);
   const [poSearchHighlight, setPoSearchHighlight] = useState(0);
+  const [poPresHighlight, setPoPresHighlight] = useState(0);
 
   // ══════════════════════════════════════════════════════════════
   // HISTORIAL LOGIC
@@ -481,7 +483,14 @@ export default function ListadoVentasPage() {
       fecha: cs.created_at ? new Date(cs.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "",
     }));
     setDetailCobroSaldo(cobroSaldoEntries);
-    setClienteSaldo((clienteData as any)?.saldo || 0);
+    const saldoCargado = (clienteData as any)?.saldo ?? 0;
+    setClienteSaldo(saldoCargado);
+    if (v.cliente_id && saldoCargado === 0) {
+      supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single().then(({ data: freshCliente }) => {
+        const saldoFresh = (freshCliente as any)?.saldo ?? 0;
+        if (saldoFresh > 0) setClienteSaldo(saldoFresh);
+      });
+    }
 
     // Check for combos
     const productIds = vitems.map((i) => i.producto_id).filter(Boolean) as string[];
@@ -888,6 +897,144 @@ export default function ListadoVentasPage() {
     } finally {
       setAnulando(false);
     }
+  };
+
+  const handleRegistrarCobro = async (result: CobroVentaResult) => {
+    if (!poSelectedPedido) return;
+    const hoy = todayARG();
+    const hora = nowTimeARG();
+    let ventaId = (poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id;
+    if (!ventaId) {
+      const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).single();
+      ventaId = v?.id;
+    }
+    if (!ventaId) {
+      showAdminToast("Error: no se encontró la venta vinculada", "error");
+      return;
+    }
+
+    // If "cobrar en entrega": only update forma_pago, no caja entry
+    if (result.cobrarEnEntrega) {
+      await supabase.from("ventas").update({ forma_pago: result.metodo }).eq("id", ventaId);
+      if (poSelectedPedido.numero) await supabase.from("pedidos_tienda").update({ metodo_pago: result.metodo.toLowerCase().replace(" ", "_") }).eq("numero", poSelectedPedido.numero);
+      showAdminToast(`Método de pago actualizado a ${result.metodo}. Se cobrará en entrega.`, "success");
+      setPoSelectedPedido(null);
+      return;
+    }
+
+    // Guard: check venta is not anulada
+    const { data: ventaCheck } = await supabase.from("ventas").select("estado").eq("id", ventaId).single();
+    if (ventaCheck?.estado === "anulada") {
+      showAdminToast("No se puede cobrar una venta anulada", "error");
+      return;
+    }
+
+    // Guard: check if already paid
+    const { count: existingPayments } = await supabase.from("caja_movimientos").select("id", { count: "exact", head: true }).eq("referencia_id", ventaId).eq("referencia_tipo", "venta");
+    if (existingPayments && existingPayments > 0) {
+      showAdminToast("Este pedido ya tiene cobro registrado", "error");
+      return;
+    }
+
+    // Compute pagado and clienteId
+    const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
+    const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
+
+    // Build caja entries
+    const entries: any[] = [];
+    if (result.metodo === "Mixto") {
+      if (result.efectivo > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: result.efectivo, referencia_id: ventaId, referencia_tipo: "venta" });
+      if (result.transferencia > 0) {
+        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia${result.surcharge > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: result.transferencia + result.surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
+      }
+    } else if (result.metodo === "Cuenta Corriente") {
+      // CC does NOT go to caja — it's not real money in the register
+    } else {
+      if (result.monto > 0) {
+        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${result.surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: result.metodo, monto: result.metodo === "Transferencia" ? result.monto + result.surcharge : result.monto, referencia_id: ventaId, referencia_tipo: "venta", ...(result.metodo === "Transferencia" && result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
+      }
+    }
+    if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
+
+    // CC portion (Mixto remainder or full CC) — atomic saldo update
+    const ccAmount = result.cuentaCorriente;
+    if (ccAmount > 0 && clienteId) {
+      const { data: newSaldo } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: ccAmount });
+      const saldoAfter = newSaldo ?? 0;
+      await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: result.metodo === "Cuenta Corriente" ? "A cuenta corriente" : "Saldo pendiente a cuenta corriente", debe: ccAmount, haber: 0, saldo: saldoAfter, forma_pago: result.metodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: ventaId });
+      setClienteSaldo(saldoAfter);
+    }
+
+    // Update venta — only count real money received, NOT CC (which is debt)
+    const realPaid = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
+    const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + realPaid };
+    if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
+    if (pagado === 0) {
+      ventaUpd.total = result.monto + (result.surcharge || 0);
+    }
+    await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
+
+    // FIFO allocation: update monto_pagado on old invoices
+    if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
+      for (const alloc of result.saldoAllocations) {
+        if (alloc.aplicar <= 0) continue;
+        const { data: old } = await supabase.from("ventas").select("monto_pagado").eq("id", alloc.venta_id).single();
+        await supabase.from("ventas").update({ monto_pagado: ((old as any)?.monto_pagado || 0) + alloc.aplicar }).eq("id", alloc.venta_id);
+      }
+      const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
+      if (totalAllocated > 0 && clienteId) {
+        const clienteNombreCobro = poSelectedPedido.nombre_cliente || "";
+        await supabase.from("caja_movimientos").insert({
+          fecha: hoy, hora, tipo: "ingreso",
+          descripcion: `Cobro saldo adeudado — ${clienteNombreCobro} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
+          metodo_pago: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
+          monto: totalAllocated,
+          referencia_tipo: "cobro_saldo",
+        });
+
+        const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: -totalAllocated });
+        const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
+        let runningSaldo2 = saldoAfter2 + totalAllocated;
+        for (const alloc of result.saldoAllocations) {
+          if (alloc.aplicar <= 0) continue;
+          runningSaldo2 -= alloc.aplicar;
+          await supabase.from("cuenta_corriente").insert({
+            cliente_id: clienteId, fecha: hoy,
+            comprobante: `Cobro saldo #${alloc.numero}`,
+            descripcion: `Cobro deuda anterior — ${result.metodo}`,
+            debe: 0, haber: alloc.aplicar, saldo: Math.max(0, runningSaldo2),
+            forma_pago: result.metodo, venta_id: alloc.venta_id,
+          });
+        }
+        setClienteSaldo(saldoAfter2);
+      }
+    }
+
+    // Refresh payment breakdown
+    if (ventaId) {
+      const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
+        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+        supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
+        supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+      ]);
+      const newPagos: { metodo: string; monto: number }[] = [];
+      for (const m of movs || []) {
+        let label = m.metodo_pago;
+        if (m.metodo_pago === "Transferencia" && m.descripcion) {
+          const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
+          if (match) label = `Transferencia (${match[1]}%)`;
+        }
+        const existing = newPagos.find((p) => p.metodo === label);
+        if (existing) existing.monto += m.monto;
+        else newPagos.push({ metodo: label, monto: m.monto });
+      }
+      const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
+      if (ccTotal > 0) newPagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
+      const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+      if (ncTotal > 0) newPagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
+      setDetailPagos(newPagos);
+    }
+    showAdminToast("Cobro registrado", "success");
   };
 
   const getVendedorNombre = (id: string | null) => {
@@ -1408,6 +1555,7 @@ export default function ListadoVentasPage() {
   const poSearchProducts = async (query: string) => {
     setPoProductSearch(query);
     setPoSearchHighlight(0);
+    setPoPresHighlight(0);
     if (query.length < 2) { setPoProductResults([]); return; }
     setPoSearchingProducts(true);
     const { data } = await supabase
@@ -2607,748 +2755,154 @@ export default function ListadoVentasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ══════════════════════════════════════════════════════════ */}
-      {/* UNIFIED DETAIL / EDIT DIALOG */}
-      {/* ══════════════════════════════════════════════════════════ */}
-      <Dialog open={poDetailOpen} onOpenChange={(open) => {
-        if (!open && poHasChanges) {
-          setConfirmDialog({
-            open: true,
-            title: "Cambios sin guardar",
-            message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?",
-            onConfirm: () => setPoDetailOpen(false),
-          });
-          return;
-        }
-        setPoDetailOpen(open);
-      }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-          {poSelectedPedido && (() => {
-            const isHistorial = poSelectedPedido._source === "historial";
+      {/* UNIFIED DETAIL DIALOG (VentaDetailDialog component) */}
+      {poSelectedPedido && (
+        <VentaDetailDialog
+          open={poDetailOpen}
+          onOpenChange={(open) => {
+            if (!open && poHasChanges) {
+              setConfirmDialog({
+                open: true,
+                title: "Cambios sin guardar",
+                message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?",
+                onConfirm: () => setPoDetailOpen(false),
+              });
+              return;
+            }
+            setPoDetailOpen(open);
+          }}
+          data={{
+            numero: poSelectedPedido.numero,
+            created_at: poSelectedPedido.created_at,
+            estado: poSelectedPedido.estado,
+            tipo_comprobante: (poSelectedPedido as any)._tipo_comprobante,
+            forma_pago: (poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago,
+            metodo_entrega: poSelectedPedido.metodo_entrega || undefined,
+            total: poSelectedPedido.total,
+            subtotal: poSelectedPedido.subtotal,
+            descuento_porcentaje: (poSelectedPedido as any)._descuento_porcentaje,
+            recargo_porcentaje: (poSelectedPedido as any)._recargo_porcentaje,
+            costo_envio: poSelectedPedido.costo_envio || 0,
+            observacion: poSelectedPedido.observacion,
+            entregado: (poSelectedPedido as any)._entregado,
+            nombre_cliente: poSelectedPedido.nombre_cliente,
+            email: poSelectedPedido.email || undefined,
+            telefono: poSelectedPedido.telefono || undefined,
+            domicilio: (poSelectedPedido as any)._domicilio || undefined,
+            cuit: (poSelectedPedido as any)._cuit || undefined,
+            vendedor: (poSelectedPedido as any)._vendedor || undefined,
+            cuenta_transferencia_alias: (poSelectedPedido as any).cuenta_transferencia_alias || null,
+            monto_efectivo: (poSelectedPedido as any).monto_efectivo || 0,
+            monto_transferencia: (poSelectedPedido as any).monto_transferencia || 0,
+            origen: poSelectedPedido._source,
+            fecha_entrega: poSelectedPedido.fecha_entrega || null,
+            direccion_texto: poSelectedPedido.direccion_texto || null,
+            comboIds: (poSelectedPedido as any)._comboIds,
+          }}
+          items={poEditItems.map(i => ({
+            producto_id: i.producto_id,
+            descripcion: i.nombre,
+            nombre: i.nombre,
+            presentacion: i.presentacion,
+            cantidad: i.cantidad,
+            precio_unitario: i.precio_unitario,
+            subtotal: i.subtotal,
+            unidades_por_presentacion: i.unidades_por_presentacion,
+            descuento: (i as any).descuento,
+          }))}
+          pagos={detailPagos.map(p => ({ metodo: p.metodo, monto: p.monto }))}
+          ncs={detailNCs}
+          editable={poSelectedPedido.estado === "pendiente" || poSelectedPedido.estado === "armado"}
+          editItems={poEditItems.map(i => ({
+            producto_id: i.producto_id,
+            nombre: i.nombre,
+            presentacion: i.presentacion || "Unidad",
+            cantidad: i.cantidad,
+            precio_unitario: i.precio_unitario,
+            subtotal: i.subtotal,
+            unidades_por_presentacion: i.unidades_por_presentacion || 1,
+          }))}
+          onEditItemsChange={(newItems) => {
+            setPoEditItems(newItems.map(i => ({
+              ...i,
+              codigo: "",
+              descuento: 0,
+              costo_unitario: 0,
+            })));
+            setPoHasChanges(true);
+          }}
+          onSave={poHandleSave}
+          saving={poSaving}
+          hasChanges={poHasChanges}
+          onEstadoChange={async (nuevoEstado) => {
+            await poHandleEstadoChange(poSelectedPedido, nuevoEstado);
+            setPoSelectedPedido({ ...poSelectedPedido, estado: nuevoEstado });
+            setPoPedidos(prev => prev.map(p => p.numero === poSelectedPedido.numero ? { ...p, estado: nuevoEstado } : p));
+            setVentas(prev => prev.map(v => v.numero === poSelectedPedido.numero ? { ...v, estado: nuevoEstado, entregado: nuevoEstado === "entregado" } as any : v));
+            showAdminToast(`Estado: ${nuevoEstado}`, "success");
+          }}
+          onPrint={async () => {
+            try {
+              let v = ventas.find(vr => vr.id === (poSelectedPedido as any)._ventaId);
+              if (!v) {
+                const { data: rows } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).order("created_at", { ascending: false }).limit(1);
+                if (rows && rows.length > 0) v = rows[0] as any;
+              }
+              if (v) {
+                if (poSelectedPedido.nombre_cliente && (poSelectedPedido._source === "pedidos" || (poSelectedPedido as any).isOnline)) {
+                  (v as any).clientes = { nombre: poSelectedPedido.nombre_cliente, cuit: (poSelectedPedido as any)._cuit || "", domicilio: poSelectedPedido.direccion_texto || (poSelectedPedido as any)._domicilio || "", telefono: poSelectedPedido.telefono || "", email: poSelectedPedido.email || "" };
+                }
+                setPoDetailOpen(false);
+                preparePrint(v);
+              } else {
+                showAdminToast("No se encontró la venta vinculada", "error");
+              }
+            } catch {
+              showAdminToast("Error al preparar impresión", "error");
+            }
+          }}
+          onConfirmAction={(title, message, action) => setConfirmDialog({ open: true, title, message, onConfirm: action })}
+          onSearchProducts={async (query) => {
+            const { data } = await supabase
+              .from("productos")
+              .select("id, codigo, nombre, precio, costo, unidad_medida, es_combo, imagen_url, stock, presentaciones(nombre, precio, cantidad)")
+              .eq("activo", true)
+              .or(`nombre.ilike.%${query}%,codigo.ilike.%${query}%`)
+              .limit(10);
+            return (data || []).map((p: any) => ({
+              id: p.id,
+              codigo: p.codigo,
+              nombre: p.nombre,
+              precio: p.precio,
+              unidad_medida: p.unidad_medida,
+              es_combo: p.es_combo,
+              imagen_url: p.imagen_url,
+              stock: p.stock,
+              presentaciones: (p.presentaciones || []).map((pr: any) => ({
+                nombre: pr.nombre,
+                precio: pr.precio,
+                unidades_por_presentacion: pr.cantidad,
+              })),
+            }));
+          }}
+          cobroConfig={(() => {
             const isCancelled = poSelectedPedido.estado === "cancelado";
             const isDelivered = poSelectedPedido.estado === "entregado";
-            const isNCType = poSelectedPedido._tipo_comprobante?.includes("Nota de Crédito");
-            const isEditable = poSelectedPedido.estado === "pendiente" || poSelectedPedido.estado === "armado";
-            const estBadge = estadoBadge[poSelectedPedido.estado] || estadoBadge.pendiente;
-            // Use item.subtotal (already includes item-level discounts) instead of precio_unitario * cantidad
-            const itemsSubtotal = poEditItems.reduce((s, i) => s + (i.subtotal ?? i.precio_unitario * i.cantidad), 0);
-            const descPct = poSelectedPedido._descuento_porcentaje || 0;
-            const recPct = poSelectedPedido._recargo_porcentaje || 0;
-            const envio = poSelectedPedido.costo_envio || 0;
-            // Use the stored total from the DB (already includes discounts, surcharges, shipping)
-            // Only fall back to computation if no stored total exists
-            const storedTotal = poSelectedPedido.total || (poSelectedPedido as any)._total || 0;
-            const computedTotal = storedTotal > 0
-              ? storedTotal
-              : isHistorial
-                ? itemsSubtotal * (1 - descPct / 100)
-                : itemsSubtotal + envio;
-
-            return (
-            <>
-              {/* Header */}
-              <div className="px-6 py-4 border-b bg-muted/30">
-                <DialogHeader className="p-0 space-y-0">
-                  <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                    {isHistorial ? <Receipt className="w-5 h-5 text-primary" /> : <ShoppingCart className="w-5 h-5 text-primary" />}
-                    {isHistorial ? `${poSelectedPedido._tipo_comprobante} #${poSelectedPedido.numero}` : `Pedido #${poSelectedPedido.numero}`}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="flex items-center gap-3 mt-1">
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(poSelectedPedido.created_at).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })}
-                    {poSelectedPedido.created_at.includes("T") && `, ${new Date(poSelectedPedido.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}`}
-                  </p>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${estBadge.bg} ${estBadge.text}`}>
-                    {estBadge.label}
-                  </span>
-                  {!isHistorial && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-50 text-pink-700 border border-pink-200">
-                      <Globe className="w-3 h-3 mr-1" />Pedido Web
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                {/* Client + Delivery info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <User className="w-4 h-4" /> Cliente
-                    </h3>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
-                      <p className="font-medium">{poSelectedPedido.nombre_cliente}</p>
-                      {poSelectedPedido.email && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="w-3 h-3" />{poSelectedPedido.email}</p>}
-                      {poSelectedPedido.telefono && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{poSelectedPedido.telefono}</p>}
-                      {poSelectedPedido._domicilio && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3" />{poSelectedPedido._domicilio}</p>}
-                      {poSelectedPedido._cuit && <p className="text-xs text-muted-foreground">CUIT: {poSelectedPedido._cuit}</p>}
-                    </div>
-                  </div>
-                  {/* Entrega */}
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <Truck className="w-4 h-4" /> Entrega
-                    </h3>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const me = poSelectedPedido.metodo_entrega;
-                          if (me === "envio") return <><Truck className="w-4 h-4 text-blue-500" /><span className="font-medium">Envío a domicilio</span></>;
-                          if (me === "retiro" || me === "retiro_local") return <><Store className="w-4 h-4 text-green-500" /><span className="font-medium">Retiro en local</span></>;
-                          if (!me && isHistorial) return poSelectedPedido._entregado
-                            ? <><CheckCircle className="w-4 h-4 text-green-500" /><span className="font-medium">Entregado</span></>
-                            : <><Clock className="w-4 h-4 text-amber-500" /><span className="font-medium">Pendiente de entrega</span></>;
-                          return me ? <span className="font-medium">{me}</span> : null;
-                        })()}
-                      </div>
-                      {poSelectedPedido.direccion_texto && poSelectedPedido.metodo_entrega === "envio" && (
-                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3 mt-0.5 shrink-0" />{poSelectedPedido.direccion_texto}</p>
-                      )}
-                      {poSelectedPedido.fecha_entrega && (
-                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(poSelectedPedido.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
-                        </p>
-                      )}
-                      {poSelectedPedido._vendedor && poSelectedPedido._vendedor !== "—" && (
-                        <p className="text-xs text-muted-foreground">Vendedor: {poSelectedPedido._vendedor}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Pago */}
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <DollarSign className="w-4 h-4" /> Detalle de Pago
-                    </h3>
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm">
-                      {detailPagos.length > 0 ? (() => {
-                        const ncPagos = detailPagos.filter(p => p.metodo.includes("Nota de Crédito"));
-                        const realPagos = detailPagos.filter(p => !p.metodo.includes("Nota de Crédito") && !p.metodo.includes("(a cobrar)"));
-                        const ccPagos = realPagos.filter(p => p.metodo === "Cuenta Corriente");
-                        const cashPagos = realPagos.filter(p => p.metodo !== "Cuenta Corriente");
-                        const cashTotal = cashPagos.reduce((s, p) => s + p.monto, 0);
-                        const ccTotal = ccPagos.reduce((s, p) => s + p.monto, 0);
-                        const montoPagadoVenta = (poSelectedPedido as any)._monto_pagado ?? (poSelectedPedido as any).monto_pagado ?? 0;
-                        const ncTotalDisplay = detailNCs.reduce((s, nc) => s + nc.total, 0);
-                        const saldoPendienteVenta = Math.max(0, Math.round(((poSelectedPedido.total || 0) - ncTotalDisplay - montoPagadoVenta) * 100) / 100);
-                        return (
-                          <>
-                            {cashPagos.map((p, i) => (
-                              <div key={i} className="flex items-center justify-between">
-                                <span className="text-muted-foreground">{p.metodo}</span>
-                                <span className="font-medium">{formatCurrency(p.monto)}</span>
-                              </div>
-                            ))}
-                            {ccPagos.map((p, i) => (
-                              <div key={`cc-${i}`} className="flex items-center justify-between">
-                                <span className="text-orange-600">Cuenta Corriente</span>
-                                <span className="font-medium text-orange-600">{formatCurrency(p.monto)}</span>
-                              </div>
-                            ))}
-                            {ncPagos.map((p, i) => (
-                              <div key={`nc-${i}`}>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-red-600">{p.metodo}</span>
-                                  <span className="font-medium text-red-600">-{formatCurrency(p.monto)}</span>
-                                </div>
-                                {detailNCs.length > 0 && (
-                                  <div className="mt-1 ml-2 space-y-0.5">
-                                    {detailNCs.flatMap((nc) => nc.items).map((item, j) => (
-                                      <div key={j} className="flex items-center justify-between text-[11px] text-red-500 pl-2 border-l-2 border-red-200">
-                                        <span className="truncate mr-2">{item.cantidad}x {item.descripcion}</span>
-                                        <span className="shrink-0">-{formatCurrency(item.subtotal)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                            {/* Cobro saldo anterior */}
-                            {detailCobroSaldo.length > 0 && (
-                              <div className="border-t pt-2 space-y-1">
-                                {detailCobroSaldo.map((cs, csi) => (
-                                  <div key={csi} className="flex items-center justify-between">
-                                    <span className="text-green-700 text-xs">
-                                      Cobro saldo anterior ({cs.metodo})
-                                      {cs.fecha && <span className="text-muted-foreground ml-1 text-[10px]">{cs.fecha}</span>}
-                                    </span>
-                                    <span className="font-medium text-green-600">{formatCurrency(cs.monto)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="border-t pt-2 space-y-1">
-                              {(cashTotal + detailCobroSaldo.reduce((s, cs) => s + cs.monto, 0)) > 0 && (
-                                <div className="flex items-center justify-between">
-                                  <span className="font-bold">Total cobrado</span>
-                                  <span className="font-bold text-base">{formatCurrency(cashTotal + detailCobroSaldo.reduce((s, cs) => s + cs.monto, 0))}</span>
-                                </div>
-                              )}
-                              {saldoPendienteVenta > 0 && (
-                                <div className="flex items-center justify-between text-orange-600">
-                                  <span className="font-medium text-xs">Saldo pendiente</span>
-                                  <span className="font-bold">{formatCurrency(saldoPendienteVenta)}</span>
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        );
-                      })() : (
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{formatPago((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago)}</span>
-                          <span className="font-bold">{formatCurrency(poSelectedPedido.total)}</span>
-                        </div>
-                      )}
-                      {/* Cambiar método de pago — solo si no hay cobro confirmado y la orden está activa */}
-                      {!isCancelled && !isDelivered && (poSelectedPedido.isOnline || poSelectedPedido.metodo_entrega === "envio") && detailPagos.filter(p => !(p.metodo || "").includes("(a cobrar)") && !(p.metodo || "").includes("Nota de Cr")).length === 0 && (
-                        <div className="pt-1 border-t">
-                          {!editandoPago ? (
-                            <button onClick={() => setEditandoPago(true)} className="text-xs text-primary hover:underline font-medium">
-                              Cambiar método de pago
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <Select defaultValue={(poSelectedPedido as any).forma_pago?.toLowerCase().replace(" ", "_") || poSelectedPedido.metodo_pago || "transferencia"} onValueChange={handleCambiarMetodoPago}>
-                                <SelectTrigger className="h-7 text-xs flex-1">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="efectivo">Efectivo</SelectItem>
-                                  <SelectItem value="transferencia">Transferencia</SelectItem>
-                                  <SelectItem value="cuenta_corriente">Cuenta Corriente</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <button onClick={() => setEditandoPago(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Registrar cobro — only for non-delivered, non-cancelled orders */}
-                {/* Once delivered, pending balances are handled from Cobranzas */}
-                {!isCancelled && !isDelivered && poSelectedPedido.estado !== "cancelado" && (() => {
-                  const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
-                  const pagado = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
-                  const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
-                  if (fp === "cuenta corriente" && !poSelectedPedido.isOnline) return null;
-                  const clienteId = (poSelectedPedido as any)._clienteId || (poSelectedPedido as any).cliente_id;
-
-                  // Always compute montoBase from items (pre-surcharge), NEVER from storedTotal
-                  // which may already include a transfer surcharge from checkout.
-                  // NOTE: recargo_porcentaje often IS the transfer surcharge (2%) stored at checkout,
-                  // so we exclude it here — CobroVentaSection calculates the surcharge fresh.
-                  const envio = poSelectedPedido.costo_envio || 0;
-                  const descuentoAmt = itemsSubtotal * (descPct / 100);
-                  const preSurchargeBase = itemsSubtotal - descuentoAmt + envio;
-                  const montoBase = Math.max(0, Math.round((preSurchargeBase - ncTotal - pagado) * 100) / 100);
-                  if (montoBase < 1) return null;
-                  const origEfectivo = (poSelectedPedido as any).monto_efectivo || 0;
-                  const adjEfectivo = Math.min(origEfectivo, montoBase);
-
-                  return (
-                    <CobroVentaSection
-                      ventaId={(poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id || ""}
-                      clienteId={clienteId || ""}
-                      clienteNombre={poSelectedPedido.nombre_cliente || ""}
-                      clienteSaldo={clienteSaldo}
-                      montoVenta={montoBase}
-                      subtotalItems={Math.max(0, itemsSubtotal - ncTotal)}
-                      costoEnvio={poSelectedPedido.costo_envio || 0}
-                      recargoTransferencia={recargoTransferencia}
-                      cuentasBancarias={cuentasBancarias}
-                      isEnvio={poSelectedPedido.metodo_entrega === "envio"}
-                      defaultMetodo={(poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago}
-                      defaultEfectivo={adjEfectivo}
-                      defaultTransferencia={ncTotal > 0 ? Math.max(0, montoBase - adjEfectivo) : ((poSelectedPedido as any).monto_transferencia || 0)}
-                      recalcSurcharge={ncTotal > 0}
-                      defaultCuentaAlias={(poSelectedPedido as any).cuenta_transferencia_alias}
-                      onPreviewChange={setCobroPreview}
-                      onConfirmar={async (result: CobroVentaResult) => {
-                        const hoy = todayARG();
-                        const hora = nowTimeARG();
-                        let ventaId = (poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id;
-                        if (!ventaId) {
-                          const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).single();
-                          ventaId = v?.id;
-                        }
-                        if (!ventaId) {
-                          showAdminToast("Error: no se encontró la venta vinculada", "error");
-                          return;
-                        }
-
-                        // If "cobrar en entrega": only update forma_pago, no caja entry
-                        if (result.cobrarEnEntrega) {
-                          await supabase.from("ventas").update({ forma_pago: result.metodo }).eq("id", ventaId);
-                          if (poSelectedPedido.numero) await supabase.from("pedidos_tienda").update({ metodo_pago: result.metodo.toLowerCase().replace(" ", "_") }).eq("numero", poSelectedPedido.numero);
-                          showAdminToast(`Método de pago actualizado a ${result.metodo}. Se cobrará en entrega.`, "success");
-                          setPoSelectedPedido(null);
-                          return;
-                        }
-
-                        // Guard: check venta is not anulada
-                        const { data: ventaCheck } = await supabase.from("ventas").select("estado").eq("id", ventaId).single();
-                        if (ventaCheck?.estado === "anulada") {
-                          showAdminToast("No se puede cobrar una venta anulada", "error");
-                          return;
-                        }
-
-                        // Guard: check if already paid
-                        const { count: existingPayments } = await supabase.from("caja_movimientos").select("id", { count: "exact", head: true }).eq("referencia_id", ventaId).eq("referencia_tipo", "venta");
-                        if (existingPayments && existingPayments > 0) {
-                          showAdminToast("Este pedido ya tiene cobro registrado", "error");
-                          return;
-                        }
-
-                        // Build caja entries
-                        const entries: any[] = [];
-                        if (result.metodo === "Mixto") {
-                          if (result.efectivo > 0) entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: result.efectivo, referencia_id: ventaId, referencia_tipo: "venta" });
-                          if (result.transferencia > 0) {
-                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero} (Transferencia${result.surcharge > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: result.transferencia + result.surcharge, referencia_id: ventaId, referencia_tipo: "venta", ...(result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
-                          }
-                        } else if (result.metodo === "Cuenta Corriente") {
-                          // CC does NOT go to caja — it's not real money in the register
-                          // CC is handled below in the CC section (cuenta_corriente + saldo update)
-                        } else {
-                          if (result.monto > 0) {
-                            entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${result.surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: result.metodo, monto: result.metodo === "Transferencia" ? result.monto + result.surcharge : result.monto, referencia_id: ventaId, referencia_tipo: "venta", ...(result.metodo === "Transferencia" && result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
-                          }
-                        }
-                        if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
-
-                        // CC portion (Mixto remainder or full CC) — atomic saldo update
-                        const ccAmount = result.cuentaCorriente;
-                        if (ccAmount > 0 && clienteId) {
-                          const { data: newSaldo } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: ccAmount });
-                          const saldoAfter = newSaldo ?? 0;
-                          await supabase.from("cuenta_corriente").insert({ cliente_id: clienteId, fecha: hoy, comprobante: `Cobro #${poSelectedPedido.numero}`, descripcion: result.metodo === "Cuenta Corriente" ? "A cuenta corriente" : "Saldo pendiente a cuenta corriente", debe: ccAmount, haber: 0, saldo: saldoAfter, forma_pago: result.metodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: ventaId });
-                          setClienteSaldo(saldoAfter);
-                        }
-
-                        // Update venta — only count real money received, NOT CC (which is debt)
-                        const realPaid = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
-                        const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + realPaid };
-                        if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
-                        if (pagado === 0) {
-                          // On first cobro, always set total to match actual payment method.
-                          // Strips any surcharge baked in from checkout if paying Efectivo,
-                          // or sets correct surcharge if paying Transferencia/Mixto.
-                          ventaUpd.total = result.monto + (result.surcharge || 0);
-                        }
-                        await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
-
-                        // FIFO allocation: update monto_pagado on old invoices
-                        if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
-                          for (const alloc of result.saldoAllocations) {
-                            if (alloc.aplicar <= 0) continue;
-                            const { data: old } = await supabase.from("ventas").select("monto_pagado").eq("id", alloc.venta_id).single();
-                            await supabase.from("ventas").update({ monto_pagado: ((old as any)?.monto_pagado || 0) + alloc.aplicar }).eq("id", alloc.venta_id);
-                          }
-                          const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
-                          if (totalAllocated > 0 && clienteId) {
-                            // Register in caja — the money was received
-                            const clienteNombreCobro = poSelectedPedido.nombre_cliente || "";
-                            await supabase.from("caja_movimientos").insert({
-                              fecha: hoy, hora, tipo: "ingreso",
-                              descripcion: `Cobro saldo adeudado — ${clienteNombreCobro} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
-                              metodo_pago: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
-                              monto: totalAllocated,
-                              referencia_tipo: "cobro_saldo",
-                            });
-
-                            const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: -totalAllocated });
-                            const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
-                            // Create per-venta CC haber entries (so each venta shows the cobro in client's Mis Pedidos)
-                            let runningSaldo2 = saldoAfter2 + totalAllocated;
-                            for (const alloc of result.saldoAllocations) {
-                              if (alloc.aplicar <= 0) continue;
-                              runningSaldo2 -= alloc.aplicar;
-                              await supabase.from("cuenta_corriente").insert({
-                                cliente_id: clienteId, fecha: hoy,
-                                comprobante: `Cobro saldo #${alloc.numero}`,
-                                descripcion: `Cobro deuda anterior — ${result.metodo}`,
-                                debe: 0, haber: alloc.aplicar, saldo: Math.max(0, runningSaldo2),
-                                forma_pago: result.metodo, venta_id: alloc.venta_id,
-                              });
-                            }
-                            setClienteSaldo(saldoAfter2);
-                          }
-                        }
-
-                        // Refresh payment breakdown
-                        if (ventaId) {
-                          const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
-                            supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
-                            supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
-                            supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
-                          ]);
-                          const newPagos: { metodo: string; monto: number }[] = [];
-                          for (const m of movs || []) {
-                            let label = m.metodo_pago;
-                            if (m.metodo_pago === "Transferencia" && m.descripcion) {
-                              const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
-                              if (match) label = `Transferencia (${match[1]}%)`;
-                            }
-                            const existing = newPagos.find((p) => p.metodo === label);
-                            if (existing) existing.monto += m.monto;
-                            else newPagos.push({ metodo: label, monto: m.monto });
-                          }
-                          const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
-                          if (ccTotal > 0) newPagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
-                          const ncTotal = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
-                          if (ncTotal > 0) newPagos.push({ metodo: "Nota de Crédito (devolución)", monto: ncTotal });
-                          setDetailPagos(newPagos);
-                        }
-                        showAdminToast("Cobro registrado", "success");
-                      }}
-                    />
-                  );
-                })()}
-
-                {poSelectedPedido.observacion && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                    <p className="font-medium text-amber-800 text-xs mb-1">Observacion:</p>
-                    <p className="text-amber-700">{poSelectedPedido.observacion}</p>
-                  </div>
-                )}
-
-                {/* Estado de entrega — stepper */}
-                {!isCancelled && (() => {
-                  const steps = ["pendiente", "armado", "entregado"] as const;
-                  const stepLabels: Record<string, string> = { pendiente: "Pendiente", armado: "Armado", entregado: "Entregado" };
-                  const currentIdx = steps.indexOf(poSelectedPedido.estado as any);
-                  const isCompleted = poSelectedPedido.estado === "entregado" || poSelectedPedido.estado === "cerrada";
-
-                  const advanceTo = async (val: string) => {
-                    if (val === poSelectedPedido.estado) return;
-                    await poHandleEstadoChange(poSelectedPedido, val);
-                    setPoSelectedPedido({ ...poSelectedPedido, estado: val });
-                    setPoPedidos(prev => prev.map(p => p.numero === poSelectedPedido.numero ? { ...p, estado: val } : p));
-                    setVentas(prev => prev.map(v => v.numero === poSelectedPedido.numero ? { ...v, estado: val, entregado: val === "entregado" } as any : v));
-                    showAdminToast(`Estado: ${stepLabels[val] || val}`, "success");
-                  };
-
-                  return (
-                    <div className="space-y-3">
-                      {/* Stepper */}
-                      <div className="flex items-center gap-0">
-                        {steps.map((step, i) => {
-                          const isActive = i <= currentIdx || isCompleted;
-                          const isCurrent = step === poSelectedPedido.estado || (isCompleted && step === "entregado");
-                          return (
-                            <div key={step} className="flex items-center flex-1 last:flex-none">
-                              <button
-                                type="button"
-                                onClick={() => advanceTo(step)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                                  isCurrent
-                                    ? "bg-emerald-600 text-white shadow-sm"
-                                    : isActive
-                                      ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                                      : "bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
-                                }`}
-                              >
-                                {isActive && !isCurrent ? (
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                                ) : (
-                                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center text-[9px] font-bold ${
-                                    isCurrent ? "border-white bg-white/20 text-white" : "border-current"
-                                  }`}>{i + 1}</span>
-                                )}
-                                {stepLabels[step]}
-                              </button>
-                              {i < steps.length - 1 && (
-                                <div className={`flex-1 h-0.5 mx-1 rounded ${i < currentIdx || isCompleted ? "bg-emerald-300" : "bg-gray-200"}`} />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Next action button */}
-                      {!isCompleted && currentIdx < steps.length - 1 && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                          onClick={() => advanceTo(steps[currentIdx + 1])}
-                        >
-                          Avanzar a {stepLabels[steps[currentIdx + 1]]}
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Bank account info — read-only, shown only if already assigned */}
-                {(poSelectedPedido as any).cuenta_transferencia_alias && detailPagos.some((p) => p.metodo.includes("Transferencia")) && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                    <span className="text-xs text-blue-700">Cuenta: <span className="font-semibold">{(poSelectedPedido as any).cuenta_transferencia_alias}</span></span>
-                  </div>
-                )}
-
-                {/* Items table */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                      <Package className="w-4 h-4" /> {isNCType ? "Productos devueltos" : "Productos"} ({isNCType ? poEditItems.filter((i) => i.cantidad > 0).length : poEditItems.length})
-                    </h3>
-                    {isEditable && !isNCType && (
-                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setPoAddProductOpen(true)}>
-                        <Plus className="w-3 h-3" /> Agregar producto
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">Producto</th>
-                          <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-24">Presentacion</th>
-                          <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-20">Cant.</th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
-                          {isEditable && (
-                            <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-20">Desc.%</th>
-                          )}
-                          {!isEditable && poEditItems.some((i) => (i.descuento || 0) > 0) && (
-                            <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>
-                          )}
-                          <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
-                          {isEditable && !isNCType && <th className="w-10"></th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(isNCType ? poEditItems.filter((i) => i.cantidad > 0) : poEditItems).map((item, idx) => {
-                          const isCombo = poSelectedPedido._comboIds?.has(item.producto_id);
-                          const upp = item.unidades_por_presentacion || 1;
-                          const isMedio = upp < 1;
-                          const displayQty = isMedio ? item.cantidad * upp : item.cantidad;
-                          const displayStep = isMedio ? upp : 0.5;
-                          return (
-                          <tr key={idx} className="border-b last:border-0">
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-1.5">
-                                {isCombo && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-black text-white tracking-wider shrink-0">COMBO</span>
-                                )}
-                                <span className="font-medium">{item.presentacion && item.presentacion !== "Unidad" ? item.nombre.replace(` - ${item.presentacion}`, "") : item.nombre}</span>
-                              </div>
-                              {item.codigo && <p className="text-[10px] text-muted-foreground font-mono">{item.codigo}</p>}
-                            </td>
-                            <td className="px-3 py-2 text-xs text-muted-foreground">{item.presentacion}</td>
-                            <td className="px-3 py-2 text-center">
-                              {!isEditable || isNCType ? (
-                                <span>{displayQty}</span>
-                              ) : (
-                                <Input
-                                  type="number"
-                                  min={displayStep}
-                                  step={displayStep}
-                                  value={displayQty}
-                                  onChange={(e) => {
-                                    const v = Number(e.target.value);
-                                    if (v <= 0) return;
-                                    const rawQty = isMedio ? Math.round(v / upp) : v;
-                                    poUpdateItemQty(idx, rawQty);
-                                  }}
-                                  className="h-7 w-16 text-center mx-auto"
-                                />
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              {formatCurrency(item.precio_unitario)}
-                              {(item.unidades_por_presentacion || 1) > 1 && (
-                                <p className="text-[10px] text-muted-foreground">{formatCurrency(item.precio_unitario / item.unidades_por_presentacion)} c/u</p>
-                              )}
-                            </td>
-                            {isEditable && (
-                              <td className="px-2 py-2">
-                                <div className="flex items-center gap-0.5">
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    value={item.descuento || 0}
-                                    onChange={(e) => poUpdateItemDiscount(idx, Number(e.target.value))}
-                                    className="h-7 w-14 text-center"
-                                  />
-                                  <span className="text-xs text-muted-foreground">%</span>
-                                </div>
-                              </td>
-                            )}
-                            {!isEditable && poEditItems.some((i) => (i.descuento || 0) > 0) && (
-                              <td className="px-3 py-2 text-right text-xs">{(item.descuento || 0) > 0 ? `-${item.descuento}%` : ""}</td>
-                            )}
-                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad * (1 - (item.descuento || 0) / 100))}</td>
-                            {isEditable && !isNCType && (
-                              <td className="px-2 py-2">
-                                <button
-                                  onClick={() => poRemoveItem(idx)}
-                                  className="text-muted-foreground hover:text-destructive disabled:opacity-30"
-                                  disabled={poEditItems.length <= 1}
-                                  title="Quitar producto"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            )}
-                          </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Totals + Payment Summary — reactive to cobro selection */}
-                  {(() => {
-                    const ncTotal = detailNCs.reduce((s, nc) => s + nc.total, 0);
-                    // Use cobroPreview (live from cobro section) when available, otherwise fall back to stored data
-                    const liveRecargo = cobroPreview ? cobroPreview.surcharge : 0;
-                    const liveTotal = cobroPreview ? cobroPreview.total : computedTotal;
-                    const liveMetodo = cobroPreview ? cobroPreview.metodo.toLowerCase() : ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
-                    return (
-                      <div className="mt-3 space-y-1 text-sm text-right border-t pt-3">
-                        <p className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{formatCurrency(itemsSubtotal)}</span></p>
-                        {descPct > 0 && (
-                          <p className="text-muted-foreground">Descuento ({descPct}%): <span className="font-medium text-red-500">-{formatCurrency(itemsSubtotal * descPct / 100)}</span></p>
-                        )}
-                        {ncTotal > 0 && (
-                          <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-red-500">-{formatCurrency(ncTotal)}</span></p>
-                        )}
-                        {envio > 0 && (
-                          <p className="text-muted-foreground">Envío: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
-                        )}
-                        {liveRecargo > 0 && (
-                          <p className="text-muted-foreground">
-                            Recargo transferencia ({recargoTransferencia}%):
-                            <span className="font-medium text-violet-600 ml-1">+{formatCurrency(liveRecargo)}</span>
-                          </p>
-                        )}
-                        <p className="text-base font-bold pt-1 border-t">Total: {formatCurrency(liveTotal)}</p>
-
-                        {/* Payment detail */}
-                        {detailPagos.length > 0 && (
-                          <div className="pt-2 mt-2 border-t space-y-1 text-left">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Detalle de pago</p>
-                            {detailPagos.filter(p => !p.metodo.includes("Nota de Crédito")).map((p, i) => (
-                              <div key={i} className="flex items-center justify-between text-xs">
-                                <span className={`${p.metodo === "Cuenta Corriente" ? "text-orange-600" : "text-muted-foreground"}`}>
-                                  {p.metodo.includes("(a cobrar)") ? `\u23F3 ${p.metodo}` : `\u2713 ${p.metodo}`}
-                                </span>
-                                <span className={`font-medium ${p.metodo.includes("(a cobrar)") ? "text-amber-600" : p.metodo === "Cuenta Corriente" ? "text-orange-600" : "text-foreground"}`}>{formatCurrency(p.monto)}</span>
-                              </div>
-                            ))}
-                            {(() => {
-                              // Total cobrado = solo efectivo + transferencia (CC es deuda, no cobro)
-                              const cashPaid = detailPagos.filter(p => !p.metodo.includes("(a cobrar)") && !p.metodo.includes("Nota de Crédito") && p.metodo !== "Cuenta Corriente").reduce((s, p) => s + p.monto, 0);
-                              const montoPagadoV = (poSelectedPedido as any)._monto_pagado ?? (poSelectedPedido as any).monto_pagado ?? 0;
-                              const ncTotalV = detailNCs.reduce((s, nc) => s + nc.total, 0);
-                              const pendiente = Math.max(0, Math.round(((poSelectedPedido.total || 0) - ncTotalV - montoPagadoV) * 100) / 100);
-                              return (
-                                <>
-                                  {cashPaid > 0 && (
-                                    <div className="flex items-center justify-between text-xs font-bold pt-1 border-t">
-                                      <span>Total cobrado</span>
-                                      <span>{formatCurrency(cashPaid)}</span>
-                                    </div>
-                                  )}
-                                  {pendiente > 0 && (
-                                    <div className="flex items-center justify-between text-xs font-bold text-orange-600">
-                                      <span>Saldo pendiente</span>
-                                      <span>{formatCurrency(pendiente)}</span>
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/30">
-                <div>
-                  {poHasChanges && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" /> Cambios sin guardar
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={async () => {
-                    try {
-                      // Always fetch from DB to get fresh total/forma_pago (may have changed after cobro)
-                      let v: VentaRow | undefined;
-                      if (poSelectedPedido._ventaId || poSelectedPedido.numero) {
-                        const { data: rows } = poSelectedPedido._ventaId
-                          ? await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("id", poSelectedPedido._ventaId).limit(1)
-                          : await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", poSelectedPedido.numero).order("created_at", { ascending: false }).limit(1);
-                        if (rows && rows.length > 0) v = rows[0] as VentaRow;
-                      }
-                      if (!v) {
-                        v = ventas.find((vr) => vr.id === poSelectedPedido._ventaId);
-                        if (!v) v = ventas.find((vr) => vr.numero === poSelectedPedido.numero);
-                      }
-                      if (v) {
-                        if (poSelectedPedido.nombre_cliente && (poSelectedPedido._source === "pedidos" || poSelectedPedido.isOnline)) {
-                          (v as any).clientes = {
-                            nombre: poSelectedPedido.nombre_cliente,
-                            cuit: (poSelectedPedido as any)._cuit || "",
-                            domicilio: poSelectedPedido.direccion_texto || (poSelectedPedido as any)._domicilio || "",
-                            telefono: poSelectedPedido.telefono || "",
-                            email: poSelectedPedido.email || "",
-                          };
-                        }
-                        setPoDetailOpen(false);
-                        preparePrint(v);
-                      } else {
-                        showAdminToast("No se encontró la venta vinculada", "error");
-                      }
-                    } catch (err) {
-                      showAdminToast("Error al preparar impresión", "error");
-                    }
-                  }}>
-                    {poSelectedPedido && printedPedidos.has(poSelectedPedido.numero) ? <PrinterCheck className="w-3.5 h-3.5 mr-1.5" /> : <Printer className="w-3.5 h-3.5 mr-1.5" />}
-                    {poSelectedPedido && printedPedidos.has(poSelectedPedido.numero) ? "Reimprimir" : "Imprimir"}
-                  </Button>
-                  <Button variant="outline" onClick={() => {
-                    if (poHasChanges) {
-                      setConfirmDialog({
-                        open: true,
-                        title: "Cambios sin guardar",
-                        message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?",
-                        onConfirm: () => setPoDetailOpen(false),
-                      });
-                      return;
-                    }
-                    setPoDetailOpen(false);
-                  }}>
-                    Cerrar
-                  </Button>
-                  {poHasChanges && !isDelivered && (
-                    <Button onClick={poHandleSave} disabled={poSaving}>
-                      {poSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                      Guardar cambios
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </>
-            );
+            const clienteId = (poSelectedPedido as any)._clienteId || "";
+            const fp = ((poSelectedPedido as any).forma_pago || poSelectedPedido.metodo_pago || "").toLowerCase();
+            if (isCancelled || isDelivered || (fp === "cuenta corriente" && !(poSelectedPedido as any).isOnline)) return undefined;
+            return {
+              ventaId: (poSelectedPedido as any)._ventaId || "",
+              clienteId,
+              clienteSaldo,
+              cuentasBancarias,
+              recargoTransferencia,
+              onRegistrarCobro: handleRegistrarCobro,
+            };
           })()}
-        </DialogContent>
-      </Dialog>
+        />
+      )}
+
 
       {/* ══════════════════════════════════════════════════════════ */}
       {/* PO ADD PRODUCT DIALOG */}
@@ -3368,10 +2922,44 @@ export default function ListadoVentasPage() {
                 value={poProductSearch}
                 onChange={(e) => poSearchProducts(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "ArrowDown") { e.preventDefault(); setPoSearchHighlight((h) => Math.min(h + 1, poProductResults.length - 1)); }
-                  else if (e.key === "ArrowUp") { e.preventDefault(); setPoSearchHighlight((h) => Math.max(h - 1, 0)); }
-                  else if (e.key === "Enter" && poProductResults.length > 0) { e.preventDefault(); poAddProduct(poProductResults[poSearchHighlight]); }
-                  else if (e.key === "Escape") { setPoAddProductOpen(false); }
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setPoSearchHighlight((h) => Math.min(h + 1, poProductResults.length - 1));
+                    setPoPresHighlight(0);
+                  }
+                  else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setPoSearchHighlight((h) => Math.max(h - 1, 0));
+                    setPoPresHighlight(0);
+                  }
+                  else if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    const prod = poProductResults[poSearchHighlight];
+                    if (!prod) return;
+                    const variants = (prod.presentaciones || []).filter((pr: any) => (pr.unidades_por_presentacion || 1) !== 1);
+                    const totalOpts = 1 + variants.length; // Unidad + variants
+                    setPoPresHighlight((h) => Math.min(h + 1, totalOpts - 1));
+                  }
+                  else if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setPoPresHighlight((h) => Math.max(h - 1, 0));
+                  }
+                  else if (e.key === "Enter" && poProductResults.length > 0) {
+                    e.preventDefault();
+                    const prod = poProductResults[poSearchHighlight];
+                    if (!prod) return;
+                    const variants = (prod.presentaciones || []).filter((pr: any) => (pr.unidades_por_presentacion || 1) !== 1);
+                    if (poPresHighlight === 0) {
+                      poAddProduct(prod); // Unidad
+                    } else {
+                      poAddProduct(prod, variants[poPresHighlight - 1]);
+                    }
+                  }
+                  else if (e.key === "Escape") {
+                    setPoAddProductOpen(false);
+                    setPoProductSearch("");
+                    setPoProductResults([]);
+                  }
                 }}
                 className="pl-9"
                 autoFocus
@@ -3383,10 +2971,7 @@ export default function ListadoVentasPage() {
                 {poProductResults.map((p, idx) => {
                   const highlighted = idx === poSearchHighlight;
                   const rawVariants = (!p.es_combo && p.presentaciones) ? p.presentaciones : [];
-                  const hasMedio = rawVariants.some((pr: any) => (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio"));
-                  const boxPresItem = rawVariants.find((pr: any) => (pr.unidades_por_presentacion || 1) > 1);
-                  const syntheticMedio = (!hasMedio && boxPresItem) ? [{ nombre: "½ Caja", precio: Math.round((boxPresItem as any).precio / 2), unidades_por_presentacion: 0.5 }] : [];
-                  const boxVariants = [...rawVariants.filter((pr: any) => (pr.unidades_por_presentacion || 1) > 1), ...syntheticMedio];
+                  const boxVariants = rawVariants.filter((pr: any) => (pr.unidades_por_presentacion || 1) !== 1);
                   const stockVal = p.stock ?? null;
                   return (
                     <div
@@ -3414,15 +2999,25 @@ export default function ListadoVentasPage() {
                       </button>
                       {boxVariants.length > 0 && (
                         <div className="flex gap-2 mt-2.5 pl-14">
-                          <Button size="sm" variant="outline" className="h-8 text-xs flex-1" onClick={() => poAddProduct(p)}>+ Unidad</Button>
-                          {boxVariants.map((pr, i) => {
-                            const isMedioVar = (pr.unidades_por_presentacion || 1) < 1 || pr.nombre.toLowerCase().includes("medio");
-                            return (
-                              <Button key={i} size="sm" className="h-8 text-xs flex-1" onClick={() => poAddProduct(p, pr)}>
-                                + {isMedioVar ? "½ Caja" : pr.nombre}
-                              </Button>
-                            );
-                          })}
+                          <Button
+                            size="sm"
+                            variant={highlighted && poPresHighlight === 0 ? "default" : "outline"}
+                            className="h-8 text-xs flex-1"
+                            onClick={() => poAddProduct(p)}
+                          >
+                            + Unidad
+                          </Button>
+                          {boxVariants.map((pr, i) => (
+                            <Button
+                              key={i}
+                              size="sm"
+                              variant={highlighted && poPresHighlight === i + 1 ? "default" : "default"}
+                              className={`h-8 text-xs flex-1 ${highlighted && poPresHighlight === i + 1 ? "ring-2 ring-offset-1 ring-primary" : ""}`}
+                              onClick={() => poAddProduct(p, pr)}
+                            >
+                              + {pr.nombre}
+                            </Button>
+                          ))}
                         </div>
                       )}
                     </div>
