@@ -53,6 +53,7 @@ interface ProductoConDescuento {
   esPorCantidad: boolean;
   esComboProd: boolean;
   presentaciones?: { nombre: string; cantidad: number; precio: number }[];
+  presIndexConDescuento?: number;
 }
 
 export default function OfertasClient() {
@@ -157,6 +158,12 @@ export default function OfertasClient() {
           if (d.cantidad_minima && d.cantidad_minima > 0) continue; // por cantidad no aplica acá
           if (d.excluir_combos && prod.es_combo) continue;
           if (d.productos_excluidos_ids?.includes(prod.id)) continue;
+          // Si el descuento es solo para caja, verificar que el producto tenga caja
+          if (d.presentacion === "caja") {
+            const prodPres = presMap[prod.id] || [];
+            const tieneCaja = prodPres.some((pr) => pr.cantidad > 1);
+            if (!tieneCaja) continue;
+          }
 
           let aplica = false;
           if (d.aplica_a === "todos") aplica = true;
@@ -186,8 +193,10 @@ export default function OfertasClient() {
         let esPorCaja = false;
         if (mejorPct === 0) {
           const prodPres = presMap[prod.id] || [];
-          const unitPres = prodPres.find((p) => p.cantidad === 1);
-          const boxPres = prodPres.find((p) => p.cantidad > 1);
+          const sortedPres = [...prodPres].sort((a, b) => a.cantidad - b.cantidad);
+          const unitPres = sortedPres.find((p) => p.cantidad === 1);
+          const boxPres = sortedPres.find((p) => p.cantidad > 1);
+          const boxIdx = sortedPres.findIndex((p) => p.cantidad > 1);
           if (unitPres && boxPres && unitPres.precio > 0 && boxPres.precio > 0) {
             const expectedPrice = unitPres.precio * boxPres.cantidad;
             if (boxPres.precio < expectedPrice) {
@@ -198,6 +207,7 @@ export default function OfertasClient() {
                 descId = "por_caja";
                 descNombre = `${boxPres.nombre || `Caja x${boxPres.cantidad}`}`;
                 esPorCaja = true;
+                Object.assign(prod, { _presIndexConDescuento: boxIdx });
               }
             }
           }
@@ -220,7 +230,16 @@ export default function OfertasClient() {
             const pct = Number(d.porcentaje);
             if (pct > mejorPct) {
               mejorPct = pct;
-              precioFinal = Math.round(prod.precio * (1 - pct / 100));
+              const prodPresLocal = presMap[prod.id] || [];
+              const sortedLocal = [...prodPresLocal].sort((a, b) => a.cantidad - b.cantidad);
+              const boxPresLocal = sortedLocal.find((pr) => pr.cantidad > 1);
+              const boxIdxLocal = sortedLocal.findIndex((pr) => pr.cantidad > 1);
+              if (boxPresLocal && boxPresLocal.precio > 0) {
+                precioFinal = Math.round(boxPresLocal.precio * (1 - pct / 100));
+                Object.assign(prod, { _presIndexConDescuento: boxIdxLocal });
+              } else {
+                precioFinal = Math.round(prod.precio * (1 - pct / 100));
+              }
               descId = d.id;
               descNombre = d.nombre;
               esPorCaja = true;
@@ -229,6 +248,7 @@ export default function OfertasClient() {
         }
 
         if (mejorPct > 0) {
+          const presOrdenadas = [...(presMap[prod.id] || [])].sort((a, b) => a.cantidad - b.cantidad);
           resultado.push({
             ...prod,
             precioFinal,
@@ -239,7 +259,8 @@ export default function OfertasClient() {
             esExclusivo,
             esPorCantidad: false,
             esComboProd: !!prod.es_combo,
-            presentaciones: presMap[prod.id] || [],
+            presentaciones: presOrdenadas,
+            presIndexConDescuento: (prod as any)._presIndexConDescuento ?? 0,
           });
         }
       }
@@ -261,6 +282,18 @@ export default function OfertasClient() {
       );
 
       setAllProductos(resultado);
+
+      // Inicializar selector de presentaciones al índice con descuento
+      const initialPres: Record<string, number> = {};
+      for (const p of resultado) {
+        if (p.presIndexConDescuento && p.presIndexConDescuento > 0) {
+          initialPres[p.id] = p.presIndexConDescuento;
+        }
+      }
+      if (Object.keys(initialPres).length > 0) {
+        setSelectedPres(initialPres);
+      }
+
       setLoading(false);
     })();
   }, []);
@@ -449,12 +482,19 @@ export default function OfertasClient() {
             const canBuy = maxForPres > 0;
 
             // Precio a mostrar según presentación activa
-            const displayPrice = activePres?.precio || p.precioFinal;
-            const displayOriginal = p.precio * (activePres ? Number(activePres.cantidad) : 1);
-            const displayAhorro = displayOriginal - displayPrice;
+            const isDescuentoPres = activeIdx === (p.presIndexConDescuento ?? 0);
+            const displayPrice = isDescuentoPres
+              ? p.precioFinal
+              : (activePres?.precio || p.precioFinal);
+            const displayOriginal = activePres
+              ? activePres.precio
+              : p.precio;
+            const displayAhorro = isDescuentoPres && displayPrice < displayOriginal
+              ? displayOriginal - displayPrice
+              : 0;
             const displayPct = displayAhorro > 0
               ? Math.round((displayAhorro / displayOriginal) * 100)
-              : p.descuentoPct;
+              : (isDescuentoPres ? p.descuentoPct : 0);
 
             return (
               <div
