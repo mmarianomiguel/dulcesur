@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { showToast } from "@/components/tienda/toast";
 import { supabase } from "@/lib/supabase";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import {
@@ -1327,7 +1327,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                         const pa = producto.precio_anterior;
                         const dateStr = producto.fecha_actualizacion || producto.updated_at;
                         if (pa && pa > 0 && pa !== producto.precio && dateStr &&
-                          (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) <= 3) {
+                          daysSinceAR(dateStr) <= 3) {
                           if (producto.precio > pa) return (
                             <span className="absolute top-2.5 left-2.5 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
                               Precio actualizado
@@ -1346,7 +1346,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           </span>
                         );
                         // "New" badge
-                        if (producto.created_at && (Date.now() - new Date(producto.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000) return (
+                        if (producto.created_at && daysSinceAR(producto.created_at) <= 7) return (
                           <span className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
                             NUEVO
                           </span>
@@ -1389,7 +1389,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           const pa = producto.precio_anterior;
                           const dateStr = producto.fecha_actualizacion || producto.updated_at;
                           if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
-                          if ((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24) > 3) return null;
+                          if (daysSinceAR(dateStr) > 3) return null;
                           if (producto.precio > pa) {
                             return <p className="text-[10px] text-amber-600 font-medium">Precio actualizado</p>;
                           }
