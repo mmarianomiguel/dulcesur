@@ -11,7 +11,7 @@ interface Pedido {
   created_at: string;
   estado: string;
   total: number;
-  numero: number | null;
+  numero: string | null;
 }
 
 const ESTADO_LABEL: Record<string, { label: string; color: string }> = {
@@ -26,31 +26,61 @@ const ESTADO_LABEL: Record<string, { label: string; color: string }> = {
 export default function HistorialPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
-  const [clienteId, setClienteId] = useState<number | null>(null);
+  const [authId, setAuthId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem("cliente_auth");
       if (stored) {
         const p = JSON.parse(stored);
-        if (p?.id) setClienteId(p.id);
+        if (p?.id) setAuthId(p.id);
+        else setLoading(false);
+      } else {
+        setLoading(false);
       }
-    } catch {}
+    } catch {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (clienteId === null) { setLoading(false); return; }
-    supabase
-      .from("ventas")
-      .select("id, created_at, estado, total, numero")
-      .eq("cliente_id", clienteId)
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
-        setPedidos((data as Pedido[]) || []);
+    if (authId === null) return;
+
+    const fetchVentas = async () => {
+      // Step 1: resolve real cliente_id from clientes_auth
+      const { data: authRec, error: authErr } = await supabase
+        .from("clientes_auth")
+        .select("cliente_id")
+        .eq("id", authId)
+        .single();
+
+      if (authErr || !authRec?.cliente_id) {
         setLoading(false);
-      });
-  }, [clienteId]);
+        return;
+      }
+
+      const clienteId = authRec.cliente_id;
+
+      // Step 2: query ventas with resolved cliente_id
+      const { data, error: ventasErr } = await supabase
+        .from("ventas")
+        .select("id, created_at, estado, total, numero")
+        .eq("cliente_id", clienteId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (ventasErr) {
+        console.error("Error fetching ventas:", ventasErr);
+        setError("No se pudieron cargar los pedidos.");
+      } else {
+        setPedidos((data as Pedido[]) || []);
+      }
+      setLoading(false);
+    };
+
+    fetchVentas();
+  }, [authId]);
 
   if (loading) {
     return (
@@ -64,7 +94,7 @@ export default function HistorialPage() {
     );
   }
 
-  if (clienteId === null) {
+  if (authId === null) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
         <Package className="mx-auto h-16 w-16 text-gray-200 mb-4" />
@@ -72,6 +102,15 @@ export default function HistorialPage() {
         <Link href="/cuenta" className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition mt-4">
           Ir a mi cuenta
         </Link>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-16 text-center">
+        <Package className="mx-auto h-16 w-16 text-gray-200 mb-4" />
+        <p className="text-gray-500">{error}</p>
       </div>
     );
   }
