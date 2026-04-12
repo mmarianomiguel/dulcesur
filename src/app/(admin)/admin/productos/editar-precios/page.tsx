@@ -2,7 +2,7 @@
 
 import { formatCurrency, todayARG } from "@/lib/formatters";
 import { showAdminToast } from "@/components/admin-toast";
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 
 const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -264,20 +265,23 @@ export default function EditarPreciosPage() {
     setRoundPreview(preview);
   };
 
+  // Auto-generate round preview when dialog opens or settings change
+  useEffect(() => {
+    if (!roundOpen) return;
+    generateRoundPreview();
+  }, [roundOpen, roundMultiple, roundMode]);
+
   const applyRounding = async () => {
     if (roundPreview.length === 0) return;
-    // If rounding right after mass edit, don't update precio_anterior (it was already set correctly)
-    const isPostMassRound = postMassEditIds.length > 0;
     setSaving(true);
     for (const item of roundPreview) {
       const prod = productos.find((p) => p.id === item.id);
       if (!prod) continue;
-      const updateData: Record<string, unknown> = { precio: item.precioNuevo, fecha_actualizacion: new Date().toISOString() };
-      if (!isPostMassRound) updateData.precio_anterior = item.precioActual;
+      const updateData: Record<string, unknown> = { precio: item.precioNuevo, fecha_actualizacion: new Date().toISOString(), precio_anterior: item.precioActual };
       await supabase.from("productos").update(updateData).eq("id", item.id);
       await supabase.from("precio_historial").insert({
         producto_id: item.id, precio_anterior: item.precioActual, precio_nuevo: item.precioNuevo,
-        costo_anterior: prod.costo, costo_nuevo: prod.costo, usuario: isPostMassRound ? "Admin (Redondeo post-edición)" : "Admin (Redondeo)",
+        costo_anterior: prod.costo, costo_nuevo: prod.costo, usuario: "Admin (Redondeo)",
       });
       // Update presentaciones
       const presRows = presentaciones.filter((pr) => pr.producto_id === item.id);
@@ -294,19 +298,11 @@ export default function EditarPreciosPage() {
     setSaving(false);
     setRoundOpen(false);
 
-    // Update saved product names with rounded prices (for post-save dialog)
-    if (isPostMassRound) {
-      setSavedProductNames((prev) => prev.map((p) => {
-        const rp = roundPreview.find((r) => r.id === p.id);
-        return rp ? { ...p, precio: rp.precioNuevo } : p;
-      }));
-    } else {
-      const savedInfo = roundPreview.map((item) => {
-        const prod = productos.find((p) => p.id === item.id);
-        return { id: item.id, nombre: prod?.nombre || "", codigo: prod?.codigo || "", precio: item.precioNuevo };
-      });
-      if (savedInfo.length > 0) setSavedProductNames(savedInfo);
-    }
+    const savedInfo = roundPreview.map((item) => {
+      const prod = productos.find((p) => p.id === item.id);
+      return { id: item.id, nombre: prod?.nombre || "", codigo: prod?.codigo || "", precio: item.precioNuevo };
+    });
+    if (savedInfo.length > 0) setSavedProductNames(savedInfo);
 
     // Update local state instead of reloading
     setProductos((prev) => prev.map((p) => {
@@ -315,16 +311,13 @@ export default function EditarPreciosPage() {
     }));
 
     setRoundPreview([]);
-    setPostMassEditIds([]);
     setPostSaveDialog(true);
   };
 
-  // Confirmation dialog for mass edit
-  const [confirmMassEditOpen, setConfirmMassEditOpen] = useState(false);
-
-  // Post-mass-edit rounding prompt
-  const [postMassRoundPrompt, setPostMassRoundPrompt] = useState(false);
-  const [postMassEditIds, setPostMassEditIds] = useState<string[]>([]);
+  // Rounding within mass edit modal
+  const [roundInModal, setRoundInModal] = useState(false);
+  const [roundInModalMultiple, setRoundInModalMultiple] = useState<5 | 10>(10);
+  const [roundInModalMode, setRoundInModalMode] = useState<"nearest" | "up" | "down">("nearest");
 
   // (search state is now internal to SearchableSelect)
 
@@ -452,6 +445,28 @@ export default function EditarPreciosPage() {
     }
     return null;
   }, [descuentos]);
+
+  // Helper: get caja units for a product
+  const getCajaUnits = useCallback((productoId: string): number => {
+    const pres = presentaciones.find(
+      p => p.producto_id === productoId && p.nombre.toLowerCase().startsWith("caja")
+    );
+    return pres?.cantidad || 0;
+  }, [presentaciones]);
+
+  // Helper: final price applying modal rounding if active
+  const finalPriceForPreview = useCallback((newPrecio: number): number => {
+    const base = Math.round(newPrecio);
+    if (!roundInModal) return base;
+    return calcRound(base, roundInModalMultiple, roundInModalMode);
+  }, [roundInModal, roundInModalMultiple, roundInModalMode]);
+
+  // Helper: range string "min – max" or single value
+  const rngStr = (values: number[], fmt: (v: number) => string): string => {
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    return min === max ? fmt(min) : `${fmt(min)} – ${fmt(max)}`;
+  };
 
   // Selection helpers
   const allFilteredSelected =
@@ -729,7 +744,7 @@ export default function EditarPreciosPage() {
       }
 
       if (massTarget === "fijar_costo") {
-        const newCosto = Math.max(0, Math.round(amount));
+        const newCosto = Math.max(0, Math.round(amount * 100) / 100);
         const diff = newCosto - currentCosto;
         const diffPercent = currentCosto > 0 ? ((newCosto - currentCosto) / currentCosto) * 100 : 0;
         return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio: currentPrecio, diff, diffPercent };
@@ -737,7 +752,7 @@ export default function EditarPreciosPage() {
 
       if (massTarget === "margen") {
         // Set fixed margin: precio = costo * (1 + amount/100)
-        const newPrecio = currentCosto > 0 ? Math.round(currentCosto * (1 + amount / 100)) : currentPrecio;
+        const newPrecio = currentCosto > 0 ? currentCosto * (1 + amount / 100) : currentPrecio;
         const diff = newPrecio - currentPrecio;
         const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
         return {
@@ -756,7 +771,7 @@ export default function EditarPreciosPage() {
         } else {
           newPrecio = massOperation === "increase" ? currentPrecio + amount : currentPrecio - amount;
         }
-        newPrecio = Math.max(0, Math.round(newPrecio));
+        newPrecio = Math.max(0, newPrecio);
 
         const diff = newPrecio - currentPrecio;
         const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
@@ -786,7 +801,7 @@ export default function EditarPreciosPage() {
         } else {
           newCosto = massOperation === "increase" ? currentCosto + amount : currentCosto - amount;
         }
-        newCosto = Math.max(0, Math.round(newCosto));
+        newCosto = Math.max(0, Math.round(newCosto * 100) / 100);
 
         let newPrecio: number;
         if (currentCosto > 0) {
@@ -800,7 +815,7 @@ export default function EditarPreciosPage() {
             newPrecio = massOperation === "increase" ? currentPrecio + amount : currentPrecio - amount;
           }
         }
-        newPrecio = Math.max(0, Math.round(newPrecio));
+        newPrecio = Math.max(0, newPrecio);
 
         const diff = newPrecio - currentPrecio;
         const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
@@ -822,11 +837,18 @@ export default function EditarPreciosPage() {
   const applyMassEdit = async () => {
     setSaving(true);
     try {
+      // Compute final prices with optional rounding
+      const getFinalPrecio = (exactPrecio: number) => {
+        const base = Math.round(exactPrecio);
+        return roundInModal ? calcRound(base, roundInModalMultiple, roundInModalMode) : base;
+      };
+
       for (const item of massEditPreview) {
         const prod = productos.find((p) => p.id === item.id);
+        const finalPrecio = getFinalPrecio(item.newPrecio);
         const updateData: Record<string, unknown> = {};
-        if (item.newPrecio !== (prod?.precio ?? 0)) {
-          updateData.precio = item.newPrecio;
+        if (finalPrecio !== (prod?.precio ?? 0)) {
+          updateData.precio = finalPrecio;
           updateData.fecha_actualizacion = new Date().toISOString();
           if (prod) updateData.precio_anterior = prod.precio;
         }
@@ -841,10 +863,10 @@ export default function EditarPreciosPage() {
         const prodPres = presentaciones.filter((pr) => pr.producto_id === item.id);
         for (const pres of prodPres) {
           const presUpdate: Record<string, unknown> = {};
-          if (item.newPrecio !== oldPrecio) {
+          if (finalPrecio !== oldPrecio) {
             presUpdate.precio = oldPrecio > 0
-              ? Math.round(pres.precio * (item.newPrecio / oldPrecio))
-              : (pres.cantidad > 0 ? Math.round(item.newPrecio * pres.cantidad) : item.newPrecio);
+              ? Math.round(pres.precio * (finalPrecio / oldPrecio))
+              : (pres.cantidad > 0 ? Math.round(finalPrecio * pres.cantidad) : finalPrecio);
           }
           if (item.newCosto !== oldCosto) {
             presUpdate.costo = oldCosto > 0
@@ -870,7 +892,7 @@ export default function EditarPreciosPage() {
           const newPriceMap: Record<string, number> = {};
           const newCostoMap: Record<string, number> = {};
           for (const item of massEditPreview) {
-            newPriceMap[item.id] = item.newPrecio;
+            newPriceMap[item.id] = getFinalPrecio(item.newPrecio);
             newCostoMap[item.id] = item.newCosto;
           }
           for (const comboId of comboIds) {
@@ -903,14 +925,14 @@ export default function EditarPreciosPage() {
       const historyInserts = massEditPreview
         .filter((item) => {
           const prod = productos.find((p) => p.id === item.id);
-          return prod && (item.newPrecio !== prod.precio || item.newCosto !== prod.costo);
+          return prod && (getFinalPrecio(item.newPrecio) !== prod.precio || item.newCosto !== prod.costo);
         })
         .map((item) => {
           const prod = productos.find((p) => p.id === item.id)!;
           return {
             producto_id: item.id,
             precio_anterior: prod.precio,
-            precio_nuevo: item.newPrecio,
+            precio_nuevo: getFinalPrecio(item.newPrecio),
             costo_anterior: prod.costo,
             costo_nuevo: item.newCosto,
             usuario: "Admin",
@@ -925,9 +947,10 @@ export default function EditarPreciosPage() {
         prev.map((p) => {
           const preview = massEditPreview.find((i) => i.id === p.id);
           if (preview) {
+            const fp = getFinalPrecio(preview.newPrecio);
             return (massTarget === "costo" || massTarget === "fijar_costo")
-              ? { ...p, costo: preview.newCosto, precio: preview.newPrecio }
-              : { ...p, precio: preview.newPrecio };
+              ? { ...p, costo: preview.newCosto, precio: fp }
+              : { ...p, precio: fp };
           }
           return p;
         })
@@ -937,9 +960,10 @@ export default function EditarPreciosPage() {
           const prod = productos.find((p) => p.id === pres.producto_id);
           const preview = massEditPreview.find((i) => i.id === pres.producto_id);
           if (!prod || !preview) return pres;
+          const fp = getFinalPrecio(preview.newPrecio);
           let updated = { ...pres };
-          if (prod.precio > 0 && preview.newPrecio !== prod.precio) {
-            updated.precio = Math.round(pres.precio * (preview.newPrecio / prod.precio));
+          if (prod.precio > 0 && fp !== prod.precio) {
+            updated.precio = Math.round(pres.precio * (fp / prod.precio));
           }
           if (prod.costo > 0 && preview.newCosto !== prod.costo) {
             updated.costo = Math.round(pres.costo * (preview.newCosto / prod.costo));
@@ -961,16 +985,13 @@ export default function EditarPreciosPage() {
       setMassEditOpen(false);
       setMassAmount("");
 
-      // Save IDs and show rounding prompt before post-save dialog
-      const editedIds = massEditPreview.map((item) => item.id);
       const savedInfo = massEditPreview.map((item) => {
         const prod = productos.find((p) => p.id === item.id);
-        return { id: item.id, nombre: prod?.nombre || item.nombre, codigo: prod?.codigo || "", precio: item.newPrecio };
+        return { id: item.id, nombre: prod?.nombre || item.nombre, codigo: prod?.codigo || "", precio: getFinalPrecio(item.newPrecio) };
       });
-      setPostMassEditIds(editedIds);
       if (savedInfo.length > 0) {
         setSavedProductNames(savedInfo);
-        setPostMassRoundPrompt(true);
+        setPostSaveDialog(true);
       }
     } catch (err) {
       console.error("Error applying mass edit:", err);
@@ -1261,6 +1282,9 @@ export default function EditarPreciosPage() {
                   const isChanged = priceChanges[p.id] !== undefined || costoChanges[p.id] !== undefined;
                   const cajaPrice = getCajaPrice(p.id);
                   const margen = currentCosto > 0 ? ((currentPrice - currentCosto) / currentCosto) * 100 : 0;
+                  const cajaPres = presentaciones.find(
+                    (pr) => pr.producto_id === p.id && pr.nombre.toLowerCase().startsWith("caja")
+                  );
 
                   const renderEditableCell = (field: "precio" | "costo" | "margen", value: number, displayValue: string) => {
                     if (isEditingThis && editingField === field) {
@@ -1302,52 +1326,96 @@ export default function EditarPreciosPage() {
                   };
 
                   return (
-                    <TableRow key={p.id} className={isChanged ? "bg-orange-50 dark:bg-orange-950/20" : ""}>
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(p.id)}
-                          onChange={() => toggleOne(p.id)}
-                          className="rounded border-input"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-sm">{p.nombre}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{p.codigo}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{p.stock}</TableCell>
-                      <TableCell className="text-right">
-                        {renderEditableCell("costo", currentCosto, currentCosto > 0 ? formatCurrency(currentCosto, true) : "—")}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {currentCosto > 0 ? renderEditableCell("margen", margen, `${margen.toFixed(1)}%`) : <span className="text-muted-foreground">—</span>}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {renderEditableCell("precio", currentPrice, formatCurrency(currentPrice))}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {cajaPrice !== null ? formatCurrency(cajaPrice) : "-"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {(() => {
-                          const disc = getProductDiscount(p);
-                          if (!disc) return <span className="text-muted-foreground">—</span>;
-                          return (
-                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
-                              {disc.tipo_descuento === "precio_fijo" && disc.precio_fijo != null ? formatCurrency(disc.precio_fijo) : `-${disc.porcentaje}%`}
-                              {disc.clientes_ids?.length > 0 && " 👤"}
-                            </Badge>
-                          );
-                        })()}
-                      </TableCell>
-                    </TableRow>
+                    <React.Fragment key={p.id}>
+                      <TableRow className={isChanged ? "bg-orange-50 dark:bg-orange-950/20" : ""}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(p.id)}
+                            onChange={() => toggleOne(p.id)}
+                            className="rounded border-input"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-sm">{p.nombre}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{p.codigo}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{p.stock}</TableCell>
+                        <TableCell className="text-right">
+                          {renderEditableCell("costo", currentCosto, currentCosto > 0 ? formatCurrency(currentCosto, true) : "—")}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {currentCosto > 0 ? renderEditableCell("margen", margen, `${margen.toFixed(1)}%`) : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {renderEditableCell("precio", currentPrice, formatCurrency(currentPrice))}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">—</TableCell>
+                        <TableCell className="text-center">
+                          {(() => {
+                            const disc = getProductDiscount(p);
+                            if (!disc) return <span className="text-muted-foreground">—</span>;
+                            return (
+                              <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">
+                                {disc.tipo_descuento === "precio_fijo" && disc.precio_fijo != null ? formatCurrency(disc.precio_fijo) : `-${disc.porcentaje}%`}
+                                {disc.clientes_ids?.length > 0 && " 👤"}
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
+                      </TableRow>
+                      {/* Sub-row: Unidad */}
+                      <TableRow className="bg-muted/30 border-t border-dashed">
+                        <TableCell className="py-1" />
+                        <TableCell colSpan={2} className="py-1">
+                          <div className="flex items-center gap-1.5 pl-4">
+                            <span className="text-muted-foreground text-xs">{cajaPres ? "├─" : "└─"}</span>
+                            <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50 text-[10px] px-1.5 py-0">Unidad ×1</Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1 tabular-nums">
+                          {currentCosto > 0 ? formatCurrency(currentCosto, true) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1 tabular-nums">
+                          {currentCosto > 0 ? `${margen.toFixed(1)}%` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1 tabular-nums">
+                          {formatCurrency(currentPrice)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground py-1">—</TableCell>
+                        <TableCell className="py-1" />
+                      </TableRow>
+                      {/* Sub-row: Caja (if exists) */}
+                      {cajaPres && (
+                        <TableRow className="bg-muted/30 border-t border-dashed">
+                          <TableCell className="py-1" />
+                          <TableCell colSpan={2} className="py-1">
+                            <div className="flex items-center gap-1.5 pl-4">
+                              <span className="text-muted-foreground text-xs">└─</span>
+                              <Badge className="bg-green-50 text-green-700 hover:bg-green-50 text-[10px] px-1.5 py-0">Caja ×{cajaPres.cantidad}</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground py-1 tabular-nums">
+                            {formatCurrency(currentCosto * cajaPres.cantidad, true)}
+                          </TableCell>
+                          <TableCell className="py-1" />
+                          <TableCell className="text-right text-xs text-muted-foreground py-1 tabular-nums">
+                            {formatCurrency(currentPrice * cajaPres.cantidad)}
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground py-1 tabular-nums">
+                            {cajaPrice !== null ? formatCurrency(cajaPrice) : formatCurrency(currentPrice * cajaPres.cantidad)}
+                          </TableCell>
+                          <TableCell className="py-1" />
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                   );
                 })}
                 {filteredProductos.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                       <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       No se encontraron productos
                     </TableCell>
@@ -1374,288 +1442,277 @@ export default function EditarPreciosPage() {
 
       {/* Mass Edit Dialog */}
       <Dialog open={massEditOpen} onOpenChange={setMassEditOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Edición Masiva de Precios</DialogTitle>
-            <DialogDescription>
-              Aplicar cambio a {selectedIds.size} productos seleccionados
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Aplicar sobre */}
+        <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-start justify-between px-6 pt-5 pb-4">
             <div>
-              <Label className="text-sm font-medium mb-2 block">Aplicar sobre</Label>
-              <div className="flex gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massTarget"
-                    checked={massTarget === "costo"}
-                    onChange={() => setMassTarget("costo")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">Precio de Costo</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massTarget"
-                    checked={massTarget === "venta"}
-                    onChange={() => setMassTarget("venta")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">Precio de Venta</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massTarget"
-                    checked={massTarget === "margen"}
-                    onChange={() => setMassTarget("margen")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">Setear Margen %</span>
-                </label>
-                <span className="text-xs text-muted-foreground">|</span>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massTarget"
-                    checked={massTarget === "fijar_venta"}
-                    onChange={() => setMassTarget("fijar_venta")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">Fijar Precio Venta</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massTarget"
-                    checked={massTarget === "fijar_costo"}
-                    onChange={() => setMassTarget("fijar_costo")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">Fijar Precio Costo</span>
-                </label>
-              </div>
+              <DialogTitle className="text-base font-semibold">Edición masiva de precios</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {selectedIds.size} producto{selectedIds.size !== 1 ? "s" : ""} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+              </p>
             </div>
-
-            {/* Tipo de cambio */}
-            {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && <div>
-              <Label className="text-sm font-medium mb-2 block">Tipo de cambio</Label>
-              <div className="flex gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massType"
-                    checked={massType === "percentage"}
-                    onChange={() => setMassType("percentage")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">% Porcentaje</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massType"
-                    checked={massType === "fixed"}
-                    onChange={() => setMassType("fixed")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">$ Monto fijo</span>
-                </label>
-              </div>
-            </div>
-
-            }
-            {/* Operacion */}
-            {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && <div>
-              <Label className="text-sm font-medium mb-2 block">Operación</Label>
-              <div className="flex gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massOp"
-                    checked={massOperation === "increase"}
-                    onChange={() => setMassOperation("increase")}
-                    className="accent-primary"
-                  />
-                  <TrendingUp className="w-4 h-4 text-green-600" />
-                  <span className="text-sm">Aumentar</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="massOp"
-                    checked={massOperation === "decrease"}
-                    onChange={() => setMassOperation("decrease")}
-                    className="accent-primary"
-                  />
-                  <TrendingDown className="w-4 h-4 text-red-500" />
-                  <span className="text-sm">Disminuir</span>
-                </label>
-              </div>
-            </div>}
-
-            {/* Amount input */}
-            <div>
-              <Label className="text-sm font-medium mb-2 block">
-                {massTarget === "margen" ? "Margen %" : massTarget === "fijar_venta" ? "Precio de venta" : massTarget === "fijar_costo" ? "Precio de costo" : massType === "percentage" ? "Porcentaje" : "Monto"}
-              </Label>
-              <div className="relative w-48">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                  {massTarget === "margen" ? "%" : ["fijar_venta", "fijar_costo"].includes(massTarget) ? "$" : massType === "percentage" ? "%" : "$"}
-                </span>
-                <Input
-                  type="number"
-                  value={massAmount}
-                  onChange={(e) => setMassAmount(e.target.value)}
-                  placeholder="0"
-                  className="pl-8"
-                />
-              </div>
-            </div>
-
-            {/* Preview table */}
-            {massEditPreview.length > 0 && (
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Vista previa</Label>
-                <div className="border rounded-lg overflow-auto max-h-64">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Producto</TableHead>
-                        {(massTarget === "costo" || massTarget === "fijar_costo") && (
-                          <>
-                            <TableHead className="text-right">Costo Actual</TableHead>
-                            <TableHead className="text-center w-10"></TableHead>
-                            <TableHead className="text-right">Costo Nuevo</TableHead>
-                          </>
-                        )}
-                        {massTarget !== "fijar_costo" && (
-                          <>
-                            <TableHead className="text-right">Precio Actual</TableHead>
-                            <TableHead className="text-center w-10"></TableHead>
-                            <TableHead className="text-right">Precio Nuevo</TableHead>
-                          </>
-                        )}
-                        <TableHead className="text-right">Diferencia</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {massEditPreview.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="text-sm font-medium">{item.nombre}</TableCell>
-                          {(massTarget === "costo" || massTarget === "fijar_costo") && (
-                            <>
-                              <TableCell className="text-right tabular-nums">
-                                {formatCurrency(item.currentCosto, true)}
-                              </TableCell>
-                              <TableCell className="text-center text-muted-foreground">&rarr;</TableCell>
-                              <TableCell className="text-right tabular-nums font-medium">
-                                {formatCurrency(item.newCosto, true)}
-                              </TableCell>
-                            </>
-                          )}
-                          {massTarget !== "fijar_costo" && (
-                            <>
-                              <TableCell className="text-right tabular-nums">
-                                {formatCurrency(item.currentPrecio)}
-                              </TableCell>
-                              <TableCell className="text-center text-muted-foreground">&rarr;</TableCell>
-                              <TableCell className="text-right tabular-nums font-medium">
-                                {formatCurrency(item.newPrecio)}
-                              </TableCell>
-                            </>
-                          )}
-                          <TableCell className="text-right tabular-nums">
-                            {item.diff >= 0 ? (
-                              <span className="text-green-600">
-                                +{formatCurrency(Math.abs(item.diff))} (+{item.diffPercent.toFixed(1)}%)
-                              </span>
-                            ) : (
-                              <span className="text-red-500">
-                                -{formatCurrency(Math.abs(item.diff))} ({item.diffPercent.toFixed(1)}%)
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMassEditOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => setConfirmMassEditOpen(true)}
-              disabled={massEditPreview.length === 0 || saving}
-            >
-              Aplicar cambios
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {/* Body: two columns */}
+          <div className="flex border-t overflow-hidden" style={{ maxHeight: "calc(85vh - 140px)" }}>
+            {/* Left column — config */}
+            <div className="w-48 min-w-48 flex-shrink-0 border-r overflow-y-auto p-3 space-y-3">
+              {/* Aplicar sobre */}
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Aplicar sobre</p>
+                {([
+                  { val: "costo" as const, label: "Precio de costo" },
+                  { val: "venta" as const, label: "Precio de venta" },
+                  { val: "margen" as const, label: "Setear Margen %" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.val}
+                    onClick={() => setMassTarget(opt.val)}
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs border transition-all text-left ${
+                      massTarget === opt.val
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-transparent text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      massTarget === opt.val ? "border-primary" : "border-muted-foreground"
+                    }`}>
+                      {massTarget === opt.val && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                    </div>
+                    {opt.label}
+                  </button>
+                ))}
+                <div className="h-px bg-border my-1" />
+                {([
+                  { val: "fijar_venta" as const, label: "Fijar Precio Venta" },
+                  { val: "fijar_costo" as const, label: "Fijar Precio Costo" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.val}
+                    onClick={() => setMassTarget(opt.val)}
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs border transition-all text-left ${
+                      massTarget === opt.val
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-transparent text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      massTarget === opt.val ? "border-primary" : "border-muted-foreground"
+                    }`}>
+                      {massTarget === opt.val && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                    </div>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
 
-      {/* Confirmation Dialog for Mass Edit */}
-      <Dialog open={confirmMassEditOpen} onOpenChange={setConfirmMassEditOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirmar cambios</DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de aplicar estos cambios a {massEditPreview.length} productos? Esta acción no se puede deshacer.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmMassEditOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={async () => {
-                setConfirmMassEditOpen(false);
-                await applyMassEdit();
-              }}
-              disabled={saving}
-            >
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Confirmar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {/* Tipo de cambio */}
+              {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Tipo</p>
+                  <div className="flex gap-1">
+                    {([
+                      { val: "percentage" as const, label: "Porcentaje" },
+                      { val: "fixed" as const, label: "Monto fijo" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.val}
+                        onClick={() => setMassType(opt.val)}
+                        className={`px-2.5 py-1 rounded-full text-xs border transition-all ${
+                          massType === opt.val
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-      {/* Post-Mass-Edit Rounding Prompt */}
-      <Dialog open={postMassRoundPrompt} onOpenChange={setPostMassRoundPrompt}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Redondear precios?</DialogTitle>
-            <DialogDescription>
-              Se actualizaron {postMassEditIds.length} productos. ¿Querés redondear los precios antes de finalizar?
-              Esto evita que la tienda muestre una rebaja por diferencia de redondeo.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setPostMassRoundPrompt(false);
-              setPostSaveDialog(true);
-            }}>
-              No, finalizar
-            </Button>
-            <Button onClick={() => {
-              setPostMassRoundPrompt(false);
-              // Pre-select the mass-edited products and open rounding dialog
-              setSelectedIds(new Set(postMassEditIds));
-              setRoundOpen(true);
-            }}>
-              Sí, redondear
-            </Button>
-          </DialogFooter>
+              {/* Operacion */}
+              {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Operación</p>
+                  <div className="flex gap-1">
+                    {([
+                      { val: "increase" as const, label: "Aumentar" },
+                      { val: "decrease" as const, label: "Disminuir" },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.val}
+                        onClick={() => setMassOperation(opt.val)}
+                        className={`px-2.5 py-1 rounded-full text-xs border transition-all ${
+                          massOperation === opt.val
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Amount input */}
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">
+                  {massTarget === "margen" ? "Margen" : massTarget === "fijar_venta" ? "Precio venta" : massTarget === "fijar_costo" ? "Precio costo" : "Valor"}
+                </p>
+                <div className="flex items-center">
+                  <span className="px-2.5 py-1.5 bg-muted border border-r-0 border-input rounded-l-md text-sm text-muted-foreground">
+                    {massTarget === "margen" ? "%" : ["fijar_venta", "fijar_costo"].includes(massTarget) ? "$" : massType === "percentage" ? "%" : "$"}
+                  </span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={massAmount}
+                    onChange={(e) => setMassAmount(e.target.value)}
+                    className="rounded-l-none w-24 text-right font-mono"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {/* Rounding toggle */}
+              <div className="space-y-2 pt-2 border-t mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Switch
+                    checked={roundInModal}
+                    onCheckedChange={setRoundInModal}
+                    className="scale-75"
+                  />
+                  <span className="text-xs text-muted-foreground">Redondear al aplicar</span>
+                </label>
+                {roundInModal && (
+                  <div className="space-y-2 pl-1">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Múltiplo</p>
+                      <div className="flex gap-1">
+                        {([5, 10] as const).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => setRoundInModalMultiple(m)}
+                            className={`px-2.5 py-1 rounded-full text-xs border transition-all ${
+                              roundInModalMultiple === m
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            ${m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Dirección</p>
+                      <div className="flex flex-col gap-1">
+                        {([
+                          { val: "nearest" as const, label: "Más cercano" },
+                          { val: "up" as const, label: "Hacia arriba" },
+                          { val: "down" as const, label: "Hacia abajo" },
+                        ]).map((opt) => (
+                          <button
+                            key={opt.val}
+                            onClick={() => setRoundInModalMode(opt.val)}
+                            className={`px-2.5 py-1 rounded-full text-xs border transition-all text-left ${
+                              roundInModalMode === opt.val
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right column — preview */}
+            <div className="flex-1 overflow-hidden flex flex-col p-3">
+              {/* Preview table */}
+              <div className="overflow-y-auto flex-1">
+                {massEditPreview.length > 0 ? (
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-background border-b">
+                      <tr className="text-muted-foreground">
+                        <th className="text-left py-1.5 px-1.5 font-medium">Producto</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium whitespace-nowrap">Costo ant.</th>
+                        <th className="text-center py-1.5 w-4"></th>
+                        <th className="text-right py-1.5 px-1.5 font-medium whitespace-nowrap">Costo nvo.</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium">Precio</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium">Margen</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium">Dif.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {massEditPreview.map((item) => {
+                        const final_ = finalPriceForPreview(item.newPrecio);
+                        const diff = final_ - item.currentPrecio;
+                        const newMargen = item.newCosto > 0 ? ((final_ - item.newCosto) / item.newCosto) * 100 : 0;
+                        return (
+                          <tr key={item.id} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-1 px-1.5 whitespace-nowrap">
+                              {item.nombre}
+                            </td>
+                            <td className="py-1 px-1.5 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                              {formatCurrency(item.currentCosto, true)}
+                            </td>
+                            <td className="py-1 text-center text-muted-foreground">→</td>
+                            <td className="py-1 px-1.5 text-right tabular-nums font-medium whitespace-nowrap">
+                              {formatCurrency(item.newCosto, true)}
+                            </td>
+                            <td className="py-1 px-1.5 text-right tabular-nums font-medium whitespace-nowrap">
+                              {formatCurrency(final_)}
+                            </td>
+                            <td className="py-1 px-1.5 text-right tabular-nums text-muted-foreground">
+                              {newMargen > 0 ? `${newMargen.toFixed(1)}%` : "—"}
+                            </td>
+                            <td className={`py-1 px-1.5 text-right tabular-nums whitespace-nowrap ${diff >= 0 ? "text-green-600" : "text-red-500"}`}>
+                              {diff >= 0 ? "+" : ""}{formatCurrency(Math.abs(diff))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                    <p>Ingresá un valor para ver la vista previa</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-6 py-4 border-t">
+            <span className="text-xs text-muted-foreground">
+              {roundInModal && massEditPreview.length > 0 && (() => {
+                const n = massEditPreview.filter(
+                  i => Math.round(i.newPrecio) !== finalPriceForPreview(i.newPrecio)
+                ).length;
+                return n > 0
+                  ? `${n} precio${n !== 1 ? "s" : ""} redondeado${n !== 1 ? "s" : ""} a múltiplo de $${roundInModalMultiple}`
+                  : "Sin diferencia por redondeo";
+              })()}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setMassEditOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={() => applyMassEdit()}
+                disabled={massEditPreview.length === 0 || saving}
+              >
+                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Aplicar cambios
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1700,11 +1757,7 @@ export default function EditarPreciosPage() {
               </div>
             </div>
 
-            <Button variant="outline" className="w-full" onClick={generateRoundPreview}>
-              Ver preview de cambios
-            </Button>
-
-            {/* Preview */}
+            {/* Preview (auto-generated) */}
             {roundPreview.length > 0 && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium">{roundPreview.length} precios a modificar</Label>
@@ -1739,7 +1792,7 @@ export default function EditarPreciosPage() {
               </div>
             )}
             {roundPreview.length === 0 && roundOpen && (
-              <p className="text-center text-sm text-muted-foreground py-4">Hacé click en &quot;Ver preview&quot; para ver qué precios cambiarían</p>
+              <p className="text-center text-sm text-muted-foreground py-4">No hay precios que necesiten redondeo con la configuración actual</p>
             )}
           </div>
           <DialogFooter>
@@ -1823,6 +1876,13 @@ export default function EditarPreciosPage() {
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setPostSaveDialog(false)}>
               No, gracias
+            </Button>
+            <Button variant="outline" onClick={() => {
+              setPostSaveDialog(false);
+              setSelectedIds(new Set(savedProductNames.map((p) => p.id)));
+              setRoundOpen(true);
+            }}>
+              Redondear precios
             </Button>
             <Button onClick={() => {
               const ids = savedProductNames.map((p) => p.id).join(",");
