@@ -721,7 +721,10 @@ export function VentaDetailDialog({
                   ) : (
                     // ─── Read-only rows ───
                     items.map((item, idx) => {
-                      const name = item.nombre || cleanDesc(item.descripcion);
+                      const name = (item.nombre || cleanDesc(item.descripcion))
+                        .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/i, "")
+                        .replace(/\s*\(Unidad\)$/i, "")
+                        .replace(/(\([^)]+\))\s*\1/gi, "$1");
                       const isCombo = data.comboIds?.has(item.producto_id || "");
                       const upp = item.unidades_por_presentacion ?? 1;
                       const presNombre = (item.presentacion || "").toLowerCase();
