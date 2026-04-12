@@ -56,7 +56,6 @@ function getCategoryIcon(nombre: string): LucideIcon {
   return CATEGORY_ICONS[key] || Package;
 }
 
-const SUBCAT_PREVIEW = 6;
 
 export interface Categoria {
   id: string;
@@ -170,7 +169,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const [mobileFilters, setMobileFilters] = useState(false);
   const [marcaSearch, setMarcaSearch] = useState("");
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>(initialData?.subcategorias || []);
-  const [subcatExpanded, setSubcatExpanded] = useState(false);
+
   const [marcasCollapsed, setMarcasCollapsed] = useState(!searchParams.get("marca"));
   const [presentacionesMap, setPresentacionesMap] = useState<Record<string, { nombre: string; cantidad: number; precio: number }[]>>(initialData?.presentacionesMap || {});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>(initialData?.activeDiscounts || []);
@@ -1015,7 +1014,6 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
           <button
             onClick={() => {
               updateParams({ categoria: null, subcategoria: null });
-              setSubcatExpanded(false);
             }}
             className={`flex flex-col items-center gap-1 px-3 py-2.5 shrink-0 border-b-2 transition-colors ${
               !categoriaId ? "border-gray-900 text-gray-900" : "border-transparent text-gray-400"
@@ -1040,12 +1038,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                 <button
                   key={cat.id}
                   onClick={() => {
-                    if (isActive) {
-                      setSubcatExpanded((prev) => !prev);
-                    } else {
-                      updateParams({ categoria: slugify(cat.nombre), subcategoria: null });
-                      setSubcatExpanded(false);
-                    }
+                    updateParams({ categoria: slugify(cat.nombre), subcategoria: null });
                   }}
                   className={`flex flex-col items-center gap-1 px-3 py-2.5 shrink-0 border-b-2 transition-colors ${
                     isActive ? "border-gray-900 text-gray-900" : "border-transparent text-gray-400"
@@ -1062,7 +1055,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
             })}
         </div>
 
-        {/* Fila 2: subcategorías (solo cuando hay categoría activa) */}
+        {/* Fila 2: subcategorías como chips horizontales scrolleables */}
         {categoriaId && (() => {
           const activeCat = categorias.find((c) => c.id === categoriaId);
           const catSubs = allSubcategorias
@@ -1071,79 +1064,45 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
           if (catSubs.length === 0) return null;
 
-          const visibleSubs = subcatExpanded ? catSubs : catSubs.slice(0, SUBCAT_PREVIEW);
-          const hasMore = catSubs.length > SUBCAT_PREVIEW;
-
           return (
-            <div className="border-t border-gray-100 bg-gray-50/50 px-3 py-2">
-              <div className="grid grid-cols-3 gap-1.5">
-                {/* "Todas" de la categoría */}
-                <button
-                  onClick={() => updateParams({ subcategoria: null })}
-                  className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-[1.5px] transition-all ${
-                    !subcategoriaId
-                      ? "border-primary bg-primary/5"
-                      : "border-transparent bg-white"
-                  }`}
-                >
-                  <span className={`text-[11px] font-semibold ${!subcategoriaId ? "text-primary" : "text-gray-600"}`}>
-                    Todas
-                  </span>
-                  <span className={`text-[9px] ${!subcategoriaId ? "text-primary/70" : "text-gray-400"}`}>
-                    {activeCat?.count || 0}
-                  </span>
-                </button>
+            <div
+              className="flex items-center gap-1.5 overflow-x-auto border-t border-gray-100 bg-gray-50/80 px-3 py-2"
+              style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as any}
+            >
+              {/* Chip "Todas" */}
+              <button
+                onClick={() => updateParams({ subcategoria: null })}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all border-[1.5px] whitespace-nowrap ${
+                  !subcategoriaId
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-primary/40"
+                }`}
+              >
+                Todas · {activeCat?.count || 0}
+              </button>
 
-                {/* Subcategorías */}
-                {visibleSubs.map((sub) => {
-                  const isSubActive = subcategoriaId === sub.id;
-                  return (
-                    <button
-                      key={sub.id}
-                      onClick={() =>
-                        updateParams({
-                          categoria: slugify(
-                            activeCat?.nombre || ""
-                          ),
-                          subcategoria: slugify(sub.nombre),
-                        })
-                      }
-                      className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-[1.5px] transition-all ${
-                        isSubActive
-                          ? "border-primary bg-primary/5"
-                          : "border-transparent bg-white"
-                      }`}
-                    >
-                      <span className={`text-[11px] font-semibold text-center leading-tight ${
-                        isSubActive ? "text-primary" : "text-gray-600"
-                      }`}>
-                        {sub.nombre}
-                      </span>
-                      <span className={`text-[9px] ${isSubActive ? "text-primary/70" : "text-gray-400"}`}>
-                        {sub.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Ver todas / Mostrar menos */}
-              {hasMore && !subcatExpanded && (
-                <button
-                  onClick={() => setSubcatExpanded(true)}
-                  className="w-full mt-2 text-center text-[11px] font-semibold text-primary bg-primary/5 rounded-xl py-2 hover:bg-primary/10 transition-colors"
-                >
-                  Ver todas las subcategorías ({catSubs.length}) ↓
-                </button>
-              )}
-              {hasMore && subcatExpanded && (
-                <button
-                  onClick={() => setSubcatExpanded(false)}
-                  className="w-full mt-2 text-center text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-xl py-2 hover:bg-gray-200 transition-colors"
-                >
-                  Mostrar menos ↑
-                </button>
-              )}
+              {/* Chips de subcategorías */}
+              {catSubs.map((sub) => {
+                const isActive = subcategoriaId === sub.id;
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() =>
+                      updateParams({
+                        categoria: slugify(activeCat?.nombre || ""),
+                        subcategoria: slugify(sub.nombre),
+                      })
+                    }
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all border-[1.5px] whitespace-nowrap ${
+                      isActive
+                        ? "bg-primary text-white border-primary"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-primary/40"
+                    }`}
+                  >
+                    {sub.nombre} · {sub.count}
+                  </button>
+                );
+              })}
             </div>
           );
         })()}
