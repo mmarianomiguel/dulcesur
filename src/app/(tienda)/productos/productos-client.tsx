@@ -166,7 +166,10 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const [marcas, setMarcas] = useState<Marca[]>(initialData?.marcas || []);
   const [total, setTotal] = useState(initialData?.total || 0);
   const [loading, setLoading] = useState(!hasInitial);
-  const [view, setView] = useState<"grid" | "list">("grid");
+  const [view, setView] = useState<"grid" | "list">(() => {
+    if (typeof window === "undefined") return "grid";
+    try { return (localStorage.getItem("productos_view") as "grid" | "list") || "grid"; } catch { return "grid"; }
+  });
   const [mobileFilters, setMobileFilters] = useState(false);
   const [marcaSearch, setMarcaSearch] = useState("");
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>(initialData?.subcategorias || []);
@@ -558,6 +561,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
   function getQty(id: string) {
     return quantities[id] ?? 1;
+  }
+
+  function changeView(v: "grid" | "list") {
+    setView(v);
+    try { localStorage.setItem("productos_view", v); } catch {}
   }
 
   function setQty(id: string, val: number) {
@@ -1180,6 +1188,24 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
             )}
           </button>
 
+          {/* Mobile view toggle */}
+          <div className="md:hidden flex bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => changeView("grid")}
+              className={`p-2.5 transition-colors ${view === "grid" ? "bg-gray-900 text-white" : "text-gray-400 hover:text-gray-600"}`}
+              aria-label="Vista grilla"
+            >
+              <Grid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => changeView("list")}
+              className={`p-2.5 transition-colors ${view === "list" ? "bg-gray-900 text-white" : "text-gray-400 hover:text-gray-600"}`}
+              aria-label="Vista lista"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
           <select
             value={sort}
             onChange={(e) => updateParams({ sort: e.target.value })}
@@ -1198,22 +1224,14 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
           <div className="hidden sm:flex bg-white border border-gray-200 rounded-xl overflow-hidden">
             <button
-              onClick={() => setView("grid")}
-              className={`p-2.5 transition-colors ${
-                view === "grid"
-                  ? "bg-primary/5 text-primary"
-                  : "text-gray-400 hover:text-gray-600"
-              }`}
+              onClick={() => changeView("grid")}
+              className={`p-2.5 transition-colors ${view === "grid" ? "bg-primary/5 text-primary" : "text-gray-400 hover:text-gray-600"}`}
             >
               <Grid className="h-4 w-4" />
             </button>
             <button
-              onClick={() => setView("list")}
-              className={`p-2.5 transition-colors ${
-                view === "list"
-                  ? "bg-primary/5 text-primary"
-                  : "text-gray-400 hover:text-gray-600"
-              }`}
+              onClick={() => changeView("list")}
+              className={`p-2.5 transition-colors ${view === "list" ? "bg-primary/5 text-primary" : "text-gray-400 hover:text-gray-600"}`}
             >
               <List className="h-4 w-4" />
             </button>
@@ -1572,144 +1590,148 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               {productos.map((producto, idx) => {
                 const qty = getQty(producto.id);
                 const pres = presentacionesMap[producto.id];
-                const activePrice = getActivePrice(producto);
+                const hasPres = pres && pres.length > 1;
+                const activeIdx = selectedPres[producto.id] ?? 0;
+                const activePres = hasPres ? pres[activeIdx] : null;
+                const presUnits = activePres ? Number(activePres.cantidad) : 1;
                 const availableStock = Math.max(0, producto.stock - (cartUnits[producto.id] || 0));
-                const listPresLabel = pres && pres.length > 1 ? presLabel(pres[selectedPres[producto.id] ?? 0]) : null;
+                const maxForPres = availableStock > 0 ? Math.floor(availableStock / presUnits) : 0;
+                const canBuy = maxForPres > 0;
+                const activePrice = getActivePrice(producto);
+                const currentPresLabel = hasPres ? presLabel(pres[activeIdx]) : null;
+                const disc = getProductDiscount(producto, currentPresLabel, qty);
+                const discountedPrice = disc > 0 ? Math.round(activePrice * (1 - disc / 100)) : activePrice;
+
+                // Descuento implícito por caja
+                const boxDiscountHint = (() => {
+                  if (!hasPres) return null;
+                  const unitP = pres.find((p) => p.cantidad === 1);
+                  const boxP = pres.find((p) => p.cantidad > 1);
+                  if (!unitP || !boxP || !unitP.precio || !boxP.precio) return null;
+                  const expected = unitP.precio * boxP.cantidad;
+                  if (boxP.precio >= expected) return null;
+                  return Math.round((1 - boxP.precio / expected) * 100);
+                })();
+
                 return (
                   <div
                     key={producto.id}
-                    className="group bg-white rounded-2xl border border-gray-100/80 overflow-hidden hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all duration-300 flex gap-0"
+                    className="group bg-white rounded-2xl border border-gray-100/80 overflow-hidden hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all duration-200"
                   >
-                    <Link
-                      href={`/productos/${productSlug(producto.nombre, producto.id)}`}
-                      className="relative shrink-0 w-36 h-36 bg-gradient-to-b from-gray-50 to-white overflow-hidden"
-                    >
-                      {producto.imagen_url ? (
-                        <Image
-                          src={producto.imagen_url}
-                          alt={producto.nombre}
-                          fill
-                          sizes="144px"
-                          className="object-contain p-4 group-hover:scale-105 transition-transform duration-500 ease-out"
-                          {...(idx < 2 ? { priority: true } : { loading: "lazy" as const })}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-gray-50 to-gray-100">
-                          <div className="w-12 h-12 rounded-xl bg-white/80 flex items-center justify-center shadow-sm">
-                            <Package className="h-6 w-6 text-gray-300" />
-                          </div>
-                        </div>
-                      )}
-                      {(() => {
-                        const d = getProductDiscount(producto, listPresLabel, qty);
-                        if (d > 0) return <span className="absolute top-2 left-2 bg-primary text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{d}% OFF</span>;
-                        const boxPres = pres?.find((p) => p.cantidad > 1);
-                        if (!boxPres) return null;
-                        const boxLabel = presLabel(boxPres);
-                        const boxDisc = getProductDiscount(producto, boxLabel, qty);
-                        if (boxDisc <= 0) return null;
-                        return <span className="absolute top-2 left-2 bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">{boxDisc}% OFF x caja</span>;
-                      })()}
-                    </Link>
-                    <div className="flex-1 py-3.5 pr-4 pl-1 flex items-center justify-between gap-4 min-w-0">
-                      <div className="min-w-0 flex-1">
-                        {(producto.categorias?.nombre || producto.marcas?.nombre || producto.es_combo) && (
-                          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                            {producto.es_combo && (
-                              <span className="text-[10px] bg-gradient-to-r from-primary to-rose-400 text-white font-bold px-2 py-0.5 rounded-full">
-                                COMBO
-                              </span>
-                            )}
-                            {producto.categorias?.nombre && (
-                              <span className="text-[10px] text-gray-400 font-medium truncate">
-                                {producto.categorias.nombre}
-                              </span>
-                            )}
-                            {producto.marcas?.nombre && (
-                              <span className="text-[10px] bg-gray-100 text-gray-500 font-medium px-1.5 py-0.5 rounded">
-                                {producto.marcas.nombre}
-                              </span>
-                            )}
+                    {/* Fila superior: imagen + info + botón */}
+                    <div className="flex gap-0">
+                      <Link
+                        href={`/productos/${productSlug(producto.nombre, producto.id)}`}
+                        className="relative shrink-0 w-24 h-24 sm:w-36 sm:h-36 bg-gradient-to-b from-gray-50 to-white overflow-hidden"
+                      >
+                        {producto.imagen_url ? (
+                          <Image
+                            src={producto.imagen_url}
+                            alt={producto.nombre}
+                            fill
+                            sizes="(max-width: 640px) 96px, 144px"
+                            className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                            {...(idx < 2 ? { priority: true } : { loading: "lazy" as const })}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                            <Package className="h-8 w-8 text-gray-200" />
                           </div>
                         )}
-                        <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`}>
-                          <h3 className="font-medium text-gray-800 line-clamp-2 text-sm leading-snug group-hover:text-primary/90 transition-colors">
-                            {producto.nombre}
-                          </h3>
-                        </Link>
-                        {(() => {
-                          const d = getProductDiscount(producto, listPresLabel, qty);
-                          const dp = d > 0 ? Math.round(activePrice * (1 - d / 100)) : activePrice;
-                          return d > 0 ? (
-                            <div className="flex items-baseline gap-2 mt-1.5">
-                              <span className="text-lg font-bold text-gray-900">{formatCurrency(dp)}</span>
+                        {disc > 0 && (
+                          <span className="absolute top-1.5 left-1.5 bg-primary text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                            -{disc}%
+                          </span>
+                        )}
+                      </Link>
+
+                      <div className="flex-1 py-3 pr-3 pl-2 flex flex-col justify-between min-w-0">
+                        <div className="min-w-0">
+                          {producto.categorias?.nombre && (
+                            <p className="text-[10px] text-primary font-medium mb-0.5">{producto.categorias.nombre}</p>
+                          )}
+                          <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`}>
+                            <h3 className="font-medium text-gray-800 text-sm leading-snug line-clamp-2 group-hover:text-primary/90 transition-colors">
+                              {producto.nombre}
+                            </h3>
+                          </Link>
+                          <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-base font-bold text-gray-900">{formatCurrency(discountedPrice)}</span>
+                            {disc > 0 && (
                               <span className="text-xs text-gray-400 line-through">{formatCurrency(activePrice)}</span>
+                            )}
+                            {boxDiscountHint && disc === 0 && (
+                              <span className="text-[10px] text-green-600 font-semibold">-{boxDiscountHint}% x caja</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {canBuy ? (
+                          <div className="flex items-center gap-2 mt-2">
+                            <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
+                              <button onClick={() => setQty(producto.id, qty - 1)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="w-6 text-center text-xs font-semibold text-gray-800">{qty}</span>
+                              <button onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))} disabled={qty >= maxForPres} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors disabled:opacity-30">
+                                <Plus className="w-3 h-3" />
+                              </button>
                             </div>
-                          ) : (
-                            <p className="text-lg font-bold text-gray-900 mt-1.5">{formatCurrency(activePrice)}</p>
-                          );
-                        })()}
-                        {pres && pres.length > 1 && (
-                          <div className="flex gap-1.5 mt-2">
-                            {pres.map((pr, idx) => ({ pr, idx })).sort((a, b) => {
-                              if (a.pr.cantidad === 1 && b.pr.cantidad !== 1) return -1;
-                              if (a.pr.cantidad !== 1 && b.pr.cantidad === 1) return 1;
-                              return a.pr.cantidad - b.pr.cantidad;
-                            }).map(({ pr, idx }) => {
-                              const isActive = (selectedPres[producto.id] ?? 0) === idx;
-                              const label = presLabel(pr);
-                              const presDisabled = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad)))) <= 0;
-                              return (
-                                <button
-                                  key={idx}
-                                  disabled={presDisabled}
-                                  onClick={() => {
-                                    setSelectedPres((prev) => ({ ...prev, [producto.id]: idx }));
-                                    const newMax = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad))));
-                                    if (qty > newMax) setQuantities((prev) => ({ ...prev, [producto.id]: Math.max(1, newMax) }));
-                                  }}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border ${
-                                    presDisabled ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed" :
-                                    isActive ? "bg-gray-900 text-white border-gray-900 shadow-sm" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
+                            <button
+                              onClick={() => addToCart(producto, qty)}
+                              className="flex-1 bg-gray-900 hover:bg-gray-800 active:scale-[0.98] text-white text-xs py-2 rounded-xl font-semibold transition-all"
+                            >
+                              Agregar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-center text-xs text-gray-400 bg-gray-50 py-2 rounded-lg font-medium">
+                            Agotado
                           </div>
                         )}
                       </div>
-                      {(() => {
-                        const activePres = pres && pres.length > 1 ? pres[selectedPres[producto.id] ?? 0] : null;
-                        const presUnits = activePres ? Number(activePres.cantidad) : 1;
-                        const maxForPres = availableStock > 0 ? Math.floor(availableStock / presUnits) : 0;
-                        const canBuy = maxForPres > 0;
-                        return canBuy ? (
-                        <div className="shrink-0 flex items-center gap-2">
-                          <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
-                            <button onClick={() => setQty(producto.id, qty - 1)} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors">
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="w-6 text-center text-xs font-semibold tabular-nums text-gray-800">{qty}</span>
-                            <button onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))} disabled={qty >= maxForPres} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-30">
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => addToCart(producto, qty)}
-                            className="bg-primary hover:bg-primary/90 active:scale-[0.98] text-white text-sm py-2.5 px-5 rounded-xl font-semibold transition-all shadow-sm shadow-primary/20"
-                          >
-                            Agregar {formatCurrency((() => { const d2 = getProductDiscount(producto, listPresLabel, qty); return d2 > 0 ? Math.round(activePrice * (1 - d2 / 100)) : activePrice; })() * qty)}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="shrink-0 flex items-center gap-1.5 bg-gray-50/80 text-gray-400 text-xs py-2.5 px-5 rounded-lg font-medium">
-                          Agotado
-                        </div>
-                      );
-                      })()}
                     </div>
+
+                    {/* Fila de presentaciones — solo si tiene más de una */}
+                    {hasPres && (
+                      <div className="flex gap-2 px-3 pb-3 border-t border-gray-50 pt-2.5">
+                        {[...pres].sort((a, b) => {
+                          if (a.cantidad === 1) return -1;
+                          if (b.cantidad === 1) return 1;
+                          return a.cantidad - b.cantidad;
+                        }).map((pr, idx) => {
+                          const sortedIdx = pres.indexOf(pr);
+                          const isActive = activeIdx === sortedIdx;
+                          const label = presLabel(pr);
+                          const presDisabled = Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad))) <= 0;
+                          const prDisc = getProductDiscount(producto, label, qty);
+                          const prPrice = prDisc > 0 ? Math.round(pr.precio * (1 - prDisc / 100)) : pr.precio;
+                          return (
+                            <button
+                              key={idx}
+                              disabled={presDisabled}
+                              onClick={() => {
+                                setSelectedPres((prev) => ({ ...prev, [producto.id]: sortedIdx }));
+                                const newMax = Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad)));
+                                if (qty > newMax) setQuantities((prev) => ({ ...prev, [producto.id]: Math.max(1, newMax) }));
+                              }}
+                              className={`flex-1 py-2 px-1 rounded-xl border transition-all text-center ${
+                                presDisabled
+                                  ? "bg-gray-50 border-gray-100 cursor-not-allowed"
+                                  : isActive
+                                  ? "bg-gray-900 border-gray-900"
+                                  : "bg-white border-gray-200 hover:border-gray-400"
+                              }`}
+                            >
+                              <div className={`text-[10px] font-medium ${presDisabled ? "text-gray-300" : isActive ? "text-gray-300" : "text-gray-500"}`}>{label}</div>
+                              <div className={`text-[13px] font-bold mt-0.5 ${presDisabled ? "text-gray-200" : isActive ? "text-white" : "text-gray-900"}`}>
+                                {formatCurrency(prPrice)}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
