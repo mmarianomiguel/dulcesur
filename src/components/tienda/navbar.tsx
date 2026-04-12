@@ -77,7 +77,7 @@ export default function TiendaNavbar() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from("categorias").select("id, nombre, restringida").limit(12),
+      supabase.from("categorias").select("id, nombre, restringida").order("nombre"),
       supabase.from("empresa").select("nombre, telefono, white_label").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion").limit(1).single(),
     ]).then(([{ data: cats }, { data: emp }, { data: tc }]) => {

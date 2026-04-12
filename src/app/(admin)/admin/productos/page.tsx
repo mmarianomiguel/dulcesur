@@ -2229,13 +2229,11 @@ export default function ProductosPage() {
                                 return es <= 0 && p.visibilidad !== "oculto";
                               });
                               const ids = sinStock.map((p) => p.id);
-                              // Setear fecha_sin_stock a hace 30 días para forzar ocultado por el sistema de visibilidad
-                              const fechaVieja = new Date();
-                              fechaVieja.setDate(fechaVieja.getDate() - 30);
+                              // Ocultar directamente con visibilidad = 'oculto'
                               for (let i = 0; i < ids.length; i += 50) {
-                                await supabase.from("productos").update({ fecha_sin_stock: fechaVieja.toISOString() }).in("id", ids.slice(i, i + 50));
+                                await supabase.from("productos").update({ visibilidad: "oculto" }).in("id", ids.slice(i, i + 50));
                               }
-                              setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, fecha_sin_stock: fechaVieja.toISOString() } as any : p));
+                              setProducts((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, visibilidad: "oculto" } : p));
                               showAdminToast(`${sinStock.length} productos ocultados de la tienda`, "success");
                             },
                           });
