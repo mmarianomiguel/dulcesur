@@ -19,6 +19,7 @@ import {
   Box,
   Tag,
   Share2,
+  Link2,
   X,
 } from "lucide-react";
 import { showToast } from "@/components/tienda/toast";
@@ -93,7 +94,22 @@ export default function ProductoDetallePage() {
   const [tiendaClienteId, setTiendaClienteId] = useState<string | null>(null);
   const [clienteLoading, setClienteLoading] = useState(true);
   const [restricted, setRestricted] = useState(false);
+  const [sugeridos, setSugeridos] = useState<{ id: string; nombre: string; precio: number; imagen_url: string | null }[]>([]);
   const { permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
+
+  // Fetch suggestions when product not found
+  useEffect(() => {
+    if (loading || (producto && !restricted)) return;
+    supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .gt("stock", 0)
+      .order("created_at", { ascending: false })
+      .limit(4)
+      .then(({ data }) => { if (data) setSugeridos(data); });
+  }, [loading, producto, restricted]);
 
   // Sync cart quantities — track total UNITS per product (across all presentations)
   const [cartUnitsByProduct, setCartUnitsByProduct] = useState<Record<string, number>>({});
@@ -532,13 +548,50 @@ export default function ProductoDetallePage() {
   if (!producto || restricted) {
     return (
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <Package className="h-20 w-20 text-gray-200" />
-          <h2 className="mt-6 text-xl font-bold text-gray-800">Producto no encontrado</h2>
-          <Link href="/productos" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary/90">
-            Volver a productos
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <Package className="h-16 w-16 text-gray-200" />
+          <h2 className="mt-4 text-xl font-bold text-gray-800">Producto no encontrado</h2>
+          <p className="text-sm text-gray-500 mt-2 max-w-sm">
+            Este producto ya no está disponible o el enlace es incorrecto.
+          </p>
+          <Link href="/productos" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary/90">
+            Ver todos los productos
           </Link>
         </div>
+        {sugeridos.length > 0 && (
+          <div className="mt-4 border-t border-gray-100 pt-8">
+            <h3 className="text-base font-semibold text-gray-700 mb-4 text-center">Quizás te interese</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {sugeridos.map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/productos/${productSlug(s.nombre, s.id)}`}
+                  className="group rounded-2xl border border-gray-100 bg-white hover:shadow-md transition overflow-hidden flex flex-col"
+                >
+                  <div className="relative aspect-square bg-gray-50 overflow-hidden">
+                    {s.imagen_url ? (
+                      <Image
+                        src={s.imagen_url}
+                        alt={s.nombre}
+                        fill
+                        sizes="(max-width: 768px) 50vw, 25vw"
+                        className="object-contain p-3 group-hover:scale-105 transition-transform"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-8 h-8 text-gray-200" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <p className="text-xs font-medium text-gray-800 line-clamp-2">{s.nombre}</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">{formatCurrency(s.precio)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -707,37 +760,58 @@ export default function ProductoDetallePage() {
           {presentaciones.length > 0 && (
             <div className="mt-5 pt-5 border-t border-gray-100">
               <div className="grid grid-cols-2 gap-3">
-                {presentaciones
-                  .map((p, idx) => ({ p, idx }))
-                  .sort((a, b) => {
-                    if (a.p.cantidad === 1 && b.p.cantidad !== 1) return -1;
-                    if (a.p.cantidad !== 1 && b.p.cantidad === 1) return 1;
-                    return a.p.cantidad - b.p.cantidad;
-                  })
-                  .map(({ p, idx }) => {
-                  const isUnit = Number(p.cantidad) === 1;
-                  const selected = selectedPresIdx === idx;
-                  const presMax = availableStock > 0 ? Math.max(1, Math.floor(availableStock / Number(p.cantidad))) : 0;
-                  const disabled = presMax <= 0;
-                  return (
-                    <button
-                      key={p.id}
-                      disabled={disabled}
-                      onClick={() => { setSelectedPresIdx(idx); setCantidad((c) => Math.min(c, Math.max(1, presMax))); }}
-                      className={`flex items-center justify-center gap-2 rounded-full border py-2.5 px-5 text-sm font-semibold transition-all ${
-                        disabled
-                          ? "border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed"
-                          : selected
-                          ? "border-primary bg-primary/5 text-primary/90"
-                          : "border-gray-200 text-gray-600 hover:border-gray-300 bg-white"
-                      }`}
-                    >
-                      {isUnit ? <Layers className="w-4 h-4" /> : <Box className="w-4 h-4" />}
-                      {presLabelFn(p)}
-                      {disabled && <span className="text-[10px] font-normal ml-1">(sin stock)</span>}
-                    </button>
-                  );
-                })}
+                {(() => {
+                  const bestIdx = presentaciones.length > 1
+                    ? presentaciones.reduce((best, p, i) => {
+                        if (p.nombre === "Unidad" || Number(p.cantidad) === 1) return best;
+                        const unitPrice = p.precio > 0 && p.cantidad > 0 ? p.precio / p.cantidad : Infinity;
+                        const bestP = presentaciones[best];
+                        const bestUnitPrice = (bestP.nombre === "Unidad" || Number(bestP.cantidad) === 1) ? Infinity
+                          : (bestP.precio > 0 && bestP.cantidad > 0
+                            ? bestP.precio / bestP.cantidad
+                            : Infinity);
+                        return unitPrice < bestUnitPrice ? i : best;
+                      }, 0)
+                    : -1;
+
+                  return presentaciones
+                    .map((p, idx) => ({ p, idx }))
+                    .sort((a, b) => {
+                      if (a.p.cantidad === 1 && b.p.cantidad !== 1) return -1;
+                      if (a.p.cantidad !== 1 && b.p.cantidad === 1) return 1;
+                      return a.p.cantidad - b.p.cantidad;
+                    })
+                    .map(({ p, idx }) => {
+                    const isUnit = Number(p.cantidad) === 1;
+                    const isBestPrice = bestIdx >= 0 && idx === bestIdx && !isUnit;
+                    const selected = selectedPresIdx === idx;
+                    const presMax = availableStock > 0 ? Math.max(1, Math.floor(availableStock / Number(p.cantidad))) : 0;
+                    const disabled = presMax <= 0;
+                    return (
+                      <button
+                        key={p.id}
+                        disabled={disabled}
+                        onClick={() => { setSelectedPresIdx(idx); setCantidad((c) => Math.min(c, Math.max(1, presMax))); }}
+                        className={`relative flex items-center justify-center gap-2 rounded-full border py-2.5 px-5 text-sm font-semibold transition-all ${
+                          disabled
+                            ? "border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed"
+                            : selected
+                            ? "border-primary bg-primary/5 text-primary/90"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300 bg-white"
+                        }`}
+                      >
+                        {isUnit ? <Layers className="w-4 h-4" /> : <Box className="w-4 h-4" />}
+                        {presLabelFn(p)}
+                        {disabled && <span className="text-[10px] font-normal ml-1">(sin stock)</span>}
+                        {isBestPrice && !disabled && (
+                          <span className="absolute -top-2 -right-1 bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none whitespace-nowrap">
+                            Mejor precio/u
+                          </span>
+                        )}
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}
@@ -814,17 +888,30 @@ export default function ProductoDetallePage() {
           </details>
 
           {/* Share */}
-          <button
-            onClick={() => {
-              const text = `Mirá este producto en Dulcesur: *${producto.nombre}* - ${formatCurrency(currentDiscount > 0 ? discountedPrice : currentPrice)}`;
-              const url = window.location.href;
-              window.open(`https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`, "_blank");
-            }}
-            className="mt-3 inline-flex items-center gap-2 text-sm text-gray-500 hover:text-green-600 transition"
-          >
-            <Share2 className="w-4 h-4" />
-            Compartir por WhatsApp
-          </button>
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => {
+                const text = `Mirá este producto en Dulcesur: *${producto.nombre}* - ${formatCurrency(currentDiscount > 0 ? discountedPrice : currentPrice)}`;
+                const url = window.location.href;
+                window.open(`https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`, "_blank");
+              }}
+              className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-green-600 transition"
+            >
+              <Share2 className="w-4 h-4" />
+              Compartir por WhatsApp
+            </button>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href).then(() => {
+                  showToast("Enlace copiado al portapapeles");
+                });
+              }}
+              className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition"
+            >
+              <Link2 className="w-4 h-4" />
+              Copiar enlace
+            </button>
+          </div>
 
           {/* Combo contents */}
           {producto.es_combo && comboComponentes.length > 0 && (() => {
@@ -895,7 +982,11 @@ export default function ProductoDetallePage() {
       {relacionados.length > 0 && (
         <section className="mt-16 mb-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900">Productos Relacionados</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              {producto.categorias?.nombre
+                ? `Más de ${producto.categorias.nombre}`
+                : "Productos Relacionados"}
+            </h2>
             <span className="text-xs text-gray-400 hidden md:block">Deslizá para ver más →</span>
           </div>
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 pb-2" style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
