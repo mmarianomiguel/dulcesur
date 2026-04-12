@@ -4640,6 +4640,145 @@ export default function ProductosPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Menú contextual — click derecho en fila de producto */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[200px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header: nombre del producto */}
+          <div className="px-3 py-2 border-b">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+              {contextMenu.product.nombre.length > 30
+                ? contextMenu.product.nombre.slice(0, 28) + "..."
+                : contextMenu.product.nombre}
+            </p>
+          </div>
+
+          {/* Grupo 1: Acciones principales */}
+          <div className="py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { openEdit(contextMenu.product); setContextMenu(null); }}
+            >
+              <Edit className="w-3.5 h-3.5 text-muted-foreground" />
+              Editar producto
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { setQuickViewProduct(contextMenu.product); setContextMenu(null); }}
+            >
+              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+              Vista rápida
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => {
+                setStockPopover({ productId: contextMenu.product.id, productName: contextMenu.product.nombre, currentStock: contextMenu.product.stock });
+                setContextMenu(null);
+              }}
+            >
+              <Package className="w-3.5 h-3.5 text-muted-foreground" />
+              Ajustar stock
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => {
+                window.location.href = `/admin/productos/editar-precios?ids=${contextMenu.product.id}`;
+                setContextMenu(null);
+              }}
+            >
+              <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
+              Editar precio
+            </button>
+          </div>
+
+          <div className="border-t my-1" />
+
+          {/* Grupo 2: Visibilidad, destacado, otras acciones */}
+          <div className="py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => {
+                const newVisibilidad = contextMenu.product.visibilidad === "oculto" ? "visible" : "oculto";
+                supabase.from("productos").update({ visibilidad: newVisibilidad }).eq("id", contextMenu.product.id).then(() => {
+                  setProducts((prev) => prev.map((p) =>
+                    p.id === contextMenu.product.id ? { ...p, visibilidad: newVisibilidad } : p
+                  ));
+                  showAdminToast(
+                    newVisibilidad === "visible"
+                      ? `${contextMenu.product.nombre} visible en la tienda`
+                      : `${contextMenu.product.nombre} oculto de la tienda`,
+                    "success"
+                  );
+                });
+                setContextMenu(null);
+              }}
+            >
+              {contextMenu.product.visibilidad === "oculto" ? (
+                <><Eye className="w-3.5 h-3.5 text-muted-foreground" /> Mostrar en tienda</>
+              ) : (
+                <><EyeOff className="w-3.5 h-3.5 text-muted-foreground" /> Ocultar de tienda</>
+              )}
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => {
+                const newVal = !(contextMenu.product as any).destacado;
+                supabase.from("productos").update({ destacado: newVal }).eq("id", contextMenu.product.id).then(() => {
+                  setProducts((prev) => prev.map((p) =>
+                    p.id === contextMenu.product.id ? { ...p, destacado: newVal } as any : p
+                  ));
+                  showAdminToast(newVal ? "Marcado como destacado" : "Quitado de destacados", "success");
+                });
+                setContextMenu(null);
+              }}
+            >
+              <Star className="w-3.5 h-3.5 text-muted-foreground" />
+              {(contextMenu.product as any).destacado ? "Quitar de destacados" : "Marcar como destacado"}
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { handleDuplicate(contextMenu.product); setContextMenu(null); }}
+            >
+              <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+              Duplicar
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { openHistory(contextMenu.product); setContextMenu(null); }}
+            >
+              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              Ver historial
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => {
+                window.location.href = `/admin/productos/lista-precios?ids=${contextMenu.product.id}`;
+                setContextMenu(null);
+              }}
+            >
+              <Printer className="w-3.5 h-3.5 text-muted-foreground" />
+              Imprimir cartel
+            </button>
+          </div>
+
+          <div className="border-t my-1" />
+
+          {/* Grupo 3: Eliminar */}
+          <div className="py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-red-50 text-red-600 transition-colors text-left"
+              onClick={() => { handleDelete(contextMenu.product.id); setContextMenu(null); }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Eliminar producto
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
