@@ -23,10 +23,40 @@ import {
   X,
   Minus,
   Plus,
+  Candy,
+  Store,
+  BookOpen,
+  Cigarette,
+  MoreHorizontal,
+  Pill,
+  Milk,
+  Tag,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 const PER_PAGE = 12;
 
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  kiosco: Candy,
+  almacen: Store,
+  libreria: BookOpen,
+  cigarros: Cigarette,
+  varios: MoreHorizontal,
+  analgesicos: Pill,
+  lacteos: Milk,
+  bolsas: Tag,
+};
+
+function getCategoryIcon(nombre: string): LucideIcon {
+  const key = nombre
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+  return CATEGORY_ICONS[key] || Package;
+}
+
+const SUBCAT_PREVIEW = 6;
 
 export interface Categoria {
   id: string;
@@ -130,7 +160,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [marcaSearch, setMarcaSearch] = useState("");
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>(initialData?.subcategorias || []);
-  const [categoriasCollapsed, setCategoriasCollapsed] = useState(!searchParams.get("categoria"));
+  const [subcatExpanded, setSubcatExpanded] = useState(false);
   const [marcasCollapsed, setMarcasCollapsed] = useState(!searchParams.get("marca"));
   const [presentacionesMap, setPresentacionesMap] = useState<Record<string, { nombre: string; cantidad: number; precio: number }[]>>(initialData?.presentacionesMap || {});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>(initialData?.activeDiscounts || []);
@@ -797,141 +827,6 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
       <div className="border-t border-gray-100" />
 
-      {/* Categorias - Tree style */}
-      <div>
-        <button
-          onClick={() => setCategoriasCollapsed(!categoriasCollapsed)}
-          className="flex items-center justify-between w-full mb-3"
-        >
-          <div className="flex items-center gap-2">
-            <h4 className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
-              Categorias
-            </h4>
-            <span className="text-[10px] bg-gray-100 text-gray-400 rounded-full px-1.5 py-0.5 font-medium">
-              {categorias.filter((c) => (c.count || 0) > 0).length}
-            </span>
-          </div>
-          <ChevronDown
-            className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${
-              categoriasCollapsed ? "-rotate-90" : ""
-            }`}
-          />
-        </button>
-
-        {!categoriasCollapsed && (
-          <div className="space-y-0.5">
-            {/* "Todas" option */}
-            <button
-              onClick={() => updateParams({ categoria: null, subcategoria: null })}
-              className={`flex items-center gap-3 py-1.5 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${!categoriaId ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
-            >
-              <RadioCircle selected={!categoriaId} />
-              <span className={`text-sm ${!categoriaId ? "font-semibold text-primary" : "text-gray-600"}`}>
-                Todas
-              </span>
-              <span className="text-gray-400 text-sm ml-auto">
-                ({categorias.reduce((sum, c) => sum + (c.count || 0), 0)})
-              </span>
-            </button>
-
-            <div className="max-h-[300px] overflow-y-auto space-y-0.5">
-            {filtrarCategorias(categorias).filter((c) => (c.count || 0) > 0).sort((a, b) => (b.count || 0) - (a.count || 0)).map((cat) => {
-              const isSelected = categoriaId === cat.id;
-              const isExpanded = expandedCats.has(cat.id);
-              const catSubs = allSubcategorias.filter(
-                (s) => s.categoria_id === cat.id && (s.count || 0) > 0
-              ).sort((a, b) => (b.count || 0) - (a.count || 0));
-              const hasSubcats = catSubs.length > 0;
-
-              return (
-                <div key={cat.id}>
-                  <div className="flex items-center gap-1 w-full">
-                    {/* Expand chevron */}
-                    {hasSubcats ? (
-                      <button
-                        onClick={() => toggleExpand(cat.id)}
-                        className="p-1 rounded hover:bg-gray-100 transition-colors shrink-0"
-                      >
-                        <ChevronRight
-                          className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${
-                            isExpanded ? "rotate-90" : ""
-                          }`}
-                        />
-                      </button>
-                    ) : (
-                      <span className="w-[26px] shrink-0" />
-                    )}
-
-                    {/* Category row */}
-                    <button
-                      onClick={() => {
-                        updateParams({
-                          categoria: slugify(cat.nombre),
-                          subcategoria: null,
-                        });
-                        if (hasSubcats && !isExpanded) {
-                          toggleExpand(cat.id);
-                        }
-                      }}
-                      className={`flex items-center gap-3 py-2 rounded-lg cursor-pointer flex-1 min-w-0 transition-all border-l-[3px] ${isSelected ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
-                    >
-                      <RadioCircle selected={isSelected} />
-                      <span
-                        className={`text-sm truncate ${
-                          isSelected ? "font-semibold text-primary" : "text-gray-600"
-                        }`}
-                      >
-                        {cat.nombre}
-                      </span>
-                      <span className="text-gray-400 text-sm ml-auto shrink-0">
-                        ({cat.count})
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Subcategories */}
-                  {isExpanded && hasSubcats && (
-                    <div className="ml-8 space-y-0.5">
-                      {catSubs.map((sub) => {
-                        const subSelected = subcategoriaId === sub.id;
-                        return (
-                          <button
-                            key={sub.id}
-                            onClick={() =>
-                              updateParams({
-                                categoria: slugify(cat.nombre),
-                                subcategoria: slugify(sub.nombre),
-                              })
-                            }
-                            className={`flex items-center gap-3 py-1.5 rounded-lg cursor-pointer w-full transition-all border-l-[3px] ${subSelected ? "bg-primary/10 border-primary px-[5px]" : "hover:bg-gray-50 border-transparent px-2"}`}
-                          >
-                            <RadioCircle selected={subSelected} />
-                            <span
-                              className={`text-sm truncate ${
-                                subSelected
-                                  ? "font-semibold text-primary"
-                                  : "text-gray-500"
-                              }`}
-                            >
-                              {sub.nombre}
-                            </span>
-                            <span className="text-gray-400 text-sm ml-auto shrink-0">
-                              ({sub.count})
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            </div>
-
-          </div>
-        )}
-      </div>
-
       <div className="border-t border-gray-100" />
 
       {/* Marcas */}
@@ -1114,6 +1009,149 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+
+      {/* ─── Barra de categorías mobile ─── */}
+      <div className="md:hidden -mx-4 mb-4 sticky top-[64px] z-30 bg-white border-b border-gray-100 shadow-sm">
+
+        {/* Fila 1: tabs de categorías */}
+        <div className="flex overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+          {/* Tab "Todas" */}
+          <button
+            onClick={() => {
+              updateParams({ categoria: null, subcategoria: null });
+              setSubcatExpanded(false);
+            }}
+            className={`flex flex-col items-center gap-1 px-3 py-2.5 shrink-0 border-b-2 transition-colors ${
+              !categoriaId ? "border-gray-900 text-gray-900" : "border-transparent text-gray-400"
+            }`}
+          >
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+              !categoriaId ? "bg-gray-900" : "bg-gray-100"
+            }`}>
+              <Grid className={`w-3.5 h-3.5 ${!categoriaId ? "text-white" : "text-gray-500"}`} />
+            </div>
+            <span className="text-[10px] font-medium whitespace-nowrap">Todas</span>
+          </button>
+
+          {/* Tabs de categorías */}
+          {filtrarCategorias(categorias)
+            .filter((c) => (c.count || 0) > 0)
+            .sort((a, b) => (b.count || 0) - (a.count || 0))
+            .map((cat) => {
+              const isActive = categoriaId === cat.id;
+              const Icon = getCategoryIcon(cat.nombre);
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    if (isActive) {
+                      setSubcatExpanded((prev) => !prev);
+                    } else {
+                      updateParams({ categoria: slugify(cat.nombre), subcategoria: null });
+                      setSubcatExpanded(false);
+                    }
+                  }}
+                  className={`flex flex-col items-center gap-1 px-3 py-2.5 shrink-0 border-b-2 transition-colors ${
+                    isActive ? "border-gray-900 text-gray-900" : "border-transparent text-gray-400"
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                    isActive ? "bg-gray-900" : "bg-gray-100"
+                  }`}>
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? "text-white" : "text-gray-500"}`} />
+                  </div>
+                  <span className="text-[10px] font-medium whitespace-nowrap">{cat.nombre}</span>
+                </button>
+              );
+            })}
+        </div>
+
+        {/* Fila 2: subcategorías (solo cuando hay categoría activa) */}
+        {categoriaId && (() => {
+          const catSubs = allSubcategorias
+            .filter((s) => s.categoria_id === categoriaId && (s.count || 0) > 0)
+            .sort((a, b) => (b.count || 0) - (a.count || 0));
+
+          if (catSubs.length === 0) return null;
+
+          const visibleSubs = subcatExpanded ? catSubs : catSubs.slice(0, SUBCAT_PREVIEW);
+          const hasMore = catSubs.length > SUBCAT_PREVIEW;
+
+          return (
+            <div className="border-t border-gray-100 bg-gray-50/50 px-3 py-2">
+              <div className="grid grid-cols-3 gap-1.5">
+                {/* "Todas" de la categoría */}
+                <button
+                  onClick={() => updateParams({ subcategoria: null })}
+                  className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-[1.5px] transition-all ${
+                    !subcategoriaId
+                      ? "border-primary bg-primary/5"
+                      : "border-transparent bg-white"
+                  }`}
+                >
+                  <span className={`text-[11px] font-semibold ${!subcategoriaId ? "text-primary" : "text-gray-600"}`}>
+                    Todas
+                  </span>
+                  <span className={`text-[9px] ${!subcategoriaId ? "text-primary/70" : "text-gray-400"}`}>
+                    {categorias.find((c) => c.id === categoriaId)?.count || 0}
+                  </span>
+                </button>
+
+                {/* Subcategorías */}
+                {visibleSubs.map((sub) => {
+                  const isSubActive = subcategoriaId === sub.id;
+                  return (
+                    <button
+                      key={sub.id}
+                      onClick={() =>
+                        updateParams({
+                          categoria: slugify(
+                            categorias.find((c) => c.id === categoriaId)?.nombre || ""
+                          ),
+                          subcategoria: slugify(sub.nombre),
+                        })
+                      }
+                      className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border-[1.5px] transition-all ${
+                        isSubActive
+                          ? "border-primary bg-primary/5"
+                          : "border-transparent bg-white"
+                      }`}
+                    >
+                      <span className={`text-[11px] font-semibold text-center leading-tight ${
+                        isSubActive ? "text-primary" : "text-gray-600"
+                      }`}>
+                        {sub.nombre}
+                      </span>
+                      <span className={`text-[9px] ${isSubActive ? "text-primary/70" : "text-gray-400"}`}>
+                        {sub.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Ver todas / Mostrar menos */}
+              {hasMore && !subcatExpanded && (
+                <button
+                  onClick={() => setSubcatExpanded(true)}
+                  className="w-full mt-2 text-center text-[11px] font-semibold text-primary bg-primary/5 rounded-xl py-2 hover:bg-primary/10 transition-colors"
+                >
+                  Ver todas las subcategorías ({catSubs.length}) ↓
+                </button>
+              )}
+              {hasMore && subcatExpanded && (
+                <button
+                  onClick={() => setSubcatExpanded(false)}
+                  className="w-full mt-2 text-center text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-xl py-2 hover:bg-gray-200 transition-colors"
+                >
+                  Mostrar menos ↑
+                </button>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
       {/* ─── Breadcrumb ─── */}
       <nav className="flex items-center gap-1.5 text-sm text-gray-400 mb-6">
         <Link href="/" className="hover:text-primary transition-colors">
