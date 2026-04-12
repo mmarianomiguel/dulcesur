@@ -4,15 +4,26 @@ import { useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
 export function useCarritoSync() {
-  // Guardar carrito en BD
+  // Guardar carrito en BD — si está vacío, borrarlo de Supabase
   const syncToRemote = useCallback(async () => {
     try {
       const stored = localStorage.getItem("cliente_auth");
       if (!stored) return;
       const { id } = JSON.parse(stored);
       const carrito = JSON.parse(localStorage.getItem("carrito") || "[]");
-      if (!Array.isArray(carrito) || carrito.length === 0) return;
 
+      if (!Array.isArray(carrito) || carrito.length === 0) {
+        // Carrito vacío: borrar de Supabase y marcar como vaciado
+        await supabase
+          .from("carritos_guardados")
+          .delete()
+          .eq("cliente_auth_id", id);
+        localStorage.setItem("carrito_vaciado", "1");
+        return;
+      }
+
+      // Carrito con items: guardar y limpiar flag de vaciado
+      localStorage.removeItem("carrito_vaciado");
       await supabase
         .from("carritos_guardados")
         .upsert(
@@ -23,6 +34,7 @@ export function useCarritoSync() {
   }, []);
 
   // Restaurar carrito desde BD si localStorage está vacío
+  // NO restaurar si el cliente vació el carrito intencionalmente
   const restoreFromRemote = useCallback(async () => {
     try {
       const stored = localStorage.getItem("cliente_auth");
@@ -31,6 +43,10 @@ export function useCarritoSync() {
 
       const localCarrito = JSON.parse(localStorage.getItem("carrito") || "[]");
       if (Array.isArray(localCarrito) && localCarrito.length > 0) return;
+
+      // Si el cliente vació el carrito intencionalmente, no restaurar
+      const vaciado = localStorage.getItem("carrito_vaciado");
+      if (vaciado === "1") return;
 
       const { data } = await supabase
         .from("carritos_guardados")
@@ -52,6 +68,7 @@ export function useCarritoSync() {
       if (!stored) return;
       const { id } = JSON.parse(stored);
       await supabase.from("carritos_guardados").delete().eq("cliente_auth_id", id);
+      localStorage.removeItem("carrito_vaciado");
     } catch {}
   }, []);
 
