@@ -52,6 +52,7 @@ export default function TiendaNavbar() {
   const [clienteNombre, setClienteNombre] = useState<string | null>(null);
   const [clienteSaldo, setClienteSaldo] = useState<number | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [mobilLogoSrc, setMobilLogoSrc] = useState<string>(FALLBACK_LOGO);
 
@@ -377,9 +378,40 @@ export default function TiendaNavbar() {
                   <Link href="/cuenta/pedidos" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><Package className="h-4 w-4 text-gray-400" />Mis pedidos</Link>
                   <Link href="/cuenta" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><User className="h-4 w-4 text-gray-400" />Mi cuenta</Link>
                   <div className="my-1 border-t border-gray-100" />
-                  <button onClick={() => { localStorage.removeItem("cliente_auth"); setClienteId(null); setClienteNombre(null); setClienteSaldo(null); setDropdownOpen(false); window.location.href = "/"; }} className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-gray-400 hover:bg-gray-50 hover:text-red-500">
-                    Cerrar sesión
-                  </button>
+                  {!logoutConfirm ? (
+                    <button
+                      onClick={() => setLogoutConfirm(true)}
+                      className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 active:text-red-600 transition-colors duration-150 rounded-b-xl"
+                    >
+                      Cerrar sesión
+                    </button>
+                  ) : (
+                    <div className="px-4 py-2.5 border-t border-gray-100">
+                      <p className="text-xs text-gray-500 mb-2">¿Seguro que querés salir?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            localStorage.removeItem("cliente_auth");
+                            setClienteId(null);
+                            setClienteNombre(null);
+                            setClienteSaldo(null);
+                            setDropdownOpen(false);
+                            setLogoutConfirm(false);
+                            window.location.href = "/";
+                          }}
+                          className="flex-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 active:scale-95 py-1.5 rounded-lg transition-all duration-150"
+                        >
+                          Sí, salir
+                        </button>
+                        <button
+                          onClick={() => setLogoutConfirm(false)}
+                          className="flex-1 text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 py-1.5 rounded-lg transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

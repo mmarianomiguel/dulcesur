@@ -32,6 +32,7 @@ export default function CuentaPage() {
   const [cliente, setCliente] = useState<ClienteAuth | null>(getStoredCliente);
   const [tab, setTab] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [error, setError] = useState("");
@@ -568,12 +569,30 @@ export default function CuentaPage() {
 
       {/* Cerrar sesión */}
       <div className="text-center pt-2">
-        <button
-          onClick={handleLogout}
-          className="text-sm text-gray-400 hover:text-red-500 transition-colors"
-        >
-          Cerrar sesión
-        </button>
+        {!showLogoutConfirm ? (
+          <button
+            onClick={() => setShowLogoutConfirm(true)}
+            className="text-sm text-gray-400 hover:text-red-500 active:text-red-600 transition-colors duration-200"
+          >
+            Cerrar sesión
+          </button>
+        ) : (
+          <div className="flex items-center justify-center gap-3 animate-in fade-in duration-200">
+            <span className="text-sm text-gray-500">¿Seguro que querés salir?</span>
+            <button
+              onClick={handleLogout}
+              className="text-sm font-semibold text-white bg-red-500 hover:bg-red-600 active:scale-95 px-4 py-1.5 rounded-full transition-all duration-150"
+            >
+              Sí, salir
+            </button>
+            <button
+              onClick={() => setShowLogoutConfirm(false)}
+              className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
       </div>
 
     </div>
