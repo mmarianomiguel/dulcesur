@@ -91,6 +91,7 @@ export default function ProductoDetallePage() {
   const [cartQtys, setCartQtys] = useState<Record<string, number>>({});
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>([]);
   const [tiendaClienteId, setTiendaClienteId] = useState<string | null>(null);
+  const [clienteLoading, setClienteLoading] = useState(true);
   const [restricted, setRestricted] = useState(false);
   const { permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
 
@@ -189,6 +190,7 @@ export default function ProductoDetallePage() {
             }
           }
         } catch { /* no auth */ }
+        finally { setClienteLoading(false); }
       })();
 
       // Slug resolution
@@ -216,7 +218,7 @@ export default function ProductoDetallePage() {
       setActiveDiscounts((discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today));
 
       // Now fetch product (needs resolved productId)
-      const { data: prod } = await supabase.from("productos").select("id, nombre, descripcion_detallada, precio, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", productId).single();
+      const { data: prod } = await supabase.from("productos").select("id, nombre, descripcion_detallada, precio, precio_oferta, precio_oferta_hasta, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, categorias(nombre), marcas(nombre)").eq("id", productId).single();
 
       if (prod) {
         const MAX_RELATED = 8;
@@ -626,9 +628,9 @@ export default function ProductoDetallePage() {
           <div className="mt-4">
             <div className="flex items-center gap-3">
               <p className="text-3xl font-bold text-gray-900">
-                {currentDiscount > 0 ? formatCurrency(discountedPrice) : formatCurrency(currentPrice)}
+                {!clienteLoading && currentDiscount > 0 ? formatCurrency(discountedPrice) : formatCurrency(currentPrice)}
               </p>
-              {currentDiscount > 0 && (
+              {!clienteLoading && currentDiscount > 0 && (
                 <span className="bg-primary/10 text-primary/90 text-xs font-bold px-2.5 py-1 rounded-full">
                   {currentDiscount}% OFF
                 </span>
@@ -643,13 +645,13 @@ export default function ProductoDetallePage() {
                   : <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">Precio rebajado</span>;
               })()}
             </div>
-            {currentDiscount > 0 && (
+            {!clienteLoading && currentDiscount > 0 && (
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-sm text-gray-400 line-through">{formatCurrency(currentPrice)}</span>
                 <span className="text-sm text-green-600 font-semibold">Ahorrás {formatCurrency(savings)}</span>
               </div>
             )}
-            {volumeDiscountHint && currentDiscount === 0 && (() => {
+            {!clienteLoading && volumeDiscountHint && currentDiscount === 0 && (() => {
               const presLabel = currentPres && currentPres.cantidad > 1
                 ? (currentPres.cantidad >= 6 ? "cajas" : "packs")
                 : "unidades";
