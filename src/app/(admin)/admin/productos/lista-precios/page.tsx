@@ -196,6 +196,12 @@ function clasificarProducto(nombre: string): { categoria: string; subcategoria: 
 export default function ListaPreciosPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [preFilterIds, setPreFilterIds] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ids = params.get("ids");
+    if (ids) setPreFilterIds(new Set(ids.split(",")));
+  }, []);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
@@ -420,6 +426,7 @@ export default function ListaPreciosPage() {
 
   const filtered = useMemo(() => {
     const result = products.filter((p) => {
+      if (preFilterIds && !preFilterIds.has(p.id)) return false;
       if (filters.search && !norm(p.nombre).includes(norm(filters.search))) return false;
       if (filters.categoria && p.categoria !== filters.categoria) return false;
       if (filters.subcategoria && p.subcategoria !== filters.subcategoria) return false;
@@ -451,7 +458,7 @@ export default function ListaPreciosPage() {
       });
     }
     return result;
-  }, [products, filters, sortOrder]);
+  }, [products, filters, sortOrder, preFilterIds]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const paginated = useMemo(() => filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage), [filtered, page]);

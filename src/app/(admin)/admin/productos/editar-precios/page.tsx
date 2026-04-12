@@ -217,6 +217,14 @@ export default function EditarPreciosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // URL ids pre-filter
+  const [preFilterIds, setPreFilterIds] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ids = params.get("ids");
+    if (ids) setPreFilterIds(new Set(ids.split(",")));
+  }, []);
+
   // Filters
   const [marcaFilter, setMarcaFilter] = useState("all");
   const [categoriaFilter, setCategoriaFilter] = useState("all");
@@ -386,6 +394,7 @@ export default function EditarPreciosPage() {
   // Filtered products
   const filteredProductos = useMemo(() => {
     const result = productos.filter((p) => {
+      if (preFilterIds && !preFilterIds.has(p.id)) return false;
       if (searchFilter && !norm(p.nombre).includes(norm(searchFilter)) && !norm(p.codigo).includes(norm(searchFilter))) return false;
       if (marcaFilter !== "all" && p.marca_id !== marcaFilter) return false;
       if (categoriaFilter !== "all" && p.categoria_id !== categoriaFilter) return false;
@@ -402,7 +411,7 @@ export default function EditarPreciosPage() {
       });
     }
     return result;
-  }, [productos, searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter, sortOrder]);
+  }, [productos, searchFilter, marcaFilter, categoriaFilter, subcategoriaFilter, estadoFilter, sortOrder, preFilterIds]);
 
   // Pagination
   const [page, setPage] = useState(1);

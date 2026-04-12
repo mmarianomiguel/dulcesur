@@ -68,11 +68,14 @@ import {
   LockOpen,
   Store,
   Star,
+  Tag,
+  MoreHorizontal,
 } from "lucide-react";
 
 import { ImageUpload } from "@/components/image-upload";
 import { showAdminToast } from "@/components/admin-toast";
 import { APP_NAME } from "@/lib/constants";
+import Link from "next/link";
 
 
 interface Subcategoria {
@@ -306,6 +309,9 @@ export default function ProductosPage() {
     visibilidad: "visible",
     imagen_url: "",
     destacado: false,
+    precio_oferta: undefined as number | undefined,
+    precio_oferta_hasta: undefined as string | undefined,
+    tags: [] as string[],
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
@@ -349,7 +355,7 @@ export default function ProductosPage() {
       const allRows: any[] = [];
       let from = 0;
       while (true) {
-        const { data } = await supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(from, from + PAGE_SIZE - 1);
+        const { data } = await supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, precio_oferta, precio_oferta_hasta, tags, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(from, from + PAGE_SIZE - 1);
         if (!data || data.length === 0) break;
         allRows.push(...data);
         if (data.length < PAGE_SIZE) break;
@@ -495,7 +501,11 @@ export default function ProductosPage() {
       visibilidad: "visible",
       imagen_url: "",
       destacado: false,
+      precio_oferta: undefined,
+      precio_oferta_hasta: undefined,
+      tags: [],
     });
+    setShowOfertaForm(false);
     setSelectedProveedores([]);
     setPresentaciones([]);
     setEditingProduct(null);
@@ -601,7 +611,11 @@ export default function ProductosPage() {
       visibilidad: p.visibilidad || "visible",
       imagen_url: p.imagen_url || "",
       destacado: !!(p as any).destacado,
+      precio_oferta: (p as any).precio_oferta || undefined,
+      precio_oferta_hasta: (p as any).precio_oferta_hasta || undefined,
+      tags: (p as any).tags || [],
     });
+    setShowOfertaForm(!!((p as any).precio_oferta && (p as any).precio_oferta > 0));
     setShowDescription(!!(p.descripcion_detallada));
     setIsCombo(!!(p as any).es_combo);
     setComboItems([]);
@@ -707,6 +721,9 @@ export default function ProductosPage() {
         imagen_url: form.imagen_url || null,
         es_combo: isCombo,
         activo: true,
+        precio_oferta: form.precio_oferta && form.precio_oferta > 0 ? form.precio_oferta : null,
+        precio_oferta_hasta: form.precio_oferta_hasta || null,
+        tags: form.tags || [],
       };
 
       let productId: string;
@@ -879,7 +896,11 @@ export default function ProductosPage() {
       visibilidad: p.visibilidad || "visible",
       imagen_url: p.imagen_url || "",
       destacado: !!(p as any).destacado,
+      precio_oferta: undefined,
+      precio_oferta_hasta: undefined,
+      tags: (p as any).tags || [],
     });
+    setShowOfertaForm(false);
     setShowDescription(!!(p.descripcion_detallada));
 
     // Load proveedores
@@ -1557,7 +1578,9 @@ export default function ProductosPage() {
         !q ||
         norm(p.nombre).includes(q) ||
         norm(p.codigo).includes(q) ||
-        (presCodigoMap[p.id] || []).some((pr) => norm(pr.codigo || "").includes(q));
+        (presCodigoMap[p.id] || []).some((pr) => norm(pr.codigo || "").includes(q)) ||
+        norm(prodProvMap[p.id] || "").includes(q) ||
+        ((p as any).tags || []).some((tag: string) => norm(tag).includes(q));
       const matchesCategory = category === "all" || p.categoria_id === category;
       const matchesSubcategory = subcategoryFilter === "all" || p.subcategoria_id === subcategoryFilter;
       const matchesMarca = marcaFilter === "all" || p.marca_id === marcaFilter;
@@ -1593,7 +1616,63 @@ export default function ProductosPage() {
       return 0;
     });
     return arr;
-  }, [products, debouncedSearch, presCodigoMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, tiendaFilter, comboFilter, soloDestacado, sortBy]);
+  }, [products, debouncedSearch, presCodigoMap, prodProvMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, tiendaFilter, comboFilter, soloDestacado, sortBy]);
+
+  // Helper: get effective price considering precio_oferta (1.3)
+  function getPrecioEfectivo(producto: { precio: number; precio_oferta?: number | null; precio_oferta_hasta?: string | null }): {
+    precio: number;
+    enOferta: boolean;
+    precioOriginal: number;
+  } {
+    const today = new Date().toISOString().slice(0, 10);
+    const ofertaVigente = producto.precio_oferta &&
+      producto.precio_oferta > 0 &&
+      (producto.precio_oferta_hasta === null || producto.precio_oferta_hasta === undefined || producto.precio_oferta_hasta >= today);
+    if (ofertaVigente) {
+      return { precio: producto.precio_oferta!, enOferta: true, precioOriginal: producto.precio };
+    }
+    return { precio: producto.precio, enOferta: false, precioOriginal: producto.precio };
+  }
+
+  // Quick stock adjust handler (1.2)
+  const handleQuickStockAdjust = async () => {
+    if (!stockPopover) return;
+    const { productId, currentStock } = stockPopover;
+    const { tipo, cantidad, motivo } = stockAdjust;
+    let stockNuevo: number;
+    if (tipo === "ajuste") stockNuevo = cantidad;
+    else if (tipo === "sumar") stockNuevo = currentStock + cantidad;
+    else stockNuevo = Math.max(0, currentStock - cantidad);
+    const diff = stockNuevo - currentStock;
+    await supabase.from("productos").update({ stock: stockNuevo }).eq("id", productId);
+    await supabase.from("stock_movimientos").insert({
+      producto_id: productId, tipo: motivo,
+      cantidad_antes: currentStock, cantidad_despues: stockNuevo, cantidad: diff,
+      descripcion: `Ajuste rápido: ${motivo} (${diff > 0 ? "+" : ""}${diff})`, usuario: "Admin",
+    });
+    showAdminToast("Stock actualizado", "success");
+    setStockPopover(null);
+    setProducts((prev) => prev.map((p) => p.id === productId ? { ...p, stock: stockNuevo } : p));
+  };
+
+  // Load rotation velocity (1.10)
+  const loadVelDiaria = async () => {
+    const hace30 = new Date();
+    hace30.setDate(hace30.getDate() - 30);
+    const desde30 = hace30.toISOString().slice(0, 10);
+    const { data: ventaIds } = await supabase.from("ventas").select("id").gte("fecha", desde30).neq("estado", "anulada");
+    if (!ventaIds || ventaIds.length === 0) return;
+    const ids = ventaIds.map((v: any) => v.id);
+    const map: Record<string, number> = {};
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const { data: vitems } = await supabase.from("venta_items").select("producto_id, cantidad").in("venta_id", chunk);
+      if (vitems) for (const item of vitems as any[]) map[item.producto_id] = (map[item.producto_id] || 0) + Number(item.cantidad);
+    }
+    const velDiariaMap: Record<string, number> = {};
+    for (const [id, total] of Object.entries(map)) velDiariaMap[id] = Math.round((total / 30) * 10) / 10;
+    setVelMap(velDiariaMap);
+  };
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -1655,6 +1734,25 @@ export default function ProductosPage() {
   }, [products, comboStockMap]);
 
   const [lowStockOpen, setLowStockOpen] = useState(false);
+
+  // Stock quick-adjust popover (1.2)
+  const [stockPopover, setStockPopover] = useState<{
+    productId: string;
+    productName: string;
+    currentStock: number;
+  } | null>(null);
+  const [stockAdjust, setStockAdjust] = useState<{
+    tipo: "sumar" | "restar" | "ajuste";
+    cantidad: number;
+    motivo: "ajuste" | "merma" | "ingreso" | "venta_manual";
+  }>({ tipo: "sumar", cantidad: 1, motivo: "ingreso" });
+
+  // Rotation velocity (1.10)
+  const [velMap, setVelMap] = useState<Record<string, number>>({});
+  const [showVelCol, setShowVelCol] = useState(false);
+
+  // Precio oferta form toggle (1.3)
+  const [showOfertaForm, setShowOfertaForm] = useState(false);
 
 
   return (
@@ -1797,6 +1895,18 @@ export default function ProductosPage() {
               >
                 <Layers className="w-4 h-4" />
                 Combos
+              </Button>
+              <Button
+                variant={showVelCol ? "default" : "outline"}
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  if (!showVelCol && Object.keys(velMap).length === 0) loadVelDiaria();
+                  setShowVelCol(!showVelCol);
+                }}
+              >
+                <TrendingUp className="w-4 h-4" />
+                Rotación
               </Button>
               <Button
                 variant="outline"
@@ -2109,6 +2219,17 @@ export default function ProductosPage() {
               <span className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-2.5 py-1 rounded-full text-xs font-medium">
                 {selected.size} seleccionado{selected.size > 1 ? "s" : ""}
               </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const ids = Array.from(selected).join(",");
+                  window.location.href = `/admin/productos/editar-precios?ids=${ids}`;
+                }}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Editar precios ({selected.size})
+              </Button>
               <Button variant="destructive" size="sm" onClick={handleMassDelete} disabled={deleting}>
                 {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
                 Eliminar ({selected.size})
@@ -2183,8 +2304,9 @@ export default function ProductosPage() {
                     <th className="text-left py-3 px-4 font-medium">Marca</th>
                     <th className="text-center py-3 px-4 font-medium">Stock</th>
                     <th className="text-right py-3 px-4 font-medium">Precio</th>
+                    {showVelCol && <th className="text-center py-3 px-4 font-medium">Vel/día</th>}
                     <th className="text-center py-3 px-2 font-medium w-8"></th>
-                    <th className="text-right py-3 px-4 font-medium w-24">Acciones</th>
+                    <th className="text-right py-3 px-4 font-medium w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2261,17 +2383,43 @@ export default function ProductosPage() {
                           const displayStock = (product as any).es_combo
                             ? (comboStockMap[product.id] ?? 0)
                             : product.stock;
-                          return displayStock === 0 ? (
-                            <Badge variant="destructive" className="text-xs font-normal">Sin stock</Badge>
-                          ) : displayStock <= (product.stock_minimo || 5) ? (
-                            <span className="text-orange-500 font-medium">{displayStock}</span>
-                          ) : (
-                            <span className="font-medium">{displayStock}</span>
+                          return (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if ((product as any).es_combo) return; // No quick adjust for combos
+                                setStockPopover({ productId: product.id, productName: product.nombre, currentStock: displayStock });
+                                setStockAdjust({ tipo: "sumar", cantidad: 1, motivo: "ingreso" });
+                              }}
+                              className="hover:bg-muted/50 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                              title="Click para ajustar stock"
+                            >
+                              {displayStock === 0 ? (
+                                <Badge variant="destructive" className="text-xs font-normal">Sin stock</Badge>
+                              ) : displayStock <= (product.stock_minimo || 5) ? (
+                                <span className="text-orange-500 font-medium">{displayStock}</span>
+                              ) : (
+                                <span className="font-medium">{displayStock}</span>
+                              )}
+                            </button>
                           );
                         })()}
                       </td>
                       <td className="py-3 px-4 text-right font-semibold">
-                        {formatCurrency(product.precio)}
+                        {(() => {
+                          const { precio, enOferta, precioOriginal } = getPrecioEfectivo(product as any);
+                          return enOferta ? (
+                            <div>
+                              <div className="text-orange-600 font-semibold">{formatCurrency(precio)}</div>
+                              <div className="text-xs text-muted-foreground line-through">{formatCurrency(precioOriginal)}</div>
+                            </div>
+                          ) : (
+                            <span>{formatCurrency(precio)}</span>
+                          );
+                        })()}
+                        {product.costo > 0 && product.precio <= product.costo && (
+                          <span title="Precio menor al costo"><AlertTriangle className="w-3.5 h-3.5 text-red-500 inline ml-1" /></span>
+                        )}
                       </td>
                       <td className="py-3 px-2 text-center">
                         <button
@@ -2302,21 +2450,43 @@ export default function ProductosPage() {
                           />
                         </button>
                       </td>
+                      {showVelCol && (
+                        <td className="py-3 px-4 text-center">
+                          {velMap[product.id] != null ? (
+                            <span className={`text-sm ${velMap[product.id] === 0 ? "text-muted-foreground" : velMap[product.id] >= 5 ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                              {velMap[product.id] > 0 ? `${velMap[product.id]}/d` : "—"}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-0.5">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(product)} title="Editar">
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openHistory(product)} title="Historial stock">
-                            <Clock className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => handleDuplicate(product)} title="Duplicar">
-                            <Copy className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(product.id)} title="Eliminar">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem onClick={() => openEdit(product)}>
+                              <Edit className="w-3.5 h-3.5 mr-2" /> Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openHistory(product)}>
+                              <Clock className="w-3.5 h-3.5 mr-2" /> Historial stock
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openPriceHistory(product)}>
+                              <TrendingUp className="w-3.5 h-3.5 mr-2" /> Historial precios
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDuplicate(product)}>
+                              <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(product.id)}>
+                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                     );
@@ -2490,6 +2660,12 @@ export default function ProductosPage() {
                           <SelectItem value="MT">Metro</SelectItem>
                         </SelectContent>
                       </Select>
+                      {editingProduct && presentaciones.filter((p) => !p._deleted && p.cantidad > 1).length > 0 && (
+                        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 mt-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          Tiene presentaciones de caja. Cambiar la unidad puede afectar cálculos.
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -2735,33 +2911,89 @@ export default function ProductosPage() {
                 </div>
               </div>
 
-              {/* Stock row */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Stock actual</Label>
-                  {editingProduct && (editingProduct as any).es_combo ? (
-                    <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">Auto (combo)</div>
-                  ) : (
-                    <Input type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: Math.max(0, Number(e.target.value)) })} className="h-9" />
-                  )}
+              {/* Margin alert (1.6) */}
+              {form.costo > 0 && form.precio > 0 && form.precio <= form.costo && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>El precio de venta es menor o igual al costo. Estás vendiendo a pérdida.</span>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Mínimo</Label>
-                  <Input type="number" min="0" value={form.stock_minimo} onChange={(e) => setForm({ ...form, stock_minimo: Math.max(0, Number(e.target.value)) })} className="h-9" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Máximo</Label>
-                  <Input type="number" min="0" value={form.stock_maximo} onChange={(e) => setForm({ ...form, stock_maximo: Math.max(0, Number(e.target.value)) })} className="h-9" />
-                </div>
-                <div className="flex items-end">
-                  {form.stock > 0 && form.stock <= form.stock_minimo && (
-                    <div className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 w-full">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      Stock bajo
+              )}
+
+              {/* Precio de oferta (1.3) */}
+              <div className="border rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowOfertaForm(!showOfertaForm)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/30 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Tag className="w-4 h-4 text-orange-500" />
+                    Precio de oferta
+                    {form.precio_oferta && form.precio_oferta > 0 && (
+                      <Badge className="text-[10px] bg-orange-100 text-orange-700 hover:bg-orange-100">
+                        {formatCurrency(form.precio_oferta)}
+                        {form.precio_oferta_hasta ? ` · hasta ${new Date(form.precio_oferta_hasta + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}` : " · permanente"}
+                      </Badge>
+                    )}
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showOfertaForm ? "rotate-180" : ""}`} />
+                </button>
+                {showOfertaForm && (
+                  <div className="p-4 space-y-3 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      El precio de oferta reemplaza al precio normal en la tienda y en el POS durante el período indicado.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Precio de oferta</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                          <MoneyInput
+                            value={form.precio_oferta || 0}
+                            onValueChange={(v) => setForm({ ...form, precio_oferta: v > 0 ? v : undefined })}
+                            className="pl-7 h-9"
+                          />
+                        </div>
+                        {form.precio_oferta && form.precio_oferta > 0 && form.precio > 0 && (
+                          <p className="text-[11px] text-orange-600 font-medium">
+                            {Math.round((1 - form.precio_oferta / form.precio) * 100)}% de descuento
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Válido hasta (vacío = permanente)</Label>
+                        <Input
+                          type="date"
+                          value={form.precio_oferta_hasta || ""}
+                          onChange={(e) => setForm({ ...form, precio_oferta_hasta: e.target.value || undefined })}
+                          className="h-9"
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
+                    {form.precio_oferta && form.precio_oferta > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, precio_oferta: undefined, precio_oferta_hasta: undefined })}
+                        className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                      >
+                        Quitar precio de oferta
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Recalc box prices suggestion (1.12) */}
+              {presentaciones.some((p) => !p._deleted && p.cantidad > 1) &&
+                editingProduct &&
+                editingProduct.precio !== form.precio && (
+                <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+                  <span>El precio unitario cambió. ¿Actualizar los precios de caja proporcionalmente?</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-100 shrink-0" onClick={recalcBoxPrices}>
+                    Recalcular cajas
+                  </Button>
+                </div>
+              )}
 
               {/* Price History - collapsible */}
               {editingProduct && priceHistory.length > 0 && (
@@ -2805,60 +3037,34 @@ export default function ProductosPage() {
             {/* END TAB: precios (section 3 pricing) */}
 
             {/* TAB: descuentos */}
-            <div className={editingProduct && editTab !== "descuentos" ? "hidden" : ""}>
-            {/* Descuentos del producto - CRUD interactivo */}
-            {editingProduct && (
-              <div className="border rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-orange-50 to-amber-50 border-b">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-orange-600" />
-                      <span className="text-sm font-semibold text-orange-800">Descuentos</span>
-                      {productDiscounts.length > 0 && (
-                        <Badge className="text-[10px] h-4 px-1.5 bg-orange-200 text-orange-800 hover:bg-orange-200">{productDiscounts.length}</Badge>
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-[11px] gap-1 border-orange-300 text-orange-700 hover:bg-orange-100"
-                      onClick={() => setShowDiscountForm(!showDiscountForm)}
-                    >
+            {editingProduct && editTab === "descuentos" && (
+              <div className="space-y-5">
+                {/* Descuentos directos */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <Tag className="w-4 h-4" />
+                      Descuentos directos ({productDiscounts.filter((d) => (d.productos_ids || []).includes(editingProduct.id)).length})
+                    </h3>
+                    <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={() => setShowDiscountForm(!showDiscountForm)}>
                       <Plus className="w-3 h-3" /> {showDiscountForm ? "Cancelar" : "Agregar"}
                     </Button>
                   </div>
 
-                  {/* Formulario inline para crear descuento */}
                   {showDiscountForm && (
-                    <div className="p-3 bg-orange-50/50 border-b space-y-3">
+                    <div className="p-3 bg-orange-50/50 border rounded-lg mb-3 space-y-3">
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <div className="col-span-2 sm:col-span-2">
+                        <div className="col-span-2">
                           <Label className="text-[10px] text-muted-foreground">Nombre</Label>
-                          <Input
-                            placeholder="Ej: Promo x10 unidades"
-                            value={discountForm.nombre}
-                            onChange={(e) => setDiscountForm({ ...discountForm, nombre: e.target.value })}
-                            className="h-8 text-xs"
-                          />
+                          <Input placeholder="Ej: Promo x10 unidades" value={discountForm.nombre} onChange={(e) => setDiscountForm({ ...discountForm, nombre: e.target.value })} className="h-8 text-xs" />
                         </div>
                         <div>
                           <Label className="text-[10px] text-muted-foreground">Descuento %</Label>
-                          <Input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={discountForm.porcentaje}
-                            onChange={(e) => setDiscountForm({ ...discountForm, porcentaje: Math.max(1, Math.min(100, Number(e.target.value))) })}
-                            className="h-8 text-xs text-center"
-                          />
+                          <Input type="number" min="1" max="100" value={discountForm.porcentaje} onChange={(e) => setDiscountForm({ ...discountForm, porcentaje: Math.max(1, Math.min(100, Number(e.target.value))) })} className="h-8 text-xs text-center" />
                         </div>
                         <div>
                           <Label className="text-[10px] text-muted-foreground">Tipo</Label>
-                          <select
-                            value={discountForm.tipo}
-                            onChange={(e) => setDiscountForm({ ...discountForm, tipo: e.target.value })}
-                            className="w-full h-8 text-xs border rounded-md px-2 bg-background"
-                          >
+                          <select value={discountForm.tipo} onChange={(e) => setDiscountForm({ ...discountForm, tipo: e.target.value })} className="w-full h-8 text-xs border rounded-md px-2 bg-background">
                             <option value="general">General</option>
                             <option value="por_cantidad">Por cantidad mín.</option>
                             <option value="solo_caja">Solo cajas</option>
@@ -2869,42 +3075,13 @@ export default function ProductosPage() {
                       {discountForm.tipo === "por_cantidad" && (
                         <div className="flex items-center gap-2">
                           <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Cantidad mínima:</Label>
-                          <Input
-                            type="number"
-                            min="2"
-                            value={discountForm.cantidad_minima}
-                            onChange={(e) => setDiscountForm({ ...discountForm, cantidad_minima: Math.max(2, Number(e.target.value)) })}
-                            className="h-7 text-xs w-20"
-                          />
-                          <span className="text-[10px] text-muted-foreground">unidades para que aplique</span>
+                          <Input type="number" min="2" value={discountForm.cantidad_minima} onChange={(e) => setDiscountForm({ ...discountForm, cantidad_minima: Math.max(2, Number(e.target.value)) })} className="h-7 text-xs w-20" />
                         </div>
                       )}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Desde</Label>
-                          <Input
-                            type="date"
-                            value={discountForm.fecha_inicio}
-                            onChange={(e) => setDiscountForm({ ...discountForm, fecha_inicio: e.target.value })}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Hasta (opcional)</Label>
-                          <Input
-                            type="date"
-                            value={discountForm.fecha_fin}
-                            onChange={(e) => setDiscountForm({ ...discountForm, fecha_fin: e.target.value })}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-8 text-xs bg-orange-600 hover:bg-orange-700"
-                          onClick={saveProductDiscount}
-                          disabled={savingDiscount || !discountForm.nombre || discountForm.porcentaje <= 0}
-                        >
+                        <div><Label className="text-[10px] text-muted-foreground">Desde</Label><Input type="date" value={discountForm.fecha_inicio} onChange={(e) => setDiscountForm({ ...discountForm, fecha_inicio: e.target.value })} className="h-8 text-xs" /></div>
+                        <div><Label className="text-[10px] text-muted-foreground">Hasta (opcional)</Label><Input type="date" value={discountForm.fecha_fin} onChange={(e) => setDiscountForm({ ...discountForm, fecha_fin: e.target.value })} className="h-8 text-xs" /></div>
+                        <Button type="button" size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700" onClick={saveProductDiscount} disabled={savingDiscount || !discountForm.nombre || discountForm.porcentaje <= 0}>
                           {savingDiscount ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                           Crear descuento
                         </Button>
@@ -2912,48 +3089,73 @@ export default function ProductosPage() {
                     </div>
                   )}
 
-                  {/* Lista de descuentos */}
-                  <div className="divide-y">
-                    {productDiscounts.length > 0 ? productDiscounts.map((d) => (
-                      <div key={d.id} className="flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Badge className={`shrink-0 text-[10px] h-5 px-2 ${d.activo ? "bg-green-600 text-white" : "bg-gray-300 text-gray-600"}`}>
-                            {d.porcentaje}%
-                          </Badge>
-                          <span className={`text-xs font-medium truncate ${!d.activo ? "line-through text-muted-foreground" : ""}`}>{d.nombre}</span>
+                  <div className="space-y-2">
+                    {productDiscounts
+                      .filter((d) => d.aplica_a === "productos" && (d.productos_ids || []).includes(editingProduct.id))
+                      .map((d) => (
+                        <div key={d.id} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-l-[3px] border-l-primary hover:bg-muted/30 transition-colors">
+                          <Badge className={`shrink-0 text-[10px] h-5 px-2 ${d.activo ? "bg-green-600 text-white" : "bg-gray-300 text-gray-600"}`}>{d.porcentaje}%</Badge>
+                          <span className={`text-xs font-medium flex-1 truncate ${!d.activo ? "line-through text-muted-foreground" : ""}`}>{d.nombre}</span>
                           {d.presentacion === "caja" && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">Cajas</Badge>}
-                          {d.presentacion === "unidad" && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">Unidad</Badge>}
-                          {d.cantidad_minima && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0 text-orange-600 border-orange-300">≥{d.cantidad_minima} un.</Badge>}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] text-muted-foreground">
-                            {d.fecha_fin ? `Hasta ${new Date(d.fecha_fin).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}` : "Sin venc."}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => toggleProductDiscount(d.id, d.activo)}
-                            className={`w-8 h-4 rounded-full transition relative ${d.activo ? "bg-green-500" : "bg-gray-300"}`}
-                          >
+                          {d.cantidad_minima && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0 text-orange-600 border-orange-300">≥{d.cantidad_minima}</Badge>}
+                          <span className="text-[10px] text-muted-foreground shrink-0">{d.fecha_fin ? `Hasta ${new Date(d.fecha_fin).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}` : "Sin venc."}</span>
+                          <button type="button" onClick={() => toggleProductDiscount(d.id, d.activo)} className={`w-8 h-4 rounded-full transition relative ${d.activo ? "bg-green-500" : "bg-gray-300"}`}>
                             <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${d.activo ? "left-4" : "left-0.5"}`} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteProductDiscount(d.id)}
-                            className="text-red-400 hover:text-red-600 transition p-0.5"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          <button type="button" onClick={() => deleteProductDiscount(d.id)} className="text-red-400 hover:text-red-600 transition p-0.5"><Trash2 className="w-3 h-3" /></button>
                         </div>
-                      </div>
-                    )) : !showDiscountForm && (
-                      <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
-                        Sin descuentos activos
-                      </div>
+                      ))}
+                    {productDiscounts.filter((d) => d.aplica_a === "productos" && (d.productos_ids || []).includes(editingProduct.id)).length === 0 && !showDiscountForm && (
+                      <p className="text-xs text-muted-foreground text-center py-3">Sin descuentos directos</p>
                     )}
                   </div>
                 </div>
-              )}
-            </div>
+
+                <Separator />
+
+                {/* Descuentos heredados (solo lectura) */}
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" />
+                    Descuentos heredados que también aplican
+                    <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Solo lectura</span>
+                  </h3>
+                  <div className="space-y-2">
+                    {productDiscounts
+                      .filter((d) => {
+                        if (d.aplica_a === "productos" && (d.productos_ids || []).includes(editingProduct.id)) return false;
+                        if (d.aplica_a === "todos") return true;
+                        if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(form.categoria_id)) return true;
+                        if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(form.subcategoria_id)) return true;
+                        return false;
+                      })
+                      .map((d) => (
+                        <div key={d.id} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-l-[3px] border-l-border opacity-75">
+                          <Badge className="shrink-0 text-[10px] h-5 px-2 bg-gray-200 text-gray-600">{d.porcentaje}%</Badge>
+                          <span className="text-xs text-muted-foreground flex-1 truncate">{d.nombre}</span>
+                          <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full shrink-0">
+                            {d.aplica_a === "todos" ? "Global" : d.aplica_a === "categorias" ? "Por categoría" : "Por subcategoría"}
+                          </span>
+                          <Link href="/admin/productos/descuentos" className="text-[10px] text-primary hover:underline shrink-0">Ver →</Link>
+                        </div>
+                      ))}
+                    {productDiscounts.filter((d) => {
+                      if (d.aplica_a === "productos" && (d.productos_ids || []).includes(editingProduct.id)) return false;
+                      if (d.aplica_a === "todos") return true;
+                      if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(form.categoria_id)) return true;
+                      if (d.aplica_a === "subcategorias" && (d.subcategorias_ids || []).includes(form.subcategoria_id)) return true;
+                      return false;
+                    }).length === 0 && (
+                      <p className="text-xs text-muted-foreground text-center py-3">No hay descuentos globales o por categoría aplicando a este producto</p>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-3">
+                    En una venta se aplica el descuento más favorable. Los descuentos heredados se gestionan en{" "}
+                    <Link href="/admin/productos/descuentos" className="text-primary hover:underline">Descuentos globales</Link>.
+                  </p>
+                </div>
+              </div>
+            )}
             {/* END TAB: descuentos */}
 
             {/* TAB: precios (continued - box summary, combos, presentaciones) */}
@@ -3263,8 +3465,36 @@ export default function ProductosPage() {
               </div>
             </div>
             }
+
+            {/* Tags (1.11) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Etiquetas</Label>
+              <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 border rounded-lg">
+                {(form.tags || []).map((tag, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
+                    {tag}
+                    <button type="button" onClick={() => setForm({ ...form, tags: form.tags.filter((_, j) => j !== i) })} className="hover:text-destructive">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  placeholder="Agregar etiqueta..."
+                  className="flex-1 min-w-[120px] text-xs outline-none bg-transparent placeholder:text-muted-foreground"
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" || e.key === ",") && (e.target as HTMLInputElement).value.trim()) {
+                      e.preventDefault();
+                      const newTag = (e.target as HTMLInputElement).value.trim().toLowerCase();
+                      if (!form.tags.includes(newTag)) setForm({ ...form, tags: [...(form.tags || []), newTag] });
+                      (e.target as HTMLInputElement).value = "";
+                    }
+                  }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">Enter o coma para agregar. Ej: sin-tacc, vegano, temporada, liquidación</p>
             </div>
-            {/* END TAB: info (proveedores) */}
+            </div>
+            {/* END TAB: info (proveedores + tags) */}
 
             {/* TAB: stock */}
             <div className={editingProduct && editTab !== "stock" ? "hidden" : ""}>
@@ -4056,6 +4286,55 @@ export default function ProductosPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* ─── Stock Quick Adjust Dialog (1.2) ─── */}
+      <Dialog open={!!stockPopover} onOpenChange={(open) => !open && setStockPopover(null)}>
+        <DialogContent className="max-w-xs p-0 gap-0 overflow-hidden">
+          <div className="px-4 py-3 border-b bg-muted/30">
+            <DialogTitle className="text-sm font-semibold">Ajustar stock</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{stockPopover?.productName}</p>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["sumar", "restar", "ajuste"] as const).map((tipo) => (
+                <button key={tipo} onClick={() => setStockAdjust((prev) => ({ ...prev, tipo }))}
+                  className={`py-1.5 rounded-lg text-xs font-medium border transition-all ${stockAdjust.tipo === tipo ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-border"}`}>
+                  {tipo === "sumar" ? "+ Agregar" : tipo === "restar" ? "− Quitar" : "= Fijar"}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{stockAdjust.tipo === "ajuste" ? "Stock final" : "Cantidad"}</Label>
+              <Input type="number" min={stockAdjust.tipo === "restar" ? 1 : 0} max={stockAdjust.tipo === "restar" ? stockPopover?.currentStock : undefined}
+                value={stockAdjust.cantidad} onChange={(e) => setStockAdjust((prev) => ({ ...prev, cantidad: Math.max(0, Number(e.target.value)) }))}
+                className="h-9 text-center text-lg font-semibold" autoFocus />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Motivo</Label>
+              <select value={stockAdjust.motivo} onChange={(e) => setStockAdjust((prev) => ({ ...prev, motivo: e.target.value as any }))}
+                className="w-full h-9 text-sm border rounded-md px-2 bg-background">
+                <option value="ingreso">Ingreso de mercadería</option>
+                <option value="ajuste">Ajuste de inventario</option>
+                <option value="merma">Merma / pérdida</option>
+                <option value="venta_manual">Venta manual</option>
+              </select>
+            </div>
+            {stockPopover && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2 text-xs text-center text-muted-foreground">
+                {stockAdjust.tipo === "ajuste"
+                  ? `${stockPopover.currentStock} → ${stockAdjust.cantidad}`
+                  : stockAdjust.tipo === "sumar"
+                  ? `${stockPopover.currentStock} + ${stockAdjust.cantidad} = ${stockPopover.currentStock + stockAdjust.cantidad}`
+                  : `${stockPopover.currentStock} − ${stockAdjust.cantidad} = ${Math.max(0, stockPopover.currentStock - stockAdjust.cantidad)}`}
+              </div>
+            )}
+          </div>
+          <div className="px-4 pb-4 flex gap-2">
+            <Button variant="outline" className="flex-1 h-8 text-xs" onClick={() => setStockPopover(null)}>Cancelar</Button>
+            <Button className="flex-1 h-8 text-xs" onClick={handleQuickStockAdjust}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ─── Stock Bajo Dialog ─── */}
       <Dialog open={lowStockOpen} onOpenChange={setLowStockOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">

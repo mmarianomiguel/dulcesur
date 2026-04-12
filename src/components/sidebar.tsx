@@ -88,11 +88,9 @@ const navigation: NavItem[] = [
     href: "/admin/productos",
     icon: Package,
     children: [
-      { name: "Listado", href: "/admin/productos" },
-      { name: "Editar Precios", href: "/admin/productos/editar-precios" },
+      { name: "Productos", href: "/admin/productos" },
       { name: "Descuentos", href: "/admin/productos/descuentos" },
-      { name: "Marcas", href: "/admin/productos/marcas" },
-      { name: "Lista de Precios (PDF)", href: "/admin/productos/lista-precios" },
+      { name: "Categorías y marcas", href: "/admin/productos/marcas" },
     ],
   },
   { name: "Proveedores", href: "/admin/proveedores", icon: Truck },

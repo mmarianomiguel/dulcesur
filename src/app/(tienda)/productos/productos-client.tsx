@@ -357,7 +357,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       setLoading(true);
       let query = supabase
         .from("productos")
-        .select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" });
+        .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" });
 
       query = query.eq("activo", true).eq("visibilidad", "visible");
 
@@ -485,7 +485,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productos, activeDiscounts]);
+  }, [productos, activeDiscounts, tiendaClienteId]);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
@@ -497,13 +497,20 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     setQuantities((prev) => ({ ...prev, [id]: Math.max(1, val) }));
   }
 
-  function getActivePrice(producto: Producto) {
+  function getActivePrice(producto: Producto): number {
+    // Check precio_oferta first
+    const today = new Date().toISOString().slice(0, 10);
+    const po = (producto as any).precio_oferta;
+    const poHasta = (producto as any).precio_oferta_hasta;
+    if (po && po > 0 && (!poHasta || poHasta >= today)) {
+      return po;
+    }
+
     const pres = presentacionesMap[producto.id];
     if (pres && pres.length > 1) {
       const idx = selectedPres[producto.id] ?? 0;
       const p = pres[idx];
       if (p) {
-        // If presentacion price seems like unit price (same as base), multiply by cantidad
         if (p.precio > 0 && p.cantidad > 1 && p.precio === producto.precio) {
           return p.precio * p.cantidad;
         }
@@ -512,6 +519,13 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       return producto.precio;
     }
     return producto.precio;
+  }
+
+  function isOnOffer(producto: Producto): boolean {
+    const today = new Date().toISOString().slice(0, 10);
+    const po = (producto as any).precio_oferta;
+    const poHasta = (producto as any).precio_oferta_hasta;
+    return !!(po && po > 0 && (!poHasta || poHasta >= today));
   }
 
   function presLabel(p: { cantidad: number; nombre?: string }): string {
@@ -1220,7 +1234,8 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               {productos.map((producto, idx) => {
                 const qty = getQty(producto.id);
                 const pres = presentacionesMap[producto.id];
-                const activePrice = pres && pres.length > 1 ? (pres[selectedPres[producto.id] ?? 0]?.precio ?? producto.precio) : producto.precio;
+                const activePrice = getActivePrice(producto);
+                const onOffer = isOnOffer(producto);
                 const availableStock = Math.max(0, producto.stock - (cartUnits[producto.id] || 0));
                 const currentPresLabel = pres && pres.length > 1 ? presLabel(pres[selectedPres[producto.id] ?? 0]) : null;
                 const disc = getProductDiscount(producto, currentPresLabel, qty);
@@ -1285,6 +1300,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                         if (producto.es_combo) return (
                           <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
                             COMBO
+                          </span>
+                        );
+                        if (onOffer && disc === 0) return (
+                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            OFERTA
                           </span>
                         );
                         if (disc > 0) return (
@@ -1358,10 +1378,13 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           <span className="text-lg font-bold text-gray-900">
                             {disc > 0 ? formatCurrency(discountedPrice) : formatCurrency(activePrice)}
                           </span>
-                          {disc > 0 && (
-                            <span className="text-xs text-gray-400 line-through">{formatCurrency(activePrice)}</span>
+                          {(disc > 0 || onOffer) && (
+                            <span className="text-xs text-gray-400 line-through">{formatCurrency(onOffer && disc === 0 ? producto.precio : activePrice)}</span>
                           )}
                         </div>
+                        {onOffer && disc === 0 && (
+                          <p className="text-[10px] text-orange-600 font-medium">Precio especial</p>
+                        )}
                         {(() => {
                           const pa = producto.precio_anterior;
                           const dateStr = producto.fecha_actualizacion || producto.updated_at;
@@ -1469,7 +1492,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               {productos.map((producto, idx) => {
                 const qty = getQty(producto.id);
                 const pres = presentacionesMap[producto.id];
-                const activePrice = pres && pres.length > 1 ? (pres[selectedPres[producto.id] ?? 0]?.precio ?? producto.precio) : producto.precio;
+                const activePrice = getActivePrice(producto);
                 const availableStock = Math.max(0, producto.stock - (cartUnits[producto.id] || 0));
                 const listPresLabel = pres && pres.length > 1 ? presLabel(pres[selectedPres[producto.id] ?? 0]) : null;
                 return (
