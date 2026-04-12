@@ -67,6 +67,7 @@ import {
 import { defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/receipt-print-view";
 import { useWhiteLabel } from "@/hooks/use-white-label";
+import { VentasHoyWidget } from "@/components/ventas-hoy-widget";
 import { formatCurrency, todayARG } from "@/lib/formatters";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
@@ -1026,6 +1027,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ─── Ventas Hoy (realtime) ─── */}
+      <VentasHoyWidget />
 
       {/* ─── Morning Briefing ─── */}
       {isWidgetVisible("briefing") && (

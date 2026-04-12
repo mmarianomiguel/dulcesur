@@ -69,6 +69,7 @@ interface Pedido {
   total: number;
   items: PedidoItem[];
   venta?: VentaRecord;
+  historial?: { estado: string; created_at: string }[];
 }
 
 
@@ -176,6 +177,14 @@ export default function PedidosPage() {
         ? supabase.from("clientes").select("saldo").eq("id", clienteId).single()
         : Promise.resolve({ data: { saldo: 0 } });
 
+      const numerosParaHistorial = (data || []).map((p: any) => p.numero);
+      const historialPromise = numerosParaHistorial.length > 0
+        ? supabase.from("pedido_estado_historial")
+            .select("pedido_numero, estado, created_at")
+            .in("pedido_numero", numerosParaHistorial)
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [] });
+
       const [
         { data: ncsData },
         { data: movsData },
@@ -183,7 +192,15 @@ export default function PedidosPage() {
         { data: cobroItemsData },
         { data: allHabersData },
         { data: cliData },
-      ] = await Promise.all([ncPromise, cajaPromise, ccPromise, cobroPromise, ccHabersPromise, saldoPromise]);
+        { data: estadoHistorial },
+      ] = await Promise.all([ncPromise, cajaPromise, ccPromise, cobroPromise, ccHabersPromise, saldoPromise, historialPromise]);
+
+      // Agrupar historial por pedido
+      const historialMap: Record<string, { estado: string; created_at: string }[]> = {};
+      for (const h of estadoHistorial || []) {
+        if (!historialMap[h.pedido_numero]) historialMap[h.pedido_numero] = [];
+        historialMap[h.pedido_numero].push({ estado: h.estado, created_at: h.created_at });
+      }
 
       // Process NCs
       let ncMap: Record<string, NotaCredito[]> = {};
@@ -511,6 +528,7 @@ export default function PedidosPage() {
           estado: deriveEstado(p.estado, ventaWithPagos),
           items: sourceItems,
           venta: ventaWithPagos,
+          historial: historialMap[p.numero] || [],
         };
       });
 
@@ -665,6 +683,65 @@ export default function PedidosPage() {
 
         {isExpanded && (
           <div className="border-t border-gray-100 mx-5 md:mx-6">
+            {/* Timeline de estados */}
+            {pedido.historial && pedido.historial.length > 0 && (
+              <div className="py-4 border-b border-gray-50">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                  Seguimiento del pedido
+                </p>
+                <div className="relative">
+                  <div className="absolute left-3 top-3 bottom-3 w-px bg-gray-100" />
+                  <div className="space-y-3">
+                    {[
+                      { key: "pendiente", label: "Pedido recibido", icon: "\u{1F4CB}" },
+                      { key: "armado", label: "En preparaci\u00F3n", icon: "\u{1F4E6}" },
+                      { key: "entregado", label: "Entregado", icon: "\u2705" },
+                      { key: "cancelado", label: "Cancelado", icon: "\u274C" },
+                    ].map(({ key, label, icon }) => {
+                      const entry = pedido.historial!.find((h) => h.estado === key);
+                      const isCurrent = pedido.estado === key;
+                      const isPast = !!entry;
+                      if (!isPast && key === "cancelado") return null;
+                      if (!isPast && !isCurrent) return (
+                        <div key={key} className="flex items-center gap-3 opacity-30">
+                          <div className="w-6 h-6 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center text-[10px] shrink-0" />
+                          <span className="text-xs text-gray-400">{label}</span>
+                        </div>
+                      );
+                      return (
+                        <div key={key} className="flex items-start gap-3">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] shrink-0 z-10 ${
+                            isCurrent
+                              ? "bg-primary text-white shadow-sm"
+                              : key === "cancelado"
+                              ? "bg-red-100"
+                              : "bg-emerald-100"
+                          }`}>
+                            {icon}
+                          </div>
+                          <div>
+                            <p className={`text-xs font-semibold ${isCurrent ? "text-primary" : "text-gray-700"}`}>
+                              {label}
+                            </p>
+                            {entry && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">
+                                {new Date(entry.created_at).toLocaleDateString("es-AR", {
+                                  day: "numeric", month: "short",
+                                })}
+                                {" \u00B7 "}
+                                {new Date(entry.created_at).toLocaleTimeString("es-AR", {
+                                  hour: "2-digit", minute: "2-digit", hour12: false,
+                                })}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Show pedido items if available, otherwise fall back to venta items */}
             {(pedido.items.length > 0 || (pedido.venta && pedido.venta.items.length > 0)) && (
               <table className="w-full text-sm">

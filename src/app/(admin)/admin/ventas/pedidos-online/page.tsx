@@ -524,6 +524,11 @@ export default function PedidosOnlinePage() {
       showAdminToast(`Error al cambiar estado: ${updateError.message}`, "error");
       return;
     }
+    // Registrar en historial para que el cliente vea el timeline
+    await supabase.from("pedido_estado_historial").insert({
+      pedido_numero: pedido.numero,
+      estado: nuevoEstado,
+    });
 
     const hoyGlobal = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     const ventaEstado = nuevoEstado === "cancelado" ? "anulada" : nuevoEstado;

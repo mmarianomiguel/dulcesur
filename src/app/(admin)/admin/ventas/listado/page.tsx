@@ -1144,6 +1144,48 @@ export default function ListadoVentasPage() {
 
   useEffect(() => { fetchPedidos(); }, [fetchPedidos]);
 
+  // Realtime: escuchar nuevos pedidos y notificar
+  useEffect(() => {
+    const channel = supabase
+      .channel("pedidos_tienda_nuevos")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "pedidos_tienda" },
+        (payload) => {
+          const nuevo = payload.new as any;
+          showAdminToast(
+            `Nuevo pedido #${nuevo.numero} — ${nuevo.nombre_cliente}`,
+            "success"
+          );
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            gain.gain.value = 0.3;
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
+            setTimeout(() => {
+              const osc2 = ctx.createOscillator();
+              const gain2 = ctx.createGain();
+              osc2.connect(gain2);
+              gain2.connect(ctx.destination);
+              osc2.frequency.value = 1100;
+              gain2.gain.value = 0.3;
+              osc2.start();
+              osc2.stop(ctx.currentTime + 0.2);
+            }, 200);
+          } catch {}
+          fetchPedidos();
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchPedidos]);
+
   // Filter pedidos
   const poFiltered = poPedidos.filter((p) => {
     if (poFilterEstado !== "todos") {
@@ -1650,6 +1692,11 @@ export default function ListadoVentasPage() {
     if (pedido.numero) {
       const { error: ptErr } = await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("numero", pedido.numero);
       if (ptErr) showAdminToast(`Error al sincronizar pedido: ${ptErr.message}`, "error");
+      // Registrar en historial para que el cliente vea el timeline
+      await supabase.from("pedido_estado_historial").insert({
+        pedido_numero: pedido.numero,
+        estado: nuevoEstado,
+      });
     }
 
     // Find linked venta (use cached _ventaId first, then query)

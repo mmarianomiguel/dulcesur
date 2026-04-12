@@ -26,6 +26,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
+import { useCarritoSync } from "@/hooks/use-carrito-sync";
 
 interface CartItem {
   id: string;
@@ -177,6 +178,7 @@ function getNextOpenDay(cfg: TiendaConfig): { label: string; date: string } {
 }
 
 export default function CheckoutPage() {
+  const { clearRemote } = useCarritoSync();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -950,6 +952,7 @@ export default function CheckoutPage() {
 
       localStorage.removeItem("carrito");
       window.dispatchEvent(new Event("cart-updated"));
+      clearRemote();
       setOrderNumber(numero);
       window.scrollTo({ top: 0, behavior: "instant" });
     } catch (err: any) {

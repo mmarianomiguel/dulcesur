@@ -42,30 +42,19 @@ async function sendPushToAll(title: string, body: string, tag: string, url: stri
   }
 }
 
-// Simple in-memory rate limiter
-const attempts = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 5; // max attempts
-const RATE_WINDOW = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT = 5;
+const RATE_WINDOW_MINUTES = 15;
 
-function checkRateLimit(key: string): boolean {
-  const now = Date.now();
-  const entry = attempts.get(key);
-  if (!entry || now > entry.resetAt) {
-    attempts.set(key, { count: 1, resetAt: now + RATE_WINDOW });
-    return true;
-  }
-  if (entry.count >= RATE_LIMIT) return false;
-  entry.count++;
-  return true;
+async function checkRateLimit(key: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("check_auth_rate_limit", {
+    p_key: key,
+    p_max_attempts: RATE_LIMIT,
+    p_window_minutes: RATE_WINDOW_MINUTES,
+  });
+
+  if (error) return true; // On error, allow through (fail open)
+  return data === true;
 }
-
-// Cleanup stale entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of attempts) {
-    if (now > entry.resetAt) attempts.delete(key);
-  }
-}, 60_000);
 
 export async function POST(req: NextRequest) {
   try {
@@ -75,7 +64,7 @@ export async function POST(req: NextRequest) {
     const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
     const rateLimitKey = `${ip}:${action}`;
 
-    if (!checkRateLimit(rateLimitKey)) {
+    if (!(await checkRateLimit(rateLimitKey))) {
       return NextResponse.json(
         { error: "Demasiados intentos. Intenta de nuevo en 15 minutos." },
         { status: 429 }

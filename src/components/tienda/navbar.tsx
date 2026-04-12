@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { slugify, productSlug } from "@/lib/utils";
 import { useCart } from "./cart-drawer";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
+import { useCarritoSync } from "@/hooks/use-carrito-sync";
 import NotificationBell from "./notification-bell";
 
 interface Categoria {
@@ -35,6 +36,7 @@ export default function TiendaNavbar() {
   const [query, setQuery] = useState("");
   const [mobileQuery, setMobileQuery] = useState("");
   const { openCart, itemCount, subtotal } = useCart();
+  useCarritoSync();
   const router = useRouter();
   const { filtrarCategorias } = useCategoriasPermitidas();
   const [hoveredCat, setHoveredCat] = useState<string | null>(null);
