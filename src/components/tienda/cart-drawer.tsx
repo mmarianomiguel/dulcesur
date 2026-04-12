@@ -19,6 +19,7 @@ interface CartItem {
   precio_original?: number;
   descuento?: number;
   unidades_por_presentacion?: number;
+  cantidad_minima?: number;
 }
 
 interface CartContextType {
@@ -124,7 +125,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     (id: string, cantidad: number) => {
       if (cantidad < 1) return;
       setItems((prev) => {
-        const next = prev.map((i) => (i.id === id ? { ...i, cantidad } : i));
+        const next = prev.map((i) => {
+          if (i.id !== id) return i;
+
+          // Si el item tiene un descuento por cantidad mínima,
+          // verificar si la nueva cantidad sigue cumpliendo el mínimo
+          if (
+            i.descuento &&
+            i.descuento > 0 &&
+            i.precio_original &&
+            i.cantidad_minima &&
+            i.cantidad_minima > 0 &&
+            cantidad < i.cantidad_minima
+          ) {
+            return {
+              ...i,
+              cantidad,
+              precio: i.precio_original,
+              precio_original: undefined,
+              descuento: undefined,
+            };
+          }
+
+          return { ...i, cantidad };
+        });
         localStorage.setItem("carrito", JSON.stringify(next));
         return next;
       });
@@ -312,11 +336,17 @@ function CartDrawer() {
                             {formatCurrency(item.precio_original)}
                           </span>
                           <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                            -{item.descuento}%
+                            -{Number.isInteger(item.descuento) ? item.descuento : Number(item.descuento?.toFixed(1))}%
                           </span>
                         </>
                       )}
                     </div>
+                    {/* Aviso de descuento perdido por cantidad */}
+                    {item.cantidad_minima && item.cantidad_minima > 0 && !item.descuento && item.cantidad < item.cantidad_minima && (
+                      <p className="text-[10px] text-amber-600 mt-1">
+                        Agregá {item.cantidad_minima - item.cantidad} más para recuperar el descuento
+                      </p>
+                    )}
                     <div className="mt-2 flex items-center">
                       {/* Quantity controls */}
                       {(() => {

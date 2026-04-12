@@ -15,7 +15,7 @@ export default function OfertasPage() {
           <TrendingDown className="h-6 w-6 text-green-600" />
           <h1 className="text-2xl font-bold text-gray-900">Ofertas</h1>
         </div>
-        <p className="text-sm text-gray-500">Productos con precio rebajado, ordenados por mayor descuento.</p>
+        <p className="text-sm text-gray-500">Productos con descuentos activos, ordenados por mayor ahorro.</p>
         <div className="w-12 h-0.5 bg-green-500 rounded-full mt-2" />
       </div>
       <OfertasClient />

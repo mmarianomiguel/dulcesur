@@ -2,7 +2,6 @@
 
 import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
-import { recalcFromVenta } from "@/lib/order-calc";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -523,7 +522,7 @@ export default function HojaDeRutaPage() {
 
   const handleMarkDelivered = async (groupVentas: VentaRow[]) => {
     const ids = groupVentas.map((v) => v.id);
-    const totalPendiente = groupVentas.reduce((s, v) => s + Math.max(0, v.total - (pagadoPorVenta[v.id] || 0)), 0);
+    const totalPendiente = groupVentas.reduce((s, v) => s + Math.max(0, (v.total - (ncPorVenta[v.id] || 0)) - (pagadoPorVenta[v.id] || 0)), 0);
     const clienteId = groupVentas[0]?.cliente_id;
     const clienteNombre = groupVentas[0]?.clientes?.nombre || "Sin cliente";
 
@@ -881,7 +880,7 @@ export default function HojaDeRutaPage() {
     const nc = g.ventas.reduce((s, v) => s + (ncPorVenta[v.id] || 0), 0);
     const pagado = g.ventas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
     const neto = bruto - nc;
-    const debe = Math.max(0, bruto - pagado);
+    const debe = Math.max(0, neto - pagado);
     return { bruto, nc, pagado, neto, debe };
   };
 
@@ -1889,12 +1888,9 @@ export default function HojaDeRutaPage() {
             const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
             const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
-            // Pre-surcharge base: use recalcFromVenta to get the base without transfer surcharge
-            const itemsSubtotalGrupo = allVentas.reduce((s, vt) => {
-              const r = recalcFromVenta({ subtotal: vt.subtotal || 0, descuento_porcentaje: vt.descuento_porcentaje || 0, recargo_porcentaje: vt.recargo_porcentaje || 0, total: vt.total });
-              return s + (vt.subtotal || 0) - r.descuentoMonto + r.recargoMonto;
-            }, 0);
-            const preDebeGrupo = Math.max(0, itemsSubtotalGrupo - totalNCGrupo - totalPagadoReal);
+            // totalDebeGrupo ya calcula total - pagadoPorVenta por venta
+            // Solo falta restar NCs para el monto base del cobro
+            const preDebeGrupo = Math.max(0, totalDebeGrupo - totalNCGrupo);
             return (
               <div className="space-y-4">
                 {/* Summary header */}

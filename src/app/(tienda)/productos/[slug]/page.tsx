@@ -153,7 +153,7 @@ export default function ProductoDetallePage() {
       if (d.presentacion === "caja" && isUnit) continue;
       let effectivePercent = Number(d.porcentaje);
       if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && prod.precio > 0) {
-        effectivePercent = Math.max(0, Math.min(100, ((prod.precio - d.precio_fijo) / prod.precio) * 100));
+        effectivePercent = Math.round(Math.max(0, Math.min(100, ((prod.precio - d.precio_fijo) / prod.precio) * 100)) * 100) / 100;
       }
       if (d.aplica_a === "todos") {
         best = Math.max(best, effectivePercent);
@@ -441,7 +441,7 @@ export default function ProductoDetallePage() {
     maxQty <= 5 ? "text-orange-500" :
     "text-green-600";
 
-  function addToCart(prod: Producto, price: number, presLabel: string, qty: number, precioOriginal?: number, descuento?: number, unidadesPres?: number, overrideStock?: number) {
+  function addToCart(prod: Producto, price: number, presLabel: string, qty: number, precioOriginal?: number, descuento?: number, unidadesPres?: number, overrideStock?: number, cantidadMinima?: number) {
     const stored = localStorage.getItem("carrito");
     let carrito: any[];
     try { const _p = stored ? JSON.parse(stored) : []; carrito = Array.isArray(_p) ? _p : []; } catch { carrito = []; }
@@ -479,6 +479,7 @@ export default function ProductoDetallePage() {
         cantidad: canAdd,
         presentacion: presLabel,
         unidades_por_presentacion: units,
+        cantidad_minima: cantidadMinima,
       });
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
@@ -501,7 +502,17 @@ export default function ProductoDetallePage() {
     }
     const disc = getProductDiscount(producto, presLabel, cantidad);
     const price = disc > 0 ? Math.round(currentPrice * (1 - disc / 100)) : currentPrice;
-    addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined, presQty, effectiveStock);
+
+    // Encontrar la cantidad_minima del descuento que se aplicó
+    const discountUsed = disc > 0
+      ? activeDiscounts.find((d: any) => {
+          if (d.cantidad_minima && d.cantidad_minima > 0 && cantidad >= d.cantidad_minima) return true;
+          return false;
+        })
+      : null;
+    const cantidadMinima = discountUsed?.cantidad_minima ?? undefined;
+
+    addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined, presQty, effectiveStock, cantidadMinima);
     setCantidad(1);
   }
 
@@ -685,7 +696,7 @@ export default function ProductoDetallePage() {
               </p>
               {!clienteLoading && currentDiscount > 0 && (
                 <span className="bg-primary/10 text-primary/90 text-xs font-bold px-2.5 py-1 rounded-full">
-                  {currentDiscount}% OFF
+                  {Number.isInteger(currentDiscount) ? currentDiscount : Number(currentDiscount.toFixed(1))}% OFF
                 </span>
               )}
               {(() => {
