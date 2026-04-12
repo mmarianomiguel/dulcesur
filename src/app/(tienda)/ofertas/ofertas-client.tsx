@@ -262,7 +262,7 @@ export default function OfertasClient() {
               const savePct = Math.round((1 - boxPres.precio / expectedPrice) * 100);
               if (savePct >= 1 && savePct > mejorPct) {
                 mejorPct = savePct; precioFinal = boxPres.precio;
-                descId = "por_caja"; descNombre = boxPres.nombre || `x${boxPres.cantidad}`;
+                descId = "por_caja"; descNombre = "Precio especial por caja";
                 fechaFin = null;
                 Object.assign(prod, { _presIndexConDescuento: boxIdx });
               }
@@ -335,7 +335,13 @@ export default function OfertasClient() {
       const descMap: Record<string, { nombre: string; count: number }> = {};
       for (const p of resultado) {
         const key = p.descuentoId;
-        const nombre = p.esComboProd ? "Combos" : p.esExclusivo ? "Exclusivos para vos" : p.descuentoNombre;
+        const nombre = p.esComboProd
+          ? "Combos"
+          : p.esExclusivo
+          ? "Exclusivo para vos"
+          : p.descuentoId === "por_caja"
+          ? "Precio especial por caja"
+          : p.descuentoNombre;
         if (!descMap[key]) descMap[key] = { nombre, count: 0 };
         descMap[key].count++;
       }
