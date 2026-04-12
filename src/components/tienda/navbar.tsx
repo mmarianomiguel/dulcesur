@@ -434,80 +434,87 @@ export default function TiendaNavbar() {
                 onMouseLeave={handleMenuLeave}
                 className="absolute left-0 right-0 bg-white border-b border-gray-200 shadow-xl z-50"
               >
-                <div className="max-w-7xl mx-auto px-4 py-5 grid grid-cols-4 gap-6">
+                {(() => {
+                  const muchasSubs = subs.length > 8;
+                  return (
+                    <div className={`max-w-7xl mx-auto px-4 py-5 grid gap-6 ${muchasSubs ? "grid-cols-5" : "grid-cols-4"}`}>
 
-                  {/* Col 1 — Subcategorías */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                      {cat.nombre}
-                    </p>
-                    <Link
-                      href={`/productos?categoria=${slugify(cat.nombre)}`}
-                      onClick={() => setHoveredCat(null)}
-                      className="block text-sm text-gray-800 font-semibold py-1.5 hover:text-primary transition-colors"
-                    >
-                      Todas las subcategorías
-                    </Link>
-                    {subs.map((sub) => (
-                      <Link
-                        key={sub.id}
-                        href={`/productos?categoria=${slugify(cat.nombre)}&subcategoria=${slugify(sub.nombre)}`}
-                        onClick={() => setHoveredCat(null)}
-                        className="flex items-center justify-between py-1.5 text-sm text-gray-600 hover:text-primary transition-colors group"
-                      >
-                        <span>{sub.nombre}</span>
-                        <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
-                      </Link>
-                    ))}
-                    {subs.length === 0 && (
-                      <p className="text-xs text-gray-400 mt-1">Sin subcategorías</p>
-                    )}
-                  </div>
-
-                  {/* Col 2 — Más buscado */}
-                  <div className="border-l border-gray-100 pl-6">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                      Más buscado
-                    </p>
-                    {subs.slice(0, 5).map((sub) => (
-                      <Link
-                        key={sub.id}
-                        href={`/productos?categoria=${slugify(cat.nombre)}&subcategoria=${slugify(sub.nombre)}`}
-                        onClick={() => setHoveredCat(null)}
-                        className="flex items-center gap-2 py-1.5 text-sm text-gray-600 hover:text-primary transition-colors"
-                      >
-                        <span className="text-gray-300 text-xs">↗</span>
-                        {sub.nombre}
-                      </Link>
-                    ))}
-                    {subs.length === 0 && (
-                      <p className="text-xs text-gray-400 mt-1">—</p>
-                    )}
-                  </div>
-
-                  {/* Col 3-4 — Marcas destacadas */}
-                  <div className="col-span-2 border-l border-gray-100 pl-6">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                      Marcas en {cat.nombre}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {marcas.map((marca) => (
+                      {/* Subcategorías: 2 cols si hay muchas, 1 col si pocas */}
+                      <div className={muchasSubs ? "col-span-2" : "col-span-1"}>
+                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                          {cat.nombre}
+                        </p>
                         <Link
-                          key={marca.id}
-                          href={`/productos?categoria=${slugify(cat.nombre)}&marca=${slugify(marca.nombre)}`}
+                          href={`/productos?categoria=${slugify(cat.nombre)}`}
                           onClick={() => setHoveredCat(null)}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-primary/10 hover:text-primary transition-colors"
+                          className="block text-sm text-gray-800 font-semibold py-1.5 hover:text-primary transition-colors mb-1"
                         >
-                          {marca.nombre}
+                          Todas las subcategorías
                         </Link>
-                      ))}
-                      {marcas.length === 0 && (
-                        <p className="text-xs text-gray-400">Sin marcas registradas</p>
-                      )}
-                    </div>
-                  </div>
+                        <div className={muchasSubs ? "grid grid-cols-2 gap-x-4" : ""}>
+                          {subs.map((sub) => (
+                            <Link
+                              key={sub.id}
+                              href={`/productos?categoria=${slugify(cat.nombre)}&subcategoria=${slugify(sub.nombre)}`}
+                              onClick={() => setHoveredCat(null)}
+                              className="flex items-center justify-between py-1 text-sm text-gray-600 hover:text-primary transition-colors group"
+                            >
+                              <span className="truncate">{sub.nombre}</span>
+                              <ChevronRight className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-primary ml-1" />
+                            </Link>
+                          ))}
+                        </div>
+                        {subs.length === 0 && (
+                          <p className="text-xs text-gray-400 mt-1">Sin subcategorías</p>
+                        )}
+                      </div>
 
-                </div>
+                      {/* Más buscado */}
+                      <div className="border-l border-gray-100 pl-6">
+                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                          Más buscado
+                        </p>
+                        {subs.slice(0, 5).map((sub) => (
+                          <Link
+                            key={sub.id}
+                            href={`/productos?categoria=${slugify(cat.nombre)}&subcategoria=${slugify(sub.nombre)}`}
+                            onClick={() => setHoveredCat(null)}
+                            className="flex items-center gap-2 py-1.5 text-sm text-gray-600 hover:text-primary transition-colors"
+                          >
+                            <span className="text-gray-300 text-xs">↗</span>
+                            {sub.nombre}
+                          </Link>
+                        ))}
+                        {subs.length === 0 && (
+                          <p className="text-xs text-gray-400 mt-1">—</p>
+                        )}
+                      </div>
+
+                      {/* Marcas */}
+                      <div className="col-span-2 border-l border-gray-100 pl-6">
+                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                          Marcas en {cat.nombre}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {marcas.map((marca) => (
+                            <Link
+                              key={marca.id}
+                              href={`/productos?categoria=${slugify(cat.nombre)}&marca=${slugify(marca.nombre)}`}
+                              onClick={() => setHoveredCat(null)}
+                              className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-primary/10 hover:text-primary transition-colors"
+                            >
+                              {marca.nombre}
+                            </Link>
+                          ))}
+                          {marcas.length === 0 && (
+                            <p className="text-xs text-gray-400">Sin marcas registradas</p>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}
