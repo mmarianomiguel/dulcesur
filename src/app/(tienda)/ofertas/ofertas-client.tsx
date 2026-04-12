@@ -139,6 +139,7 @@ export default function OfertasClient() {
           .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, stock, es_combo, categoria_id, subcategoria_id, marca_id, categorias(id, nombre, restringida)")
           .eq("activo", true)
           .eq("visibilidad", "visible")
+          .gt("stock", 0)
           .limit(2000),
         Promise.all([
           supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).is("fecha_fin", null),
@@ -335,7 +336,7 @@ export default function OfertasClient() {
           }
         }
 
-        if (mejorPct > 0) {
+        if (mejorPct > 0 && prod.stock > 0) {
           const presOrdenadas = [...(presMap[prod.id] || [])].sort((a, b) => a.cantidad - b.cantidad);
           resultado.push({
             ...prod,
