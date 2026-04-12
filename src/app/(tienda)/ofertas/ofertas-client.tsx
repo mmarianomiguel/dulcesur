@@ -299,7 +299,18 @@ export default function OfertasClient({ initialProductos, initialDescuentos, ini
             ...prod,
             precioFinal,
             descuentoPct: Math.round(mejorPct),
-            ahorro: prod.precio - precioFinal,
+            ahorro: (() => {
+              // Para descuentos por caja, el ahorro es vs comprar unidades sueltas
+              if (descId === "por_caja" || (prod as any)._presIndexConDescuento > 0) {
+                const presOrdenadas = [...(presMap[prod.id] || [])].sort((a, b) => a.cantidad - b.cantidad);
+                const unitPres = presOrdenadas.find((p: any) => p.cantidad === 1);
+                const boxPres = presOrdenadas.find((p: any) => p.cantidad > 1);
+                if (unitPres && boxPres) {
+                  return Math.round(unitPres.precio * boxPres.cantidad) - precioFinal;
+                }
+              }
+              return prod.precio - precioFinal;
+            })(),
             descuentoId: descId,
             descuentoNombre: descNombre,
             esExclusivo,
@@ -678,7 +689,14 @@ export default function OfertasClient({ initialProductos, initialDescuentos, ini
             const displayPrice = isDescuentoPres && cantMinOk
               ? p.precioFinal
               : (activePres?.precio || p.precio);
-            const displayOriginal = activePres ? activePres.precio : p.precio;
+            const displayOriginal = (() => {
+              if (activePres && activePres.cantidad > 1) {
+                // Para cajas, el precio de referencia es unidad × cantidad
+                const unitPres = pres.find((pr) => pr.cantidad === 1);
+                if (unitPres && unitPres.precio > 0) return Math.round(unitPres.precio * activePres.cantidad);
+              }
+              return activePres ? activePres.precio : p.precio;
+            })();
             const displayAhorro = isDescuentoPres && cantMinOk && displayPrice < displayOriginal
               ? displayOriginal - displayPrice
               : 0;
