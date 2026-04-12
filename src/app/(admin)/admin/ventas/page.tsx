@@ -506,55 +506,59 @@ export default function VentasPage() {
   };
 
   // ---------- discount helper ----------
+  // Retorna: positivo = porcentaje de descuento
+  //          negativo = precio fijo exacto (negado para distinguirlo)
   const getProductDiscount = (product: Producto, presName: string, qty?: number): number => {
     let bestDiscount = 0;
+    let bestPrecioFijo: number | null = null;
     const isCombo = !!(product as any).es_combo;
     for (const d of activeDiscounts) {
-      // Skip if discount excludes combos and product is combo
       if (d.excluir_combos && isCombo) continue;
-      // Skip if product is in exclusion list
       if (d.productos_excluidos_ids?.length > 0 && d.productos_excluidos_ids.includes(product.id)) continue;
-      // Skip if discount is client-specific and current client doesn't match
       if (d.clientes_ids?.length > 0 && (!clientId || !d.clientes_ids.includes(clientId))) continue;
-      // Check minimum quantity for volume discounts - skip if qty not met or not provided
       if (d.cantidad_minima && d.cantidad_minima > 0) {
         if (qty == null || qty < d.cantidad_minima) continue;
       }
-      // Check presentation filter
       if (d.presentacion === "unidad" && presName !== "Unidad") continue;
       if (d.presentacion === "caja" && presName === "Unidad") continue;
 
-      // Determine the effective discount percentage
-      let effectivePercent = Number(d.porcentaje);
-      if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && product.precio > 0) {
-        // Convert fixed price to equivalent percentage
-        effectivePercent = Math.max(0, Math.min(100, ((product.precio - d.precio_fijo) / product.precio) * 100));
-      }
-
-      // Check scope
-      if (d.aplica_a === "todos") {
-        bestDiscount = Math.max(bestDiscount, effectivePercent);
-      } else if (d.aplica_a === "categorias") {
+      let aplica = false;
+      if (d.aplica_a === "todos") aplica = true;
+      else if (d.aplica_a === "categorias") {
         const catIds: string[] = d.categorias_ids || [];
-        if (catIds.includes((product as any).categoria_id) || catIds.includes((product as any).subcategoria_id)) {
-          bestDiscount = Math.max(bestDiscount, effectivePercent);
-        }
+        aplica = catIds.includes((product as any).categoria_id) || catIds.includes((product as any).subcategoria_id);
       } else if (d.aplica_a === "subcategorias") {
         const subIds: string[] = d.subcategorias_ids || [];
-        if ((product as any).subcategoria_id && subIds.includes((product as any).subcategoria_id)) {
-          bestDiscount = Math.max(bestDiscount, effectivePercent);
-        }
+        aplica = !!(product as any).subcategoria_id && subIds.includes((product as any).subcategoria_id);
       } else if (d.aplica_a === "productos") {
-        const prodIds: string[] = d.productos_ids || [];
-        if (prodIds.includes(product.id)) {
-          bestDiscount = Math.max(bestDiscount, effectivePercent);
-        }
+        aplica = (d.productos_ids || []).includes(product.id);
       } else if (d.aplica_a === "marcas") {
         const mIds: string[] = d.marcas_ids || [];
-        if ((product as any).marca_id && mIds.includes((product as any).marca_id)) {
-          bestDiscount = Math.max(bestDiscount, effectivePercent);
-        }
+        aplica = !!(product as any).marca_id && mIds.includes((product as any).marca_id);
       }
+      if (!aplica) continue;
+
+      // Precio fijo: guardar directamente sin convertir a porcentaje
+      if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && d.precio_fijo > 0) {
+        const savePct = product.precio > 0
+          ? Math.round(((product.precio - d.precio_fijo) / product.precio) * 100)
+          : 0;
+        if (savePct > bestDiscount) {
+          bestDiscount = savePct;
+          bestPrecioFijo = d.precio_fijo;
+        }
+        continue;
+      }
+
+      const effectivePercent = Number(d.porcentaje);
+      if (effectivePercent > bestDiscount) {
+        bestDiscount = effectivePercent;
+        bestPrecioFijo = null;
+      }
+    }
+
+    if (bestPrecioFijo !== null) {
+      return -bestPrecioFijo; // negativo = precio fijo exacto
     }
     return bestDiscount;
   };
@@ -614,8 +618,16 @@ export default function VentasPage() {
         setSelectedItemIdx(existingIdx);
         return updated;
       }
-      const autoDiscount = getProductDiscount(product, presName);
-      const discountedSubtotal = presPrice * (1 - autoDiscount / 100);
+      const rawDiscount = getProductDiscount(product, presName);
+      // rawDiscount < 0 significa precio fijo exacto (negado)
+      const isPrecioFijo = rawDiscount < 0;
+      const precioFijoExacto = isPrecioFijo ? Math.abs(rawDiscount) : null;
+      const autoDiscount = isPrecioFijo
+        ? Math.round(((presPrice - precioFijoExacto!) / presPrice) * 100)
+        : rawDiscount;
+      const discountedSubtotal = isPrecioFijo
+        ? precioFijoExacto!
+        : presPrice * (1 - autoDiscount / 100);
       const newItems = [
         ...prev,
         {
@@ -802,8 +814,16 @@ export default function VentasPage() {
         }
         // Recalculate discount for volume-based discounts
         const prod = products.find((p) => p.id === i.producto_id);
-        const newDiscount = prod ? getProductDiscount(prod, i.presentacion, qty) : i.discount;
-        return { ...i, qty, discount: newDiscount, subtotal: i.price * qty * (1 - newDiscount / 100) };
+        const rawDisc = prod ? getProductDiscount(prod, i.presentacion, qty) : i.discount;
+        const isPrecioFijoQty = rawDisc < 0;
+        const precioFijoQty = isPrecioFijoQty ? Math.abs(rawDisc) : null;
+        const newDiscount = isPrecioFijoQty
+          ? Math.round(((i.price - precioFijoQty!) / i.price) * 100)
+          : rawDisc;
+        const newSubtotal = isPrecioFijoQty
+          ? precioFijoQty! * qty
+          : i.price * qty * (1 - newDiscount / 100);
+        return { ...i, qty, discount: newDiscount, subtotal: newSubtotal };
       });
     });
   };

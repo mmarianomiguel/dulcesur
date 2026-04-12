@@ -227,10 +227,25 @@ export default function OfertasClient() {
           else if (d.aplica_a === "marcas") aplica = !!prod.marca_id && (d.marcas_ids || []).includes(prod.marca_id);
           if (!aplica) continue;
 
-          let pct = Number(d.porcentaje);
-          if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && prod.precio > 0) {
-            pct = Math.round(Math.max(0, Math.min(100, ((prod.precio - d.precio_fijo) / prod.precio) * 100)) * 100) / 100;
+          // Precio fijo: usar directamente sin convertir a porcentaje
+          if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && d.precio_fijo > 0) {
+            const precioFijo = d.precio_fijo;
+            const savePct = prod.precio > 0
+              ? Math.round(((prod.precio - precioFijo) / prod.precio) * 100)
+              : 0;
+            if (savePct > mejorPct) {
+              mejorPct = savePct;
+              precioFinal = precioFijo;
+              descId = d.id;
+              descNombre = d.nombre;
+              esExclusivo = !!(d.clientes_ids && d.clientes_ids.length > 0);
+              cantMinima = d.cantidad_minima ?? null;
+              fechaFin = d.fecha_fin ?? null;
+            }
+            continue;
           }
+
+          let pct = Number(d.porcentaje);
 
           if (d.presentacion === "caja") {
             const sortedPresB = [...(presMap[prod.id] || [])].sort((a, b) => a.cantidad - b.cantidad);
