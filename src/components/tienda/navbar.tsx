@@ -48,7 +48,11 @@ export default function TiendaNavbar() {
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [logoSrc, setLogoSrc] = useState<string>(FALLBACK_LOGO);
-  const [clienteId, setClienteId] = useState<number | null>(null);
+  const [clienteId, setClienteId] = useState<string | null>(null);
+  const [clienteNombre, setClienteNombre] = useState<string | null>(null);
+  const [clienteSaldo, setClienteSaldo] = useState<number | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [mobilLogoSrc, setMobilLogoSrc] = useState<string>(FALLBACK_LOGO);
 
   const [config, setConfig] = useState<{
@@ -61,9 +65,9 @@ export default function TiendaNavbar() {
     const readCliente = () => {
       try {
         const stored = localStorage.getItem("cliente_auth");
-        if (stored) { const p = JSON.parse(stored); if (p?.id) { setClienteId(p.id); return; } }
+        if (stored) { const p = JSON.parse(stored); if (p?.id) { setClienteId(p.id); setClienteNombre(p.nombre || null); return; } }
       } catch {}
-      setClienteId(null);
+      setClienteId(null); setClienteNombre(null); setClienteSaldo(null);
     };
     readCliente();
     // Re-check on storage changes (login/logout from other tabs) and on focus (same tab navigation)
@@ -199,6 +203,21 @@ export default function TiendaNavbar() {
     setHoveredCat(catId);
   };
 
+  const handleAvatarClick = async () => {
+    setDropdownOpen((prev) => !prev);
+    if (!dropdownOpen && clienteId && clienteSaldo === null) {
+      const { data } = await supabase.from("clientes").select("saldo").eq("id", clienteId).single();
+      if (data) setClienteSaldo((data as any).saldo ?? 0);
+    }
+  };
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const handleCatLeave = () => {
     closeTimer.current = setTimeout(() => setHoveredCat(null), 250);
   };
@@ -210,6 +229,11 @@ export default function TiendaNavbar() {
   const handleMenuLeave = () => {
     closeTimer.current = setTimeout(() => setHoveredCat(null), 250);
   };
+
+  const clientePrimerNombre = clienteNombre ? clienteNombre.trim().split(" ")[0] : null;
+  const clienteIniciales = clienteNombre
+    ? clienteNombre.trim().split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")
+    : "?";
 
   return (
     <>
@@ -227,14 +251,8 @@ export default function TiendaNavbar() {
             Atención: {config?.dias_atencion ? `${config.dias_atencion[0]} a ${config.dias_atencion[config.dias_atencion.length - 1]}` : "Lunes a Sábados"} de {config?.horario_atencion_inicio?.slice(0, 5)?.replace(/^0/, "") || "8"} a {config?.horario_atencion_fin?.slice(0, 5)?.replace(/^0/, "") || "14"}hs
           </span>
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/cuenta" className="hover:text-primary transition">
-              Mi cuenta
-            </Link>
-            <Link href="/historial" className="hover:text-primary transition">
-              Mis pedidos
-            </Link>
-            <Link href="/ofertas" className="hover:text-primary transition">
-              Ofertas
+            <Link href="/ofertas" className="flex items-center gap-1 font-semibold text-pink-400 hover:text-pink-300 transition">
+              🏷️ Ofertas
             </Link>
             {config?.telefono && (
               <a href={`tel:${config.telefono.replace(/[^+\d]/g, "")}`} className="flex items-center gap-1 hover:text-primary transition" suppressHydrationWarning>
@@ -332,28 +350,39 @@ export default function TiendaNavbar() {
 
           {/* Right actions */}
           <div className="ml-auto flex items-center gap-1 lg:gap-3">
-            {/* Account (desktop) */}
-            <Link
-              href="/cuenta"
-              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-primary lg:flex"
-            >
-              <User className="h-5 w-5" />
-              Mi cuenta
-            </Link>
-            <Link
-              href="/historial"
-              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-primary lg:flex"
-            >
-              <Package className="h-5 w-5" />
-              Mis pedidos
-            </Link>
-            <Link
-              href="/ofertas"
-              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-primary lg:flex"
-            >
-              <TrendingDown className="h-5 w-5" />
+            <Link href="/ofertas" className="hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-pink-600 bg-pink-50 border border-pink-200 transition hover:bg-pink-100 lg:flex">
+              <TrendingDown className="h-4 w-4" />
               Ofertas
             </Link>
+            <div ref={dropdownRef} className="relative hidden lg:block">
+              {clienteNombre ? (
+                <button onClick={handleAvatarClick} className="flex items-center gap-2 rounded-full border border-gray-200 py-1 pl-1 pr-3 text-sm text-gray-700 transition hover:border-pink-300 hover:bg-pink-50">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white">{clienteIniciales}</div>
+                  <span className="font-medium">{clientePrimerNombre}</span>
+                </button>
+              ) : (
+                <Link href="/cuenta" className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:border-pink-300 hover:text-primary">
+                  <User className="h-4 w-4" />
+                  Ingresar
+                </Link>
+              )}
+              {dropdownOpen && clienteNombre && (
+                <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-gray-100 bg-white py-1.5 shadow-lg">
+                  <div className="border-b border-gray-100 px-4 py-2.5">
+                    <p className="text-sm font-semibold text-gray-900">{clienteNombre}</p>
+                    {clienteSaldo !== null && clienteSaldo > 0 && (
+                      <p className="mt-0.5 text-xs font-medium text-red-500">⚠ Saldo pendiente {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(clienteSaldo)}</p>
+                    )}
+                  </div>
+                  <Link href="/historial" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><Package className="h-4 w-4 text-gray-400" />Mis pedidos</Link>
+                  <Link href="/cuenta" onClick={() => setDropdownOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><User className="h-4 w-4 text-gray-400" />Mi cuenta</Link>
+                  <div className="my-1 border-t border-gray-100" />
+                  <button onClick={() => { localStorage.removeItem("cliente_auth"); setClienteId(null); setClienteNombre(null); setClienteSaldo(null); setDropdownOpen(false); window.location.href = "/"; }} className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-gray-400 hover:bg-gray-50 hover:text-red-500">
+                    Cerrar sesión
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Notifications */}
             {clienteId && <NotificationBell clienteId={clienteId} />}
@@ -559,6 +588,33 @@ export default function TiendaNavbar() {
           </button>
         </div>
 
+        {/* Client info */}
+        {clienteNombre ? (
+          <Link href="/cuenta" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 border-b px-4 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-white flex-shrink-0">{clienteIniciales}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{clienteNombre}</p>
+              {clienteSaldo !== null && clienteSaldo > 0
+                ? <p className="text-xs font-medium text-red-500 mt-0.5">⚠ Saldo pendiente</p>
+                : <p className="text-xs text-gray-400 mt-0.5">Ver mi cuenta</p>}
+            </div>
+            <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
+          </Link>
+        ) : (
+          <div className="flex items-center gap-3 border-b px-4 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 flex-shrink-0">
+              <User className="h-5 w-5 text-gray-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-700">Ingresá a tu cuenta</p>
+              <p className="text-xs text-gray-400 mt-0.5">Pedidos, notificaciones y más</p>
+            </div>
+            <Link href="/cuenta" onClick={() => setMobileOpen(false)} className="flex-shrink-0 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
+              Ingresar
+            </Link>
+          </div>
+        )}
+
         {/* Mobile search */}
         <form onSubmit={handleMobileSearch} className="border-b px-4 py-3">
           <div className="relative flex items-center">
@@ -582,6 +638,11 @@ export default function TiendaNavbar() {
 
         {/* Categories */}
         <nav aria-label="Categorías" className="flex-1 overflow-y-auto px-2 py-2">
+          <Link href="/ofertas" onClick={() => setMobileOpen(false)} className="mx-2 mb-1 mt-2 flex items-center gap-2 rounded-lg bg-pink-50 px-3 py-2.5 text-sm font-semibold text-pink-600 border border-pink-200">
+            <TrendingDown className="h-4 w-4" />
+            Ver Ofertas
+            <span className="ml-auto rounded-full bg-pink-100 border border-pink-200 px-2 py-0.5 text-[9px] font-bold text-pink-600">NUEVO</span>
+          </Link>
           <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
             Categorías
           </p>
@@ -607,39 +668,16 @@ export default function TiendaNavbar() {
         </nav>
 
         {/* Bottom links */}
-        <div className="border-t px-4 py-4">
-          <Link
-            href="/cuenta"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
-          >
-            <User className="h-5 w-5" />
-            Mi cuenta
-          </Link>
-          <Link
-            href="/historial"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
-          >
-            <Package className="h-5 w-5" />
-            Mis pedidos
-          </Link>
-          <Link
-            href="/ofertas"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
-          >
-            <TrendingDown className="h-5 w-5" />
-            Ofertas
-          </Link>
-          <Link
-            href="/info#faq"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
-          >
-            <Phone className="h-5 w-5" />
+        <div className="border-t px-4 py-3 flex items-center justify-between">
+          <Link href="/info#faq" onClick={() => setMobileOpen(false)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+            <Phone className="h-4 w-4" />
             Ayuda
           </Link>
+          {clienteNombre && (
+            <button onClick={() => { localStorage.removeItem("cliente_auth"); setClienteId(null); setClienteNombre(null); setClienteSaldo(null); setMobileOpen(false); window.location.href = "/"; }} className="text-xs text-gray-400 hover:text-red-500 transition">
+              Cerrar sesión
+            </button>
+          )}
         </div>
       </div>
     </>
