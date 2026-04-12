@@ -131,6 +131,50 @@ type ProductoWithRelations = Producto & {
   visibilidad?: string;
 };
 
+// ── Helpers ──────────────────────────────────────────────────────────────
+function formatRelativeDate(dateStr: string): string {
+  const days = Math.floor(
+    (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (days === 0) return "hoy";
+  if (days === 1) return "ayer";
+  if (days < 30) return `hace ${days} días`;
+  if (days < 60) return "hace 1 mes";
+  return `hace ${Math.floor(days / 30)} meses`;
+}
+
+function getProductInitials(nombre: string): string {
+  const words = nombre.trim().split(" ").filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function getInitialsColor(nombre: string): { background: string; color: string } {
+  const colors = [
+    { background: "#EEEDFE", color: "#3C3489" },
+    { background: "#E6F1FB", color: "#0C447C" },
+    { background: "#EAF3DE", color: "#27500A" },
+    { background: "#FAEEDA", color: "#633806" },
+    { background: "#E1F5EE", color: "#085041" },
+  ];
+  const idx = nombre.charCodeAt(0) % colors.length;
+  return colors[idx];
+}
+
+function getPrecioEfectivo(product: ProductoWithRelations & { precio_oferta?: number | null; precio_oferta_hasta?: string | null }): { precio: number; enOferta: boolean; precioOriginal: number } {
+  const hoy = new Date().toISOString().split("T")[0];
+  const enOferta =
+    !!product.precio_oferta &&
+    product.precio_oferta > 0 &&
+    (!product.precio_oferta_hasta || product.precio_oferta_hasta >= hoy);
+  return {
+    precio: enOferta ? product.precio_oferta! : product.precio,
+    enOferta,
+    precioOriginal: product.precio,
+  };
+}
+
 export default function ProductosPage() {
   const [products, setProducts] = useState<ProductoWithRelations[]>([]);
   const [categories, setCategories] = useState<Categoria[]>([]);
