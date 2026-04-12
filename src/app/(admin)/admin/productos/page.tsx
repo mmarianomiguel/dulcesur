@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, Fragment } from "react";
 import { todayARG, formatCurrency } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -227,6 +227,9 @@ export default function ProductosPage() {
   const marcaRef = useRef<HTMLDivElement>(null);
   const [pageSize] = useState(50);
   const importRef = useRef<HTMLInputElement>(null);
+
+  const [quickViewProduct, setQuickViewProduct] =
+    useState<ProductoWithRelations | null>(null);
 
   // Mass selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -2404,12 +2407,23 @@ export default function ProductosPage() {
                   {paginatedProducts.map((product) => {
                     const isSelected = selected.has(product.id);
                     return (
+                    <Fragment key={product.id}>
                     <tr
-                      key={product.id}
-                      className={`border-b last:border-0 transition-colors ${isSelected ? "bg-accent" : "hover:bg-muted/50"}`}
+                      onClick={() =>
+                        setQuickViewProduct(
+                          quickViewProduct?.id === product.id ? null : product
+                        )
+                      }
+                      className={`border-b last:border-0 transition-colors cursor-pointer ${
+                        isSelected
+                          ? "bg-accent"
+                          : quickViewProduct?.id === product.id
+                          ? "bg-primary/5"
+                          : "hover:bg-muted/50"
+                      }`}
                     >
                       <td className="py-3 px-2">
-                        <button onClick={() => toggleSelect(product.id)}>
+                        <button onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }}>
                           <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
                             {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
                           </div>
@@ -2580,6 +2594,159 @@ export default function ProductosPage() {
                         </DropdownMenu>
                       </td>
                     </tr>
+                    {quickViewProduct?.id === product.id && (
+                      <tr key={`qv-${product.id}`}>
+                        <td colSpan={10} className="p-0">
+                          <div className="mx-3 mb-3 mt-1 border border-primary/20 rounded-xl overflow-hidden bg-background">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                              <div>
+                                <p className="text-sm font-semibold">{quickViewProduct.nombre}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {(quickViewProduct as any).categorias?.nombre} ·{" "}
+                                  {(quickViewProduct as any).marcas?.nombre || "Sin marca"} ·{" "}
+                                  {quickViewProduct.fecha_actualizacion
+                                    ? `Precio actualizado ${formatRelativeDate(quickViewProduct.fecha_actualizacion)}`
+                                    : "Sin fecha de actualización"}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEdit(quickViewProduct);
+                                  }}
+                                >
+                                  Editar completo
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setStockPopover({
+                                      productId: quickViewProduct.id,
+                                      productName: quickViewProduct.nombre,
+                                      currentStock: quickViewProduct.stock,
+                                    });
+                                    setStockAdjust({ tipo: "sumar", cantidad: 1, motivo: "ingreso" });
+                                  }}
+                                >
+                                  Ajustar stock
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Price cards */}
+                            <div className="grid grid-cols-3 gap-3 p-4 border-b">
+                              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider mb-1">Costo</p>
+                                <p className="text-lg font-semibold text-blue-800">{formatCurrency(quickViewProduct.costo)}</p>
+                              </div>
+                              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                                <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider mb-1">Precio venta</p>
+                                <p className="text-lg font-semibold text-emerald-800">{formatCurrency(quickViewProduct.precio)}</p>
+                              </div>
+                              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3">
+                                <p className="text-[10px] font-semibold text-violet-700 uppercase tracking-wider mb-1">Margen</p>
+                                <p className="text-lg font-semibold text-violet-800">
+                                  {quickViewProduct.costo > 0
+                                    ? `${Math.round(
+                                        ((quickViewProduct.precio - quickViewProduct.costo) /
+                                          quickViewProduct.costo) *
+                                          100
+                                      )}%`
+                                    : "—"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Stock + supplier row */}
+                            <div className="grid grid-cols-4 gap-3 px-4 py-3 border-b">
+                              <div className="text-center">
+                                <p className="text-[10px] text-muted-foreground">Stock actual</p>
+                                <p
+                                  className={`text-base font-semibold mt-0.5 ${
+                                    quickViewProduct.stock <= 0
+                                      ? "text-red-600"
+                                      : quickViewProduct.stock <=
+                                        (quickViewProduct.stock_minimo || 5)
+                                      ? "text-orange-500"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {quickViewProduct.stock}
+                                </p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-[10px] text-muted-foreground">Mínimo</p>
+                                <p className="text-base font-semibold mt-0.5">
+                                  {quickViewProduct.stock_minimo || "—"}
+                                </p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-[10px] text-muted-foreground">Máximo</p>
+                                <p className="text-base font-semibold mt-0.5">
+                                  {(quickViewProduct as any).stock_maximo || "—"}
+                                </p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-[10px] text-muted-foreground">Proveedor</p>
+                                <p className="text-xs font-medium mt-0.5 truncate">
+                                  {prodProvMap[quickViewProduct.id] || "Sin asignar"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Tags + status badges */}
+                            <div className="px-4 py-2.5 flex flex-wrap gap-1.5">
+                              {quickViewProduct.stock <= 0 && (
+                                <Badge variant="destructive" className="text-[10px]">
+                                  Sin stock
+                                </Badge>
+                              )}
+                              {(quickViewProduct as any).visibilidad === "oculto" && (
+                                <Badge className="text-[10px] bg-red-100 text-red-700 hover:bg-red-100">
+                                  Oculto en tienda
+                                </Badge>
+                              )}
+                              {quickViewProduct.costo > 0 &&
+                                quickViewProduct.precio <= quickViewProduct.costo && (
+                                  <Badge className="text-[10px] bg-red-100 text-red-700 hover:bg-red-100">
+                                    ⚠ Precio &lt; costo
+                                  </Badge>
+                                )}
+                              {((quickViewProduct as any).tags as string[] | undefined)?.map(
+                                (tag) => (
+                                  <Badge key={tag} variant="secondary" className="text-[10px]">
+                                    {tag}
+                                  </Badge>
+                                )
+                              )}
+                              {quickViewProduct.fecha_actualizacion &&
+                                (() => {
+                                  const days = Math.floor(
+                                    (Date.now() -
+                                      new Date(quickViewProduct.fecha_actualizacion!).getTime()) /
+                                      (1000 * 60 * 60 * 24)
+                                  );
+                                  if (days > 30)
+                                    return (
+                                      <Badge className="text-[10px] bg-amber-100 text-amber-700 hover:bg-amber-100">
+                                        Precio: hace {days} días
+                                      </Badge>
+                                    );
+                                  return null;
+                                })()}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                     );
                   })}
                 </tbody>
