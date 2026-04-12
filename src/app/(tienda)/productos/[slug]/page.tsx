@@ -763,15 +763,13 @@ export default function ProductoDetallePage() {
                 {(() => {
                   const bestIdx = presentaciones.length > 1
                     ? presentaciones.reduce((best, p, i) => {
-                        if (p.nombre === "Unidad" || Number(p.cantidad) === 1) return best;
+                        if (p.nombre === "Unidad" || p.cantidad <= 1) return best;
                         const unitPrice = p.precio > 0 && p.cantidad > 0 ? p.precio / p.cantidad : Infinity;
+                        if (best === -1) return unitPrice < Infinity ? i : best;
                         const bestP = presentaciones[best];
-                        const bestUnitPrice = (bestP.nombre === "Unidad" || Number(bestP.cantidad) === 1) ? Infinity
-                          : (bestP.precio > 0 && bestP.cantidad > 0
-                            ? bestP.precio / bestP.cantidad
-                            : Infinity);
+                        const bestUnitPrice = bestP.precio > 0 && bestP.cantidad > 0 ? bestP.precio / bestP.cantidad : Infinity;
                         return unitPrice < bestUnitPrice ? i : best;
-                      }, 0)
+                      }, -1)
                     : -1;
 
                   return presentaciones
