@@ -1876,21 +1876,52 @@ export default function ProductosPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <Card>
+        {/* Total artículos */}
+        <Card
+          className={`cursor-pointer hover:bg-muted/40 transition-colors ${
+            stockFilter === "all" && comboFilter === "all" && tiendaFilter === "all" && !soloDestacado
+              ? "ring-1 ring-primary/40"
+              : ""
+          }`}
+          onClick={() => {
+            setStockFilter("all");
+            setComboFilter("all");
+            setTiendaFilter("all");
+            setSoloDestacado(false);
+            setPage(1);
+          }}
+        >
           <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Package className="w-5 h-5 text-primary" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              stockFilter === "all" && comboFilter === "all" && tiendaFilter === "all" && !soloDestacado
+                ? "bg-primary/20"
+                : "bg-primary/10"
+            }`}>
+              <Package className={`w-5 h-5 ${
+                stockFilter === "all" && comboFilter === "all" && tiendaFilter === "all" && !soloDestacado
+                  ? "text-primary"
+                  : "text-primary/70"
+              }`} />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total articulos</p>
+              <p className="text-xs text-muted-foreground">Total artículos</p>
               <p className="text-xl font-bold">{products.length}</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+
+        {/* Con stock */}
+        <Card
+          className={`cursor-pointer hover:bg-muted/40 transition-colors ${
+            stockFilter === "si" ? "ring-1 ring-emerald-400/60" : ""
+          }`}
+          onClick={() => { setStockFilter("si"); setPage(1); }}
+        >
           <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <Package className="w-5 h-5 text-emerald-500" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              stockFilter === "si" ? "bg-emerald-500/20" : "bg-emerald-500/10"
+            }`}>
+              <Package className={`w-5 h-5 ${stockFilter === "si" ? "text-emerald-600" : "text-emerald-500"}`} />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Con stock</p>
@@ -1898,17 +1929,23 @@ export default function ProductosPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Sin stock */}
         <Card
-          className={`cursor-pointer transition-colors ${
-            outOfStock > 0
+          className={`cursor-pointer hover:bg-muted/40 transition-colors ${
+            stockFilter === "no"
+              ? "ring-1 ring-red-400/60"
+              : outOfStock > 0
               ? "border-red-200 hover:border-red-300"
-              : "hover:bg-muted/40"
+              : ""
           }`}
           onClick={() => { setStockFilter("no"); setPage(1); }}
         >
           <CardContent className="pt-6 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              stockFilter === "no" ? "bg-red-500/20" : "bg-red-500/10"
+            }`}>
+              <AlertTriangle className={`w-5 h-5 ${stockFilter === "no" ? "text-red-600" : "text-red-500"}`} />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Sin stock</p>
@@ -1916,6 +1953,8 @@ export default function ProductosPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Stock bajo — opens dialog, never shows active ring */}
         <Card
           className="cursor-pointer hover:bg-muted/40 transition-colors"
           onClick={() => lowStock > 0 && setLowStockOpen(true)}
@@ -1930,8 +1969,12 @@ export default function ProductosPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Combos */}
         <Card
-          className="cursor-pointer hover:bg-muted/40 transition-colors"
+          className={`cursor-pointer hover:bg-muted/40 transition-colors ${
+            comboFilter === "si" ? "ring-1 ring-pink-400/60" : ""
+          }`}
           onClick={() => { setComboFilter(comboFilter === "si" ? "all" : "si"); setPage(1); }}
         >
           <CardContent className="pt-6 flex items-center gap-4">
