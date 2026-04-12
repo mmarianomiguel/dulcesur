@@ -193,6 +193,23 @@ function clasificarProducto(nombre: string): { categoria: string; subcategoria: 
   return { categoria: "Otros", subcategoria: "General" };
 }
 
+/**
+ * Procesa un array en chunks cediendo el hilo al navegador entre cada uno.
+ */
+async function processInChunks<T>(
+  items: T[],
+  chunkSize: number,
+  processor: (item: T, index: number) => void,
+  onProgress?: (done: number, total: number) => void
+): Promise<void> {
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    chunk.forEach((item, j) => processor(item, i + j));
+    onProgress?.(Math.min(i + chunkSize, items.length), items.length);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
+}
+
 export default function ListaPreciosPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -224,6 +241,7 @@ export default function ListaPreciosPage() {
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
   const [logoAspectRatio, setLogoAspectRatio] = useState(1); // width / height
   const [generating, setGenerating] = useState(false);
+  const [generatingProgress, setGeneratingProgress] = useState<{ done: number; total: number } | null>(null);
   const itemsPerPage = 50;
 
   // Load logo from localStorage on mount
@@ -502,14 +520,24 @@ export default function ListaPreciosPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleGenerateClick = () => setShowStylePicker(true);
+  const handleGenerateClick = () => {
+    if (selected.size > 200) {
+      if (!window.confirm(
+        `Vas a generar un PDF con ${selected.size} productos.\nEsto puede tardar unos segundos. ¿Continuar?`
+      )) return;
+    }
+    setShowStylePicker(true);
+  };
 
   // ─── PDF Generation ───
-  const generatePDF = (style: PdfStyle) => {
+  const generatePDF = async (style: PdfStyle) => {
     setShowStylePicker(false);
     setGenerating(true);
+    setGeneratingProgress({ done: 0, total: selected.size });
 
-    setTimeout(async () => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    try {
       const selectedProducts = products.filter((_, i) => selected.has(i));
       if (selectedProducts.length === 0) { setGenerating(false); return; }
 
@@ -535,7 +563,7 @@ export default function ListaPreciosPage() {
         const cellW = (pageW - margin * 2) / cols;
         const cellH = (pageH - margin * 2) / rows;
 
-        selectedProducts.forEach((product, idx) => {
+        await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0 && idx % perPage === 0) pdf.addPage();
           const posInPage = idx % perPage;
           const col = posInPage % cols;
@@ -677,7 +705,7 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.combinado_tamañoPrecio);
           pdf.text(formatCurrency(displayPrice), x + cellW / 2, priceZoneCenter + config.combinado_tamañoPrecio * 0.15, { align: "center" });
-        });
+        }, (done, total) => setGeneratingProgress({ done, total }));
       }
 
       if (style === "duo") {
@@ -688,7 +716,7 @@ export default function ListaPreciosPage() {
         const cellW = (pageW - margin * 2) / cols;
         const cellH = (pageH - margin * 2) / rows;
 
-        selectedProducts.forEach((product, idx) => {
+        await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0 && idx % perPage === 0) pdf.addPage();
           const posInPage = idx % perPage;
           const col = posInPage % cols;
@@ -842,7 +870,7 @@ export default function ListaPreciosPage() {
             pdf.text(prodDate, x + cellW - pad - 1, zFooter + 3, { align: "right" });
           }
           pdf.setTextColor(0);
-        });
+        }, (done, total) => setGeneratingProgress({ done, total }));
       }
 
       if (style === "simple") {
@@ -853,7 +881,7 @@ export default function ListaPreciosPage() {
         const cellW = (pageW - margin * 2) / cols;
         const cellH = (pageH - margin * 2) / rows;
 
-        selectedProducts.forEach((product, idx) => {
+        await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0 && idx % perPage === 0) pdf.addPage();
           const posInPage = idx % perPage;
           const col = posInPage % cols;
@@ -961,7 +989,7 @@ export default function ListaPreciosPage() {
             pdf.text(prodDate, x + cellW - pad - 1, zFooter + 3, { align: "right" });
           }
           pdf.setTextColor(0);
-        });
+        }, (done, total) => setGeneratingProgress({ done, total }));
       }
 
       if (style === "poster") {
@@ -975,7 +1003,7 @@ export default function ListaPreciosPage() {
           } catch {}
         }
 
-        selectedProducts.forEach((product, idx) => {
+        await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0) pdf.addPage();
           const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
           const boxPrice = product.precioCaja > 0 ? product.precioCaja : 0;
@@ -1070,7 +1098,7 @@ export default function ListaPreciosPage() {
             }
             pdf.setTextColor(0);
           }
-        });
+        }, (done, total) => setGeneratingProgress({ done, total }));
       }
 
       if (style === "lista") {
@@ -1279,10 +1307,10 @@ export default function ListaPreciosPage() {
 
         if (listaGroupMode === "none") {
           yPos = drawTableHeader(yPos);
-          selectedProducts.forEach((p) => {
+          await processInChunks(selectedProducts, 10, (p) => {
             yPos = checkPage(yPos);
             yPos = drawProduct(p, yPos);
-          });
+          }, (done, total) => setGeneratingProgress({ done, total }));
         } else if (listaGroupMode === "categoria") {
           const groups: Record<string, Product[]> = {};
           selectedProducts.forEach((p) => {
@@ -1407,7 +1435,6 @@ export default function ListaPreciosPage() {
         if (pdfUrl) URL.revokeObjectURL(pdfUrl);
         setPdfUrl(vUrl);
         setShowPreview(true);
-        setGenerating(false);
         return;
       }
 
@@ -1420,7 +1447,7 @@ export default function ListaPreciosPage() {
         const cellH = (pageH - margin * 2) / rows;  // ~40mm
         const pad = 3;
 
-        selectedProducts.forEach((product, idx) => {
+        await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0 && idx % perPage === 0) pdf.addPage();
           const posInPage = idx % perPage;
           const col = posInPage % cols;
@@ -1572,7 +1599,7 @@ export default function ListaPreciosPage() {
             pdf.text(boxUnitText, startX + mainW + 2, cursor + 3.5);
             pdf.setTextColor(0);
           }
-        });
+        }, (done, total) => setGeneratingProgress({ done, total }));
       }
 
       const blob = pdf.output("blob");
@@ -1580,8 +1607,10 @@ export default function ListaPreciosPage() {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       setPdfUrl(url);
       setShowPreview(true);
+    } finally {
       setGenerating(false);
-    }, 100);
+      setGeneratingProgress(null);
+    }
   };
 
   const downloadPDF = () => {
@@ -2271,6 +2300,31 @@ export default function ListaPreciosPage() {
             <div className="px-6 py-4 border-t border-border flex justify-between">
               <button onClick={() => setConfig(DEFAULT_CONFIG)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Restaurar valores</button>
               <button onClick={() => setShowConfig(false)} className="bg-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generating overlay */}
+      {generating && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-background rounded-2xl px-8 py-6 flex flex-col items-center gap-4 shadow-xl min-w-[260px]">
+            <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+            <div className="text-center">
+              <p className="font-semibold text-sm">Generando PDF...</p>
+              {generatingProgress && (
+                <>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {generatingProgress.done} de {generatingProgress.total} productos
+                  </p>
+                  <div className="w-48 h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-200"
+                      style={{ width: `${Math.round((generatingProgress.done / generatingProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

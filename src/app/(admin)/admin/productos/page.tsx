@@ -156,12 +156,13 @@ function getInitialsColor(nombre: string): { background: string; color: string }
   return colors[idx];
 }
 
+const TODAY_STR = new Date().toISOString().split("T")[0];
+
 function getPrecioEfectivo(product: ProductoWithRelations & { precio_oferta?: number | null; precio_oferta_hasta?: string | null }): { precio: number; enOferta: boolean; precioOriginal: number } {
-  const hoy = new Date().toISOString().split("T")[0];
   const enOferta =
     !!product.precio_oferta &&
     product.precio_oferta > 0 &&
-    (!product.precio_oferta_hasta || product.precio_oferta_hasta >= hoy);
+    (!product.precio_oferta_hasta || product.precio_oferta_hasta >= TODAY_STR);
   return {
     precio: enOferta ? product.precio_oferta! : product.precio,
     enOferta,
@@ -484,21 +485,27 @@ export default function ProductosPage() {
   }, []);
 
   useEffect(() => {
-    fetchProducts();
-    fetchCategories();
-    fetchSubcategories();
-    fetchMarcas();
-    fetchProveedores();
-    // Load provider map for product table
-    supabase.from("producto_proveedores").select("producto_id, proveedores(nombre)").then(({ data }) => {
+    // All initial fetches in parallel
+    Promise.all([
+      fetchProducts(),
+      supabase.from("categorias").select("id, nombre").order("nombre"),
+      supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre"),
+      supabase.from("marcas").select("id, nombre").order("nombre"),
+      supabase.from("proveedores").select("id, nombre, activo").eq("activo", true).order("nombre"),
+      supabase.from("producto_proveedores").select("producto_id, proveedores(nombre)"),
+    ]).then(([, catsResult, subcatsResult, marcasResult, provsResult, prodProvsResult]) => {
+      setCategories((catsResult.data || []) as unknown as Categoria[]);
+      setSubcategories(subcatsResult.data || []);
+      setMarcas(marcasResult.data || []);
+      setProveedores(provsResult.data || []);
       const map: Record<string, string> = {};
-      (data || []).forEach((pp: any) => {
+      (prodProvsResult.data || []).forEach((pp: any) => {
         const n = pp.proveedores?.nombre;
         if (n) map[pp.producto_id] = map[pp.producto_id] ? `${map[pp.producto_id]}, ${n}` : n;
       });
       setProdProvMap(map);
     });
-  }, [fetchProducts, fetchCategories, fetchSubcategories, fetchMarcas, fetchProveedores]);
+  }, [fetchProducts]);
 
   // Auto-open create dialog if ?crear=true
   useEffect(() => {
@@ -511,9 +518,25 @@ export default function ProductosPage() {
   }, [loading]);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 150);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Pre-normalized search index for fast filtering
+  const searchIndex = useMemo(() => {
+    const idx = new Map<string, string>();
+    for (const p of products) {
+      const parts = [
+        p.nombre,
+        p.codigo,
+        ...(presCodigoMap[p.id] || []).map((pr) => pr.codigo || ""),
+        prodProvMap[p.id] || "",
+        ...((p as any).tags || []),
+      ].filter(Boolean);
+      idx.set(p.id, norm(parts.join(" ")));
+    }
+    return idx;
+  }, [products, presCodigoMap, prodProvMap]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -647,6 +670,7 @@ export default function ProductosPage() {
   };
 
   const openEdit = async (p: ProductoWithRelations) => {
+    // Set form data and open dialog IMMEDIATELY
     setEditingProduct(p);
     setForm({
       codigo: p.codigo,
@@ -674,58 +698,49 @@ export default function ProductosPage() {
     setComboItems([]);
     setPriceHistory([]);
     setProductDiscounts([]);
-
-    // Parallelize essential API calls (proveedores + presentaciones + combo items)
-    const [provResult, presResult, comboResult] = await Promise.all([
-      supabase.from("producto_proveedores").select("proveedor_id").eq("producto_id", p.id),
-      supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, sku, costo, precio, precio_oferta").eq("producto_id", p.id).order("cantidad"),
-      (p as any).es_combo
-        ? supabase.from("combo_items").select("*, productos!combo_items_producto_id_fkey(id, codigo, nombre, precio, costo, stock)").eq("combo_id", p.id)
-        : Promise.resolve({ data: null }),
-    ]);
-
-    setSelectedProveedores((provResult.data || []).map((pp) => pp.proveedor_id));
-
-    const loadedPres = (presResult.data || []) as Presentacion[];
-    if (!loadedPres.some((pr) => pr.cantidad === 1)) {
-      loadedPres.unshift({ nombre: "Unidad", cantidad: 1, sku: "", costo: p.costo, precio: p.precio, precio_oferta: null });
-    }
-    setPresentaciones(loadedPres);
-
-    if ((p as any).es_combo && comboResult.data) {
-      setComboItems(comboResult.data.map((d: any) => ({
-        producto_id: d.producto_id, cantidad: d.cantidad, descuento: d.descuento ?? 0, producto: d.productos,
-      })));
-    }
-
     setEditTab("info");
-    setDialogOpen(true);
+    setDialogOpen(true); // Open dialog immediately
 
-    // Lazy-load price history + stock movements in parallel (non-blocking)
+    // Load additional data in background
+    setLoadingEditData(true);
+    try {
+      const [provResult, presResult, comboResult] = await Promise.all([
+        supabase.from("producto_proveedores").select("proveedor_id").eq("producto_id", p.id),
+        supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, sku, costo, precio, precio_oferta").eq("producto_id", p.id).order("cantidad"),
+        (p as any).es_combo
+          ? supabase.from("combo_items").select("*, productos!combo_items_producto_id_fkey(id, codigo, nombre, precio, costo, stock)").eq("combo_id", p.id)
+          : Promise.resolve({ data: null }),
+      ]);
+
+      setSelectedProveedores((provResult.data || []).map((pp) => pp.proveedor_id));
+
+      const loadedPres = (presResult.data || []) as Presentacion[];
+      if (!loadedPres.some((pr) => pr.cantidad === 1)) {
+        loadedPres.unshift({ nombre: "Unidad", cantidad: 1, sku: "", costo: p.costo, precio: p.precio, precio_oferta: null });
+      }
+      setPresentaciones(loadedPres);
+
+      if ((p as any).es_combo && comboResult.data) {
+        setComboItems(comboResult.data.map((d: any) => ({
+          producto_id: d.producto_id, cantidad: d.cantidad, descuento: d.descuento ?? 0, producto: d.productos,
+        })));
+      }
+    } finally {
+      setLoadingEditData(false);
+    }
+
+    // Lazy-load price history + stock movements + discounts in parallel (non-blocking)
     Promise.all([
-      supabase
-        .from("precio_historial")
-        .select("*")
-        .eq("producto_id", p.id)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabase
-        .from("stock_movimientos")
-        .select(
-          "id, tipo, cantidad_antes, cantidad_despues, cantidad, referencia, descripcion, usuario, created_at, orden_id"
-        )
-        .eq("producto_id", p.id)
-        .order("created_at", { ascending: false })
-        .limit(30),
+      supabase.from("precio_historial").select("*").eq("producto_id", p.id).order("created_at", { ascending: false }).limit(20),
+      supabase.from("stock_movimientos").select("id, tipo, cantidad_antes, cantidad_despues, cantidad, referencia, descripcion, usuario, created_at, orden_id").eq("producto_id", p.id).order("created_at", { ascending: false }).limit(30),
     ]).then(([{ data: ph }, { data: sm }]) => {
       setPriceHistory((ph || []) as any);
       setHistoryItems((sm || []) as any);
     });
     supabase.from("descuentos").select("*").eq("activo", true)
       .then(({ data: allDesc }) => {
-        const today = new Date().toISOString().split("T")[0];
         setProductDiscounts((allDesc || []).filter((d: any) => {
-          if (d.fecha_fin && d.fecha_fin < today) return false;
+          if (d.fecha_fin && d.fecha_fin < TODAY_STR) return false;
           if (d.aplica_a === "todos") return true;
           if (d.aplica_a === "productos" && (d.productos_ids || []).includes(p.id)) return true;
           if (d.aplica_a === "categorias" && (d.categorias_ids || []).includes(p.categoria_id)) return true;
@@ -878,40 +893,81 @@ export default function ProductosPage() {
 
       // Sync presentaciones (only for non-combos)
       if (!isCombo) {
-      const toKeep = presentaciones.filter((p) => !p._deleted);
+      const toKeep = presentaciones.filter((p) => !p._deleted && p.cantidad && p.cantidad > 0);
       const toDelete = presentaciones.filter((p) => p._deleted && p.id);
 
-      // Delete removed presentaciones
-      for (const p of toDelete) {
-        await supabase.from("presentaciones").delete().eq("id", p.id!);
-      }
+      // Separate inserts vs updates
+      const toInsert = toKeep.filter((p) => !p.id).map((p) => ({
+        producto_id: productId,
+        nombre: p.nombre,
+        cantidad: p.cantidad,
+        sku: (p.cantidad === 1 && p.nombre === "Unidad") ? codigo : p.sku,
+        costo: p.costo,
+        precio: p.precio,
+        precio_oferta: p.precio_oferta,
+      }));
 
-      // Upsert remaining
-      for (const p of toKeep) {
-        // Skip presentations with invalid cantidad
-        if (!p.cantidad || p.cantidad <= 0) continue;
-        // Always sync Unidad SKU with the product code
-        const sku = (p.cantidad === 1 && p.nombre === "Unidad") ? codigo : p.sku;
-        const presPayload = {
-          producto_id: productId,
-          nombre: p.nombre,
-          cantidad: p.cantidad,
-          sku,
-          costo: p.costo,
-          precio: p.precio,
-          precio_oferta: p.precio_oferta,
-        };
-        if (p.id) {
-          await supabase.from("presentaciones").update(presPayload).eq("id", p.id);
-        } else {
-          await supabase.from("presentaciones").insert(presPayload);
-        }
-      }
+      const toUpdate = toKeep.filter((p) => p.id);
+
+      // Execute all in parallel: batch insert + parallel updates + batch delete
+      await Promise.all([
+        toInsert.length > 0
+          ? supabase.from("presentaciones").insert(toInsert)
+          : Promise.resolve(),
+        ...toUpdate.map((p) => {
+          const sku = (p.cantidad === 1 && p.nombre === "Unidad") ? codigo : p.sku;
+          return supabase.from("presentaciones").update({
+            producto_id: productId, nombre: p.nombre, cantidad: p.cantidad, sku,
+            costo: p.costo, precio: p.precio, precio_oferta: p.precio_oferta,
+          }).eq("id", p.id!);
+        }),
+        toDelete.length > 0
+          ? supabase.from("presentaciones").delete().in("id", toDelete.map((p) => p.id!))
+          : Promise.resolve(),
+      ]);
       } // end if (!isCombo)
 
       setDialogOpen(false);
       resetForm();
-      fetchProducts();
+      if (editingProduct) {
+        // Update the product in local state instead of full refetch
+        setProducts((prev) => prev.map((p) =>
+          p.id === productId
+            ? {
+                ...p,
+                codigo: payload.codigo as string,
+                nombre: payload.nombre as string,
+                categoria_id: payload.categoria_id as string,
+                subcategoria_id: payload.subcategoria_id as string,
+                marca_id: payload.marca_id as string,
+                stock: payload.stock as number,
+                stock_minimo: payload.stock_minimo as number,
+                stock_maximo: payload.stock_maximo as number,
+                precio: payload.precio as number,
+                costo: payload.costo as number,
+                unidad_medida: payload.unidad_medida as string,
+                descripcion_detallada: payload.descripcion_detallada as string,
+                visibilidad: payload.visibilidad as string,
+                destacado: payload.destacado as boolean,
+                imagen_url: payload.imagen_url as string,
+                precio_oferta: payload.precio_oferta as number,
+                precio_oferta_hasta: payload.precio_oferta_hasta as string,
+                tags: payload.tags as string[],
+                es_combo: payload.es_combo as boolean,
+                fecha_actualizacion: (payload.fecha_actualizacion as string) || p.fecha_actualizacion,
+                categorias: categories.find((c) => c.id === payload.categoria_id)
+                  ? { nombre: categories.find((c) => c.id === payload.categoria_id)!.nombre }
+                  : p.categorias,
+                marcas: marcas.find((m) => m.id === payload.marca_id)
+                  ? { nombre: marcas.find((m) => m.id === payload.marca_id)!.nombre }
+                  : p.marcas,
+              }
+            : p
+        ));
+      } else {
+        // New product — need refetch to get the generated ID and relations
+        fetchProducts();
+      }
       showAdminToast("Producto guardado correctamente", "success");
     } catch (err: any) {
       showAdminToast(err.message || "Error al guardar producto", "error");
@@ -929,8 +985,8 @@ export default function ProductosPage() {
     if (!deleteTarget) return;
     try {
       await supabase.from("productos").update({ activo: false, visibilidad: "oculto" }).eq("id", deleteTarget.id);
+      setProducts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
       showAdminToast("Producto eliminado correctamente", "success");
-      fetchProducts();
     } catch (err: any) {
       showAdminToast(err.message || "Error al eliminar producto", "error");
     }
@@ -1550,13 +1606,7 @@ export default function ProductosPage() {
   const filtered = useMemo(() => {
     const q = norm(debouncedSearch);
     const arr = products.filter((p) => {
-      const matchesSearch =
-        !q ||
-        norm(p.nombre).includes(q) ||
-        norm(p.codigo).includes(q) ||
-        (presCodigoMap[p.id] || []).some((pr) => norm(pr.codigo || "").includes(q)) ||
-        norm(prodProvMap[p.id] || "").includes(q) ||
-        ((p as any).tags || []).some((tag: string) => norm(tag).includes(q));
+      const matchesSearch = !q || (searchIndex.get(p.id) || "").includes(q);
       const matchesCategory = category === "all" || p.categoria_id === category;
       const matchesSubcategory = subcategoryFilter === "all" || p.subcategoria_id === subcategoryFilter;
       const matchesMarca = marcaFilter === "all" || p.marca_id === marcaFilter;
@@ -1567,32 +1617,35 @@ export default function ProductosPage() {
       const matchesDestacado = !soloDestacado || !!(p as any).destacado;
       return matchesSearch && matchesCategory && matchesSubcategory && matchesMarca && matchesStock && matchesTienda && matchesCombo && matchesDestacado;
     });
-    arr.sort((a, b) => {
-      if (sortBy === "nombre_asc") return a.nombre.localeCompare(b.nombre);
-      if (sortBy === "nombre_desc") return b.nombre.localeCompare(a.nombre);
-      if (sortBy === "updated_desc") {
-        const da = (a as any).fecha_actualizacion ? new Date((a as any).fecha_actualizacion).getTime() : 0;
-        const db = (b as any).fecha_actualizacion ? new Date((b as any).fecha_actualizacion).getTime() : 0;
+
+    // Sort: pre-parse dates to avoid repeated new Date() in comparisons
+    if (sortBy === "updated_desc" || sortBy === "updated_asc") {
+      const dateCache = new Map<string, number>();
+      for (const p of arr) {
+        const d = (p as any).fecha_actualizacion;
+        dateCache.set(p.id, d ? new Date(d).getTime() : 0);
+      }
+      arr.sort((a, b) => {
+        const da = dateCache.get(a.id) || 0;
+        const db = dateCache.get(b.id) || 0;
         if (!da && !db) return 0;
         if (!da) return 1;
         if (!db) return -1;
-        return db - da;
-      }
-      if (sortBy === "updated_asc") {
-        const da = (a as any).fecha_actualizacion ? new Date((a as any).fecha_actualizacion).getTime() : 0;
-        const db = (b as any).fecha_actualizacion ? new Date((b as any).fecha_actualizacion).getTime() : 0;
-        if (!da && !db) return 0;
-        if (!da) return 1;
-        if (!db) return -1;
-        return da - db;
-      }
-      if (sortBy === "precio_asc") return a.precio - b.precio;
-      if (sortBy === "precio_desc") return b.precio - a.precio;
-      if (sortBy === "stock_asc") return a.stock - b.stock;
-      return 0;
-    });
+        return sortBy === "updated_desc" ? db - da : da - db;
+      });
+    } else {
+      arr.sort((a, b) => {
+        if (sortBy === "nombre_asc") return a.nombre.localeCompare(b.nombre);
+        if (sortBy === "nombre_desc") return b.nombre.localeCompare(a.nombre);
+        if (sortBy === "precio_asc") return a.precio - b.precio;
+        if (sortBy === "precio_desc") return b.precio - a.precio;
+        if (sortBy === "stock_asc") return a.stock - b.stock;
+        return 0;
+      });
+    }
+
     return arr;
-  }, [products, debouncedSearch, presCodigoMap, prodProvMap, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, tiendaFilter, comboFilter, soloDestacado, sortBy]);
+  }, [products, debouncedSearch, searchIndex, category, subcategoryFilter, marcaFilter, comboStockMap, stockFilter, tiendaFilter, comboFilter, soloDestacado, sortBy]);
 
   // Helper: get effective price considering precio_oferta (1.3)
   function getPrecioEfectivo(producto: { precio: number; precio_oferta?: number | null; precio_oferta_hasta?: string | null }): {
@@ -1600,10 +1653,9 @@ export default function ProductosPage() {
     enOferta: boolean;
     precioOriginal: number;
   } {
-    const today = new Date().toISOString().slice(0, 10);
     const ofertaVigente = producto.precio_oferta &&
       producto.precio_oferta > 0 &&
-      (producto.precio_oferta_hasta === null || producto.precio_oferta_hasta === undefined || producto.precio_oferta_hasta >= today);
+      (producto.precio_oferta_hasta === null || producto.precio_oferta_hasta === undefined || producto.precio_oferta_hasta >= TODAY_STR);
     if (ofertaVigente) {
       return { precio: producto.precio_oferta!, enOferta: true, precioOriginal: producto.precio };
     }
@@ -1620,12 +1672,14 @@ export default function ProductosPage() {
     else if (tipo === "sumar") stockNuevo = currentStock + cantidad;
     else stockNuevo = Math.max(0, currentStock - cantidad);
     const diff = stockNuevo - currentStock;
-    await supabase.from("productos").update(buildStockUpdate(stockNuevo, currentStock)).eq("id", productId);
-    await supabase.from("stock_movimientos").insert({
-      producto_id: productId, tipo: motivo,
-      cantidad_antes: currentStock, cantidad_despues: stockNuevo, cantidad: diff,
-      descripcion: `Ajuste rápido: ${motivo} (${diff > 0 ? "+" : ""}${diff})`, usuario: "Admin",
-    });
+    await Promise.all([
+      supabase.from("productos").update(buildStockUpdate(stockNuevo, currentStock)).eq("id", productId),
+      supabase.from("stock_movimientos").insert({
+        producto_id: productId, tipo: motivo,
+        cantidad_antes: currentStock, cantidad_despues: stockNuevo, cantidad: diff,
+        descripcion: `Ajuste rápido: ${motivo} (${diff > 0 ? "+" : ""}${diff})`, usuario: "Admin",
+      }),
+    ]);
     showAdminToast("Stock actualizado", "success");
     setStockPopover(null);
     setProducts((prev) => prev.map((p) => p.id === productId ? { ...p, stock: stockNuevo } : p));
@@ -1639,10 +1693,14 @@ export default function ProductosPage() {
     const { data: ventaIds } = await supabase.from("ventas").select("id").gte("fecha", desde30).neq("estado", "anulada");
     if (!ventaIds || ventaIds.length === 0) return;
     const ids = ventaIds.map((v: any) => v.id);
+    // All chunks in parallel
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
+    const results = await Promise.all(
+      chunks.map((chunk) => supabase.from("venta_items").select("producto_id, cantidad").in("venta_id", chunk))
+    );
     const map: Record<string, number> = {};
-    for (let i = 0; i < ids.length; i += 200) {
-      const chunk = ids.slice(i, i + 200);
-      const { data: vitems } = await supabase.from("venta_items").select("producto_id, cantidad").in("venta_id", chunk);
+    for (const { data: vitems } of results) {
       if (vitems) for (const item of vitems as any[]) map[item.producto_id] = (map[item.producto_id] || 0) + Number(item.cantidad);
     }
     const velDiariaMap: Record<string, number> = {};
@@ -1692,9 +1750,10 @@ export default function ProductosPage() {
         const batch = ids.slice(i, i + 200);
         await supabase.from("productos").update({ activo: false, visibilidad: "oculto" }).in("id", batch);
       }
+      const deletedIds = new Set(ids);
+      setProducts((prev) => prev.filter((p) => !deletedIds.has(p.id)));
       showAdminToast(`${selected.size} producto${selected.size > 1 ? "s" : ""} eliminado${selected.size > 1 ? "s" : ""}`, "success");
       setSelected(new Set());
-      fetchProducts();
     } catch (err: any) {
       showAdminToast(err.message || "Error al eliminar productos", "error");
         }
@@ -1747,6 +1806,7 @@ export default function ProductosPage() {
 
   // Precio oferta form toggle (1.3)
   const [showOfertaForm, setShowOfertaForm] = useState(false);
+  const [loadingEditData, setLoadingEditData] = useState(false);
 
   // Catalog health bar state
   const [showProblemsView, setShowProblemsView] = useState(false);
@@ -2511,6 +2571,17 @@ export default function ProductosPage() {
                 <Edit className="w-4 h-4 mr-2" />
                 Editar precios ({selected.size})
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const ids = Array.from(selected).join(",");
+                  window.location.href = `/admin/productos/lista-precios?ids=${ids}`;
+                }}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir carteles ({selected.size})
+              </Button>
               <Button variant="destructive" size="sm" onClick={handleMassDelete} disabled={deleting}>
                 {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
                 Eliminar ({selected.size})
@@ -2819,6 +2890,9 @@ export default function ProductosPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleDuplicate(product)}>
                               <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { window.location.href = `/admin/productos/lista-precios?ids=${product.id}`; }}>
+                              <Printer className="w-3.5 h-3.5 mr-2" /> Imprimir cartel
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(product.id)}>

@@ -90,6 +90,7 @@ const navigation: NavItem[] = [
     children: [
       { name: "Productos", href: "/admin/productos" },
       { name: "Descuentos", href: "/admin/productos/descuentos" },
+      { name: "Lista de precios", href: "/admin/productos/lista-precios" },
       { name: "Categorías y marcas", href: "/admin/productos/marcas" },
     ],
   },
