@@ -218,6 +218,7 @@ export default function ListadoVentasPage() {
   // HISTORIAL DE VENTAS STATE
   // ══════════════════════════════════════════════════════════════
   const [ventas, setVentas] = useState<VentaRow[]>([]);
+  const [limitReached, setLimitReached] = useState(false);
   const [loading, setLoading] = useState(true);
   const [filterOrigen, setFilterOrigen] = useState("all");
   const [filterType, setFilterType] = useState("all");
@@ -345,6 +346,7 @@ export default function ListadoVentasPage() {
     query = query.limit(200);
     const { data } = await query;
     let results = (data as unknown as VentaRow[]) || [];
+    setLimitReached(data?.length === 200);
     setVisiblePage(1);
 
     // Recover client names for ventas where join returned null but cliente_id exists
@@ -2266,6 +2268,13 @@ export default function ListadoVentasPage() {
           </div>
         </CardContent>
       </Card>
+
+      {limitReached && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <p className="text-sm">Mostrando 200 ventas — hay más registros. Acotá el período para ver todos.</p>
+        </div>
+      )}
 
       {/* Unified Cards */}
       {(loading || poLoading) ? (
