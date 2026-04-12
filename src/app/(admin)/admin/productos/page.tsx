@@ -1917,6 +1917,148 @@ export default function ProductosPage() {
         </Card>
       </div>
 
+      {showProblemsView ? (
+        <div>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold">Productos problemáticos</h2>
+              <p className="text-sm text-muted-foreground">
+                {catalogProblems.total} productos requieren atención
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowProblemsView(false)}
+            >
+              ← Volver al listado
+            </Button>
+          </div>
+
+          {/* Problem type tabs */}
+          <div className="flex gap-2 mb-4 flex-wrap">
+            {(
+              [
+                { key: "sin_categoria", label: "Sin categoría", count: catalogProblems.sinCategoria },
+                { key: "sin_imagen", label: "Sin imagen", count: catalogProblems.sinImagen },
+                { key: "precio_costo", label: "Precio < costo", count: catalogProblems.precioBajoCosto },
+                { key: "sin_proveedor", label: "Sin proveedor", count: catalogProblems.sinProveedor },
+              ] as const
+            ).map(({ key, label, count }) => (
+              <button
+                key={key}
+                onClick={() => setProblemsTab(key)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                  problemsTab === key
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : count > 0
+                    ? "border-red-200 text-red-700 bg-red-50 hover:border-red-300"
+                    : "border-border text-muted-foreground"
+                }`}
+              >
+                {label} ({count})
+              </button>
+            ))}
+          </div>
+
+          {/* Description + optional action */}
+          {(() => {
+            const descriptions: Record<string, string> = {
+              sin_categoria:
+                "Estos productos no aparecen correctamente en la tienda ni en los filtros del sistema.",
+              sin_imagen:
+                "Los productos sin imagen tienen menor tasa de venta en la tienda online.",
+              precio_costo: "Estás vendiendo estos productos a pérdida o sin ganancia.",
+              sin_proveedor:
+                "Sin proveedor asignado no podés generar pedidos automáticos desde Stock crítico.",
+            };
+            return (
+              <div className="flex items-start justify-between gap-3 bg-muted/50 rounded-lg px-4 py-3 mb-4 text-sm">
+                <p className="text-muted-foreground">{descriptions[problemsTab]}</p>
+                {problemsTab === "precio_costo" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 text-xs"
+                    onClick={() => {
+                      window.location.href = "/admin/productos/editar-precios";
+                    }}
+                  >
+                    Editar precios
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Product list */}
+          <div className="space-y-2">
+            {products
+              .filter((p) => {
+                if (problemsTab === "sin_categoria") return !p.categoria_id;
+                if (problemsTab === "sin_imagen") return !(p as any).imagen_url;
+                if (problemsTab === "precio_costo")
+                  return p.costo > 0 && p.precio <= p.costo;
+                if (problemsTab === "sin_proveedor") return !prodProvMap[p.id];
+                return false;
+              })
+              .map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 px-4 py-3 border rounded-xl hover:border-primary/30 transition-colors bg-background"
+                >
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-semibold shrink-0"
+                    style={getInitialsColor(p.nombre)}
+                  >
+                    {getProductInitials(p.nombre)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{p.nombre}</p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {(p as any).codigo} · Stock: {p.stock} · {formatCurrency(p.precio)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 text-xs h-7 text-primary border-primary/30 bg-primary/5 hover:bg-primary/10"
+                    onClick={() => openEdit(p)}
+                  >
+                    {problemsTab === "sin_categoria"
+                      ? "Asignar categoría"
+                      : problemsTab === "sin_imagen"
+                      ? "Agregar imagen"
+                      : problemsTab === "precio_costo"
+                      ? "Corregir precio"
+                      : "Asignar proveedor"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => openEdit(p)}
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+            {products.filter((p) => {
+              if (problemsTab === "sin_categoria") return !p.categoria_id;
+              if (problemsTab === "sin_imagen") return !(p as any).imagen_url;
+              if (problemsTab === "precio_costo") return p.costo > 0 && p.precio <= p.costo;
+              if (problemsTab === "sin_proveedor") return !prodProvMap[p.id];
+              return false;
+            }).length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-8">
+                Sin productos con este problema ✓
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+      <>
       {/* Filters */}
       <Card className="overflow-visible">
         <CardContent className="pt-6 space-y-4 overflow-visible">
@@ -2768,6 +2910,8 @@ export default function ProductosPage() {
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* Create/Edit Dialog - Single scrollable dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
