@@ -4662,14 +4662,14 @@ export default function ProductosPage() {
           <div className="py-1">
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-              onClick={() => { openEdit(contextMenu.product); setContextMenu(null); }}
+              onClick={() => { const p = contextMenu.product; openEdit(p); setContextMenu(null); }}
             >
               <Edit className="w-3.5 h-3.5 text-muted-foreground" />
               Editar producto
             </button>
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-              onClick={() => { setQuickViewProduct(contextMenu.product); setContextMenu(null); }}
+              onClick={() => { const p = contextMenu.product; setQuickViewProduct(p); setContextMenu(null); }}
             >
               <Eye className="w-3.5 h-3.5 text-muted-foreground" />
               Vista rápida
@@ -4677,7 +4677,8 @@ export default function ProductosPage() {
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
               onClick={() => {
-                setStockPopover({ productId: contextMenu.product.id, productName: contextMenu.product.nombre, currentStock: contextMenu.product.stock });
+                const p = contextMenu.product;
+                setStockPopover({ productId: p.id, productName: p.nombre, currentStock: p.stock });
                 setContextMenu(null);
               }}
             >
@@ -4687,7 +4688,8 @@ export default function ProductosPage() {
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
               onClick={() => {
-                window.location.href = `/admin/productos/editar-precios?ids=${contextMenu.product.id}`;
+                const p = contextMenu.product;
+                window.location.href = `/admin/productos/editar-precios?ids=${p.id}`;
                 setContextMenu(null);
               }}
             >
@@ -4748,14 +4750,14 @@ export default function ProductosPage() {
             </button>
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-              onClick={() => { handleDuplicate(contextMenu.product); setContextMenu(null); }}
+              onClick={() => { const p = contextMenu.product; handleDuplicate(p); setContextMenu(null); }}
             >
               <Copy className="w-3.5 h-3.5 text-muted-foreground" />
               Duplicar
             </button>
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-              onClick={() => { openHistory(contextMenu.product); setContextMenu(null); }}
+              onClick={() => { const p = contextMenu.product; openHistory(p); setContextMenu(null); }}
             >
               <Clock className="w-3.5 h-3.5 text-muted-foreground" />
               Ver historial
@@ -4763,7 +4765,8 @@ export default function ProductosPage() {
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
               onClick={() => {
-                window.location.href = `/admin/productos/lista-precios?ids=${contextMenu.product.id}`;
+                const p = contextMenu.product;
+                window.location.href = `/admin/productos/lista-precios?ids=${p.id}`;
                 setContextMenu(null);
               }}
             >
@@ -4778,7 +4781,7 @@ export default function ProductosPage() {
           <div className="py-1">
             <button
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-red-50 text-red-600 transition-colors text-left"
-              onClick={() => { handleDelete(contextMenu.product.id); setContextMenu(null); }}
+              onClick={() => { const p = contextMenu.product; handleDelete(p.id); setContextMenu(null); }}
             >
               <Trash2 className="w-3.5 h-3.5" />
               Eliminar producto
