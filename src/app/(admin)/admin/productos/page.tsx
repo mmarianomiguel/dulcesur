@@ -2510,21 +2510,44 @@ export default function ProductosPage() {
                           );
                         })()}
                       </td>
-                      <td className="py-3 px-4 text-right font-semibold">
-                        {(() => {
-                          const { precio, enOferta, precioOriginal } = getPrecioEfectivo(product as any);
-                          return enOferta ? (
-                            <div>
-                              <div className="text-orange-600 font-semibold">{formatCurrency(precio)}</div>
-                              <div className="text-xs text-muted-foreground line-through">{formatCurrency(precioOriginal)}</div>
-                            </div>
-                          ) : (
-                            <span>{formatCurrency(precio)}</span>
-                          );
-                        })()}
-                        {product.costo > 0 && product.precio <= product.costo && (
-                          <span title="Precio menor al costo"><AlertTriangle className="w-3.5 h-3.5 text-red-500 inline ml-1" /></span>
-                        )}
+                      <td className="py-3 px-4 text-right">
+                        <div>
+                          {(() => {
+                            const { precio, enOferta, precioOriginal } = getPrecioEfectivo(
+                              product as any
+                            );
+                            return enOferta ? (
+                              <>
+                                <p className="font-semibold text-orange-600">
+                                  {formatCurrency(precio)}
+                                </p>
+                                <p className="text-[10px] line-through text-muted-foreground">
+                                  {formatCurrency(precioOriginal)}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p
+                                  className={`font-semibold ${
+                                    product.costo > 0 && product.precio <= product.costo
+                                      ? "text-red-600"
+                                      : ""
+                                  }`}
+                                >
+                                  {formatCurrency(product.precio)}
+                                  {product.costo > 0 && product.precio <= product.costo && (
+                                    <AlertTriangle className="w-3 h-3 inline ml-1 text-red-500" />
+                                  )}
+                                </p>
+                                {(product as any).fecha_actualizacion && (
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {formatRelativeDate((product as any).fecha_actualizacion)}
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
                       </td>
                       <td className="py-3 px-2 text-center">
                         <button
