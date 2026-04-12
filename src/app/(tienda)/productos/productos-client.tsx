@@ -93,6 +93,7 @@ export interface Producto {
   precio_anterior?: number | null;
   fecha_actualizacion?: string | null;
   updated_at?: string;
+  tags?: string[] | null;
 }
 
 /* ───── Skeleton loader ───── */
@@ -236,6 +237,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const precioMax = searchParams.get("precio_max") || "";
   const disponibilidad = searchParams.get("disponibilidad") || "";
   const tipoFilter = searchParams.get("tipo") || "";
+  const tagFilter = searchParams.get("tag") || "";
 
   // Resolve slugs to IDs (supports both slugified names and legacy UUIDs)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -405,7 +407,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       setLoading(true);
       let query = supabase
         .from("productos")
-        .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, fecha_sin_stock, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" });
+        .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, fecha_sin_stock, es_combo, precio_anterior, fecha_actualizacion, tags, categorias(nombre), marcas(nombre)", { count: "exact" });
 
       query = query.eq("activo", true).eq("visibilidad", "visible");
 
@@ -444,6 +446,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       }
       if (disponibilidad === "en_stock") query = query.gt("stock", 0);
       if (disponibilidad === "sin_stock") query = query.eq("stock", 0);
+      if (tagFilter) query = query.contains("tags", [tagFilter]);
       if (tipoFilter === "combos") query = query.eq("es_combo", true);
       if (tipoFilter === "precio_actualizado") {
         const threeDaysAgo = cutoffARG(3);
@@ -534,7 +537,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad, tipoFilter, permitidas, categorias, diasOcultarSinStock]);
+  }, [categoriaId, subcategoriaId, marcaParam, searchQuery, sort, page, precioMin, precioMax, disponibilidad, tipoFilter, tagFilter, permitidas, categorias, diasOcultarSinStock]);
 
   const totalPages = Math.ceil(total / PER_PAGE);
   const activeCategoryName = categorias.find(
@@ -671,7 +674,8 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     (precioMax ? 1 : 0) +
     (searchQuery ? 1 : 0) +
     (disponibilidad ? 1 : 0) +
-    (tipoFilter ? 1 : 0);
+    (tipoFilter ? 1 : 0) +
+    (tagFilter ? 1 : 0);
 
   const activeSubcategoryName = allSubcategorias.find(
     (s) => s.id === subcategoriaId
@@ -758,6 +762,17 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                 {disponibilidad === "en_stock" ? "En stock" : "Sin stock"}
                 <button
                   onClick={() => updateParams({ disponibilidad: null })}
+                  className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {tagFilter && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-primary/5 text-primary rounded-full px-3 py-1.5">
+                🏷 {tagFilter}
+                <button
+                  onClick={() => updateParams({ tag: null })}
                   className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
                 >
                   <X className="h-3 w-3" />
@@ -1443,6 +1458,28 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                         )}
                         {boxDiscountHint && (
                           <p className="text-[10px] text-emerald-600 font-medium mt-0.5">📦 {boxDiscountHint.pct}% OFF por {boxDiscountHint.label}</p>
+                        )}
+                        {/* Tags */}
+                        {producto.tags && producto.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {producto.tags.slice(0, 3).map((tag: string) => (
+                              <button
+                                key={tag}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  updateParams({ tag: tagFilter === tag ? null : tag });
+                                }}
+                                className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+                                  tagFilter === tag
+                                    ? "bg-primary/10 text-primary border-primary/30 font-semibold"
+                                    : "bg-gray-50 text-gray-500 border-gray-200 hover:border-primary/30 hover:text-primary"
+                                }`}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
 

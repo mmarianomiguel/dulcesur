@@ -379,6 +379,15 @@ export default function OfertasClient() {
         }
       }
       if (Object.keys(initialPres).length > 0) setSelectedPres(initialPres);
+
+      // Inicializar quantities con cantidadMinima para descuentos por volumen
+      const initialQty: Record<string, number> = {};
+      for (const p of resultado) {
+        if (p.cantidadMinima && p.cantidadMinima > 0) {
+          initialQty[p.id] = p.cantidadMinima;
+        }
+      }
+      if (Object.keys(initialQty).length > 0) setQuantities(initialQty);
     })();
   }, []);
 
@@ -691,10 +700,18 @@ export default function OfertasClient() {
             const canBuy = maxForPres > 0;
 
             const isDescuentoPres = activeIdx === (p.presIndexConDescuento ?? 0);
-            const displayPrice = isDescuentoPres ? p.precioFinal : (activePres?.precio || p.precioFinal);
+            // Para descuentos por cantidad mínima: aplicar descuento si qty >= cantidadMinima
+            const cantMinOk = !p.cantidadMinima || qty >= p.cantidadMinima;
+            const displayPrice = isDescuentoPres && cantMinOk
+              ? p.precioFinal
+              : (activePres?.precio || p.precio);
             const displayOriginal = activePres ? activePres.precio : p.precio;
-            const displayAhorro = isDescuentoPres && displayPrice < displayOriginal ? displayOriginal - displayPrice : 0;
-            const displayPct = displayAhorro > 0 ? Math.round((displayAhorro / displayOriginal) * 100) : (isDescuentoPres ? p.descuentoPct : 0);
+            const displayAhorro = isDescuentoPres && cantMinOk && displayPrice < displayOriginal
+              ? displayOriginal - displayPrice
+              : 0;
+            const displayPct = displayAhorro > 0
+              ? Math.round((displayAhorro / displayOriginal) * 100)
+              : (isDescuentoPres && cantMinOk ? p.descuentoPct : 0);
 
             // Precio por unidad para presentaciones mayores
             const precioXUnidad = activePres && activePres.cantidad > 1 && displayPrice > 0
@@ -780,7 +797,15 @@ export default function OfertasClient() {
                     )}
                     {/* Aviso cantidad mínima */}
                     {p.cantidadMinima && p.cantidadMinima > 0 ? (
-                      <p className="text-[10px] text-orange-600 font-semibold mt-0.5">🏷 Comprando {p.cantidadMinima}+ unidades</p>
+                      qty >= p.cantidadMinima ? (
+                        <p className="text-[10px] text-green-600 font-semibold mt-0.5">
+                          ✓ Descuento aplicado ({p.descuentoPct}% OFF)
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-orange-600 font-semibold mt-0.5">
+                          🏷 Agregá {p.cantidadMinima - qty} más para el {p.descuentoPct}% OFF
+                        </p>
+                      )
                     ) : p.descuentoNombre && p.descuentoNombre !== "Precio especial" && p.descuentoId !== "por_caja" ? (
                       <p className="text-[10px] text-gray-400 mt-0.5 truncate">{p.descuentoNombre}</p>
                     ) : null}
