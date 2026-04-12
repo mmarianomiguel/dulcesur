@@ -83,6 +83,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const persist = useCallback((next: CartItem[]) => {
     setItems(next);
     localStorage.setItem("carrito", JSON.stringify(next));
+    window.dispatchEvent(new Event("cart-updated"));
   }, []);
 
   const addItem = useCallback(
