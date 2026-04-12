@@ -323,10 +323,12 @@ export function VentaDetailDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => {
       if (!o && hasChanges && onConfirmAction) {
-        onConfirmAction("Cambios sin guardar", "Tenés cambios sin guardar. ¿Cerrar de todas formas?", () => onOpenChange(false));
+        onConfirmAction("Cambios sin guardar", "Tenés cambios sin guardar. ¿Cerrar de todas formas?", () => {
+          onOpenChange(false);
+        });
         return;
       }
-      onOpenChange(o);
+      if (!hasChanges) onOpenChange(o);
     }}>
       <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
         {/* ═══ HEADER ═══ */}
@@ -660,7 +662,11 @@ export function VentaDetailDialog({
                         <tr key={idx} className="border-b last:border-0">
                           <td className="px-3 py-2 font-medium">
                             <div className="flex flex-col gap-0.5">
-                              <span>{item.nombre}</span>
+                              <span>{item.nombre
+                                .replace(/\s*[-–]\sUnidad(\s(Unidad))?$/i, "")
+                                .replace(/\s*(Unidad)$/i, "")
+                                .replace(/(([^)]+))\s*\1/gi, "$1")
+                              }</span>
                               {item.presentacion && item.presentacion !== "Unidad" && (
                                 <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary">{item.presentacion}</span>
                               )}
