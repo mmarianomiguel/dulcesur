@@ -11,6 +11,7 @@ import {
   X,
   Truck,
   Phone,
+  ChevronDown,
   ChevronRight,
   Package,
   TrendingDown,
@@ -36,7 +37,10 @@ export default function TiendaNavbar() {
   const { openCart, itemCount, subtotal } = useCart();
   const router = useRouter();
   const { filtrarCategorias } = useCategoriasPermitidas();
-  const categoryBarRef = useRef<HTMLDivElement>(null);
+  const [hoveredCat, setHoveredCat] = useState<string | null>(null);
+  const [subcatsMap, setSubcatsMap] = useState<Record<string, { id: string; nombre: string }[]>>({});
+  const [marcasMap, setMarcasMap] = useState<Record<string, { id: string; nombre: string }[]>>({});
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [suggestions, setSuggestions] = useState<{ id: string; nombre: string; precio: number; imagen_url: string | null }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -85,6 +89,43 @@ export default function TiendaNavbar() {
         setMobilLogoSrc(logoUrl);
       }
     });
+  }, []);
+
+  // Cargar subcategorías y marcas para el mega-menú
+  useEffect(() => {
+    (async () => {
+      const { data: subs } = await supabase
+        .from("subcategorias")
+        .select("id, nombre, categoria_id");
+
+      const subsMap: Record<string, { id: string; nombre: string }[]> = {};
+      (subs || []).forEach((s: any) => {
+        if (!subsMap[s.categoria_id]) subsMap[s.categoria_id] = [];
+        subsMap[s.categoria_id].push({ id: s.id, nombre: s.nombre });
+      });
+      setSubcatsMap(subsMap);
+
+      const { data: prodMarcas } = await supabase
+        .from("productos")
+        .select("categoria_id, marca_id, marcas(id, nombre)")
+        .eq("activo", true)
+        .eq("visibilidad", "visible")
+        .not("marca_id", "is", null);
+
+      const mMap: Record<string, Map<string, string>> = {};
+      (prodMarcas || []).forEach((p: any) => {
+        if (!p.categoria_id || !p.marcas) return;
+        if (!mMap[p.categoria_id]) mMap[p.categoria_id] = new Map();
+        mMap[p.categoria_id].set(p.marcas.id, p.marcas.nombre);
+      });
+      const mResult: Record<string, { id: string; nombre: string }[]> = {};
+      for (const [catId, map] of Object.entries(mMap)) {
+        mResult[catId] = Array.from(map.entries())
+          .slice(0, 8)
+          .map(([id, nombre]) => ({ id, nombre }));
+      }
+      setMarcasMap(mResult);
+    })();
   }, []);
 
   // Lock body scroll when mobile menu is open
@@ -139,6 +180,23 @@ export default function TiendaNavbar() {
       setMobileQuery("");
       setMobileOpen(false);
     }
+  };
+
+  const handleCatEnter = (catId: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setHoveredCat(catId);
+  };
+
+  const handleCatLeave = () => {
+    closeTimer.current = setTimeout(() => setHoveredCat(null), 150);
+  };
+
+  const handleMenuEnter = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  };
+
+  const handleMenuLeave = () => {
+    closeTimer.current = setTimeout(() => setHoveredCat(null), 150);
   };
 
   return (
@@ -312,30 +370,135 @@ export default function TiendaNavbar() {
           </div>
         </div>
 
-        {/* ── Category bar (desktop) ── */}
-        <nav aria-label="Categorías" className="hidden border-b border-gray-100 lg:block">
-          <div
-            ref={categoryBarRef}
-            className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 scrollbar-none"
-          >
-            {filtrarCategorias(categorias).map((cat) => (
-              <Link
-                key={cat.id}
-                href={`/productos?categoria=${slugify(cat.nombre)}`}
-                className="group relative flex-shrink-0 px-3 py-2.5 text-sm font-medium text-gray-600 transition hover:text-primary"
-              >
-                {cat.nombre}
-                <span className="absolute bottom-0 left-0 h-0.5 w-full origin-left scale-x-0 bg-primary transition-transform group-hover:scale-x-100" />
-              </Link>
-            ))}
+        {/* ── Category bar con mega-menú (desktop) ── */}
+        <nav aria-label="Categorías" className="hidden border-b border-gray-100 lg:block relative z-40">
+          <div className="mx-auto flex max-w-7xl items-center px-4">
+            {filtrarCategorias(categorias).map((cat) => {
+              const isHovered = hoveredCat === cat.id;
+              return (
+                <div
+                  key={cat.id}
+                  onMouseEnter={() => handleCatEnter(cat.id)}
+                  onMouseLeave={handleCatLeave}
+                  className="relative"
+                >
+                  <Link
+                    href={`/productos?categoria=${slugify(cat.nombre)}`}
+                    className={`flex items-center gap-1 px-4 py-3 text-sm border-b-2 transition-colors whitespace-nowrap ${
+                      isHovered
+                        ? "border-gray-900 text-gray-900 font-semibold"
+                        : "border-transparent text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    {cat.nombre}
+                    <ChevronDown
+                      className={`w-3 h-3 transition-transform duration-200 ${
+                        isHovered ? "rotate-180" : ""
+                      }`}
+                    />
+                  </Link>
+                </div>
+              );
+            })}
             <Link
               href="/productos"
-              className="flex flex-shrink-0 items-center gap-0.5 px-3 py-2.5 text-sm font-medium text-primary transition hover:text-primary/90"
+              className="flex flex-shrink-0 items-center gap-0.5 px-4 py-3 text-sm font-semibold text-primary transition hover:text-primary/80 ml-auto"
             >
               Ver todo
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
+
+          {/* Mega-menú desplegable */}
+          {hoveredCat && (() => {
+            const cat = filtrarCategorias(categorias).find((c) => c.id === hoveredCat);
+            const subs = subcatsMap[hoveredCat] || [];
+            const marcas = marcasMap[hoveredCat] || [];
+            if (!cat) return null;
+
+            return (
+              <div
+                onMouseEnter={handleMenuEnter}
+                onMouseLeave={handleMenuLeave}
+                className="absolute left-0 right-0 bg-white border-b border-gray-200 shadow-xl z-50"
+              >
+                <div className="max-w-7xl mx-auto px-4 py-5 grid grid-cols-4 gap-6">
+
+                  {/* Col 1 — Subcategorías */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                      {cat.nombre}
+                    </p>
+                    <Link
+                      href={`/productos?categoria=${slugify(cat.nombre)}`}
+                      onClick={() => setHoveredCat(null)}
+                      className="block text-sm text-gray-800 font-semibold py-1.5 hover:text-primary transition-colors"
+                    >
+                      Todas las subcategorías
+                    </Link>
+                    {subs.map((sub) => (
+                      <Link
+                        key={sub.id}
+                        href={`/productos?categoria=${slugify(cat.nombre)}&subcategoria=${slugify(sub.nombre)}`}
+                        onClick={() => setHoveredCat(null)}
+                        className="flex items-center justify-between py-1.5 text-sm text-gray-600 hover:text-primary transition-colors group"
+                      >
+                        <span>{sub.nombre}</span>
+                        <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
+                      </Link>
+                    ))}
+                    {subs.length === 0 && (
+                      <p className="text-xs text-gray-400 mt-1">Sin subcategorías</p>
+                    )}
+                  </div>
+
+                  {/* Col 2 — Más buscado */}
+                  <div className="border-l border-gray-100 pl-6">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                      Más buscado
+                    </p>
+                    {subs.slice(0, 5).map((sub) => (
+                      <Link
+                        key={sub.id}
+                        href={`/productos?categoria=${slugify(cat.nombre)}&subcategoria=${slugify(sub.nombre)}`}
+                        onClick={() => setHoveredCat(null)}
+                        className="flex items-center gap-2 py-1.5 text-sm text-gray-600 hover:text-primary transition-colors"
+                      >
+                        <span className="text-gray-300 text-xs">↗</span>
+                        {sub.nombre}
+                      </Link>
+                    ))}
+                    {subs.length === 0 && (
+                      <p className="text-xs text-gray-400 mt-1">—</p>
+                    )}
+                  </div>
+
+                  {/* Col 3-4 — Marcas destacadas */}
+                  <div className="col-span-2 border-l border-gray-100 pl-6">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                      Marcas en {cat.nombre}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {marcas.map((marca) => (
+                        <Link
+                          key={marca.id}
+                          href={`/productos?categoria=${slugify(cat.nombre)}&marca=${slugify(marca.nombre)}`}
+                          onClick={() => setHoveredCat(null)}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-primary/10 hover:text-primary transition-colors"
+                        >
+                          {marca.nombre}
+                        </Link>
+                      ))}
+                      {marcas.length === 0 && (
+                        <p className="text-xs text-gray-400">Sin marcas registradas</p>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            );
+          })()}
         </nav>
       </header>
 
