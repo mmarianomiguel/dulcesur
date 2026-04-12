@@ -13,6 +13,7 @@ import {
   Phone,
   ChevronRight,
   Package,
+  TrendingDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { slugify, productSlug } from "@/lib/utils";
@@ -162,6 +163,9 @@ export default function TiendaNavbar() {
             <Link href="/historial" className="hover:text-primary transition">
               Mis pedidos
             </Link>
+            <Link href="/ofertas" className="hover:text-primary transition">
+              Ofertas
+            </Link>
             {config?.telefono && (
               <a href={`tel:${config.telefono.replace(/[^+\d]/g, "")}`} className="flex items-center gap-1 hover:text-primary transition" suppressHydrationWarning>
                 <Phone className="h-3 w-3" />
@@ -272,6 +276,13 @@ export default function TiendaNavbar() {
             >
               <Package className="h-5 w-5" />
               Mis pedidos
+            </Link>
+            <Link
+              href="/ofertas"
+              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-primary lg:flex"
+            >
+              <TrendingDown className="h-5 w-5" />
+              Ofertas
             </Link>
 
             {/* Notifications */}
@@ -430,6 +441,14 @@ export default function TiendaNavbar() {
           >
             <Package className="h-5 w-5" />
             Mis pedidos
+          </Link>
+          <Link
+            href="/ofertas"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+          >
+            <TrendingDown className="h-5 w-5" />
+            Ofertas
           </Link>
           <Link
             href="/info#faq"
