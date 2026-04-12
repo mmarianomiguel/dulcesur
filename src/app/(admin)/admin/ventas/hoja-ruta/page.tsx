@@ -537,6 +537,189 @@ export default function HojaDeRutaPage() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
   })();
 
+  const exportHistorialPDF = async () => {
+    const { jsPDF } = await import("jspdf");
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const w = pdf.internal.pageSize.getWidth();
+    const margin = 15;
+    let y = 20;
+    const fmtCur = formatCurrency;
+
+    // Header
+    pdf.setFontSize(18);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Resumen de Entregas", margin, y);
+    y += 8;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+    const fromLabel = new Date(historialDateFrom + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const toLabel = new Date(historialDateTo + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    pdf.text(`Período: ${fromLabel} — ${toLabel}`, margin, y);
+    y += 5;
+    pdf.text(`${filteredHistorial.length} entrega${filteredHistorial.length !== 1 ? "s" : ""}`, margin, y);
+    y += 10;
+
+    // General summary
+    const totalNeto = historialTotalVentas - historialTotalNC;
+    const totalPendiente = totalNeto - historialTotalCobrado;
+
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Resumen General", margin, y);
+    y += 7;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+    const summaryRows = [
+      ["Total Ventas", fmtCur(historialTotalVentas)],
+      ...(historialTotalNC > 0 ? [["Notas de Crédito", `-${fmtCur(historialTotalNC)}`]] : []),
+      ["Neto", fmtCur(totalNeto)],
+      ["Cobrado", fmtCur(historialTotalCobrado)],
+      ...(totalPendiente > 0 ? [["Pendiente de Cobro", fmtCur(totalPendiente)]] : []),
+    ];
+    for (const [label, val] of summaryRows) {
+      pdf.text(label, margin, y);
+      pdf.text(val, w - margin, y, { align: "right" });
+      y += 5;
+    }
+    y += 5;
+
+    // Payment method breakdown
+    pdf.setDrawColor(200);
+    pdf.line(margin, y, w - margin, y);
+    y += 5;
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Desglose por Método de Pago", margin, y);
+    y += 7;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+
+    if (historialBreakdown.efectivo > 0) {
+      pdf.text("Efectivo", margin + 5, y);
+      pdf.text(fmtCur(historialBreakdown.efectivo), w - margin, y, { align: "right" });
+      y += 5;
+    }
+    if (historialBreakdown.totalTransferencias > 0) {
+      pdf.text("Transferencia", margin + 5, y);
+      pdf.text(fmtCur(historialBreakdown.totalTransferencias), w - margin, y, { align: "right" });
+      y += 5;
+      pdf.setFontSize(9);
+      for (const [cuenta, monto] of Object.entries(historialBreakdown.transferencias).sort((a, b) => b[1] - a[1])) {
+        pdf.text(`→ ${cuenta}`, margin + 10, y);
+        pdf.text(fmtCur(monto), w - margin, y, { align: "right" });
+        y += 4;
+      }
+      pdf.setFontSize(10);
+    }
+    if (historialBreakdown.cuentaCorriente > 0) {
+      pdf.text("Cuenta Corriente", margin + 5, y);
+      pdf.text(fmtCur(historialBreakdown.cuentaCorriente), w - margin, y, { align: "right" });
+      y += 5;
+    }
+    y += 5;
+
+    // Deliveries table grouped by day
+    pdf.setDrawColor(200);
+    pdf.line(margin, y, w - margin, y);
+    y += 5;
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Detalle de Entregas", margin, y);
+    y += 7;
+
+    for (const [day, dayVentas] of historialByDay) {
+      if (y > 255) { pdf.addPage(); y = 20; }
+
+      const dayLabel = new Date(day + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
+      const dayTotal = dayVentas.reduce((s, v) => s + v.total, 0);
+
+      // Day subheader
+      pdf.setFillColor(245, 245, 245);
+      pdf.rect(margin, y - 4, w - margin * 2, 6, "F");
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1), margin + 2, y);
+      pdf.text(fmtCur(dayTotal), w - margin - 2, y, { align: "right" });
+      y += 5;
+
+      // Table header
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(120);
+      pdf.text("N°", margin, y);
+      pdf.text("Cliente", margin + 22, y);
+      pdf.text("Método", margin + 90, y);
+      pdf.text("Total", margin + 125, y, { align: "right" });
+      pdf.text("Cobrado", margin + 150, y, { align: "right" });
+      pdf.text("Debe", w - margin, y, { align: "right" });
+      y += 4;
+      pdf.setTextColor(0);
+      pdf.setDrawColor(220);
+      pdf.line(margin, y - 1, w - margin, y - 1);
+      pdf.setFont("helvetica", "normal");
+
+      for (const v of dayVentas) {
+        if (y > 275) { pdf.addPage(); y = 20; }
+        const pagos = historialPagos[v.id] || [];
+        const cobradoSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+        const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+        const neto = v.total - ncMonto;
+        const debe = Math.max(0, neto - cobradoSinNC);
+        const metodos = [...new Set(pagos.filter(p => !p.metodo.includes("Nota de Cr")).map(p => p.metodo))].join(", ") || "—";
+
+        pdf.text(v.numero || "—", margin, y);
+        pdf.text((v.clientes?.nombre || "Sin cliente").substring(0, 30), margin + 22, y);
+        pdf.text(metodos.substring(0, 18), margin + 90, y);
+        pdf.text(fmtCur(neto), margin + 125, y, { align: "right" });
+        pdf.text(fmtCur(cobradoSinNC), margin + 150, y, { align: "right" });
+        if (debe > 0) {
+          pdf.setTextColor(200, 100, 0);
+          pdf.text(fmtCur(debe), w - margin, y, { align: "right" });
+          pdf.setTextColor(0);
+        } else {
+          pdf.text("—", w - margin, y, { align: "right" });
+        }
+        y += 4.5;
+      }
+      y += 4;
+    }
+
+    // Deudores section
+    if (historialBreakdown.deudores.length > 0) {
+      if (y > 250) { pdf.addPage(); y = 20; }
+      pdf.setDrawColor(200);
+      pdf.line(margin, y, w - margin, y);
+      y += 5;
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(`Deudores Pendientes (${historialBreakdown.deudores.length})`, margin, y);
+      y += 7;
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+
+      for (const d of historialBreakdown.deudores.sort((a, b) => b.monto - a.monto)) {
+        if (y > 275) { pdf.addPage(); y = 20; }
+        pdf.text(d.nombre, margin + 5, y);
+        pdf.setTextColor(200, 100, 0);
+        pdf.text(fmtCur(d.monto), w - margin, y, { align: "right" });
+        pdf.setTextColor(0);
+        y += 5;
+      }
+      y += 3;
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Total Pendiente:", margin + 5, y);
+      pdf.text(fmtCur(historialBreakdown.deudores.reduce((s, d) => s + d.monto, 0)), w - margin, y, { align: "right" });
+    }
+
+    // Footer
+    y += 10;
+    pdf.setFontSize(8);
+    pdf.setTextColor(150);
+    pdf.text(`Generado el ${new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} a las ${nowTimeARG().substring(0, 5)}`, margin, y);
+
+    pdf.save(`entregas-${historialDateFrom}-a-${historialDateTo}.pdf`);
+  };
+
   const handleMarkDelivered = async (groupVentas: VentaRow[]) => {
     const ids = groupVentas.map((v) => v.id);
     const totalPendiente = groupVentas.reduce((s, v) => s + Math.max(0, (v.total - (ncPorVenta[v.id] || 0)) - (pagadoPorVenta[v.id] || 0)), 0);
@@ -1130,10 +1313,16 @@ export default function HojaDeRutaPage() {
           {/* Historial grouped by day */}
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">Historial de Entregas</h2>
-            <Button variant="outline" size="sm" onClick={fetchHistorial} disabled={historialLoading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${historialLoading ? "animate-spin" : ""}`} />
-              Actualizar
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={exportHistorialPDF} disabled={historialLoading || filteredHistorial.length === 0}>
+                <FileText className="w-4 h-4 mr-2" />
+                Exportar PDF
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchHistorial} disabled={historialLoading}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${historialLoading ? "animate-spin" : ""}`} />
+                Actualizar
+              </Button>
+            </div>
           </div>
 
           {historialLoading ? (
