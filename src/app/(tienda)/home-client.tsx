@@ -524,33 +524,11 @@ function ProductosDestacadosBlock({
   );
 }
 
-function AumentosRecientesBlock() {
+function AumentosRecientesBlock({ productos: initialData = [] }: { productos?: any[] }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-    supabase
-      .from("productos")
-      .select("id, nombre, precio, imagen_url, stock, activo, precio_anterior, fecha_actualizacion, categorias(id, nombre, restringida)")
-      .eq("activo", true)
-      .eq("visibilidad", "visible")
-      .gt("precio_anterior", 0)
-      .gt("fecha_actualizacion", cutoff)
-      .order("fecha_actualizacion", { ascending: false })
-      .limit(12)
-      .then(({ data }) => {
-        const increased = (data || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
-        setProductos(increased as any);
-        setLoaded(true);
-      });
-  }, []);
-
-  if (!loaded) return null;
-
-  const filtered = productos.filter((p) => {
-    const cat = (p as any).categorias;
+  const filtered = initialData.filter((p: any) => {
+    const cat = p.categorias;
     if (!cat) return true;
     return filtrarCategorias([cat]).length > 0;
   }).slice(0, 8);
@@ -639,32 +617,13 @@ function AumentosRecientesBlock() {
   );
 }
 
-function MasVendidosBlock({ config }: { config: Record<string, any> }) {
+function MasVendidosBlock({ config, productos: initialData = [] }: { config: Record<string, any>; productos?: any[] }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [loaded, setLoaded] = useState(false);
   const limit = config.max_items || 8;
   const titulo = config.titulo || "Los Más Vendidos";
 
-  useEffect(() => {
-    supabase
-      .from("productos")
-      .select("id, nombre, precio, imagen_url, stock, es_combo, activo, categorias(id, nombre, restringida), precio_anterior, created_at")
-      .eq("activo", true)
-      .eq("visibilidad", "visible")
-      .gt("stock", 0)
-      .order("stock", { ascending: false })
-      .limit(limit * 3)
-      .then(({ data }) => {
-        setProductos((data as any[]) || []);
-        setLoaded(true);
-      });
-  }, [limit]);
-
-  if (!loaded) return null;
-
-  const filtered = productos.filter((p) => {
-    const cat = (p as any).categorias;
+  const filtered = initialData.filter((p: any) => {
+    const cat = p.categorias;
     if (!cat) return true;
     return filtrarCategorias([cat]).length > 0;
   }).slice(0, limit);
@@ -721,38 +680,20 @@ function MasVendidosBlock({ config }: { config: Record<string, any> }) {
   );
 }
 
-function UltimasUnidadesBlock({ config }: { config: Record<string, any> }) {
+function UltimasUnidadesBlock({ config, productos: initialData = [] }: { config: Record<string, any>; productos?: any[] }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [loaded, setLoaded] = useState(false);
   const limit = config.max_items || 8;
   const umbral = config.umbral_stock || 5;
   const titulo = config.titulo || "Últimas Unidades";
 
-  useEffect(() => {
-    supabase
-      .from("productos")
-      .select("id, nombre, precio, imagen_url, stock, activo, categorias(id, nombre, restringida)")
-      .eq("activo", true)
-      .eq("visibilidad", "visible")
-      .eq("es_combo", false)
-      .gt("stock", 0)
-      .lte("stock", umbral)
-      .order("stock", { ascending: true })
-      .limit(limit * 3)
-      .then(({ data }) => {
-        setProductos((data as any[]) || []);
-        setLoaded(true);
-      });
-  }, [limit, umbral]);
-
-  if (!loaded) return null;
-
-  const filtered = productos.filter((p) => {
-    const cat = (p as any).categorias;
-    if (!cat) return true;
-    return filtrarCategorias([cat]).length > 0;
-  }).slice(0, limit);
+  const filtered = initialData
+    .filter((p: any) => {
+      const cat = p.categorias;
+      if (!cat) return true;
+      return filtrarCategorias([cat]).length > 0;
+    })
+    .filter((p: any) => p.stock > 0 && p.stock <= umbral)
+    .slice(0, limit);
 
   if (filtered.length === 0) return null;
 
@@ -936,6 +877,9 @@ interface HomeClientProps {
   initialProductos?: Producto[];
   initialPresMap?: Record<string, any[]>;
   initialDiasNuevo?: number;
+  initialAumentos?: any[];
+  initialMasVendidos?: any[];
+  initialUltimasUnidades?: any[];
 }
 
 export default function TiendaPage({
@@ -944,6 +888,9 @@ export default function TiendaPage({
   initialProductos,
   initialPresMap,
   initialDiasNuevo = 7,
+  initialAumentos = [],
+  initialMasVendidos = [],
+  initialUltimasUnidades = [],
 }: HomeClientProps = {}) {
   const hasInitial = !!initialBloques;
   const [bloques, setBloques] = useState<Bloque[]>(initialBloques || []);
@@ -1166,9 +1113,9 @@ export default function TiendaPage({
       case "imagen_banner":
         return <ImagenBannerBlock key={bloque.id} config={config} />;
       case "mas_vendidos":
-        return <MasVendidosBlock key={bloque.id} config={config} />;
+        return <MasVendidosBlock key={bloque.id} config={config} productos={initialMasVendidos} />;
       case "ultimas_unidades":
-        return <UltimasUnidadesBlock key={bloque.id} config={config} />;
+        return <UltimasUnidadesBlock key={bloque.id} config={config} productos={initialUltimasUnidades} />;
       default:
         return null;
     }
@@ -1242,7 +1189,7 @@ export default function TiendaPage({
   return (
     <div className="min-h-screen bg-white">
       {orderedBloques.map((bloque) => renderBlock(bloque))}
-      <AumentosRecientesBlock />
+      <AumentosRecientesBlock productos={initialAumentos} />
       {afterAumentosBloques.map((bloque) => renderBlock(bloque))}
       {remaining.map((bloque) => renderBlock(bloque))}
     </div>

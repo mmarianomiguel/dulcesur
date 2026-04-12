@@ -149,16 +149,19 @@ export default function TiendaNavbar() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (val.trim().length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
     debounceRef.current = setTimeout(async () => {
+      const q = val.trim();
+      if (q.length < 2) return;
       const { data } = await supabase
         .from("productos")
         .select("id, nombre, precio, imagen_url")
         .eq("activo", true)
         .eq("visibilidad", "visible")
-        .ilike("nombre", `%${val.trim()}%`)
-        .limit(5);
+        .ilike("nombre", `%${q}%`)
+        .gt("stock", 0)
+        .limit(6);
       setSuggestions(data || []);
       setShowSuggestions(true);
-    }, 300);
+    }, 400);
   };
 
   // Close suggestions on click outside

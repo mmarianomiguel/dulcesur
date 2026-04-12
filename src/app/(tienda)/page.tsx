@@ -140,7 +140,53 @@ export default async function TiendaHomePage() {
       })()
     : Promise.resolve([]);
 
-  const [categorias, productos] = await Promise.all([catPromise, prodPromise]);
+  // Cutoff for aumentos recientes (3 days in AR timezone)
+  const cutoffAumentos = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" })
+  );
+  cutoffAumentos.setDate(cutoffAumentos.getDate() - 3);
+  cutoffAumentos.setHours(0, 0, 0, 0);
+  const cutoffStr = cutoffAumentos.toISOString();
+
+  const aumentosPromise = supabase
+    .from("productos")
+    .select("id, nombre, precio, imagen_url, stock, precio_anterior, fecha_actualizacion, categorias(id, nombre, restringida)")
+    .eq("activo", true)
+    .eq("visibilidad", "visible")
+    .gt("precio_anterior", 0)
+    .gt("fecha_actualizacion", cutoffStr)
+    .order("fecha_actualizacion", { ascending: false })
+    .limit(12);
+
+  const masVendidosPromise = supabase
+    .from("productos")
+    .select("id, nombre, precio, imagen_url, stock, es_combo, categorias(id, nombre, restringida), precio_anterior, created_at")
+    .eq("activo", true)
+    .eq("visibilidad", "visible")
+    .gt("stock", 0)
+    .order("stock", { ascending: false })
+    .limit(24);
+
+  const ultimasUnidadesPromise = supabase
+    .from("productos")
+    .select("id, nombre, precio, imagen_url, stock, categorias(id, nombre, restringida)")
+    .eq("activo", true)
+    .eq("visibilidad", "visible")
+    .eq("es_combo", false)
+    .gt("stock", 0)
+    .lte("stock", 5)
+    .order("stock", { ascending: true })
+    .limit(24);
+
+  const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }] = await Promise.all([
+    catPromise,
+    prodPromise,
+    aumentosPromise,
+    masVendidosPromise,
+    ultimasUnidadesPromise,
+  ]);
+
+  const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
 
   // 3. Fetch presentaciones for products (needs product IDs from step 2)
   const presMap: Record<string, any[]> = {};
@@ -164,6 +210,9 @@ export default async function TiendaHomePage() {
       initialProductos={productos}
       initialPresMap={presMap}
       initialDiasNuevo={diasNuevo}
+      initialAumentos={aumentos}
+      initialMasVendidos={masVendidosData || []}
+      initialUltimasUnidades={ultimasUnidadesData || []}
     />
   );
 }

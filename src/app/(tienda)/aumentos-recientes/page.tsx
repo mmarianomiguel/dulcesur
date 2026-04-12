@@ -10,7 +10,12 @@ export const metadata = {
 
 export default async function AumentosRecientesPage() {
   const supabase = createServerSupabase();
-  const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" })
+  );
+  now.setDate(now.getDate() - 3);
+  now.setHours(0, 0, 0, 0);
+  const cutoff = now.toISOString();
 
   const { data } = await supabase
     .from("productos")
