@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm } from "@/lib/utils";
+import { formatRelativeDate } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,18 +69,6 @@ interface DeleteConfirm {
   nombre: string;
   productos: ProductoAsociado[];
   reassignTo: string;
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const days = Math.floor(
-    (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)
-  );
-  if (isNaN(days) || days < 0) return "—";
-  if (days === 0) return "hoy";
-  if (days === 1) return "ayer";
-  if (days < 30) return `hace ${days} días`;
-  if (days < 60) return "hace 1 mes";
-  return `hace ${Math.floor(days / 30)} meses`;
 }
 
 export default function MarcasPage() {
