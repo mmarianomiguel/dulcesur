@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo, Fragment } from "react";
-import { todayARG, formatCurrency } from "@/lib/formatters";
+import { todayARG, formatCurrency, formatRelativeDate } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import type { Producto, Categoria } from "@/types/database";
@@ -132,17 +132,6 @@ type ProductoWithRelations = Producto & {
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────
-function formatRelativeDate(dateStr: string): string {
-  const days = Math.floor(
-    (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)
-  );
-  if (isNaN(days) || days < 0) return "—";
-  if (days === 0) return "hoy";
-  if (days === 1) return "ayer";
-  if (days < 30) return `hace ${days} días`;
-  if (days < 60) return "hace 1 mes";
-  return `hace ${Math.floor(days / 30)} meses`;
-}
 
 function getProductInitials(nombre: string): string {
   const words = nombre.trim().split(" ").filter(Boolean);
