@@ -38,6 +38,7 @@ interface Marca {
 
 interface MarcaConConteo extends Marca {
   producto_count: number;
+  ultima_actualizacion?: string | null;
 }
 
 interface Categoria {
@@ -69,6 +70,18 @@ interface DeleteConfirm {
   reassignTo: string;
 }
 
+function formatRelativeDate(dateStr: string): string {
+  const days = Math.floor(
+    (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (isNaN(days) || days < 0) return "—";
+  if (days === 0) return "hoy";
+  if (days === 1) return "ayer";
+  if (days < 30) return `hace ${days} días`;
+  if (days < 60) return "hace 1 mes";
+  return `hace ${Math.floor(days / 30)} meses`;
+}
+
 export default function MarcasPage() {
   const [activeTab, setActiveTab] = useState("marcas");
   const [search, setSearch] = useState("");
@@ -98,16 +111,39 @@ export default function MarcasPage() {
   const editDialog = useDialog<MarcaConConteo>();
 
   const fetchMarcas = useCallback(async (): Promise<MarcaConConteo[]> => {
-    const { data: marcasData } = await supabase.from("marcas").select("*").order("nombre");
+    const { data: marcasData } = await supabase
+      .from("marcas")
+      .select("*")
+      .order("nombre");
     if (!marcasData) return [];
 
-    const { data: productos } = await supabase.from("productos").select("marca_id");
+    const { data: productos } = await supabase
+      .from("productos")
+      .select("marca_id, fecha_actualizacion")
+      .eq("activo", true);
+
     const countMap: Record<string, number> = {};
-    (productos ?? []).forEach((p: { marca_id: string | null }) => {
-      if (p.marca_id) countMap[p.marca_id] = (countMap[p.marca_id] || 0) + 1;
+    const lastUpdateMap: Record<string, string> = {};
+
+    (productos ?? []).forEach((p: any) => {
+      if (p.marca_id) {
+        countMap[p.marca_id] = (countMap[p.marca_id] || 0) + 1;
+        if (p.fecha_actualizacion) {
+          if (
+            !lastUpdateMap[p.marca_id] ||
+            p.fecha_actualizacion > lastUpdateMap[p.marca_id]
+          ) {
+            lastUpdateMap[p.marca_id] = p.fecha_actualizacion;
+          }
+        }
+      }
     });
 
-    return marcasData.map((m: Marca) => ({ ...m, producto_count: countMap[m.id] || 0 }));
+    return marcasData.map((m: Marca) => ({
+      ...m,
+      producto_count: countMap[m.id] || 0,
+      ultima_actualizacion: lastUpdateMap[m.id] || null,
+    }));
   }, []);
 
   const { data: marcas, loading, refetch } = useAsyncData({
@@ -437,6 +473,9 @@ export default function MarcasPage() {
                     <tr className="border-b bg-muted/50">
                       <th className="text-left px-4 py-3 font-medium">Nombre</th>
                       <th className="text-left px-4 py-3 font-medium">Productos</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                        Últ. actualización
+                      </th>
                       <th className="text-right px-4 py-3 font-medium">Acciones</th>
                     </tr>
                   </thead>
@@ -474,6 +513,11 @@ export default function MarcasPage() {
                             {m.producto_count}{" "}
                             {m.producto_count === 1 ? "producto" : "productos"}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {m.ultima_actualizacion
+                            ? formatRelativeDate(m.ultima_actualizacion)
+                            : "—"}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
