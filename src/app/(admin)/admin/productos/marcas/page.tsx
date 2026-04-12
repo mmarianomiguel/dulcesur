@@ -93,6 +93,8 @@ export default function MarcasPage() {
   // Simple delete (no products)
   const [simpleDelete, setSimpleDelete] = useState<{ type: string; id: string; nombre: string } | null>(null);
 
+  const [showSinProductos, setShowSinProductos] = useState(false);
+
   const editDialog = useDialog<MarcaConConteo>();
 
   const fetchMarcas = useCallback(async (): Promise<MarcaConConteo[]> => {
@@ -333,6 +335,11 @@ export default function MarcasPage() {
 
   // ─── Derived ───
   const filtered = marcas.filter((m) => norm(m.nombre).includes(norm(search)));
+  const filteredMarcas = (marcas as MarcaConConteo[]).filter((m) => {
+    const matchSearch = norm(m.nombre).includes(norm(search));
+    if (showSinProductos) return matchSearch && m.producto_count === 0;
+    return matchSearch;
+  });
   const filteredCats = categorias.filter((c) => norm(c.nombre).includes(norm(search)));
   const filteredSubs = subcategorias.filter((s) => norm(s.nombre).includes(norm(search)) || norm(s.categoria_nombre || "").includes(norm(search)));
 
@@ -373,23 +380,44 @@ export default function MarcasPage() {
         <StatCard title="Sin productos" value={marcas.filter((m) => m.producto_count === 0).length} icon={Tag} iconColor="text-gray-400" iconBg="bg-gray-100" />
       </div>
 
-      <SearchInput value={search} onChange={setSearch} placeholder="Buscar marcas..." className="max-w-sm" />
+      <div className="flex gap-3 items-center mb-4">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Buscar marcas..."
+          className="max-w-sm"
+        />
+        <Button
+          variant={showSinProductos ? "default" : "outline"}
+          size="sm"
+          className={
+            showSinProductos
+              ? ""
+              : "text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-100"
+          }
+          onClick={() => setShowSinProductos(!showSinProductos)}
+        >
+          Sin productos (
+          {(marcas as MarcaConConteo[]).filter((m) => m.producto_count === 0).length}
+          )
+        </Button>
+      </div>
 
       <Card>
         <CardContent className="p-0">
           {loading ? (
             <LoadingSpinner />
-          ) : filtered.length === 0 ? (
+          ) : filteredMarcas.length === 0 ? (
             <EmptyState
               icon={Tag}
-              title={search ? "No se encontraron marcas" : "No hay marcas creadas"}
-              action={!search ? { label: "Crear marca", onClick: openCreate } : undefined}
+              title={search || showSinProductos ? "No se encontraron marcas" : "No hay marcas creadas"}
+              action={!search && !showSinProductos ? { label: "Crear marca", onClick: openCreate } : undefined}
             />
           ) : (
             <>
               {/* Mobile card view */}
               <div className="sm:hidden divide-y">
-                {filtered.map((m) => (
+                {filteredMarcas.map((m) => (
                   <div key={m.id} className="p-4 flex items-center justify-between">
                     <div>
                       <div className="font-medium">{m.nombre}</div>
@@ -413,11 +441,39 @@ export default function MarcasPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((m) => (
+                    {filteredMarcas.map((m) => (
                       <tr key={m.id} className="border-b hover:bg-muted/30">
-                        <td className="px-4 py-3 font-medium">{m.nombre}</td>
                         <td className="px-4 py-3">
-                          <Badge variant="secondary"><Package className="w-3 h-3 mr-1" />{m.producto_count}</Badge>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0"
+                              style={
+                                m.producto_count === 0
+                                  ? { background: "#FAEEDA", color: "#633806" }
+                                  : m.producto_count >= 10
+                                  ? { background: "#EAF3DE", color: "#27500A" }
+                                  : { background: "#EEEDFE", color: "#3C3489" }
+                              }
+                            >
+                              {m.nombre.slice(0, 2).toUpperCase()}
+                            </div>
+                            <span className="font-medium text-sm">{m.nombre}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge
+                            variant="secondary"
+                            className={
+                              m.producto_count === 0
+                                ? "bg-amber-50 text-amber-700"
+                                : m.producto_count >= 10
+                                ? "bg-emerald-50 text-emerald-700"
+                                : ""
+                            }
+                          >
+                            {m.producto_count}{" "}
+                            {m.producto_count === 1 ? "producto" : "productos"}
+                          </Badge>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
