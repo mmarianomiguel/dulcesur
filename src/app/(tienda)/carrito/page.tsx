@@ -143,6 +143,10 @@ export default function CarritoPage() {
   };
 
   const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const totalSavings = items.reduce((sum, item) => {
+    if (!item.precio_original || item.precio_original <= item.precio) return sum;
+    return sum + (item.precio_original - item.precio) * item.cantidad;
+  }, 0);
 
   if (!loaded) return null;
 
@@ -271,6 +275,11 @@ export default function CarritoPage() {
         <div>
           <p className="text-xs text-gray-500">Subtotal</p>
           <p className="text-lg font-bold">{formatCurrency(subtotal)}</p>
+          {totalSavings > 0 && (
+            <p className="text-xs text-green-600 font-semibold mt-0.5">
+              Ahorrás {formatCurrency(totalSavings)}
+            </p>
+          )}
         </div>
         {hayStockInsuficiente ? (
           <span className="bg-gray-200 text-gray-500 px-6 py-3 rounded-xl text-sm font-medium cursor-not-allowed flex items-center gap-2">
