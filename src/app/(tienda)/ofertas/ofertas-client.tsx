@@ -145,6 +145,25 @@ export default function OfertasClient() {
 
       const resultado: ProductoConDescuento[] = [];
 
+      // DEBUG TEMPORAL
+      console.log("=== OFERTAS DEBUG ===");
+      console.log("Total productos:", allProds.length);
+      console.log("Total descuentos:", allDesc.length);
+      console.log("Descuentos:", allDesc.map(d => ({ nombre: d.nombre, presentacion: d.presentacion, aplica_a: d.aplica_a })));
+      console.log("Total presentaciones:", allPres.length);
+      const bultoIds = [
+        "fb76f683-9f31-4533-a33b-1947da15dba0",
+        "e0495bc4-4b14-4124-b053-9946e9338ece",
+        "e58dbeb5-f2d1-4660-813f-579e4b2c0e53",
+        "3ec85666-97fb-4fa0-b565-42ca283deaf6"
+      ];
+      for (const id of bultoIds) {
+        const prod = allProds.find((p: any) => p.id === id);
+        const pres2 = presMap[id];
+        console.log(`Producto ${id.slice(0,8)}:`, prod ? prod.nombre : "NO ENCONTRADO", "| Presentaciones:", pres2 ? pres2.map(p => `${p.nombre}:$${p.precio}`) : "NINGUNA");
+      }
+      // END DEBUG
+
       for (const prod of allProds) {
         let mejorPct = 0;
         let precioFinal = prod.precio;
