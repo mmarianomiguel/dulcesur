@@ -170,6 +170,8 @@ export default function ClientesPage() {
   const [importProgress, setImportProgress] = useState("");
 
   // Cobranzas state
+  const [deudaDetalle, setDeudaDetalle] = useState<Record<string, { cantFacturas: number; diasDeuda: number }>>({});
+  const [cobranzaSort, setCobranzaSort] = useState<"monto" | "antiguedad">("monto");
   const [cobranzasSearch, setCobranzasSearch] = useState("");
   const [cobroOpen, setCobroOpen] = useState(false);
   const [cobroReceipt, setCobroReceipt] = useState<{
@@ -922,6 +924,36 @@ export default function ClientesPage() {
     const s = norm(cobranzasSearch);
     return clientsConDeuda.filter((c) => norm(c.nombre).includes(s));
   }, [clientsConDeuda, cobranzasSearch]);
+
+  const fetchDeudaDetalle = useCallback(async (deudores: Cliente[]) => {
+    if (deudores.length === 0) { setDeudaDetalle({}); return; }
+    const ids = deudores.map((c) => c.id);
+    const { data: ventasDeuda } = await supabase
+      .from("ventas")
+      .select("id, cliente_id, fecha, total, monto_pagado, forma_pago, estado")
+      .in("cliente_id", ids)
+      .in("forma_pago", ["Cuenta Corriente", "Mixto", "Pendiente"])
+      .neq("estado", "anulada");
+    const hoy = todayARG();
+    const resultado: Record<string, { cantFacturas: number; diasDeuda: number }> = {};
+    for (const id of ids) {
+      const ventasCliente = (ventasDeuda || []).filter(
+        (v) => v.cliente_id === id && (v.total - (v.monto_pagado || 0)) > 1
+      );
+      if (ventasCliente.length === 0) { resultado[id] = { cantFacturas: 0, diasDeuda: 0 }; continue; }
+      const fechaMasAntigua = ventasCliente.map((v) => v.fecha).sort()[0];
+      const dias = Math.floor(
+        (new Date(hoy + "T12:00:00").getTime() - new Date(fechaMasAntigua + "T12:00:00").getTime())
+        / (1000 * 60 * 60 * 24)
+      );
+      resultado[id] = { cantFacturas: ventasCliente.length, diasDeuda: dias };
+    }
+    setDeudaDetalle(resultado);
+  }, []);
+
+  useEffect(() => {
+    fetchDeudaDetalle(clientsConDeuda);
+  }, [clientsConDeuda, fetchDeudaDetalle]);
 
   const openCobro = (client: Cliente) => {
     setCobroClient(client);
