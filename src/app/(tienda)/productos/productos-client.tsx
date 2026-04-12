@@ -8,6 +8,7 @@ import { showToast } from "@/components/tienda/toast";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import { slugify, productSlug } from "@/lib/utils";
+import { fuzzyMatch } from "@/lib/fuzzy";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import {
   Search,
@@ -137,6 +138,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({}); // productId -> presentacion index
   const [cartUnits, setCartUnits] = useState<Record<string, number>>({}); // productId -> total units in cart
   const [diasOcultarSinStock, setDiasOcultarSinStock] = useState(initialData?.diasOcultarSinStock ?? 7);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
   // Resolve tienda cliente_id for client-specific discounts
   useEffect(() => {
@@ -171,6 +173,13 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     syncCart();
     window.addEventListener("cart-updated", syncCart);
     return () => window.removeEventListener("cart-updated", syncCart);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("search_history");
+      if (raw) setSearchHistory(JSON.parse(raw));
+    } catch {}
   }, []);
 
   // Price inputs local state for "Aplicar" button
@@ -212,6 +221,15 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     setLocalPrecioMin(precioMin);
     setLocalPrecioMax(precioMax);
   }, [precioMin, precioMax]);
+
+  function saveToHistory(q: string) {
+    if (!q.trim()) return;
+    setSearchHistory((prev) => {
+      const next = [q, ...prev.filter((h) => h !== q)].slice(0, 5);
+      localStorage.setItem("search_history", JSON.stringify(next));
+      return next;
+    });
+  }
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -387,8 +405,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       if (precioMax) query = query.lte("precio", Number(precioMax));
       // Hide out-of-stock products not updated in X days (unless filtering for sin_stock)
       // Combos have stock=0 in the table (calculated dynamically), so exclude them from this filter
-      if (disponibilidad !== "sin_stock" && diasOcultarSinStock > 0) {
-        const cutoff = new Date(Date.now() - diasOcultarSinStock * 24 * 60 * 60 * 1000).toISOString();
+      if (disponibilidad === "" && diasOcultarSinStock > 0) {
+        const nowAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+        nowAR.setHours(0, 0, 0, 0);
+        nowAR.setDate(nowAR.getDate() - diasOcultarSinStock);
+        const cutoff = nowAR.toISOString();
         query = query.or(`stock.gt.0,updated_at.gt.${cutoff},es_combo.eq.true`);
       }
       if (disponibilidad === "en_stock") query = query.gt("stock", 0);
@@ -418,8 +439,21 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
       const { data, count } = await query;
       const prods = (data as unknown as Producto[]) || [];
-      const ids = prods.map((p) => p.id);
-      const comboIds = prods.filter((p) => p.es_combo).map((p) => p.id);
+      let finalProds = prods;
+      let finalCount = count || 0;
+      if (searchQuery && finalCount === 0) {
+        const { data: allData } = await supabase
+          .from("productos")
+          .select("id, nombre, precio, imagen_url, stock, activo, visibilidad, es_combo, precio_anterior, fecha_actualizacion, updated_at, created_at, categorias(id, nombre, restringida), marcas(id, nombre)")
+          .eq("activo", true)
+          .eq("visibilidad", "visible")
+          .limit(500);
+        const fuzzyFiltered = ((allData as any[]) || []).filter((p: any) => fuzzyMatch(p.nombre, searchQuery));
+        finalProds = fuzzyFiltered as unknown as Producto[];
+        finalCount = fuzzyFiltered.length;
+      }
+      const ids = finalProds.map((p) => p.id);
+      const comboIds = finalProds.filter((p) => p.es_combo).map((p) => p.id);
 
       // Fetch combo stock + presentaciones in parallel (single render instead of two)
       const [comboResult, presResult] = await Promise.all([
@@ -441,7 +475,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
             ? Math.min(comboStockMap[ci.combo_id], maxFromComp)
             : maxFromComp;
         }
-        for (const p of prods) {
+        for (const p of finalProds) {
           if (p.es_combo && p.id in comboStockMap) p.stock = comboStockMap[p.id];
         }
       }
@@ -462,8 +496,8 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       }
 
       // Set all state at once — single render pass
-      setProductos(prods);
-      setTotal(count || 0);
+      setProductos(finalProds);
+      setTotal(finalCount);
       setPresentacionesMap(presMap);
       if (Object.keys(defaults).length > 0) setSelectedPres((prev) => ({ ...defaults, ...prev }));
       setLoading(false);
@@ -734,12 +768,31 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
             placeholder="Buscar productos..."
             defaultValue={searchQuery}
             onKeyDown={(e) => {
-              if (e.key === "Enter")
-                updateParams({ q: (e.target as HTMLInputElement).value || null });
+              if (e.key === "Enter") {
+                const val = (e.target as HTMLInputElement).value || null;
+                if (val) saveToHistory(val);
+                updateParams({ q: val });
+              }
             }}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-gray-400"
           />
         </div>
+        {searchHistory.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {searchHistory.map((h) => (
+              <button
+                key={h}
+                onClick={() => {
+                  saveToHistory(h);
+                  updateParams({ q: h });
+                }}
+                className="text-[11px] bg-gray-100 hover:bg-primary/10 hover:text-primary text-gray-600 rounded-full px-2.5 py-1 transition"
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border-t border-gray-100" />
