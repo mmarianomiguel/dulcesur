@@ -121,11 +121,17 @@ export default function OfertasClient() {
         if (raw) { const p = JSON.parse(raw); if (p?.id) clienteId = p.id; }
       } catch {}
 
-      const [{ data: prods }, { data: descuentos }, { data: pres }] = await Promise.all([
+      const [{ data: prods }, descuentosResult, { data: pres }] = await Promise.all([
         supabase.from("productos").select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, stock, es_combo, categoria_id, subcategoria_id, marca_id, categorias(id, nombre, restringida)").eq("activo", true).eq("visibilidad", "visible"),
-        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).or(`fecha_fin.is.null,fecha_fin.gte.${today}`),
+        Promise.all([
+          supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).is("fecha_fin", null),
+          supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).gte("fecha_fin", today),
+        ]).then(([{ data: d1 }, { data: d2 }]) => ({
+          data: [...(d1 || []), ...(d2 || [])],
+        })),
         supabase.from("presentaciones").select("producto_id, nombre, cantidad, precio").order("cantidad"),
       ]);
+      const { data: descuentos } = descuentosResult;
 
       const allProds = (prods || []) as any[];
       const allDesc = (descuentos || []) as Descuento[];
