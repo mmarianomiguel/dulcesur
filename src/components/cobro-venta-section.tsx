@@ -179,6 +179,24 @@ export function CobroVentaSection({
         .order("fecha", { ascending: true })
         .order("created_at", { ascending: true });
 
+      const ventaIds = (ventas || []).map((v: any) => v.id);
+
+      // Buscar NCs asociadas a estas ventas para descontarlas del pendiente
+      let ncMap: Record<string, number> = {};
+      if (ventaIds.length > 0) {
+        const { data: ncs } = await supabase
+          .from("ventas")
+          .select("remito_origen_id, total")
+          .in("remito_origen_id", ventaIds)
+          .ilike("tipo_comprobante", "Nota de Crédito%")
+          .neq("estado", "anulada");
+        (ncs || []).forEach((nc: any) => {
+          if (nc.remito_origen_id) {
+            ncMap[nc.remito_origen_id] = (ncMap[nc.remito_origen_id] || 0) + (nc.total || 0);
+          }
+        });
+      }
+
       let pending = (ventas || [])
         .filter((v: any) => {
           if ((v.forma_pago === "Efectivo" || v.forma_pago === "Transferencia") && v.origen !== "tienda") return false;
@@ -186,7 +204,7 @@ export function CobroVentaSection({
         })
         .map((v: any) => ({
           id: v.id, numero: v.numero, fecha: v.fecha,
-          pendiente: v.total - (v.monto_pagado || 0),
+          pendiente: v.total - (v.monto_pagado || 0) - (ncMap[v.id] || 0),
         }))
         .filter((v) => v.pendiente > 0.01);
 

@@ -193,7 +193,13 @@ export default function HojaDeRutaPage() {
     if (rows.length > 0) {
       const ventaIds = rows.map((v) => v.id);
       const clienteIds = [...new Set(rows.map((v) => v.cliente_id).filter(Boolean))] as string[];
-      const [{ data: movs }, { data: ncDirect }, { data: facturas }, { data: ncByCliente }] = await Promise.all([
+      const [
+        { data: movs },
+        { data: ncDirect },
+        { data: facturas },
+        { data: ncByCliente },
+        { data: cobroItems },
+      ] = await Promise.all([
         supabase
           .from("caja_movimientos")
           .select("referencia_id, monto")
@@ -221,6 +227,11 @@ export default function HojaDeRutaPage() {
           .ilike("tipo_comprobante", "Nota de Crédito%")
           .neq("estado", "anulada")
           .is("remito_origen_id", null),
+        // Cobros registrados via cobro_items (Cobranzas)
+        supabase
+          .from("cobro_items")
+          .select("venta_id, monto_aplicado")
+          .in("venta_id", ventaIds),
       ]);
 
       // Build map: factura_id -> original remito_id
@@ -243,6 +254,12 @@ export default function HojaDeRutaPage() {
       const pagadoMap: Record<string, number> = {};
       (movs || []).forEach((m: { referencia_id: string; monto: number }) => {
         pagadoMap[m.referencia_id] = (pagadoMap[m.referencia_id] || 0) + m.monto;
+      });
+      // Sumar cobros de cobro_items (Cobranzas)
+      (cobroItems || []).forEach((ci: any) => {
+        if (ci.venta_id && ci.monto_aplicado > 0) {
+          pagadoMap[ci.venta_id] = (pagadoMap[ci.venta_id] || 0) + ci.monto_aplicado;
+        }
       });
       // Add NC refund amounts as "paid" (they reduce what the client owes)
       const ncMap: Record<string, number> = {};
@@ -553,7 +570,10 @@ export default function HojaDeRutaPage() {
       const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
       for (const venta of groupVentas) {
-        const ventaDeuda = Math.max(0, venta.total - (pagadoPorVenta[venta.id] || 0));
+        const ventaDeuda = Math.max(
+          0,
+          (venta.total - (ncPorVenta[venta.id] || 0)) - (pagadoPorVenta[venta.id] || 0)
+        );
         if (ventaDeuda <= 0) continue;
         // Check if CC entry already exists
         const { data: existingCC } = await supabase.from("cuenta_corriente").select("id").eq("venta_id", venta.id).gt("debe", 0).limit(1);
@@ -1829,8 +1849,13 @@ export default function HojaDeRutaPage() {
                     {groupVentas.length > 1 && (
                       <div className="space-y-0.5">
                         {groupVentas.map((v) => {
-                          const d = Math.max(0, v.total - (pagadoPorVenta[v.id] || 0));
-                          return d > 0 ? <p key={v.id} className="text-xs text-amber-700">#{v.numero}: {fmtCur(d)}</p> : null;
+                          const d = Math.max(
+                            0,
+                            (v.total - (ncPorVenta[v.id] || 0)) - (pagadoPorVenta[v.id] || 0)
+                          );
+                          return d > 0 ? (
+                            <p key={v.id} className="text-xs text-amber-700">#{v.numero}: {fmtCur(d)}</p>
+                          ) : null;
                         })}
                       </div>
                     )}

@@ -143,6 +143,17 @@ export interface InitialProductosData {
   diasOcultarSinStock: number;
 }
 
+function cutoffARG(dias: number): string {
+  const now = new Date(
+    new Date().toLocaleString("en-US", {
+      timeZone: "America/Argentina/Buenos_Aires",
+    })
+  );
+  now.setDate(now.getDate() - dias);
+  now.setHours(0, 0, 0, 0);
+  return now.toISOString();
+}
+
 function ProductosContent({ initialData }: { initialData?: InitialProductosData }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -314,9 +325,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
       const dias = configRes.data?.dias_ocultar_sin_stock ?? 7;
       setDiasOcultarSinStock(dias);
-      const cutoff = dias > 0
-        ? new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
-        : null;
+      const cutoff = dias > 0 ? cutoffARG(dias) : null;
       const visibleProds = cutoff
         ? allProds.filter((p: any) => p.stock > 0 || (p.updated_at && p.updated_at > cutoff))
         : allProds;
@@ -439,7 +448,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       if (disponibilidad === "sin_stock") query = query.eq("stock", 0);
       if (tipoFilter === "combos") query = query.eq("es_combo", true);
       if (tipoFilter === "precio_actualizado") {
-        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+        const threeDaysAgo = cutoffARG(3);
         query = query.gt("precio_anterior", 0).gt("fecha_actualizacion", threeDaysAgo);
       }
 
