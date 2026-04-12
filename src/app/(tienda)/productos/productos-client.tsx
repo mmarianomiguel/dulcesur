@@ -157,7 +157,6 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const [loading, setLoading] = useState(!hasInitial);
   const [view, setView] = useState<"grid" | "list">("grid");
   const [mobileFilters, setMobileFilters] = useState(false);
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [marcaSearch, setMarcaSearch] = useState("");
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>(initialData?.subcategorias || []);
   const [subcatExpanded, setSubcatExpanded] = useState(false);
@@ -245,6 +244,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       ? marcaSlug
       : marcas.find((m) => slugify(m.nombre) === marcaSlug)?.id || null
     : null;
+
+  // Reset subcategory expanded state when active category changes
+  useEffect(() => {
+    setSubcatExpanded(false);
+  }, [categoriaId]);
 
   // Sync local price inputs with URL
   useEffect(() => {
@@ -387,17 +391,6 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     }
     return best;
   }
-
-  // Auto-expand selected category
-  useEffect(() => {
-    if (categoriaId) {
-      setExpandedCats((prev) => {
-        const next = new Set(prev);
-        next.add(categoriaId);
-        return next;
-      });
-    }
-  }, [categoriaId]);
 
   // Fetch products
   useEffect(() => {
@@ -676,15 +669,6 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const activeSubcategoryName = allSubcategorias.find(
     (s) => s.id === subcategoriaId
   )?.nombre;
-
-  function toggleExpand(catId: string) {
-    setExpandedCats((prev) => {
-      const next = new Set(prev);
-      if (next.has(catId)) next.delete(catId);
-      else next.add(catId);
-      return next;
-    });
-  }
 
   /* ───── Custom radio component ───── */
   const RadioCircle = ({ selected }: { selected: boolean }) => (
@@ -1068,6 +1052,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
         {/* Fila 2: subcategorías (solo cuando hay categoría activa) */}
         {categoriaId && (() => {
+          const activeCat = categorias.find((c) => c.id === categoriaId);
           const catSubs = allSubcategorias
             .filter((s) => s.categoria_id === categoriaId && (s.count || 0) > 0)
             .sort((a, b) => (b.count || 0) - (a.count || 0));
@@ -1093,7 +1078,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                     Todas
                   </span>
                   <span className={`text-[9px] ${!subcategoriaId ? "text-primary/70" : "text-gray-400"}`}>
-                    {categorias.find((c) => c.id === categoriaId)?.count || 0}
+                    {activeCat?.count || 0}
                   </span>
                 </button>
 
@@ -1106,7 +1091,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                       onClick={() =>
                         updateParams({
                           categoria: slugify(
-                            categorias.find((c) => c.id === categoriaId)?.nombre || ""
+                            activeCat?.nombre || ""
                           ),
                           subcategoria: slugify(sub.nombre),
                         })
