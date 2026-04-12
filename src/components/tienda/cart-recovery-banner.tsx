@@ -6,7 +6,7 @@ import { ShoppingCart, X } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 
 const DISMISS_KEY = "cart_recovery_dismissed_at";
-const IDLE_MS = 30 * 60 * 1000; // 30 minutes
+const IDLE_MS = 30 * 60 * 1000;
 
 interface CartItem {
   precio: number;
@@ -25,11 +25,8 @@ export default function CartRecoveryBanner() {
         if (!raw) return;
         const items: CartItem[] = JSON.parse(raw);
         if (!Array.isArray(items) || items.length === 0) return;
-
-        // Check idle time: last dismiss
         const dismissedAt = localStorage.getItem(DISMISS_KEY);
         if (dismissedAt && Date.now() - Number(dismissedAt) < IDLE_MS) return;
-
         const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
         const qty = items.reduce((s, i) => s + i.cantidad, 0);
         setSubtotal(total);
@@ -37,14 +34,9 @@ export default function CartRecoveryBanner() {
         setVisible(true);
       } catch {}
     }
-
-    // Delay to avoid flash on page load
     const t = setTimeout(check, 2000);
     window.addEventListener("cart-updated", check);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("cart-updated", check);
-    };
+    return () => { clearTimeout(t); window.removeEventListener("cart-updated", check); };
   }, []);
 
   function dismiss() {
@@ -55,27 +47,23 @@ export default function CartRecoveryBanner() {
   if (!visible) return null;
 
   return (
-    <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-4 text-sm">
-      <div className="flex items-center gap-2 text-amber-800 min-w-0">
-        <ShoppingCart className="h-4 w-4 shrink-0 text-amber-600" />
+    <div className="bg-gray-50 border-b border-gray-100 px-4 py-1.5 flex items-center justify-between gap-3 text-xs text-gray-500">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <ShoppingCart className="h-3.5 w-3.5 shrink-0 text-gray-400" />
         <span className="truncate">
-          Tenés {count} producto{count !== 1 ? "s" : ""} en tu carrito por{" "}
-          <strong>{formatCurrency(subtotal)}</strong>
+          {count} producto{count !== 1 ? "s" : ""} guardado{count !== 1 ? "s" : ""} ·{" "}
+          <span className="font-medium text-gray-700">{formatCurrency(subtotal)}</span>
         </span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <Link
           href="/carrito"
-          className="bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-700 transition"
+          className="text-primary font-semibold hover:underline transition text-xs"
         >
-          Ver carrito
+          Ver carrito →
         </Link>
-        <button
-          onClick={dismiss}
-          aria-label="Cerrar"
-          className="text-amber-500 hover:text-amber-700 transition p-0.5"
-        >
-          <X className="h-4 w-4" />
+        <button onClick={dismiss} aria-label="Cerrar" className="text-gray-300 hover:text-gray-500 transition">
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
