@@ -1602,7 +1602,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                 const disc = getProductDiscount(producto, currentPresLabel, qty);
                 const discountedPrice = disc > 0 ? Math.round(activePrice * (1 - disc / 100)) : activePrice;
 
-                // Descuento implícito por caja
+                // Hint descuento por caja
                 const boxDiscountHint = (() => {
                   if (!hasPres) return null;
                   const unitP = pres.find((p) => p.cantidad === 1);
@@ -1618,120 +1618,127 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                     key={producto.id}
                     className="group bg-white rounded-2xl border border-gray-100/80 overflow-hidden hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all duration-200"
                   >
-                    {/* Fila superior: imagen + info + botón */}
-                    <div className="flex gap-0">
+                    {/* Fila principal: imagen + info */}
+                    <div className="flex items-center gap-3 p-3">
                       <Link
                         href={`/productos/${productSlug(producto.nombre, producto.id)}`}
-                        className="relative shrink-0 w-24 h-24 sm:w-36 sm:h-36 bg-gradient-to-b from-gray-50 to-white overflow-hidden"
+                        className="relative shrink-0 w-16 h-16 bg-gray-50 rounded-xl overflow-hidden"
                       >
                         {producto.imagen_url ? (
                           <Image
                             src={producto.imagen_url}
                             alt={producto.nombre}
                             fill
-                            sizes="(max-width: 640px) 96px, 144px"
-                            className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
-                            {...(idx < 2 ? { priority: true } : { loading: "lazy" as const })}
+                            sizes="64px"
+                            className="object-contain p-1.5"
+                            {...(idx < 4 ? { priority: true } : { loading: "lazy" as const })}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                            <Package className="h-8 w-8 text-gray-200" />
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="h-6 w-6 text-gray-200" />
                           </div>
                         )}
                         {disc > 0 && (
-                          <span className="absolute top-1.5 left-1.5 bg-primary text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                          <span className="absolute top-1 left-1 bg-primary text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
                             -{disc}%
                           </span>
                         )}
                       </Link>
 
-                      <div className="flex-1 py-3 pr-3 pl-2 flex flex-col justify-between min-w-0">
-                        <div className="min-w-0">
-                          {producto.categorias?.nombre && (
-                            <p className="text-[10px] text-primary font-medium mb-0.5">{producto.categorias.nombre}</p>
-                          )}
-                          <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`}>
-                            <h3 className="font-medium text-gray-800 text-sm leading-snug line-clamp-2 group-hover:text-primary/90 transition-colors">
-                              {producto.nombre}
-                            </h3>
-                          </Link>
-                          <div className="flex items-baseline gap-2 mt-1">
-                            <span className="text-base font-bold text-gray-900">{formatCurrency(discountedPrice)}</span>
-                            {disc > 0 && (
-                              <span className="text-xs text-gray-400 line-through">{formatCurrency(activePrice)}</span>
-                            )}
-                            {boxDiscountHint && disc === 0 && (
-                              <span className="text-[10px] text-green-600 font-semibold">-{boxDiscountHint}% x caja</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {canBuy ? (
-                          <div className="flex items-center gap-2 mt-2">
-                            <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
-                              <button onClick={() => setQty(producto.id, qty - 1)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <span className="w-6 text-center text-xs font-semibold text-gray-800">{qty}</span>
-                              <button onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))} disabled={qty >= maxForPres} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors disabled:opacity-30">
-                                <Plus className="w-3 h-3" />
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => addToCart(producto, qty)}
-                              className="flex-1 bg-gray-900 hover:bg-gray-800 active:scale-[0.98] text-white text-xs py-2 rounded-xl font-semibold transition-all"
-                            >
-                              Agregar
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="mt-2 text-center text-xs text-gray-400 bg-gray-50 py-2 rounded-lg font-medium">
-                            Agotado
-                          </div>
+                      <div className="flex-1 min-w-0">
+                        {producto.categorias?.nombre && (
+                          <p className="text-[10px] text-primary font-medium mb-0.5">{producto.categorias.nombre}</p>
                         )}
+                        <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`}>
+                          <h3 className="font-semibold text-gray-800 text-sm leading-snug line-clamp-2 group-hover:text-primary/90 transition-colors">
+                            {producto.nombre}
+                          </h3>
+                        </Link>
+                        <div className="flex items-baseline gap-2 mt-1">
+                          <span className="text-base font-bold text-gray-900">{formatCurrency(discountedPrice)}</span>
+                          {disc > 0 && (
+                            <span className="text-xs text-gray-400 line-through">{formatCurrency(activePrice)}</span>
+                          )}
+                          {boxDiscountHint && disc === 0 && !activePres && (
+                            <span className="text-[10px] text-green-600 font-semibold">-{boxDiscountHint}% x caja</span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Fila de presentaciones — solo si tiene más de una */}
+                    {/* Pills de presentación — solo si tiene más de una */}
                     {hasPres && (
-                      <div className="flex gap-2 px-3 pb-3 border-t border-gray-50 pt-2.5">
+                      <div className="flex items-center gap-2 px-3 pb-2 flex-wrap">
                         {[...pres].sort((a, b) => {
                           if (a.cantidad === 1) return -1;
                           if (b.cantidad === 1) return 1;
                           return a.cantidad - b.cantidad;
-                        }).map((pr, idx) => {
+                        }).map((pr) => {
                           const sortedIdx = pres.indexOf(pr);
                           const isActive = activeIdx === sortedIdx;
                           const label = presLabel(pr);
                           const presDisabled = Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad))) <= 0;
                           const prDisc = getProductDiscount(producto, label, qty);
-                          const prPrice = prDisc > 0 ? Math.round(pr.precio * (1 - prDisc / 100)) : pr.precio;
                           return (
                             <button
-                              key={idx}
+                              key={sortedIdx}
                               disabled={presDisabled}
                               onClick={() => {
                                 setSelectedPres((prev) => ({ ...prev, [producto.id]: sortedIdx }));
                                 const newMax = Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad)));
                                 if (qty > newMax) setQuantities((prev) => ({ ...prev, [producto.id]: Math.max(1, newMax) }));
                               }}
-                              className={`flex-1 py-2 px-1 rounded-xl border transition-all text-center ${
+                              className={`px-3 py-1.5 rounded-full border-[1.5px] text-sm font-semibold transition-all whitespace-nowrap ${
                                 presDisabled
-                                  ? "bg-gray-50 border-gray-100 cursor-not-allowed"
+                                  ? "bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed"
                                   : isActive
-                                  ? "bg-gray-900 border-gray-900"
-                                  : "bg-white border-gray-200 hover:border-gray-400"
+                                  ? "bg-gray-900 border-gray-900 text-white"
+                                  : "bg-white border-gray-200 text-gray-600 hover:border-gray-400"
                               }`}
                             >
-                              <div className={`text-[10px] font-medium ${presDisabled ? "text-gray-300" : isActive ? "text-gray-300" : "text-gray-500"}`}>{label}</div>
-                              <div className={`text-[13px] font-bold mt-0.5 ${presDisabled ? "text-gray-200" : isActive ? "text-white" : "text-gray-900"}`}>
-                                {formatCurrency(prPrice)}
-                              </div>
+                              {label}
                             </button>
                           );
                         })}
+                        {boxDiscountHint && disc === 0 && (
+                          <span className="text-xs text-green-600 font-semibold">-{boxDiscountHint}% x caja</span>
+                        )}
                       </div>
                     )}
+
+                    {/* Footer: cantidad + agregar */}
+                    <div className="flex items-center gap-2 px-3 pb-3">
+                      {canBuy ? (
+                        <>
+                          <div className="flex items-center bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
+                            <button
+                              onClick={() => setQty(producto.id, qty - 1)}
+                              className="w-10 h-10 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors text-lg"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="w-8 text-center text-sm font-semibold text-gray-800">{qty}</span>
+                            <button
+                              onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))}
+                              disabled={qty >= maxForPres}
+                              className="w-10 h-10 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors disabled:opacity-30"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => addToCart(producto, qty)}
+                            className="flex-1 bg-gray-900 hover:bg-gray-800 active:scale-[0.98] text-white text-sm h-10 rounded-xl font-semibold transition-all"
+                          >
+                            Agregar
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex-1 text-center text-xs text-gray-400 bg-gray-50 py-2.5 rounded-xl font-medium">
+                          Agotado
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
