@@ -118,39 +118,69 @@ export default function OfertasClient() {
       let clienteId: string | null = null;
       try {
         const raw = localStorage.getItem("cliente_auth");
-        if (raw) { const p = JSON.parse(raw); if (p?.id) clienteId = p.id; }
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (p?.id) {
+            // Resolver el cliente_id real (distinto del auth_id)
+            const { data: authRec } = await supabase
+              .from("clientes_auth")
+              .select("cliente_id")
+              .eq("id", p.id)
+              .single();
+            if (authRec?.cliente_id) clienteId = authRec.cliente_id;
+          }
+        }
       } catch {}
 
-      const [{ data: prods }, descuentosResult, { data: pres }] = await Promise.all([
-        supabase.from("productos").select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, stock, es_combo, categoria_id, subcategoria_id, marca_id, categorias(id, nombre, restringida)").eq("activo", true).eq("visibilidad", "visible"),
+      // Primero traer descuentos y productos en paralelo
+      const [{ data: prods }, descuentosResult] = await Promise.all([
+        supabase
+          .from("productos")
+          .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, stock, es_combo, categoria_id, subcategoria_id, marca_id, categorias(id, nombre, restringida)")
+          .eq("activo", true)
+          .eq("visibilidad", "visible")
+          .limit(2000),
         Promise.all([
           supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).is("fecha_fin", null),
           supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).gte("fecha_fin", today),
         ]).then(([{ data: d1 }, { data: d2 }]) => ({
           data: [...(d1 || []), ...(d2 || [])],
         })),
-        (async () => {
-          const PAGE = 1000;
-          const allRows: any[] = [];
-          let from = 0;
-          while (true) {
-            const { data } = await supabase
-              .from("presentaciones")
-              .select("producto_id, nombre, cantidad, precio")
-              .order("cantidad")
-              .range(from, from + PAGE - 1);
-            if (!data || data.length === 0) break;
-            allRows.push(...data);
-            if (data.length < PAGE) break;
-            from += PAGE;
-          }
-          return { data: allRows };
-        })(),
       ]);
-      const { data: descuentos } = descuentosResult;
 
-      const allProds = (prods || []) as any[];
-      const allDesc = (descuentos || []) as Descuento[];
+      const allDesc = (descuentosResult.data || []) as Descuento[];
+
+      // Recolectar IDs de productos que pueden tener descuento
+      // para traer solo las presentaciones necesarias
+      const prodIdsConDescuento = new Set<string>();
+      const allProdsArr = (prods || []) as any[];
+
+      for (const d of allDesc) {
+        if (d.presentacion !== "caja") continue; // solo necesitamos pres para descuentos de caja
+        for (const prod of allProdsArr) {
+          let aplica = false;
+          if (d.aplica_a === "todos") aplica = true;
+          else if (d.aplica_a === "productos") aplica = (d.productos_ids || []).includes(prod.id);
+          else if (d.aplica_a === "categorias") aplica = (d.categorias_ids || []).includes(prod.categoria_id);
+          else if (d.aplica_a === "subcategorias") aplica = !!prod.subcategoria_id && (d.subcategorias_ids || []).includes(prod.subcategoria_id);
+          else if (d.aplica_a === "marcas") aplica = !!prod.marca_id && (d.marcas_ids || []).includes(prod.marca_id);
+          if (aplica) prodIdsConDescuento.add(prod.id);
+        }
+      }
+
+      // También traer presentaciones de todos los productos para detectar
+      // descuentos implícitos (precio caja < precio unitario × cantidad)
+      // Pero limitar a máximo 500 productos más relevantes
+      const todosLosIds = allProdsArr.map((p: any) => p.id);
+      const idsParaPres = [...new Set([...prodIdsConDescuento, ...todosLosIds])].slice(0, 500);
+
+      const { data: pres } = await supabase
+        .from("presentaciones")
+        .select("producto_id, nombre, cantidad, precio")
+        .in("producto_id", idsParaPres)
+        .order("cantidad");
+
+      const allProds = allProdsArr;
       const allPres = (pres || []) as any[];
 
       const presMap: Record<string, { nombre: string; cantidad: number; precio: number }[]> = {};
@@ -160,25 +190,6 @@ export default function OfertasClient() {
       }
 
       const resultado: ProductoConDescuento[] = [];
-
-      // DEBUG TEMPORAL
-      console.log("=== OFERTAS DEBUG ===");
-      console.log("Total productos:", allProds.length);
-      console.log("Total descuentos:", allDesc.length);
-      console.log("Descuentos:", allDesc.map(d => ({ nombre: d.nombre, presentacion: d.presentacion, aplica_a: d.aplica_a })));
-      console.log("Total presentaciones:", allPres.length);
-      const bultoIds = [
-        "fb76f683-9f31-4533-a33b-1947da15dba0",
-        "e0495bc4-4b14-4124-b053-9946e9338ece",
-        "e58dbeb5-f2d1-4660-813f-579e4b2c0e53",
-        "3ec85666-97fb-4fa0-b565-42ca283deaf6"
-      ];
-      for (const id of bultoIds) {
-        const prod = allProds.find((p: any) => p.id === id);
-        const pres2 = presMap[id];
-        console.log(`Producto ${id.slice(0,8)}:`, prod ? prod.nombre : "NO ENCONTRADO", "| Presentaciones:", pres2 ? pres2.map(p => `${p.nombre}:$${p.precio}`) : "NINGUNA");
-      }
-      // END DEBUG
 
       for (const prod of allProds) {
         let mejorPct = 0;
