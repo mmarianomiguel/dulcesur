@@ -602,6 +602,8 @@ export default function CajaPage() {
   // ─── Expandable stat cards ───
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [ventaOrigenFilter, setVentaOrigenFilter] = useState<"todas" | "pos" | "envio" | "retiro">("todas");
+  const [ventasTab, setVentasTab] = useState<"ventas" | "entregas">("ventas");
+  const [movsOpen, setMovsOpen] = useState(false);
   const toggleCard = (key: string) => setExpandedCard((prev) => prev === key ? null : key);
 
   // ─── Dialogs ───
@@ -1090,17 +1092,18 @@ export default function CajaPage() {
     // Cobros de cuenta corriente del día (pagos que reducen deuda CC)
     const cobrosCC = movements.filter((m) => m.tipo === "ingreso" && (
       (m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC")) ||
-      m.referencia_tipo === "cobro_saldo"
+      m.referencia_tipo === "cobro_saldo" ||
+      m.referencia_tipo === "cobro"
     ));
     const cobrosCCTotal = cobrosCC.reduce((a, m) => a + m.monto, 0);
     const cobrosCCEfectivo = cobrosCC.filter((m) => m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0);
     const cobrosCCTransferencia = cobrosCC.filter((m) => m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0);
 
     const depositosEfectivo = movements
-      .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo")
+      .filter((m) => m.tipo === "ingreso" && m.metodo_pago === "Efectivo" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo" && m.referencia_tipo !== "cobro")
       .reduce((a, m) => a + m.monto, 0);
     const depositosOtros = movements
-      .filter((m) => m.tipo === "ingreso" && m.metodo_pago !== "Efectivo" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo")
+      .filter((m) => m.tipo === "ingreso" && m.metodo_pago !== "Efectivo" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo" && m.referencia_tipo !== "cobro")
       .reduce((a, m) => a + m.monto, 0);
     const depositos = depositosEfectivo + depositosOtros;
 
@@ -1449,7 +1452,8 @@ export default function CajaPage() {
                 detail: [
                   { label: `Inicial`, value: formatCurrency(efectivoInicial), color: "" },
                   { label: `+ Ventas efectivo`, value: formatCurrency(ventasEfectivo), color: "text-emerald-600" },
-                  { label: `+ Ingresos`, value: formatCurrency(depositos), color: "text-emerald-600" },
+                  ...(cobrosCCEfectivo > 0 ? [{ label: `+ Cobros CC`, value: formatCurrency(cobrosCCEfectivo), color: "text-emerald-600" }] : []),
+                  ...(depositos > 0 ? [{ label: `+ Ingresos`, value: formatCurrency(depositos), color: "text-emerald-600" }] : []),
                   { label: `- Egresos`, value: `-${formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}`, color: "text-red-500" },
                 ],
               },
@@ -1673,278 +1677,108 @@ export default function CajaPage() {
 
           </div>
 
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Entregas del día</p>
-          {/* Entregas del día */}
-          {(() => {
-            const entregasMovs = movements.filter(m =>
-              m.tipo === "ingreso" &&
-              m.referencia_tipo === "venta" &&
-              (m.descripcion || "").toLowerCase().includes("cobro entrega")
-            );
-            if (entregasMovs.length === 0) return null;
-
-            const totalEfectivoEntregas = entregasMovs
-              .filter(m => m.metodo_pago === "Efectivo")
-              .reduce((s, m) => s + m.monto, 0);
-            const totalTransfEntregas = entregasMovs
-              .filter(m => m.metodo_pago === "Transferencia")
-              .reduce((s, m) => s + m.monto, 0);
-
-            const ventasEntregadas = ventas.filter(v =>
-              (v as any).entregado === true &&
-              (v as any).metodo_entrega &&
-              ["envio", "envio_a_domicilio", "envio a domicilio"].includes((v as any).metodo_entrega)
-            );
-            const ventaIdsConCobro = new Set(entregasMovs.map(m => m.referencia_id));
-            const sinCobrar = ventasEntregadas.filter(v => !ventaIdsConCobro.has(v.id));
-
-            return (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center justify-between">
-                    <span>Entregas del día</span>
-                    <div className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
-                      <span className="text-emerald-600 font-medium">
-                        {entregasMovs.length} cobradas
-                      </span>
-                      {sinCobrar.length > 0 && (
-                        <span className="text-red-500 font-medium">
-                          {sinCobrar.length} sin cobrar
-                        </span>
-                      )}
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Hora</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cliente</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cuenta</th>
-                          <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Monto</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {entregasMovs
-                          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                          .map((m) => {
-                            const desc = m.descripcion || "";
-                            const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
-                            const nombre = nombreMatch?.[1]?.trim() || "—";
-                            const cuenta = (m as any).cuenta_bancaria || "";
-                            return (
-                              <tr key={m.id} className="border-b last:border-0 hover:bg-muted/30">
-                                <td className="py-2.5 px-3 text-muted-foreground text-xs">
-                                  {m.hora?.substring(0, 5) || "—"}
-                                </td>
-                                <td className="py-2.5 px-3 font-medium text-xs">{nombre}</td>
-                                <td className="py-2.5 px-3">
-                                  <Badge variant="secondary" className="text-[10px] font-normal">
-                                    {m.metodo_pago}
-                                  </Badge>
-                                </td>
-                                <td className="py-2.5 px-3 text-xs text-muted-foreground">
-                                  {cuenta || "—"}
-                                </td>
-                                <td className="py-2.5 px-3 text-right font-medium text-emerald-600 text-xs">
-                                  {formatCurrency(m.monto)}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        {sinCobrar.map((v) => (
-                          <tr key={v.id} className="border-b last:border-0 bg-red-50/40 dark:bg-red-950/10">
-                            <td className="py-2.5 px-3 text-muted-foreground text-xs">—</td>
-                            <td className="py-2.5 px-3 font-medium text-xs text-red-600">
-                              {(v as any).clientes?.nombre || "Sin cliente"}
-                            </td>
-                            <td className="py-2.5 px-3" colSpan={2}>
-                              <span className="text-[10px] text-red-500 font-medium">sin cobrar</span>
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-medium text-red-500 text-xs">
-                              {formatCurrency(v.total)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t bg-muted/30">
-                          <td colSpan={4} className="py-2.5 px-3 text-xs text-muted-foreground">
-                            {totalEfectivoEntregas > 0 && (
-                              <span className="mr-4">
-                                Efectivo: <span className="font-medium text-foreground">{formatCurrency(totalEfectivoEntregas)}</span>
-                              </span>
-                            )}
-                            {totalTransfEntregas > 0 && (
-                              <span>
-                                Transferencia: <span className="font-medium text-foreground">{formatCurrency(totalTransfEntregas)}</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-xs font-medium">
-                            {formatCurrency(entregasMovs.reduce((s, m) => s + m.monto, 0))}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
-
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Ventas del día</p>
-          {/* Ventas del día */}
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">
+            Ventas del día
+          </p>
           <Card>
-            <CardHeader className="pb-3">
+            {/* Tab bar */}
+            <div className="px-4 pt-3">
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <CardTitle className="text-base">
-                  {ventaOrigenFilter === "todas" ? `${ventas.length} ventas` :
-                   ventaOrigenFilter === "pos" ? `${ventas.filter(v => { const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return (v as any).origen !== "tienda" && !isEnvio; }).length} ventas POS` :
-                   ventaOrigenFilter === "envio" ? `${ventas.filter(v => { const me = (v as any).metodo_entrega; return me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); }).length} envíos` :
-                   `${ventas.filter(v => { const isWeb = (v as any).origen === "tienda"; const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return isWeb && !isEnvio; }).length} retiros`}
-                </CardTitle>
-                <div className="flex gap-1.5 flex-wrap">
-                  {([
-                    { key: "todas", label: "Todas", dot: null, count: ventas.length },
-                    { key: "pos", label: "POS", dot: "bg-blue-600", count: ventas.filter(v => { const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return (v as any).origen !== "tienda" && !isEnvio; }).length },
-                    { key: "envio", label: "Envío", dot: "bg-emerald-600", count: ventas.filter(v => { const me = (v as any).metodo_entrega; return me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); }).length },
-                    { key: "retiro", label: "Retiro", dot: "bg-purple-600", count: ventas.filter(v => { const isWeb = (v as any).origen === "tienda"; const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return isWeb && !isEnvio; }).length },
-                  ] as const).map(f => (
-                    <button
-                      key={f.key}
-                      onClick={() => setVentaOrigenFilter(f.key)}
-                      className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all ${
-                        ventaOrigenFilter === f.key
-                          ? "bg-foreground text-background border-foreground"
-                          : "bg-background text-muted-foreground border-border hover:border-foreground/30"
-                      }`}
-                    >
-                      {f.dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} />}
-                      {f.label}
-                      <span className="opacity-60">{f.count}</span>
-                    </button>
-                  ))}
+                <div className="flex gap-0">
+                  {(["ventas", "entregas"] as const).map((t) => {
+                    const entregasMovs = movements.filter(m =>
+                      m.tipo === "ingreso" &&
+                      m.referencia_tipo === "venta" &&
+                      (m.descripcion || "").toLowerCase().includes("cobro entrega")
+                    );
+                    const ventasEntregadas = ventas.filter(v =>
+                      (v as any).entregado === true &&
+                      (v as any).metodo_entrega &&
+                      ["envio", "envio_a_domicilio", "envio a domicilio"].includes((v as any).metodo_entrega)
+                    );
+                    const ventaIdsConCobro = new Set(entregasMovs.map(m => m.referencia_id));
+                    const sinCobrar = ventasEntregadas.filter(v => !ventaIdsConCobro.has(v.id));
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setVentasTab(t)}
+                        className={`flex items-center gap-2 px-1 pb-2.5 mr-5 text-sm border-b-2 transition-all ${
+                          ventasTab === t
+                            ? "border-foreground text-foreground font-medium"
+                            : "border-transparent text-muted-foreground hover:text-foreground/70"
+                        }`}
+                      >
+                        {t === "ventas" ? "Ventas" : "Entregas"}
+                        {t === "entregas" && (
+                          <span className="flex items-center gap-1">
+                            {entregasMovs.length > 0 && (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400">
+                                {entregasMovs.length}
+                              </span>
+                            )}
+                            {sinCobrar.length > 0 && (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-400">
+                                {sinCobrar.length}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {ventasTab === "ventas" && (
+                  <div className="flex gap-1.5 flex-wrap pb-2">
+                    {([
+                      { key: "todas" as const, label: "Todas", dot: null, count: ventas.length },
+                      { key: "pos" as const, label: "POS", dot: "bg-blue-600", count: ventas.filter(v => { const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return (v as any).origen !== "tienda" && !isEnvio; }).length },
+                      { key: "envio" as const, label: "Envío", dot: "bg-emerald-600", count: ventas.filter(v => { const me = (v as any).metodo_entrega; return me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); }).length },
+                      { key: "retiro" as const, label: "Retiro", dot: "bg-purple-600", count: ventas.filter(v => { const isWeb = (v as any).origen === "tienda"; const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return isWeb && !isEnvio; }).length },
+                    ]).map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setVentaOrigenFilter(f.key)}
+                        className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all ${
+                          ventaOrigenFilter === f.key
+                            ? "bg-foreground text-background border-foreground"
+                            : "bg-background text-muted-foreground border-border hover:border-foreground/30"
+                        }`}
+                      >
+                        {f.dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} />}
+                        {f.label}
+                        <span className="opacity-60">{f.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {ventas.length === 0 ? (
-                <EmptyState title="No hay ventas hoy" icon={Wallet} />
-              ) : (
+              <div className="border-t border-border -mx-4" />
+            </div>
+
+            <CardContent className="pt-0 pb-0">
+
+              {/* TAB VENTAS */}
+              {ventasTab === "ventas" && (
                 <>
-                  {/* Tabla desktop */}
-                  <div className="hidden sm:block overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">N°</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cliente</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Origen</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Estado</th>
-                          <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Total</th>
-                          <th className="w-8"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ventas.filter(v => {
-                          if (ventaOrigenFilter === "todas") return true;
-                          const isWeb = (v as any).origen === "tienda";
-                          const me = (v as any).metodo_entrega;
-                          const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
-                          const isRetiro = isWeb && !isEnvio;
-                          if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
-                          if (ventaOrigenFilter === "envio") return !!isEnvio;
-                          if (ventaOrigenFilter === "retiro") return !!isRetiro;
-                          return true;
-                        }).map((v) => {
-                          const origen = (v as any).origen;
-                          const metodoEntrega = (v as any).metodo_entrega;
-                          const isWeb = origen === "tienda";
-                          const isEnvio = metodoEntrega && ["envio", "envio_a_domicilio", "envio a domicilio"].includes(metodoEntrega);
-                          const isRetiro = isWeb && !isEnvio;
-
-                          const origenLabel = isEnvio ? "Envío" : isRetiro ? "Retiro" : "POS";
-                          const origenDot = isEnvio ? "bg-emerald-600" : isRetiro ? "bg-purple-600" : "bg-blue-600";
-                          const origenClass = isEnvio
-                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                            : isRetiro
-                            ? "bg-purple-50 text-purple-800 border border-purple-200"
-                            : "bg-blue-50 text-blue-800 border border-blue-200";
-                          const origenSub = isRetiro ? "Web" : (isEnvio && !isWeb) ? "POS" : isEnvio ? "Web" : null;
-
-                          const montoPagado = (v as any).monto_pagado || 0;
-                          const isPagado = montoPagado >= v.total - 1;
-                          const isCC = v.forma_pago === "Cuenta Corriente" ||
-                            (ventasDesglose["Cuenta Corriente"] && ccEntries?.some(e => e.venta_id === v.id));
-                          const estadoLabel = isPagado ? "Cobrado" : isCC ? "Cta cte" : "Pendiente";
-                          const estadoClass = isPagado
-                            ? "bg-green-50 text-green-800 border border-green-200"
-                            : isCC
-                            ? "bg-amber-50 text-amber-800 border border-amber-200"
-                            : "bg-red-50 text-red-800 border border-red-200";
-
-                          return (
-                            <tr
-                              key={v.id}
-                              className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
-                              onClick={() => openVentaDetail(v)}
-                            >
-                              <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
-                                {v.numero}
-                              </td>
-                              <td className="py-2.5 px-3 text-xs">
-                                {(v as any).clientes?.nombre || "—"}
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <div className="flex flex-col gap-0.5">
-                                  <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full w-fit ${origenClass}`}>
-                                    <span className={`w-1 h-1 rounded-full shrink-0 ${origenDot}`} />
-                                    {origenLabel}
-                                  </span>
-                                  {origenSub && <span className="text-[10px] text-muted-foreground pl-1">{origenSub}</span>}
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <div className="flex flex-col gap-0.5">
-                                  <Badge variant="secondary" className="text-[10px] font-normal w-fit">
-                                    {v.forma_pago}
-                                  </Badge>
-                                  {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && (v as any).cuenta_transferencia_alias && (
-                                    <span className="text-[10px] text-muted-foreground">
-                                      → {(v as any).cuenta_transferencia_alias}
-                                    </span>
-                                  )}
-                                  {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && !(v as any).cuenta_transferencia_alias && (
-                                    <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
-                                      <AlertTriangle className="w-2.5 h-2.5" />
-                                      Sin cuenta
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <span className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full ${estadoClass}`}>
-                                  {estadoLabel}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-medium text-xs">
-                                {formatCurrency(v.total)}
-                              </td>
-                              <td className="py-2.5 px-1">
-                                <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                              </td>
+                  {ventas.length === 0 ? (
+                    <EmptyState title="No hay ventas hoy" icon={Wallet} />
+                  ) : (
+                    <>
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-muted-foreground">
+                              <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">N°</th>
+                              <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cliente</th>
+                              <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Origen</th>
+                              <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
+                              <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Estado</th>
+                              <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Total</th>
+                              <th className="w-8"></th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t bg-muted/30">
-                          <td colSpan={5} className="py-2.5 px-3 text-xs text-muted-foreground">
+                          </thead>
+                          <tbody>
                             {ventas.filter(v => {
                               if (ventaOrigenFilter === "todas") return true;
                               const isWeb = (v as any).origen === "tienda";
@@ -1955,117 +1789,296 @@ export default function CajaPage() {
                               if (ventaOrigenFilter === "envio") return !!isEnvio;
                               if (ventaOrigenFilter === "retiro") return !!isRetiro;
                               return true;
-                            }).length} ventas
-                            {ventas.some(v =>
-                              (v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") &&
-                              !(v as any).cuenta_transferencia_alias
-                            ) && (
-                              <span className="ml-2 text-amber-600 font-medium">
-                                · {ventas.filter(v =>
-                                  (v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") &&
-                                  !(v as any).cuenta_transferencia_alias
-                                ).length} sin cuenta asignada
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-xs font-medium">
-                            {formatCurrency(ventas.filter(v => {
-                              if (ventaOrigenFilter === "todas") return true;
+                            }).map((v) => {
                               const isWeb = (v as any).origen === "tienda";
                               const me = (v as any).metodo_entrega;
                               const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
                               const isRetiro = isWeb && !isEnvio;
-                              if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
-                              if (ventaOrigenFilter === "envio") return !!isEnvio;
-                              if (ventaOrigenFilter === "retiro") return !!isRetiro;
-                              return true;
-                            }).reduce((s, v) => s + v.total, 0))}
-                          </td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-
-                  {/* Mobile */}
-                  <div className="sm:hidden divide-y">
-                    {ventas.filter(v => {
-                      if (ventaOrigenFilter === "todas") return true;
-                      const isWeb = (v as any).origen === "tienda";
-                      const me = (v as any).metodo_entrega;
-                      const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
-                      const isRetiro = isWeb && !isEnvio;
-                      if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
-                      if (ventaOrigenFilter === "envio") return !!isEnvio;
-                      if (ventaOrigenFilter === "retiro") return !!isRetiro;
-                      return true;
-                    }).map((v) => (
-                      <div
-                        key={v.id}
-                        className="py-3 px-3 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer"
-                        onClick={() => openVentaDetail(v)}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs text-muted-foreground">{v.numero}</span>
-                            {(v as any).origen === "tienda" && (
-                              <Badge variant="outline" className="text-[10px] px-1 py-0 border-pink-300 text-pink-600">Web</Badge>
-                            )}
-                            <Badge variant="secondary" className="text-[10px] font-normal">{v.forma_pago}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {(v as any).clientes?.nombre || "—"}
-                          </p>
-                        </div>
-                        <span className="font-medium text-sm shrink-0">{formatCurrency(v.total)}</span>
+                              const origenLabel = isEnvio ? "Envío" : isRetiro ? "Retiro" : "POS";
+                              const origenDot = isEnvio ? "bg-emerald-600" : isRetiro ? "bg-purple-600" : "bg-blue-600";
+                              const origenClass = isEnvio
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                : isRetiro
+                                ? "bg-purple-50 text-purple-800 border border-purple-200"
+                                : "bg-blue-50 text-blue-800 border border-blue-200";
+                              const origenSub = isRetiro ? "Web" : (isEnvio && !isWeb) ? "POS" : isEnvio ? "Web" : null;
+                              const montoPagado = (v as any).monto_pagado || 0;
+                              const isPagado = montoPagado >= v.total - 1;
+                              const isCC = v.forma_pago === "Cuenta Corriente" ||
+                                (ventasDesglose["Cuenta Corriente"] && ccEntries?.some(e => e.venta_id === v.id));
+                              const estadoLabel = isPagado ? "Cobrado" : isCC ? "Cta cte" : "Pendiente";
+                              const estadoClass = isPagado
+                                ? "bg-green-50 text-green-800 border border-green-200"
+                                : isCC
+                                ? "bg-amber-50 text-amber-800 border border-amber-200"
+                                : "bg-red-50 text-red-800 border border-red-200";
+                              return (
+                                <tr key={v.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => openVentaDetail(v)}>
+                                  <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">{v.numero}</td>
+                                  <td className="py-2.5 px-3 text-xs">{(v as any).clientes?.nombre || "—"}</td>
+                                  <td className="py-2.5 px-3">
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full w-fit ${origenClass}`}>
+                                        <span className={`w-1 h-1 rounded-full shrink-0 ${origenDot}`} />
+                                        {origenLabel}
+                                      </span>
+                                      {origenSub && <span className="text-[10px] text-muted-foreground pl-1">{origenSub}</span>}
+                                    </div>
+                                  </td>
+                                  <td className="py-2.5 px-3">
+                                    <div className="flex flex-col gap-0.5">
+                                      <Badge variant="secondary" className="text-[10px] font-normal w-fit">{v.forma_pago}</Badge>
+                                      {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && (v as any).cuenta_transferencia_alias && (
+                                        <span className="text-[10px] text-muted-foreground">→ {(v as any).cuenta_transferencia_alias}</span>
+                                      )}
+                                      {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && !(v as any).cuenta_transferencia_alias && (
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
+                                          <AlertTriangle className="w-2.5 h-2.5" />Sin cuenta
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-2.5 px-3">
+                                    <span className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full ${estadoClass}`}>
+                                      {estadoLabel}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-medium text-xs">{formatCurrency(v.total)}</td>
+                                  <td className="py-2.5 px-1"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t bg-muted/30">
+                              <td colSpan={5} className="py-2.5 px-3 text-xs text-muted-foreground">
+                                {ventas.filter(v => {
+                                  if (ventaOrigenFilter === "todas") return true;
+                                  const isWeb = (v as any).origen === "tienda";
+                                  const me = (v as any).metodo_entrega;
+                                  const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                                  if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
+                                  if (ventaOrigenFilter === "envio") return !!isEnvio;
+                                  if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                                  return true;
+                                }).length} ventas
+                                {ventas.some(v => (v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") && !(v as any).cuenta_transferencia_alias) && (
+                                  <span className="ml-2 text-amber-600 font-medium">
+                                    · {ventas.filter(v => (v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") && !(v as any).cuenta_transferencia_alias).length} sin cuenta
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-right text-xs font-medium">
+                                {formatCurrency(ventas.filter(v => {
+                                  if (ventaOrigenFilter === "todas") return true;
+                                  const isWeb = (v as any).origen === "tienda";
+                                  const me = (v as any).metodo_entrega;
+                                  const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                                  if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
+                                  if (ventaOrigenFilter === "envio") return !!isEnvio;
+                                  if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                                  return true;
+                                }).reduce((s, v) => s + v.total, 0))}
+                              </td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
                       </div>
-                    ))}
-                  </div>
+
+                      {/* Mobile */}
+                      <div className="sm:hidden divide-y">
+                        {ventas.filter(v => {
+                          if (ventaOrigenFilter === "todas") return true;
+                          const isWeb = (v as any).origen === "tienda";
+                          const me = (v as any).metodo_entrega;
+                          const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                          if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
+                          if (ventaOrigenFilter === "envio") return !!isEnvio;
+                          if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                          return true;
+                        }).map((v) => (
+                          <div key={v.id} className="py-3 px-3 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openVentaDetail(v)}>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-xs text-muted-foreground">{v.numero}</span>
+                                {(v as any).origen === "tienda" && (
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 border-pink-300 text-pink-600">Web</Badge>
+                                )}
+                                <Badge variant="secondary" className="text-[10px] font-normal">{v.forma_pago}</Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{(v as any).clientes?.nombre || "—"}</p>
+                            </div>
+                            <span className="font-medium text-sm shrink-0">{formatCurrency(v.total)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
+
+              {/* TAB ENTREGAS */}
+              {ventasTab === "entregas" && (() => {
+                const entregasMovs = movements.filter(m =>
+                  m.tipo === "ingreso" &&
+                  m.referencia_tipo === "venta" &&
+                  (m.descripcion || "").toLowerCase().includes("cobro entrega")
+                );
+                const totalEfectivoEntregas = entregasMovs.filter(m => m.metodo_pago === "Efectivo").reduce((s, m) => s + m.monto, 0);
+                const totalTransfEntregas = entregasMovs.filter(m => m.metodo_pago === "Transferencia").reduce((s, m) => s + m.monto, 0);
+                const ventasEntregadas = ventas.filter(v =>
+                  (v as any).entregado === true &&
+                  (v as any).metodo_entrega &&
+                  ["envio", "envio_a_domicilio", "envio a domicilio"].includes((v as any).metodo_entrega)
+                );
+                const ventaIdsConCobro = new Set(entregasMovs.map(m => m.referencia_id));
+                const sinCobrar = ventasEntregadas.filter(v => !ventaIdsConCobro.has(v.id));
+                return (
+                  <>
+                    {entregasMovs.length === 0 && sinCobrar.length === 0 ? (
+                      <div className="py-8 text-center text-sm text-muted-foreground">Sin entregas registradas hoy</div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b text-muted-foreground">
+                                <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Hora</th>
+                                <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cliente</th>
+                                <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
+                                <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cuenta</th>
+                                <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Monto</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {entregasMovs
+                                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                .map((m) => {
+                                  const desc = m.descripcion || "";
+                                  const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
+                                  const nombre = nombreMatch?.[1]?.trim() || "—";
+                                  const cuenta = (m as any).cuenta_bancaria || "";
+                                  return (
+                                    <tr key={m.id} className="border-b last:border-0 hover:bg-muted/30">
+                                      <td className="py-2.5 px-3 text-xs text-muted-foreground">{m.hora?.substring(0, 5) || "—"}</td>
+                                      <td className="py-2.5 px-3 text-xs font-medium">{nombre}</td>
+                                      <td className="py-2.5 px-3">
+                                        <Badge variant="secondary" className="text-[10px] font-normal">{m.metodo_pago}</Badge>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-xs text-muted-foreground">{cuenta || "—"}</td>
+                                      <td className="py-2.5 px-3 text-right text-xs font-medium text-emerald-600">{formatCurrency(m.monto)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              {sinCobrar.map((v) => (
+                                <tr key={v.id} className="border-b last:border-0 bg-red-50/40 dark:bg-red-950/10">
+                                  <td className="py-2.5 px-3 text-xs text-muted-foreground">—</td>
+                                  <td className="py-2.5 px-3 text-xs font-medium text-red-600">{(v as any).clientes?.nombre || "Sin cliente"}</td>
+                                  <td className="py-2.5 px-3" colSpan={2}>
+                                    <span className="text-[10px] text-red-500 font-medium">sin cobrar</span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right text-xs font-medium text-red-500">{formatCurrency(v.total)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t bg-muted/30">
+                                <td colSpan={4} className="py-2.5 px-3 text-xs text-muted-foreground">
+                                  {totalEfectivoEntregas > 0 && (
+                                    <span className="mr-4">Efectivo <span className="font-medium text-foreground">{formatCurrency(totalEfectivoEntregas)}</span></span>
+                                  )}
+                                  {totalTransfEntregas > 0 && (
+                                    <span>Transferencia <span className="font-medium text-foreground">{formatCurrency(totalTransfEntregas)}</span></span>
+                                  )}
+                                  {sinCobrar.length > 0 && (
+                                    <span className="ml-4 text-red-500">Sin cobrar <span className="font-medium">{formatCurrency(sinCobrar.reduce((s, v) => s + v.total, 0))}</span></span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-right text-xs font-medium">
+                                  {formatCurrency(entregasMovs.reduce((s, m) => s + m.monto, 0))}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+
             </CardContent>
           </Card>
 
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Movimientos de caja</p>
-          {/* Movimientos de Caja */}
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">
+            Movimientos de caja
+          </p>
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Movimientos de caja</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {movements.length === 0 ? (
-                <EmptyState title="No hay movimientos hoy" icon={Wallet} />
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Hora</th>
-                        <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Descripción</th>
-                        <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
-                        <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {movements.map((m) => (
-                        <tr key={m.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="py-2.5 px-3 text-muted-foreground text-xs">{m.hora?.substring(0, 5)}</td>
-                          <td className="py-2.5 px-3 text-xs">{m.descripcion}</td>
-                          <td className="py-2.5 px-3">
-                            <Badge variant="secondary" className="text-[10px] font-normal">{m.metodo_pago}</Badge>
-                          </td>
-                          <td className={`py-2.5 px-3 text-right font-medium text-xs ${
-                            m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"
-                          }`}>
-                            {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <button
+              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-muted/30 transition-colors text-left"
+              onClick={() => setMovsOpen(o => !o)}
+            >
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="text-sm font-medium text-foreground">{movements.length} movimientos</span>
+                <div className="flex gap-3 text-[11px] text-muted-foreground">
+                  {movements.filter(m => m.tipo === "ingreso").length > 0 && (
+                    <span>
+                      Ingresos{" "}
+                      <span className="font-medium text-emerald-600">
+                        +{formatCurrency(movements.filter(m => m.tipo === "ingreso").reduce((s, m) => s + m.monto, 0))}
+                      </span>
+                    </span>
+                  )}
+                  {movements.filter(m => m.tipo === "egreso" || m.tipo === "cancelacion").length > 0 && (
+                    <span>
+                      Egresos{" "}
+                      <span className="font-medium text-red-500">
+                        -{formatCurrency(movements.filter(m => m.tipo === "egreso" || m.tipo === "cancelacion").reduce((s, m) => s + Math.abs(m.monto), 0))}
+                      </span>
+                    </span>
+                  )}
                 </div>
-              )}
-            </CardContent>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${movsOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {movsOpen && (
+              <div className="border-t border-border/60">
+                {movements.length === 0 ? (
+                  <EmptyState title="No hay movimientos hoy" icon={Wallet} />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Hora</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Descripción</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
+                          <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {movements.map((m) => (
+                          <tr key={m.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="py-2.5 px-3 text-xs text-muted-foreground">{m.hora?.substring(0, 5)}</td>
+                            <td className="py-2.5 px-3 text-xs">{m.descripcion}</td>
+                            <td className="py-2.5 px-3">
+                              <Badge variant="secondary" className="text-[10px] font-normal">{m.metodo_pago}</Badge>
+                            </td>
+                            <td className={`py-2.5 px-3 text-right text-xs font-medium ${
+                              m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"
+                            }`}>
+                              {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </>
       )}
