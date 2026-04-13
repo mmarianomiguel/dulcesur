@@ -1698,9 +1698,56 @@ export default function ListadoVentasPage() {
       const isHistorial = poSelectedPedido._source === "historial";
       const descPct = (poSelectedPedido as any)._descuento_porcentaje || 0;
       const recPct = (poSelectedPedido as any)._recargo_porcentaje || 0;
-      const nuevoTotal = (isHistorial && !poSelectedPedido.isOnline)
+
+      // Recuperar % de recargo de transferencia desde tienda_config
+      let pctTransfer = 0;
+      const { data: tcData } = await supabase
+        .from("tienda_config")
+        .select("recargo_transferencia")
+        .limit(1)
+        .single();
+      if (tcData && tcData.recargo_transferencia > 0) pctTransfer = tcData.recargo_transferencia;
+
+      // Total base (sin recargo de transferencia)
+      const nuevoTotalBase = (isHistorial && !poSelectedPedido.isOnline)
         ? Math.round(nuevoSubtotal * (1 - descPct / 100) * (1 + recPct / 100))
-        : nuevoSubtotal + (poSelectedPedido.costo_envio || 0) + ((poSelectedPedido as any).recargo_transferencia || 0);
+        : nuevoSubtotal + (poSelectedPedido.costo_envio || 0);
+
+      // Calcular recargo de transferencia según forma de pago
+      // Leer forma_pago de la venta (más confiable que el pedido)
+      let ventaFormaPago = (poSelectedPedido as any).forma_pago || "";
+      if (isHistorial && poSelectedPedido._ventaId) {
+        const { data: fpData } = await supabase.from("ventas").select("forma_pago").eq("id", poSelectedPedido._ventaId).single();
+        if (fpData?.forma_pago) ventaFormaPago = fpData.forma_pago;
+      } else if (!isHistorial && poSelectedPedido.numero) {
+        const { data: fpData } = await supabase.from("ventas").select("forma_pago").eq("numero", poSelectedPedido.numero).maybeSingle();
+        if (fpData?.forma_pago) ventaFormaPago = fpData.forma_pago;
+      }
+
+      let nuevoTransferSurcharge = 0;
+      let nuevoMixtoEfectivo = 0;
+      let nuevoMixtoTransferencia = 0;
+
+      if (ventaFormaPago === "Transferencia" && pctTransfer > 0) {
+        nuevoTransferSurcharge = Math.round(nuevoTotalBase * pctTransfer / 100);
+      } else if (ventaFormaPago === "Mixto" && pctTransfer > 0) {
+        let efectivoOriginal = 0;
+        if (poSelectedPedido.numero) {
+          const { data: ptMixto } = await supabase
+            .from("pedidos_tienda")
+            .select("monto_efectivo, monto_transferencia")
+            .eq("numero", poSelectedPedido.numero)
+            .maybeSingle();
+          efectivoOriginal = ptMixto?.monto_efectivo || 0;
+        }
+        if (efectivoOriginal > 0 && efectivoOriginal < nuevoTotalBase) {
+          nuevoMixtoEfectivo = efectivoOriginal;
+          nuevoMixtoTransferencia = nuevoTotalBase - efectivoOriginal;
+          nuevoTransferSurcharge = Math.round(nuevoMixtoTransferencia * pctTransfer / 100);
+        }
+      }
+
+      const nuevoTotal = nuevoTotalBase + nuevoTransferSurcharge;
       const refLabel = isHistorial ? `Edición Venta #${poSelectedPedido.numero}` : `Edición Pedido Web #${poSelectedPedido.numero}`;
 
       // Update pedido_tienda_items — for PO source OR historial ventas from online orders
@@ -1724,10 +1771,24 @@ export default function ListadoVentasPage() {
           );
           if (insErr) errores.push(`Error insertando items en tienda: ${insErr.message}`);
         }
-        const { error: pedErr } = await supabase.from("pedidos_tienda").update({
+        // Construir el update de pedidos_tienda con desglose Mixto/Transferencia
+        const ptUpdate: Record<string, any> = {
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
-        }).eq("id", pedidoTiendaId);
+        };
+        if (ventaFormaPago === "Transferencia") {
+          ptUpdate.monto_efectivo = 0;
+          ptUpdate.monto_transferencia = nuevoTotalBase;
+        } else if (ventaFormaPago === "Mixto") {
+          if (nuevoMixtoEfectivo > 0) {
+            ptUpdate.monto_efectivo = nuevoMixtoEfectivo;
+            ptUpdate.monto_transferencia = nuevoMixtoTransferencia;
+          } else {
+            ptUpdate.monto_efectivo = 0;
+            ptUpdate.monto_transferencia = 0;
+          }
+        }
+        const { error: pedErr } = await supabase.from("pedidos_tienda").update(ptUpdate).eq("id", pedidoTiendaId);
         if (pedErr) errores.push(`Error actualizando total en tienda: ${pedErr.message}`);
       }
 

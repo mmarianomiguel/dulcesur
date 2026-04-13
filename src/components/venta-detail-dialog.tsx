@@ -246,13 +246,34 @@ export function VentaDetailDialog({
   const ncTotal = (ncs || []).reduce((s, nc) => s + nc.total, 0);
   const ncFromPagos = (pagos || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
   const ncDisplay = ncTotal || ncFromPagos;
+  const fp = (data.forma_pago || data.metodo_pago || "").toLowerCase();
+  const isTransferenciaPura = fp === "transferencia";
+  const isMixto = fp === "mixto";
+
   const displayTotal = editable && editItems
-    ? calculateOrderFinancials({
-        items: editItems.map(i => ({ subtotal: i.subtotal })),
-        descuentoPorcentaje: descPct,
-        recargoPorcentaje: recPct,
-        costoEnvio: envio || 0,
-      }).totalFinal
+    ? (() => {
+        const base = calculateOrderFinancials({
+          items: editItems.map(i => ({ subtotal: i.subtotal })),
+          descuentoPorcentaje: descPct,
+          recargoPorcentaje: recPct,
+          costoEnvio: envio || 0,
+        }).totalFinal;
+
+        if (isTransferenciaPura && configRecargoPct > 0) {
+          return base + Math.round(base * configRecargoPct / 100);
+        }
+
+        if (isMixto && configRecargoPct > 0) {
+          const efectivoOriginal = data.monto_efectivo || 0;
+          if (efectivoOriginal > 0 && efectivoOriginal < base) {
+            const transferBase = base - efectivoOriginal;
+            return base + Math.round(transferBase * configRecargoPct / 100);
+          }
+          return base;
+        }
+
+        return base;
+      })()
     : data.total; // stored total is already net of NC — don't subtract again
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const canCobrar = editable && estado !== "cancelado";
@@ -760,7 +781,6 @@ export function VentaDetailDialog({
 
             {/* Totals + Payment Summary */}
             {(() => {
-              const fp = (data.forma_pago || data.metodo_pago || "").toLowerCase();
               const ventaCalc = recalcFromVenta({ subtotal: itemsSubtotal, descuento_porcentaje: descPct, recargo_porcentaje: recPct, total: data.total });
               const realPagos = (pagos || []).filter(p => !p.metodo.includes("Nota de Cr") && !p.metodo.includes("Pendiente"));
               const totalCobrado = realPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
@@ -773,7 +793,38 @@ export function VentaDetailDialog({
                   {ncDisplay > 0 && (
                     <p className="text-muted-foreground">Nota de Crédito: <span className="font-medium text-red-500">-{formatCurrency(ncDisplay)}</span></p>
                   )}
-                  {ventaCalc.transferSurcharge > 0 && (
+                  {/* Recargo transferencia — modo edición */}
+                  {editable && editItems && (() => {
+                    const base = calculateOrderFinancials({
+                      items: editItems.map(i => ({ subtotal: i.subtotal })),
+                      descuentoPorcentaje: descPct,
+                      recargoPorcentaje: recPct,
+                    }).totalFinal;
+
+                    let surcharge = 0;
+                    let label = "";
+
+                    if (isTransferenciaPura && configRecargoPct > 0) {
+                      surcharge = Math.round(base * configRecargoPct / 100);
+                      label = `Recargo transferencia (${configRecargoPct}%)`;
+                    } else if (isMixto && configRecargoPct > 0) {
+                      const efectivoOriginal = data.monto_efectivo || 0;
+                      if (efectivoOriginal > 0 && efectivoOriginal < base) {
+                        const transferBase = base - efectivoOriginal;
+                        surcharge = Math.round(transferBase * configRecargoPct / 100);
+                        label = `Recargo transferencia (${configRecargoPct}% s/ ${formatCurrency(transferBase)})`;
+                      }
+                    }
+
+                    return surcharge > 0 ? (
+                      <p className="text-muted-foreground">
+                        {label}:
+                        <span className="font-medium text-violet-600 ml-1">+{formatCurrency(surcharge)}</span>
+                      </p>
+                    ) : null;
+                  })()}
+                  {/* Recargo transferencia — modo lectura */}
+                  {(!editable || !editItems) && ventaCalc.transferSurcharge > 0 && (
                     <p className="text-muted-foreground">
                       Recargo transferencia ({recPct || configRecargoPct}%):
                       <span className="font-medium text-violet-600 ml-1">+{formatCurrency(ventaCalc.transferSurcharge)}</span>
