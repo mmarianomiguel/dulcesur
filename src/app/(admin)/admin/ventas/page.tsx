@@ -1946,63 +1946,72 @@ export default function VentasPage() {
         // For Mixto: already handled above in the combined flow — skip here
         // Collect ONLY the pre-existing debt (not what was just added by this sale's CC)
         if (formaPago !== "Pendiente" && formaPago !== "Mixto" && !cobrarEnEntrega && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
-          const saldoActualDB = saldoRealAntesDeTodo;
-          if (saldoActualDB > 0) {
-            const saldoPendiente = saldoActualDB;
-            // Note: Mixto cobro saldo is already handled above in the combined flow (formaPago === "Mixto" is excluded by the outer condition)
-            await supabase.from("caja_movimientos").insert({
-              fecha: hoy,
-              hora,
-              tipo: "ingreso",
-              descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
-              metodo_pago: formaPago,
-              monto: saldoPendiente,
-              referencia_id: venta.id,
-              referencia_tipo: "cobro_saldo",
-            });
-            // Atomic saldo update via RPC (negative = reduce debt from cobro)
-            const { data: newSaldoAfterCobro, error: saldoCobErr } = await supabase.rpc("atomic_update_client_saldo", {
-              p_client_id: clientId,
-              p_change: -saldoPendiente,
-            });
-            let finalSaldoAfterCobro = newSaldoAfterCobro;
-            if (saldoCobErr) {
-              // Fallback: direct update if RPC fails
-              const { data: currCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-              finalSaldoAfterCobro = Math.max(0, Math.round(((currCli?.saldo ?? 0) - saldoPendiente) * 100) / 100);
-              await supabase.from("clientes").update({ saldo: finalSaldoAfterCobro }).eq("id", clientId);
-            }
+          const saldoPendiente = saldoRealAntesDeTodo;
+
+          // 1. Registrar cobro en caja
+          await supabase.from("caja_movimientos").insert({
+            fecha: hoy,
+            hora,
+            tipo: "ingreso",
+            descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
+            metodo_pago: formaPago,
+            monto: saldoPendiente,
+            referencia_id: venta.id,
+            referencia_tipo: "cobro_saldo",
+          });
+
+          // 2. Reducir saldo del cliente atómicamente
+          const { data: newSaldoAfterCobro, error: saldoCobErr } = await supabase.rpc("atomic_update_client_saldo", {
+            p_client_id: clientId,
+            p_change: -saldoPendiente,
+          });
+          let finalSaldoAfterCobro = newSaldoAfterCobro ?? 0;
+          if (saldoCobErr) {
+            const { data: currCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+            finalSaldoAfterCobro = Math.max(0, Math.round(((currCli?.saldo ?? 0) - saldoPendiente) * 100) / 100);
+            await supabase.from("clientes").update({ saldo: finalSaldoAfterCobro }).eq("id", clientId);
+          }
+
+          // 3. FIFO: insertar haber en cuenta_corriente por cada venta vieja saldada
+          const { data: pendingVentas } = await supabase
+            .from("ventas")
+            .select("id, numero, total, monto_pagado")
+            .eq("cliente_id", clientId)
+            .in("forma_pago", ["Cuenta Corriente", "Mixto", "Pendiente"])
+            .neq("estado", "anulada")
+            .neq("id", venta.id)
+            .order("fecha", { ascending: true })
+            .order("created_at", { ascending: true });
+
+          let remainingCobro = saldoPendiente;
+          let runningSaldo = (newSaldoAfterCobro ?? 0) + saldoPendiente; // saldo antes del cobro
+
+          for (const pv of pendingVentas || []) {
+            if (remainingCobro <= 0) break;
+            const pvPendiente = pv.total - (pv.monto_pagado || 0);
+            if (pvPendiente <= 0) continue;
+            const aplicar = Math.min(remainingCobro, pvPendiente);
+            remainingCobro = Math.round((remainingCobro - aplicar) * 100) / 100;
+            runningSaldo -= aplicar;
+
+            // Insertar haber en cuenta_corriente vinculado a la venta vieja
             await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
-              comprobante: `Cobro saldo - Venta #${numero}`,
-              descripcion: `Cobro saldo anterior (${formaPago})`,
+              comprobante: `Cobro saldo #${pv.numero}`,
+              descripcion: `Cobro deuda anterior — ${formaPago} (Venta #${numero})`,
               debe: 0,
-              haber: saldoPendiente,
-              saldo: finalSaldoAfterCobro,
+              haber: aplicar,
+              saldo: Math.max(0, runningSaldo),
               forma_pago: formaPago,
-              venta_id: venta.id,
+              venta_id: pv.id,
             });
-            // FIFO update monto_pagado on CC/Mixto ventas so they reflect as paid
-            const { data: pendingVentas } = await supabase
-              .from("ventas")
-              .select("id, total, monto_pagado")
-              .eq("cliente_id", clientId)
-              .in("forma_pago", ["Cuenta Corriente", "Mixto", "Pendiente"])
-              .neq("estado", "anulada")
-              .order("fecha", { ascending: true })
-              .order("created_at", { ascending: true });
-            let remainingCobro = saldoPendiente;
-            for (const pv of pendingVentas || []) {
-              if (remainingCobro <= 0) break;
-              const pvPendiente = pv.total - (pv.monto_pagado || 0);
-              if (pvPendiente <= 0) continue;
-              const aplicar = Math.min(remainingCobro, pvPendiente);
-              remainingCobro = Math.round((remainingCobro - aplicar) * 100) / 100;
-              await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + aplicar }).eq("id", pv.id);
-            }
-            if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: finalSaldoAfterCobro } : c));
+
+            // Actualizar monto_pagado en la venta vieja
+            await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + aplicar }).eq("id", pv.id);
           }
+
+          if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: finalSaldoAfterCobro } : c));
         }
 
         // Calculate CC amounts for receipt
