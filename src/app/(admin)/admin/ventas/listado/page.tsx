@@ -2341,40 +2341,37 @@ export default function ListadoVentasPage() {
           )}
 
           {/* Row 2: Filters - Origin, Estado, Cobro, Comprobante */}
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 border-t">
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t">
             {/* Origin */}
-            <div className="flex items-center gap-1.5 pt-2">
-              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Origen</span>
+            <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
               {([["todos", "Todos", null], ["pos", "POS", Store], ["online", "Online", Globe]] as const).map(([val, label, Icon]) => (
                 <button
                   key={val}
                   onClick={() => setFilterSource(val as any)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
                     filterSource === val
-                      ? "bg-foreground text-background shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {Icon && <Icon className="w-3 h-3 inline mr-1 -mt-0.5" />}
+                  {Icon && <Icon className="w-3 h-3" />}
                   {label}
                 </button>
               ))}
             </div>
 
-            {/* Separator */}
-            <div className="hidden sm:block w-px h-6 bg-border mt-2" />
+            <div className="w-px h-5 bg-border hidden sm:block" />
 
             {/* Estado */}
-            <div className="flex items-center gap-1.5 pt-2">
-              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Estado</span>
+            <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
               {([["todos", "Todos"], ["pendiente", "Pendiente"], ["armado", "Armado"], ["entregado", "Entregado"], ["cancelado", "Cancelado"]] as const).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setPoFilterEstado(val)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
                     poFilterEstado === val
-                      ? "bg-foreground text-background shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {label}
@@ -2382,59 +2379,61 @@ export default function ListadoVentasPage() {
               ))}
             </div>
 
-            {/* Separator */}
-            <div className="hidden sm:block w-px h-6 bg-border mt-2" />
+            <div className="w-px h-5 bg-border hidden sm:block" />
 
-            {/* Forma de cobro */}
-            <div className="flex items-center gap-1.5 pt-2 flex-wrap">
-              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Cobro</span>
-              <Select value={filterPayment} onValueChange={(v) => { setFilterPayment(v ?? "all"); setFilterBanco("all"); }}>
-                <SelectTrigger className="h-7 w-auto min-w-[90px] text-xs border-dashed">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="Efectivo">Efectivo</SelectItem>
-                  <SelectItem value="Transferencia">Transferencia</SelectItem>
-                  <SelectItem value="Cuenta Corriente">Cuenta Corriente</SelectItem>
-                  <SelectItem value="Mixto">Mixto</SelectItem>
-                </SelectContent>
-              </Select>
-              {(filterPayment === "Transferencia" || filterPayment === "Mixto") && cuentasBancarias.length > 0 && (
-                <Select value={filterBanco} onValueChange={(v) => setFilterBanco(v ?? "all")}>
-                  <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs border-dashed border-blue-300 text-blue-700">
-                    <SelectValue placeholder="Todos los bancos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los bancos</SelectItem>
-                    {cuentasBancarias.map((c: any) => (
-                      <SelectItem key={c.id} value={c.alias || c.nombre}>
-                        {c.nombre}{c.alias ? ` — ${c.alias}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+            {/* Cobro — pills en lugar de Select */}
+            <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
+              {([["all", "Todos"], ["Efectivo", "Efectivo"], ["Transferencia", "Transfer."], ["Cuenta Corriente", "Cta Cte"], ["Mixto", "Mixto"]] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => { setFilterPayment(val); setFilterBanco("all"); }}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    filterPayment === val
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {/* Banco — solo si es Transferencia o Mixto */}
+            {(filterPayment === "Transferencia" || filterPayment === "Mixto") && cuentasBancarias.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {[{ id: "all", label: "Todos" }, ...cuentasBancarias.map((c: any) => ({ id: c.alias || c.nombre, label: c.alias || c.nombre }))].map((banco) => (
+                  <button
+                    key={banco.id}
+                    onClick={() => setFilterBanco(banco.id)}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border ${
+                      filterBanco === banco.id
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-background text-blue-700 border-blue-200 hover:border-blue-400"
+                    }`}
+                  >
+                    {banco.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="w-px h-5 bg-border hidden sm:block" />
 
             {/* Tipo comprobante */}
-            <div className="flex items-center gap-1.5 pt-2">
-              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mr-0.5">Tipo</span>
-              <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
-                <SelectTrigger className="h-7 w-auto min-w-[90px] text-xs border-dashed">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="Remito X">Remito X</SelectItem>
-                  <SelectItem value="Pedido Web">Pedido Web</SelectItem>
-                  <SelectItem value="Nota de Crédito B">NC B</SelectItem>
-                  <SelectItem value="Nota de Crédito C">NC C</SelectItem>
-                  <SelectItem value="Nota de Débito B">ND B</SelectItem>
-                  <SelectItem value="Nota de Débito C">ND C</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
+              <SelectTrigger className="h-8 w-auto min-w-[100px] text-xs border-dashed bg-muted/40">
+                <SelectValue placeholder="Tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los tipos</SelectItem>
+                <SelectItem value="Remito X">Remito X</SelectItem>
+                <SelectItem value="Pedido Web">Pedido Web</SelectItem>
+                <SelectItem value="Nota de Crédito B">NC B</SelectItem>
+                <SelectItem value="Nota de Crédito C">NC C</SelectItem>
+                <SelectItem value="Nota de Débito B">ND B</SelectItem>
+                <SelectItem value="Nota de Débito C">ND C</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
