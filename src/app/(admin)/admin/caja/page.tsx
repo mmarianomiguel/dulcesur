@@ -601,6 +601,7 @@ export default function CajaPage() {
 
   // ─── Expandable stat cards ───
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [ventaOrigenFilter, setVentaOrigenFilter] = useState<"todas" | "pos" | "envio" | "retiro">("todas");
   const toggleCard = (key: string) => setExpandedCard((prev) => prev === key ? null : key);
 
   // ─── Dialogs ───
@@ -1411,43 +1412,26 @@ export default function CajaPage() {
         <>
           {/* Turno info bar */}
           {turno && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex flex-wrap items-center gap-4 text-sm">
-                  <Badge variant="secondary" className="bg-primary/10 text-primary">
-                    Turno #{turno.numero}
-                  </Badge>
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>
-                      Apertura: {turno.hora_apertura?.substring(0, 5)} hs
-                    </span>
-                  </div>
-                  <div className="text-muted-foreground">
-                    Operador: <span className="font-medium text-foreground">{turno.operador}</span>
-                  </div>
-                  <div className="text-muted-foreground">
-                    Efectivo inicial:{" "}
-                    <span className="font-medium text-foreground">
-                      {formatCurrency(turno.efectivo_inicial)}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-background text-xs text-muted-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span>Turno #{turno.numero}</span>
+              <span className="text-border">·</span>
+              <span>apertura {turno.hora_apertura?.substring(0, 5)}</span>
+              <span className="text-border">·</span>
+              <span>{turno.operador}</span>
+              <span className="text-border">·</span>
+              <span>efectivo inicial {formatCurrency(turno.efectivo_inicial)}</span>
+            </div>
           )}
 
           {/* Stats - Interactive cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             {[
               {
                 key: "ventas",
                 title: "Total Ventas",
                 value: formatCurrency(totalVentas),
                 subtitle: `${ventas.length} ordenes`,
-                icon: Wallet,
-                iconColor: "text-primary",
-                iconBg: "bg-primary/10",
                 hasDetail: Object.keys(ventasDesglose).length > 0,
                 detail: Object.entries(ventasDesglose).sort((a, b) => b[1].total - a[1].total).map(([fp, d]) => ({
                   label: fp === "Transferencia" && totalTransferSurcharge > 0
@@ -1461,9 +1445,6 @@ export default function CajaPage() {
                 key: "efectivo",
                 title: "Efectivo Esperado",
                 value: formatCurrency(efectivoEsperado),
-                icon: Banknote,
-                iconColor: "text-emerald-500",
-                iconBg: "bg-emerald-500/10",
                 hasDetail: true,
                 detail: [
                   { label: `Inicial`, value: formatCurrency(efectivoInicial), color: "" },
@@ -1476,9 +1457,6 @@ export default function CajaPage() {
                 key: "ingresos",
                 title: "Ingresos Caja",
                 value: formatCurrency(depositos),
-                icon: ArrowUpRight,
-                iconColor: "text-emerald-500",
-                iconBg: "bg-emerald-500/10",
                 hasDetail: ingresosDetalle.length > 0,
                 detail: ingresosDetalle.map((d) => ({
                   label: `${d.descripcion} (${d.metodo})`,
@@ -1490,9 +1468,6 @@ export default function CajaPage() {
                 key: "egresos",
                 title: "Egresos Caja",
                 value: formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones),
-                icon: ArrowDownRight,
-                iconColor: "text-red-500",
-                iconBg: "bg-red-500/10",
                 hasDetail: egresosDetalle.length > 0,
                 detail: egresosDetalle.map((d) => ({
                   label: d.descripcion,
@@ -1501,58 +1476,55 @@ export default function CajaPage() {
                 })),
               },
             ].map((card) => (
-              <Card
+              <div
                 key={card.key}
-                className={`transition-all ${card.hasDetail ? "cursor-pointer hover:shadow-md" : ""}`}
+                className={`rounded-xl bg-muted/50 p-4 transition-all ${card.hasDetail ? "cursor-pointer hover:bg-muted/70" : ""}`}
                 onClick={() => card.hasDetail && toggleCard(card.key)}
               >
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 min-w-0">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{card.title}</p>
-                      <p className="text-xl lg:text-2xl font-bold truncate">{card.value}</p>
-                      {card.subtitle && <p className="text-xs text-muted-foreground">{card.subtitle}</p>}
-                    </div>
-                    <div className="flex flex-col items-center gap-1 shrink-0">
-                      <div className={`p-2.5 rounded-xl ${card.iconBg}`}>
-                        <card.icon className={`w-5 h-5 ${card.iconColor}`} />
-                      </div>
-                      {card.hasDetail && (
-                        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expandedCard === card.key ? "rotate-180" : ""}`} />
-                      )}
-                    </div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest mb-1">{card.title}</p>
+                    <p className={`text-xl sm:text-2xl font-medium truncate ${
+                      card.key === "egresos" ? "text-red-500" :
+                      card.key === "ingresos" ? "text-emerald-600" : ""
+                    }`}>{card.value}</p>
+                    {card.subtitle && <p className="text-[11px] text-muted-foreground mt-0.5">{card.subtitle}</p>}
                   </div>
-                  {expandedCard === card.key && card.detail.length > 0 && (
-                    <div className="mt-2 pt-2 border-t space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                      {card.detail.map((d, i) => (
-                        <div key={i} className="flex justify-between text-[11px]">
-                          <span className="text-muted-foreground truncate mr-2">{d.label}</span>
-                          <span className={`font-medium shrink-0 ${d.color}`}>{d.value}</span>
-                        </div>
-                      ))}
-                    </div>
+                  {card.hasDetail && (
+                    <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 mt-1 transition-transform ${expandedCard === card.key ? "rotate-180" : ""}`} />
                   )}
-                </CardContent>
-              </Card>
+                </div>
+                {expandedCard === card.key && card.detail.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-border/50 space-y-1">
+                    {card.detail.map((d, i) => (
+                      <div key={i} className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground truncate mr-2">{d.label}</span>
+                        <span className={`font-medium shrink-0 ${d.color}`}>{d.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
 
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Ingresos por método</p>
           {/* Detalle por método + deudores + egresos + cobros CC */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             {/* Efectivo */}
-            <Card>
+            <Card className="border-border/60">
               <CardContent className="pt-4 pb-4">
-                <p className="text-xs text-muted-foreground mb-1">Efectivo</p>
-                <p className="text-lg font-semibold">{formatCurrency(ventasEfectivo)}</p>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Efectivo</p>
+                <p className="text-lg font-medium">{formatCurrency(ventasEfectivo)}</p>
               </CardContent>
             </Card>
 
             {/* Transferencia con desglose por cuenta */}
-            <Card>
+            <Card className="border-border/60">
               <CardContent className="pt-4 pb-4">
-                <p className="text-xs text-muted-foreground mb-1">Transferencia</p>
-                <p className="text-lg font-semibold">{formatCurrency(ventasTransferencia)}</p>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Transferencia</p>
+                <p className="text-lg font-medium">{formatCurrency(ventasTransferencia)}</p>
                 {totalTransferSurcharge > 0 && (
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     inc. recargo {formatCurrency(totalTransferSurcharge)}
@@ -1587,10 +1559,10 @@ export default function CajaPage() {
               }
               deudoresHoy.sort((a, b) => b.monto - a.monto);
               return (
-                <Card>
+                <Card className="border-border/60">
                   <CardContent className="pt-4 pb-4">
-                    <p className="text-xs text-muted-foreground mb-1">Cuenta corriente</p>
-                    <p className="text-lg font-semibold text-amber-600">
+                    <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Cuenta corriente</p>
+                    <p className="text-lg font-medium text-amber-600">
                       {formatCurrency(ventasDesglose["Cuenta Corriente"].total)}
                     </p>
                     {deudoresHoy.length > 0 && (
@@ -1612,15 +1584,16 @@ export default function CajaPage() {
 
           </div>
 
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Detalle</p>
           {/* Cobros CC + Egresos + Ingresos manuales */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             {/* Cobros de deuda recibidos hoy */}
             {cobrosCCTotal > 0 && (
-              <Card>
+              <Card className="border-border/60">
                 <CardContent className="pt-4 pb-4">
-                  <p className="text-xs text-muted-foreground mb-1">Cobros de deuda recibidos</p>
-                  <p className="text-lg font-semibold text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
+                  <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Cobros de deuda recibidos</p>
+                  <p className="text-lg font-medium text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
                   <div className="mt-2 pt-2 border-t space-y-1.5">
                     {movements
                       .filter(m => m.tipo === "ingreso" && m.referencia_tipo === "cobro_saldo")
@@ -1658,10 +1631,10 @@ export default function CajaPage() {
 
             {/* Egresos del día con detalle */}
             {(gastos + retiros + notasCreditoEgresos + anulaciones) > 0 && (
-              <Card>
+              <Card className="border-border/60">
                 <CardContent className="pt-4 pb-4">
-                  <p className="text-xs text-muted-foreground mb-1">Egresos</p>
-                  <p className="text-lg font-semibold text-red-500">
+                  <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Egresos</p>
+                  <p className="text-lg font-medium text-red-500">
                     -{formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}
                   </p>
                   {egresosDetalle.length > 0 && (
@@ -1680,10 +1653,10 @@ export default function CajaPage() {
 
             {/* Ingresos manuales si los hay */}
             {depositos > 0 && (
-              <Card>
+              <Card className="border-border/60">
                 <CardContent className="pt-4 pb-4">
-                  <p className="text-xs text-muted-foreground mb-1">Ingresos manuales</p>
-                  <p className="text-lg font-semibold text-emerald-600">{formatCurrency(depositos)}</p>
+                  <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Ingresos manuales</p>
+                  <p className="text-lg font-medium text-emerald-600">{formatCurrency(depositos)}</p>
                   {ingresosDetalle.length > 0 && (
                     <div className="mt-2 pt-2 border-t space-y-1">
                       {ingresosDetalle.map((d, i) => (
@@ -1700,6 +1673,7 @@ export default function CajaPage() {
 
           </div>
 
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Entregas del día</p>
           {/* Entregas del día */}
           {(() => {
             const entregasMovs = movements.filter(m =>
@@ -1746,11 +1720,11 @@ export default function CajaPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-2 px-3 font-medium text-xs">Hora</th>
-                          <th className="text-left py-2 px-3 font-medium text-xs">Cliente</th>
-                          <th className="text-left py-2 px-3 font-medium text-xs">Método</th>
-                          <th className="text-left py-2 px-3 font-medium text-xs">Cuenta</th>
-                          <th className="text-right py-2 px-3 font-medium text-xs">Monto</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Hora</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cliente</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cuenta</th>
+                          <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Monto</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1763,19 +1737,19 @@ export default function CajaPage() {
                             const cuenta = (m as any).cuenta_bancaria || "";
                             return (
                               <tr key={m.id} className="border-b last:border-0 hover:bg-muted/30">
-                                <td className="py-2 px-3 text-muted-foreground text-xs">
+                                <td className="py-2.5 px-3 text-muted-foreground text-xs">
                                   {m.hora?.substring(0, 5) || "—"}
                                 </td>
-                                <td className="py-2 px-3 font-medium text-xs">{nombre}</td>
-                                <td className="py-2 px-3">
+                                <td className="py-2.5 px-3 font-medium text-xs">{nombre}</td>
+                                <td className="py-2.5 px-3">
                                   <Badge variant="secondary" className="text-[10px] font-normal">
                                     {m.metodo_pago}
                                   </Badge>
                                 </td>
-                                <td className="py-2 px-3 text-xs text-muted-foreground">
+                                <td className="py-2.5 px-3 text-xs text-muted-foreground">
                                   {cuenta || "—"}
                                 </td>
-                                <td className="py-2 px-3 text-right font-semibold text-emerald-600 text-xs">
+                                <td className="py-2.5 px-3 text-right font-medium text-emerald-600 text-xs">
                                   {formatCurrency(m.monto)}
                                 </td>
                               </tr>
@@ -1783,14 +1757,14 @@ export default function CajaPage() {
                           })}
                         {sinCobrar.map((v) => (
                           <tr key={v.id} className="border-b last:border-0 bg-red-50/40 dark:bg-red-950/10">
-                            <td className="py-2 px-3 text-muted-foreground text-xs">—</td>
-                            <td className="py-2 px-3 font-medium text-xs text-red-600">
+                            <td className="py-2.5 px-3 text-muted-foreground text-xs">—</td>
+                            <td className="py-2.5 px-3 font-medium text-xs text-red-600">
                               {(v as any).clientes?.nombre || "Sin cliente"}
                             </td>
-                            <td className="py-2 px-3" colSpan={2}>
+                            <td className="py-2.5 px-3" colSpan={2}>
                               <span className="text-[10px] text-red-500 font-medium">sin cobrar</span>
                             </td>
-                            <td className="py-2 px-3 text-right font-semibold text-red-500 text-xs">
+                            <td className="py-2.5 px-3 text-right font-medium text-red-500 text-xs">
                               {formatCurrency(v.total)}
                             </td>
                           </tr>
@@ -1798,7 +1772,7 @@ export default function CajaPage() {
                       </tbody>
                       <tfoot>
                         <tr className="border-t bg-muted/30">
-                          <td colSpan={4} className="py-2 px-3 text-xs text-muted-foreground">
+                          <td colSpan={4} className="py-2.5 px-3 text-xs text-muted-foreground">
                             {totalEfectivoEntregas > 0 && (
                               <span className="mr-4">
                                 Efectivo: <span className="font-medium text-foreground">{formatCurrency(totalEfectivoEntregas)}</span>
@@ -1810,7 +1784,7 @@ export default function CajaPage() {
                               </span>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-right text-xs font-bold">
+                          <td className="py-2.5 px-3 text-right text-xs font-medium">
                             {formatCurrency(entregasMovs.reduce((s, m) => s + m.monto, 0))}
                           </td>
                         </tr>
@@ -1822,10 +1796,40 @@ export default function CajaPage() {
             );
           })()}
 
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Ventas del día</p>
           {/* Ventas del día */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Ventas del día</CardTitle>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <CardTitle className="text-base">
+                  {ventaOrigenFilter === "todas" ? `${ventas.length} ventas` :
+                   ventaOrigenFilter === "pos" ? `${ventas.filter(v => (v as any).origen !== "tienda").length} ventas POS` :
+                   ventaOrigenFilter === "envio" ? `${ventas.filter(v => (v as any).origen === "tienda" && ["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length} envíos` :
+                   `${ventas.filter(v => (v as any).origen === "tienda" && !["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length} retiros`}
+                </CardTitle>
+                <div className="flex gap-1.5 flex-wrap">
+                  {([
+                    { key: "todas", label: "Todas", dot: null, count: ventas.length },
+                    { key: "pos", label: "POS", dot: "bg-blue-600", count: ventas.filter(v => (v as any).origen !== "tienda").length },
+                    { key: "envio", label: "Envío", dot: "bg-emerald-600", count: ventas.filter(v => (v as any).origen === "tienda" && ["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length },
+                    { key: "retiro", label: "Retiro", dot: "bg-purple-600", count: ventas.filter(v => (v as any).origen === "tienda" && !["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length },
+                  ] as const).map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => setVentaOrigenFilter(f.key)}
+                      className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all ${
+                        ventaOrigenFilter === f.key
+                          ? "bg-foreground text-background border-foreground"
+                          : "bg-background text-muted-foreground border-border hover:border-foreground/30"
+                      }`}
+                    >
+                      {f.dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.dot}`} />}
+                      {f.label}
+                      <span className="opacity-60">{f.count}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="pt-0">
               {ventas.length === 0 ? (
@@ -1837,29 +1841,40 @@ export default function CajaPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-2.5 px-3 font-medium text-xs">N°</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-xs">Cliente</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-xs">Origen</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-xs">Método</th>
-                          <th className="text-left py-2.5 px-3 font-medium text-xs">Estado</th>
-                          <th className="text-right py-2.5 px-3 font-medium text-xs">Total</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">N°</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Cliente</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Origen</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Estado</th>
+                          <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Total</th>
                           <th className="w-8"></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {ventas.map((v) => {
+                        {ventas.filter(v => {
+                          if (ventaOrigenFilter === "todas") return true;
+                          const isWeb = (v as any).origen === "tienda";
+                          const metodoEntrega = (v as any).metodo_entrega;
+                          const isEnvio = isWeb && metodoEntrega && ["envio","envio_a_domicilio","envio a domicilio"].includes(metodoEntrega);
+                          if (ventaOrigenFilter === "pos") return !isWeb;
+                          if (ventaOrigenFilter === "envio") return isEnvio;
+                          if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                          return true;
+                        }).map((v) => {
                           const origen = (v as any).origen;
                           const metodoEntrega = (v as any).metodo_entrega;
                           const isWeb = origen === "tienda";
                           const isEnvio = isWeb && metodoEntrega && ["envio", "envio_a_domicilio", "envio a domicilio"].includes(metodoEntrega);
                           const isRetiro = isWeb && !isEnvio;
 
-                          const origenLabel = isEnvio ? "Web — envío" : isRetiro ? "Web — retiro" : "Local";
+                          const origenLabel = isEnvio ? "Envío" : isRetiro ? "Retiro" : "POS";
+                          const origenDot = isEnvio ? "bg-emerald-600" : isRetiro ? "bg-purple-600" : "bg-blue-600";
                           const origenClass = isEnvio
                             ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                             : isRetiro
                             ? "bg-purple-50 text-purple-800 border border-purple-200"
                             : "bg-blue-50 text-blue-800 border border-blue-200";
+                          const showWeb = isEnvio || isRetiro;
 
                           const montoPagado = (v as any).monto_pagado || 0;
                           const isPagado = montoPagado >= v.total - 1;
@@ -1885,9 +1900,13 @@ export default function CajaPage() {
                                 {(v as any).clientes?.nombre || "—"}
                               </td>
                               <td className="py-2.5 px-3">
-                                <span className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full ${origenClass}`}>
-                                  {origenLabel}
-                                </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full w-fit ${origenClass}`}>
+                                    <span className={`w-1 h-1 rounded-full shrink-0 ${origenDot}`} />
+                                    {origenLabel}
+                                  </span>
+                                  {showWeb && <span className="text-[10px] text-muted-foreground pl-1">Web</span>}
+                                </div>
                               </td>
                               <td className="py-2.5 px-3">
                                 <div className="flex flex-col gap-0.5">
@@ -1912,7 +1931,7 @@ export default function CajaPage() {
                                   {estadoLabel}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-3 text-right font-semibold text-xs">
+                              <td className="py-2.5 px-3 text-right font-medium text-xs">
                                 {formatCurrency(v.total)}
                               </td>
                               <td className="py-2.5 px-1">
@@ -1924,10 +1943,17 @@ export default function CajaPage() {
                       </tbody>
                       <tfoot>
                         <tr className="border-t bg-muted/30">
-                          <td colSpan={5} className="py-2 px-3 text-xs text-muted-foreground">
-                            {ventas.length} ventas ·{" "}
-                            {ventas.filter(v => (v as any).origen !== "tienda").length} local ·{" "}
-                            {ventas.filter(v => (v as any).origen === "tienda").length} web
+                          <td colSpan={5} className="py-2.5 px-3 text-xs text-muted-foreground">
+                            {ventas.filter(v => {
+                              if (ventaOrigenFilter === "todas") return true;
+                              const isWeb = (v as any).origen === "tienda";
+                              const me = (v as any).metodo_entrega;
+                              const isEnvio = isWeb && me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                              if (ventaOrigenFilter === "pos") return !isWeb;
+                              if (ventaOrigenFilter === "envio") return isEnvio;
+                              if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                              return true;
+                            }).length} ventas
                             {ventas.some(v =>
                               (v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") &&
                               !(v as any).cuenta_transferencia_alias
@@ -1940,8 +1966,17 @@ export default function CajaPage() {
                               </span>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-right text-xs font-bold">
-                            {formatCurrency(ventas.reduce((s, v) => s + v.total, 0))}
+                          <td className="py-2.5 px-3 text-right text-xs font-medium">
+                            {formatCurrency(ventas.filter(v => {
+                              if (ventaOrigenFilter === "todas") return true;
+                              const isWeb = (v as any).origen === "tienda";
+                              const me = (v as any).metodo_entrega;
+                              const isEnvio = isWeb && me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                              if (ventaOrigenFilter === "pos") return !isWeb;
+                              if (ventaOrigenFilter === "envio") return isEnvio;
+                              if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                              return true;
+                            }).reduce((s, v) => s + v.total, 0))}
                           </td>
                           <td></td>
                         </tr>
@@ -1951,7 +1986,16 @@ export default function CajaPage() {
 
                   {/* Mobile */}
                   <div className="sm:hidden divide-y">
-                    {ventas.map((v) => (
+                    {ventas.filter(v => {
+                      if (ventaOrigenFilter === "todas") return true;
+                      const isWeb = (v as any).origen === "tienda";
+                      const me = (v as any).metodo_entrega;
+                      const isEnvio = isWeb && me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                      if (ventaOrigenFilter === "pos") return !isWeb;
+                      if (ventaOrigenFilter === "envio") return isEnvio;
+                      if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                      return true;
+                    }).map((v) => (
                       <div
                         key={v.id}
                         className="py-3 px-3 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer"
@@ -1969,7 +2013,7 @@ export default function CajaPage() {
                             {(v as any).clientes?.nombre || "—"}
                           </p>
                         </div>
-                        <span className="font-semibold text-sm shrink-0">{formatCurrency(v.total)}</span>
+                        <span className="font-medium text-sm shrink-0">{formatCurrency(v.total)}</span>
                       </div>
                     ))}
                   </div>
@@ -1978,6 +2022,7 @@ export default function CajaPage() {
             </CardContent>
           </Card>
 
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Movimientos de caja</p>
           {/* Movimientos de Caja */}
           <Card>
             <CardHeader className="pb-3">
@@ -1991,10 +2036,10 @@ export default function CajaPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2.5 px-3 font-medium text-xs">Hora</th>
-                        <th className="text-left py-2.5 px-3 font-medium text-xs">Descripción</th>
-                        <th className="text-left py-2.5 px-3 font-medium text-xs">Método</th>
-                        <th className="text-right py-2.5 px-3 font-medium text-xs">Monto</th>
+                        <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Hora</th>
+                        <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Descripción</th>
+                        <th className="text-left py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Método</th>
+                        <th className="text-right py-2.5 px-3 font-medium text-[10px] uppercase tracking-widest text-muted-foreground">Monto</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2005,7 +2050,7 @@ export default function CajaPage() {
                           <td className="py-2.5 px-3">
                             <Badge variant="secondary" className="text-[10px] font-normal">{m.metodo_pago}</Badge>
                           </td>
-                          <td className={`py-2.5 px-3 text-right font-semibold text-xs ${
+                          <td className={`py-2.5 px-3 text-right font-medium text-xs ${
                             m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"
                           }`}>
                             {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
