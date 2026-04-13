@@ -1812,20 +1812,64 @@ export default function ListadoVentasPage() {
         }).eq("id", ventaId);
         if (ventaErr) errores.push(`Error sync venta: ${ventaErr.message}`);
 
+        // Recuperar costos originales de venta_items antes de eliminarlos
+        const { data: originalVentaItems } = await supabase
+          .from("venta_items")
+          .select("producto_id, presentacion, costo_unitario")
+          .eq("venta_id", ventaId);
+
+        const costoMap: Record<string, number> = {};
+        for (const vi of originalVentaItems || []) {
+          if (vi.costo_unitario > 0) {
+            const key = `${vi.producto_id}_${vi.presentacion || "Unidad"}`;
+            costoMap[key] = vi.costo_unitario;
+          }
+        }
+
+        // Para productos nuevos, buscar costo en la tabla productos
+        const productIdsNuevos = poEditItems
+          .filter(item => {
+            const key = `${item.producto_id}_${item.presentacion || "Unidad"}`;
+            return !costoMap[key];
+          })
+          .map(item => item.producto_id)
+          .filter(Boolean);
+
+        if (productIdsNuevos.length > 0) {
+          const { data: prodData } = await supabase
+            .from("productos")
+            .select("id, costo")
+            .in("id", productIdsNuevos);
+          for (const p of prodData || []) {
+            const matchingItem = poEditItems.find(i => i.producto_id === p.id);
+            if (matchingItem) {
+              const key = `${p.id}_${matchingItem.presentacion || "Unidad"}`;
+              const upp = matchingItem.unidades_por_presentacion || 1;
+              costoMap[key] = (p.costo || 0) * upp;
+            }
+          }
+        }
+
         await supabase.from("venta_items").delete().eq("venta_id", ventaId);
         const { error: viErr } = await supabase.from("venta_items").insert(
-          poEditItems.map((item) => ({
-            venta_id: ventaId,
-            producto_id: item.producto_id,
-            descripcion: (item.presentacion && item.presentacion !== "Unidad" && item.presentacion !== "Un") ? `${item.nombre} (${item.presentacion})` : item.nombre,
-            cantidad: item.cantidad,
-            precio_unitario: item.precio_unitario,
-            subtotal: item.precio_unitario * item.cantidad,
-            unidad_medida: "Un",
-            presentacion: item.presentacion,
-            unidades_por_presentacion: item.unidades_por_presentacion || 1,
-            costo_unitario: item.costo_unitario || 0,
-          }))
+          poEditItems.map((item) => {
+            const key = `${item.producto_id}_${item.presentacion || "Unidad"}`;
+            const costoFinal = costoMap[key] || item.costo_unitario || 0;
+            return {
+              venta_id: ventaId,
+              producto_id: item.producto_id,
+              descripcion: (item.presentacion && item.presentacion !== "Unidad" && item.presentacion !== "Un")
+                ? `${item.nombre} (${item.presentacion})`
+                : item.nombre,
+              cantidad: item.cantidad,
+              precio_unitario: item.precio_unitario,
+              subtotal: item.precio_unitario * item.cantidad,
+              unidad_medida: "Un",
+              presentacion: item.presentacion,
+              unidades_por_presentacion: item.unidades_por_presentacion || 1,
+              costo_unitario: costoFinal,
+            };
+          })
         );
         if (viErr) errores.push(`Error sync venta_items: ${viErr.message}`);
 
