@@ -3592,12 +3592,11 @@ export default function ProductosPage() {
                           newPrecio = Math.round(newCosto * (1 + margin));
                         }
                         setForm({ ...form, costo: newCosto, precio: newPrecio });
-                        const priceRatio = form.precio > 0 ? newPrecio / form.precio : 1;
                         setPresentaciones((prev) =>
                           prev.map((p) => {
                             if (p._deleted) return p;
                             if (p.cantidad === 1) return { ...p, costo: newCosto, precio: newPrecio };
-                            return { ...p, costo: newCosto * p.cantidad, precio: Math.round(p.precio * priceRatio) };
+                            return { ...p, costo: newCosto * p.cantidad, precio: newPrecio * p.cantidad };
                           })
                         );
                       }}
