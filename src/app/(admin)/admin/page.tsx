@@ -414,6 +414,40 @@ export default function DashboardPage() {
     showAdminToast(`${saldoMismatches.length} saldos corregidos`, "success");
   };
 
+  const fetchCharts = useCallback(async (start: string, end: string) => {
+    setChartsLoading(true);
+    try {
+      const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(todayARG() + "T12:00:00");
+        d.setDate(1);
+        d.setMonth(d.getMonth() - i);
+        const year = d.getFullYear(); const month = d.getMonth() + 1;
+        const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
+        const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+        const label = d.toLocaleDateString("es-AR", { month: "short" });
+        monthQueries.push(
+          Promise.all([
+            supabase.from("ventas").select("total, tipo_comprobante").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
+            supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd),
+          ]).then(([{ data: mv }, { data: me }]) => {
+            const regularSales = (mv || []).filter((v: any) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+            const ncSales = (mv || []).filter((v: any) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+            return {
+              name: label,
+              ventas: regularSales.reduce((a: number, v: any) => a + v.total, 0) - ncSales.reduce((a: number, v: any) => a + v.total, 0),
+              egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
+            };
+          })
+        );
+      }
+      const monthlyDataResult = await Promise.all(monthQueries);
+      setMonthlyData(monthlyDataResult);
+    } finally {
+      setChartsLoading(false);
+    }
+  }, []);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -437,41 +471,6 @@ export default function DashboardPage() {
         }));
       }
     });
-
-    // ─── Función para cargar gráficos diferidos ───
-    const fetchCharts = async (start: string, end: string) => {
-      setChartsLoading(true);
-      try {
-        const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
-        for (let i = 5; i >= 0; i--) {
-          const d = new Date(todayARG() + "T12:00:00");
-          d.setDate(1);
-          d.setMonth(d.getMonth() - i);
-          const year = d.getFullYear(); const month = d.getMonth() + 1;
-          const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
-          const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-          const label = d.toLocaleDateString("es-AR", { month: "short" });
-          monthQueries.push(
-            Promise.all([
-              supabase.from("ventas").select("total, tipo_comprobante").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
-              supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd),
-            ]).then(([{ data: mv }, { data: me }]) => {
-              const regularSales = (mv || []).filter((v: any) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-              const ncSales = (mv || []).filter((v: any) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-              return {
-                name: label,
-                ventas: regularSales.reduce((a: number, v: any) => a + v.total, 0) - ncSales.reduce((a: number, v: any) => a + v.total, 0),
-                egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
-              };
-            })
-          );
-        }
-        const monthlyDataResult = await Promise.all(monthQueries);
-        setMonthlyData(monthlyDataResult);
-      } finally {
-        setChartsLoading(false);
-      }
-    };
 
     // ─── All independent queries in parallel (including turno + últimas ventas) ───
     const [
@@ -632,7 +631,7 @@ export default function DashboardPage() {
       const { start: chartStart, end: chartEnd } = getDateRange();
       fetchCharts(chartStart, chartEnd);
     }
-  }, [getDateRange, fetchPedidosOnline]);
+  }, [getDateRange, fetchPedidosOnline, fetchCharts]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
