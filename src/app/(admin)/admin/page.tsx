@@ -171,6 +171,7 @@ export default function DashboardPage() {
   const currentUser = useCurrentUser();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [chartsLoading, setChartsLoading] = useState(true);
 
   // ─── Filter state ───
   const [filterMode, setFilterMode] = useState<FilterMode>("diario");
@@ -437,32 +438,40 @@ export default function DashboardPage() {
       }
     });
 
-    // ─── Build month chart queries (6 months, each fires 2 parallel requests) ───
-    const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
-    for (let i = 5; i >= 0; i--) {
-      // Use day=1 to avoid setMonth overflow (e.g. Mar 31 → setMonth(-1) skips Feb)
-      const d = new Date(todayARG() + "T12:00:00");
-      d.setDate(1); // set to 1st before changing month to prevent overflow
-      d.setMonth(d.getMonth() - i);
-      const year = d.getFullYear(); const month = d.getMonth() + 1;
-      const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
-      const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-      const label = d.toLocaleDateString("es-AR", { month: "short" });
-      monthQueries.push(
-        Promise.all([
-          supabase.from("ventas").select("total, tipo_comprobante").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
-          supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd),
-        ]).then(([{ data: mv }, { data: me }]) => {
-          const regularSales = (mv || []).filter((v: any) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-          const ncSales = (mv || []).filter((v: any) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-          return {
-            name: label,
-            ventas: regularSales.reduce((a: number, v: any) => a + v.total, 0) - ncSales.reduce((a: number, v: any) => a + v.total, 0),
-            egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
-          };
-        })
-      );
-    }
+    // ─── Función para cargar gráficos diferidos ───
+    const fetchCharts = async (start: string, end: string) => {
+      setChartsLoading(true);
+      try {
+        const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(todayARG() + "T12:00:00");
+          d.setDate(1);
+          d.setMonth(d.getMonth() - i);
+          const year = d.getFullYear(); const month = d.getMonth() + 1;
+          const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
+          const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+          const label = d.toLocaleDateString("es-AR", { month: "short" });
+          monthQueries.push(
+            Promise.all([
+              supabase.from("ventas").select("total, tipo_comprobante").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
+              supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd),
+            ]).then(([{ data: mv }, { data: me }]) => {
+              const regularSales = (mv || []).filter((v: any) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+              const ncSales = (mv || []).filter((v: any) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
+              return {
+                name: label,
+                ventas: regularSales.reduce((a: number, v: any) => a + v.total, 0) - ncSales.reduce((a: number, v: any) => a + v.total, 0),
+                egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
+              };
+            })
+          );
+        }
+        const monthlyDataResult = await Promise.all(monthQueries);
+        setMonthlyData(monthlyDataResult);
+      } finally {
+        setChartsLoading(false);
+      }
+    };
 
     // ─── All independent queries in parallel (including turno + últimas ventas) ───
     const [
@@ -474,7 +483,6 @@ export default function DashboardPage() {
       { data: provs },
       { data: ccSums },
       { data: ventasCat },
-      monthlyDataResult,
       { data: turnoData },
       { data: ultimasVentasRaw },
       // fetchPedidosOnline runs in parallel too
@@ -487,7 +495,6 @@ export default function DashboardPage() {
       supabase.from("proveedores").select("saldo").eq("activo", true),
       supabase.from("cuenta_corriente").select("cliente_id, debe, haber"),
       supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada"),
-      Promise.all(monthQueries),
       supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1),
       supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").not("tipo_comprobante", "ilike", "Nota de Crédito%").not("tipo_comprobante", "ilike", "Nota de Débito%").order("created_at", { ascending: false }).limit(8),
     ]);
@@ -552,8 +559,8 @@ export default function DashboardPage() {
       setSaldoMismatches(mismatches);
     }
 
-    // ─── Monthly chart ───
-    setMonthlyData(monthlyDataResult);
+    // ─── Monthly chart: carga diferida ───
+    // (se carga en segundo plano después de mostrar el dashboard)
 
     // ─── Ventas por categoria ───
     const catMap: Record<string, number> = {};
@@ -621,6 +628,9 @@ export default function DashboardPage() {
       showAdminToast("Error cargando el dashboard", "error");
     } finally {
       setLoading(false);
+      // Cargar gráficos en segundo plano sin bloquear la UI
+      const { start: chartStart, end: chartEnd } = getDateRange();
+      fetchCharts(chartStart, chartEnd);
     }
   }, [getDateRange, fetchPedidosOnline]);
 
@@ -1205,12 +1215,20 @@ export default function DashboardPage() {
                 <CardTitle className="text-[15px]">Ventas vs Gastos</CardTitle>
                 <span className="text-xs text-muted-foreground">Últimos 6 meses</span>
               </CardHeader>
-              <CardContent><div className="h-[250px]" style={{ minWidth: 0 }}><ResponsiveContainer width="100%" height="100%" minWidth={0}><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.65 0.18 160)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></CardContent>
+              <CardContent>{chartsLoading ? (
+                <div className="h-[250px] flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (<div className="h-[250px]" style={{ minWidth: 0 }}><ResponsiveContainer width="100%" height="100%" minWidth={0}><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.65 0.18 160)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>)}</CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-[15px]">Formas de Pago</CardTitle></CardHeader>
               <CardContent>
-                {paymentBreakdown.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p> : (
+                {chartsLoading ? (
+                <div className="h-[180px] flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : paymentBreakdown.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p> : (
                   <>
                     <div className="h-[180px]" style={{ minWidth: 0 }}><ResponsiveContainer width="100%" height="100%" minWidth={0}><PieChart><Pie data={paymentBreakdown} innerRadius={50} outerRadius={75} dataKey="value" stroke="none">{paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /></PieChart></ResponsiveContainer></div>
                     <div className="space-y-2 mt-2">{paymentBreakdown.map((m, i) => (<div key={m.name} className="flex items-center justify-between text-[13px]"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span className="text-muted-foreground">{m.name}</span></div><span className="font-medium">{formatCurrency(m.value)}</span></div>))}</div>
