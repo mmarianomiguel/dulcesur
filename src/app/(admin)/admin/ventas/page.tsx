@@ -1407,42 +1407,42 @@ export default function VentasPage() {
   // ---------- fetch client addresses ----------
   const fetchClientAddresses = async (cId: string) => {
     const addresses: ClienteDireccion[] = [];
+    const cliente = clients.find((c) => c.id === cId);
 
-    // 1. Check if there's a clientes_auth linked to this client, and get their direcciones
+    // Usar maybeSingle en lugar de single para evitar error cuando no hay clientes_auth
     const { data: authData } = await supabase
       .from("clientes_auth")
       .select("id")
       .eq("cliente_id", cId)
       .limit(1)
-      .single();
+      .maybeSingle();
+
     if (authData) {
       const { data } = await supabase
         .from("cliente_direcciones")
         .select("*")
-        .eq("cliente_auth_id", authData.id);
-      if (data) addresses.push(...(data as ClienteDireccion[]));
+        .eq("cliente_auth_id", authData.id)
+        .order("predeterminada", { ascending: false });
+      if (data && data.length > 0) addresses.push(...(data as ClienteDireccion[]));
     }
 
-    // 2. Use domicilio from clientes table as fallback if no addresses found
-    if (addresses.length === 0) {
-      const cliente = clients.find((c) => c.id === cId);
-      if (cliente?.domicilio) {
-        addresses.push({
-          id: "domicilio-principal",
-          cliente_auth_id: "",
-          nombre: "Domicilio principal",
-          direccion: `${cliente.domicilio}${cliente.localidad ? `, ${cliente.localidad}` : ""}${cliente.provincia ? `, ${cliente.provincia}` : ""}`,
-          ciudad: cliente.localidad || "",
-          provincia: cliente.provincia || "",
-          codigo_postal: cliente.codigo_postal || "",
-          telefono: cliente.telefono || "",
-          predeterminada: true,
-        });
-      }
+    // Fallback: domicilio del cliente si no tiene direcciones registradas
+    if (addresses.length === 0 && cliente?.domicilio) {
+      addresses.push({
+        id: "domicilio-principal",
+        cliente_auth_id: "",
+        nombre: "Domicilio principal",
+        direccion: `${cliente.domicilio}${cliente.localidad ? `, ${cliente.localidad}` : ""}${cliente.provincia ? `, ${cliente.provincia}` : ""}`,
+        ciudad: cliente.localidad || "",
+        provincia: cliente.provincia || "",
+        codigo_postal: (cliente as any).codigo_postal || "",
+        telefono: cliente.telefono || "",
+        predeterminada: true,
+      });
     }
 
     setClientAddresses(addresses);
-    const def = addresses.find((a) => a.predeterminada);
+    const def = addresses.find((a) => a.predeterminada) || addresses[0];
     if (def) setSelectedAddressId(def.id);
   };
 
@@ -2132,6 +2132,11 @@ export default function VentasPage() {
       e.preventDefault();
       if (filteredClients[clientHighlight]) {
         setClientId(filteredClients[clientHighlight].id);
+        setClientAddresses([]);
+        setSelectedAddressId("");
+        setDeliveryMethod("pickup");
+        setCobrarEnEntrega(false);
+        setDespacho("Retira en local");
         setClientDialogOpen(false);
         setClientSearch("");
         if (codigoClienteRef.current) codigoClienteRef.current.value = (filteredClients[clientHighlight] as any).codigo_cliente || "";
@@ -3169,6 +3174,11 @@ export default function VentasPage() {
                 }`}
                 onClick={() => {
                   setClientId(c.id);
+                  setClientAddresses([]);
+                  setSelectedAddressId("");
+                  setDeliveryMethod("pickup");
+                  setCobrarEnEntrega(false);
+                  setDespacho("Retira en local");
                   setClientDialogOpen(false);
                   setClientSearch("");
                   if (codigoClienteRef.current) codigoClienteRef.current.value = (c as any).codigo_cliente || "";
