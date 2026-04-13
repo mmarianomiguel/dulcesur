@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import TiendaNavbar from "@/components/tienda/navbar";
 import TiendaFooter from "@/components/tienda/footer";
 import { CartProvider } from "@/components/tienda/cart-drawer";
@@ -26,15 +27,20 @@ export const viewport = {
 export default function TiendaLayout({ children }: { children: React.ReactNode }) {
   return (
     <CartProvider>
-      <div className="flex min-h-screen flex-col bg-white">
-        <AdminBanner />
-        <TiendaNavbar />
-        <main className="flex-1 min-h-[60vh]">{children}</main>
-        <TiendaFooter />
-        <ToastContainer />
-        <WhatsAppFloat />
-        <ScrollToTop />
-      </div>
+      <>
+        {/* Preconnect hints para recursos críticos */}
+        <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+        <div className="flex min-h-screen flex-col bg-white">
+          <AdminBanner />
+          <TiendaNavbar />
+          <main className="flex-1 min-h-[60vh]">{children}</main>
+          <TiendaFooter />
+          <ToastContainer />
+          <WhatsAppFloat />
+          <ScrollToTop />
+        </div>
+      </>
     </CartProvider>
   );
 }

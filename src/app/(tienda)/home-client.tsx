@@ -377,7 +377,7 @@ function ProductosDestacadosBlock({
         <Link href={`/productos/${productSlug(prod.nombre, prod.id)}`}>
           <div className="relative aspect-square bg-gray-50 overflow-hidden">
             {prod.imagen_url ? (
-              <Image src={prod.imagen_url} alt={prod.nombre} fill sizes="(max-width: 768px) 50vw, 25vw" {...(isPriority ? { priority: true } : { loading: "lazy" })} className="card-product-img object-contain p-4" />
+              <Image src={prod.imagen_url} alt={prod.nombre} fill sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 20vw" {...(isPriority ? { priority: true } : { loading: "lazy" })} className="card-product-img object-contain p-4" />
             ) : (
               <div className="w-full h-full flex items-center justify-center"><Package className="w-12 h-12 text-gray-300" /></div>
             )}
@@ -536,7 +536,7 @@ function AumentosRecientesBlock({ productos: initialData = [] }: { productos?: a
                       src={prod.imagen_url}
                       alt={prod.nombre}
                       fill
-                      sizes="(max-width: 768px) 50vw, 25vw"
+                      sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 20vw"
                       loading="lazy"
                       className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                     />
@@ -612,7 +612,7 @@ function MasVendidosBlock({ config, productos: initialData = [] }: { config: Rec
                     src={prod.imagen_url}
                     alt={prod.nombre}
                     fill
-                    sizes="(max-width: 768px) 50vw, 25vw"
+                    sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 20vw"
                     loading="lazy"
                     className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                   />
@@ -679,7 +679,7 @@ function UltimasUnidadesBlock({ config, productos: initialData = [] }: { config:
                     src={prod.imagen_url}
                     alt={prod.nombre}
                     fill
-                    sizes="(max-width: 768px) 50vw, 25vw"
+                    sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 20vw"
                     loading="lazy"
                     className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                   />
