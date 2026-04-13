@@ -2185,9 +2185,27 @@ export default function HojaDeRutaPage() {
             const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
             const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
-            // totalDebeGrupo ya calcula total - pagadoPorVenta por venta
-            // Solo falta restar NCs para el monto base del cobro
-            const preDebeGrupo = Math.max(0, totalDebeGrupo - totalNCGrupo);
+
+            // Calcular subtotal SIN recargo para pasarle al CobroVentaSection.
+            // vt.total puede incluir el recargo de transferencia (guardado en DB),
+            // así que hay que revertirlo para que el componente no lo duplique.
+            // Si hay items disponibles, usar la suma de sus subtotales (más preciso).
+            // Si no, revertir matemáticamente dividiendo por (1 + recargo/100).
+            const subtotalSinRecargo = allVentas.reduce((s, vt) => {
+              const items = vt.venta_items;
+              if (items && items.length > 0) {
+                return s + items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
+              }
+              // Fallback: revertir recargo si la forma de pago es transferencia
+              const fp = (vt.forma_pago || "").toLowerCase();
+              const tieneRecargo = fp === "transferencia" && porcentajeTransferencia > 0;
+              const baseTotal = vt.total - (pagadoPorVenta[vt.id] || 0);
+              return s + (tieneRecargo
+                ? Math.round((baseTotal / (1 + porcentajeTransferencia / 100)) * 100) / 100
+                : baseTotal);
+            }, 0);
+
+            const preDebeGrupo = Math.max(0, subtotalSinRecargo - totalNCGrupo);
             return (
               <div className="space-y-4">
                 {/* Summary header */}
@@ -2221,7 +2239,7 @@ export default function HojaDeRutaPage() {
                   clienteNombre={payVenta.clientes?.nombre || ""}
                   clienteSaldo={payVenta.clientes?.saldo || 0}
                   montoVenta={preDebeGrupo}
-                  subtotalItems={preDebeGrupo}
+                  subtotalItems={subtotalSinRecargo}
                   costoEnvio={0}
                   recargoTransferencia={porcentajeTransferencia}
                   cuentasBancarias={cuentasBancarias.map(c => ({ id: c.id, nombre: c.nombre, alias: (c as any).alias || "" }))}
