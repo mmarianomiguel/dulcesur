@@ -10,8 +10,8 @@ const nextConfig: NextConfig = {
     loaderFile: "./src/lib/cloudinary-loader.ts",
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 3600,
-    deviceSizes: [640, 750, 828, 1080, 1200],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    deviceSizes: [256, 384, 640, 750, 828, 1080, 1200],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 320],
     remotePatterns: [
       {
         protocol: "https",
@@ -42,6 +42,9 @@ const nextConfig: NextConfig = {
     ];
   },
 };
+
+// Target modern browsers only — elimina polyfills innecesarios
+process.env.BROWSERSLIST = "chrome >= 90, firefox >= 90, safari >= 14, edge >= 90";
 
 export default nextConfig;
  
