@@ -1616,13 +1616,7 @@ export default function VentasPage() {
         monto_pagado: cobrarEnEntrega
           ? 0
           : formaPago === "Efectivo" || formaPago === "Transferencia"
-            ? (() => {
-                if (cobrarSaldo && saldoRealAntesDeTodo > 0) {
-                  // Part of the payment goes to old debt
-                  return Math.max(0, Math.round((total - saldoRealAntesDeTodo) * 100) / 100);
-                }
-                return total;
-              })()
+            ? total  // la venta nueva siempre queda pagada (saldo viejo es deuda separada)
             : formaPago === "Mixto"
               ? (() => {
                   const cashForAll = mixtoEfectivo + mixtoTransferencia + transferSurcharge;
