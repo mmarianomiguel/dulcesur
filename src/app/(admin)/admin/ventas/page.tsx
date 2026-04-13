@@ -316,7 +316,7 @@ export default function VentasPage() {
     // Single batch: all data in one Promise.all
     const [{ data: prods1 }, { data: prods2 }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData },
            { data: allComboItems }, { data: descuentosData }, { data: presData1 }, { data: presData2 },
-           { data: empData }, { data: tcData }] = await Promise.all([
+           { data: empData }, { data: tcData }, { data: cuentasData }] = await Promise.all([
       supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(0, 999),
       supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(1000, 2999),
       supabase.from("clientes").select("id, codigo_cliente, nombre, email, telefono, saldo, situacion_iva, tipo_factura, tipo_documento, numero_documento, cuit, razon_social, domicilio, domicilio_comercial, domicilio_fiscal, localidad, provincia, codigo_postal, barrio, vendedor_id, observacion, zona_entrega, limite_credito").eq("activo", true).order("nombre"),
@@ -329,6 +329,7 @@ export default function VentasPage() {
       supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, costo, sku").order("id").range(1000, 2999),
       supabase.from("empresa").select("nombre, domicilio, telefono, cuit, situacion_iva, receipt_config").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, url_tienda").limit(1).single(),
+      supabase.from("cuentas_bancarias").select("id, nombre, tipo_cuenta, cbu_cvu, alias, origen, logo_url, titular").eq("activo", true).order("nombre"),
     ]);
     const prods = [...(prods1 || []), ...(prods2 || [])];
     const presData = [...(presData1 || []), ...(presData2 || [])];
@@ -392,6 +393,15 @@ export default function VentasPage() {
         empresaWeb: prev.empresaWeb || (tcData as any).url_tienda || "",
       }));
     }
+    // Cuentas bancarias
+    if (cuentasData && cuentasData.length > 0) {
+      setCuentasBancarias(cuentasData as CuentaBancaria[]);
+    } else {
+      try {
+        const stored = localStorage.getItem("cuentas_bancarias");
+        if (stored) setCuentasBancarias(JSON.parse(stored));
+      } catch {}
+    }
   }, []);
 
   useEffect(() => {
@@ -400,27 +410,19 @@ export default function VentasPage() {
     supabase.from("turnos_caja").select("id").eq("estado", "abierto").limit(1).then(({ data }) => {
       setCajaAbierta(data && data.length > 0);
     });
-    // Light refresh on tab focus: only products + presentaciones
-    const onFocus = () => refreshProducts();
+    // Light refresh on tab focus: only if >5 min since last refresh
+    let lastRefresh = Date.now();
+    const onFocus = () => {
+      if (Date.now() - lastRefresh > 5 * 60 * 1000) {
+        lastRefresh = Date.now();
+        refreshProducts();
+      }
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [fetchData, refreshProducts]);
 
-  // Load bank accounts from localStorage
-  useEffect(() => {
-    (async () => {
-      // Load bank accounts from DB (own + provider accounts)
-      const { data } = await supabase.from("cuentas_bancarias").select("id, nombre, tipo_cuenta, cbu_cvu, alias, origen, logo_url, titular").eq("activo", true).order("nombre");
-      if (data && data.length > 0) {
-        setCuentasBancarias(data as CuentaBancaria[]);
-      } else {
-        try {
-          const stored = localStorage.getItem("cuentas_bancarias");
-          if (stored) setCuentasBancarias(JSON.parse(stored));
-        } catch {}
-      }
-    })();
-  }, []);
+  // Cuentas bancarias se cargan dentro de fetchData
 
   // Auto-print receipt when sale is finalized
   useEffect(() => {
@@ -2057,7 +2059,8 @@ export default function VentasPage() {
         });
 
         resetSale();
-        fetchData();
+        // Solo refrescar stock, no todo fetchData (más rápido)
+        refreshProducts();
         const modalData = { open: true, ...saleData, pdfUrl: null };
         setSuccessModal(modalData);
         setLastPrintData(modalData);
