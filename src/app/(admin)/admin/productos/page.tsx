@@ -394,6 +394,8 @@ export default function ProductosPage() {
     const costoTotal = comboItems.reduce((a, i) => a + (i.producto?.costo || 0) * i.cantidad, 0);
     setForm((prev) => ({ ...prev, costo: costoTotal }));
   }, [comboItems, isCombo]);
+  // Margen as stored state (not computed inline) so it stays stable while editing other fields
+  const [margen, setMargen] = useState(0);
   const [comboProductSearch, setComboProductSearch] = useState("");
   const [selectedComboRow, setSelectedComboRow] = useState<string | null>(null);
   const [presCodigoMap, setPresCodigoMap] = useState<Record<string, { codigo: string }[]>>({});
@@ -593,6 +595,7 @@ export default function ProductosPage() {
       precio_oferta_hasta: undefined,
       tags: [],
     });
+    setMargen(0);
     setShowOfertaForm(false);
     setSelectedProveedores([]);
     setPresentaciones([]);
@@ -704,6 +707,7 @@ export default function ProductosPage() {
       precio_oferta_hasta: (p as any).precio_oferta_hasta || undefined,
       tags: (p as any).tags || [],
     });
+    setMargen(p.costo > 0 ? Math.round(((p.precio - p.costo) / p.costo) * 1000) / 10 : 0);
     setShowOfertaForm(!!((p as any).precio_oferta && (p as any).precio_oferta > 0));
     setShowDescription(!!(p.descripcion_detallada));
     setIsCombo(!!(p as any).es_combo);
@@ -1029,6 +1033,7 @@ export default function ProductosPage() {
       precio_oferta_hasta: undefined,
       tags: (p as any).tags || [],
     });
+    setMargen(p.costo > 0 ? Math.round(((p.precio - p.costo) / p.costo) * 1000) / 10 : 0);
     setShowOfertaForm(false);
     setShowDescription(!!(p.descripcion_detallada));
 
@@ -3583,20 +3588,15 @@ export default function ProductosPage() {
                     <MoneyInput
                       min={0}
                       value={form.costo}
-                      onValueChange={(v) => {
-                        const newCosto = Math.max(0, v);
-                        const oldCosto = form.costo || 0;
-                        let newPrecio = form.precio;
-                        if (oldCosto > 0) {
-                          const margin = (form.precio - oldCosto) / oldCosto;
-                          newPrecio = Math.round(newCosto * (1 + margin));
-                        }
-                        setForm({ ...form, costo: newCosto, precio: newPrecio });
+                      onValueChange={(v) => setForm((f) => ({ ...f, costo: Math.max(0, v) }))}
+                      onBlur={() => {
+                        const newPrecio = Math.round(form.costo * (1 + margen / 100));
+                        setForm((f) => ({ ...f, precio: newPrecio }));
                         setPresentaciones((prev) =>
                           prev.map((p) => {
                             if (p._deleted) return p;
-                            if (p.cantidad === 1) return { ...p, costo: newCosto, precio: newPrecio };
-                            return { ...p, costo: newCosto * p.cantidad, precio: newPrecio * p.cantidad };
+                            if (p.cantidad === 1) return { ...p, costo: form.costo, precio: newPrecio };
+                            return { ...p, costo: form.costo * p.cantidad, precio: newPrecio * p.cantidad };
                           })
                         );
                       }}
@@ -3617,14 +3617,16 @@ export default function ProductosPage() {
                     <MoneyInput
                       min={0}
                       value={form.precio}
-                      onValueChange={(v) => {
-                        const newPrecio = Math.max(0, v);
-                        setForm({ ...form, precio: newPrecio });
+                      onValueChange={(v) => setForm((f) => ({ ...f, precio: Math.max(0, v) }))}
+                      onBlur={() => {
+                        if (form.costo > 0) {
+                          setMargen(Math.round(((form.precio - form.costo) / form.costo) * 1000) / 10);
+                        }
                         setPresentaciones((prev) =>
                           prev.map((p) => {
                             if (p._deleted) return p;
-                            if (p.cantidad === 1) return { ...p, precio: newPrecio };
-                            return { ...p, precio: newPrecio * p.cantidad };
+                            if (p.cantidad === 1) return { ...p, precio: form.precio };
+                            return { ...p, precio: form.precio * p.cantidad };
                           })
                         );
                       }}
@@ -3646,11 +3648,11 @@ export default function ProductosPage() {
                         <Input
                           type="number"
                           step="0.1"
-                          value={Math.round(((form.precio - form.costo) / form.costo) * 1000) / 10}
-                          onChange={(e) => {
-                            const newMargen = Number(e.target.value);
-                            const newPrecio = Math.round(form.costo * (1 + newMargen / 100));
-                            setForm({ ...form, precio: newPrecio });
+                          value={margen}
+                          onChange={(e) => setMargen(Number(e.target.value))}
+                          onBlur={() => {
+                            const newPrecio = Math.round(form.costo * (1 + margen / 100));
+                            setForm((f) => ({ ...f, precio: newPrecio }));
                             setPresentaciones((prev) =>
                               prev.map((p) => {
                                 if (p._deleted) return p;

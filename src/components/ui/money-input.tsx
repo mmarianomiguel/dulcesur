@@ -28,7 +28,7 @@ interface MoneyInputProps extends Omit<React.ComponentProps<"input">, "value" | 
   max?: number;
 }
 
-function MoneyInput({ className, value, onValueChange, min, max, ...props }: MoneyInputProps) {
+function MoneyInput({ className, value, onValueChange, min, max, onBlur: externalOnBlur, onFocus: externalOnFocus, ...props }: MoneyInputProps) {
   const [display, setDisplay] = React.useState(() => formatDisplay(value));
   const [focused, setFocused] = React.useState(false);
 
@@ -51,17 +51,19 @@ function MoneyInput({ className, value, onValueChange, min, max, ...props }: Mon
     onValueChange(clamped);
   };
 
-  const handleFocus = () => {
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     setFocused(true);
     // Show raw number for easier editing
     if (value !== 0) {
       setDisplay(value.toString().replace(".", ","));
     }
+    externalOnFocus?.(e);
   };
 
-  const handleBlur = () => {
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     setFocused(false);
     setDisplay(formatDisplay(value));
+    externalOnBlur?.(e);
   };
 
   return (
