@@ -1801,22 +1801,15 @@ export default function ListadoVentasPage() {
           ? (await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).maybeSingle()).data?.id
           : null);
 
-      console.log("[poHandleSave] ventaId:", ventaId, "| knownVentaId:", knownVentaId, "| isHistorial:", isHistorial);
-      console.log("[poHandleSave] nuevoSubtotal:", nuevoSubtotal, "| nuevoTotalBase:", nuevoTotalBase, "| surcharge:", nuevoTransferSurcharge, "| nuevoTotal:", nuevoTotal);
-      console.log("[poHandleSave] ventaFormaPago:", ventaFormaPago, "| pctTransfer:", pctTransfer);
-
       if (ventaId) {
         const { data: ventaData } = await supabase.from("ventas").select("total, cliente_id, forma_pago").eq("id", ventaId).single();
         const totalAnterior = ventaData?.total || 0;
         const diferencia = nuevoTotal - totalAnterior;
 
-        console.log("[poHandleSave] totalAnterior:", totalAnterior, "| diferencia:", diferencia);
-
-        const { error: ventaErr, data: ventaUpdateResult } = await supabase.from("ventas").update({
+        const { error: ventaErr } = await supabase.from("ventas").update({
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
-        }).eq("id", ventaId).select();
-        console.log("[poHandleSave] ventaUpdateResult:", ventaUpdateResult, "| ventaErr:", ventaErr);
+        }).eq("id", ventaId);
         if (ventaErr) errores.push(`Error sync venta: ${ventaErr.message}`);
 
         await supabase.from("venta_items").delete().eq("venta_id", ventaId);
@@ -1889,8 +1882,6 @@ export default function ListadoVentasPage() {
             }
           }
         }
-      } else {
-        console.warn("[poHandleSave] ventaId is null — venta NOT updated! numero:", poSelectedPedido.numero, "_ventaId:", poSelectedPedido._ventaId);
       }
 
       if (errores.length > 0) {
