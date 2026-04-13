@@ -257,19 +257,16 @@ export default function VendedoresPage() {
       const items = itemsByVenta[venta.id] || [];
       const vendExcl = exclMap[vid] || new Set<string>();
 
-      // Sum all item subtotals to get the ratio for distributing venta.total
-      const itemsTotal = items.reduce((a, i) => a + i.subtotal, 0);
-      const ratio = itemsTotal > 0 ? ventaTotal / (itemsTotal * sign) : 1;
-
+      // Usar subtotal real del item sin ajustar por descuentos/recargos globales
       let comisionable = 0;
       for (const item of items) {
-        const adjustedSubtotal = item.subtotal * ratio * sign;
+        const itemSubtotal = item.subtotal * sign;
         const catId = item.producto_id ? productCategories[item.producto_id] : null;
         if (catId && vendExcl.has(catId)) {
-          summary[vid].excluidoPorCategoria[catId] = (summary[vid].excluidoPorCategoria[catId] || 0) + adjustedSubtotal;
+          summary[vid].excluidoPorCategoria[catId] = (summary[vid].excluidoPorCategoria[catId] || 0) + itemSubtotal;
           continue;
         }
-        comisionable += adjustedSubtotal;
+        comisionable += itemSubtotal;
       }
       summary[vid].comisionable += comisionable;
     }
@@ -371,15 +368,12 @@ export default function VendedoresPage() {
       const sign = isNC ? -1 : 1;
       const items = itemsByVenta[v.id] || [];
 
-      // Distribute venta.total proportionally across items (accounts for discounts/surcharges)
-      const itemsTotal = items.reduce((a, i) => a + i.subtotal, 0);
-      const ratio = itemsTotal > 0 ? v.total / itemsTotal : 1;
-
+      // Usar subtotal real del item sin ajustar por descuentos/recargos globales
       let comisionable = 0;
       for (const item of items) {
         const catId = item.producto_id ? productCategories[item.producto_id] : null;
         if (catId && vendExcl.has(catId)) continue;
-        comisionable += item.subtotal * ratio;
+        comisionable += item.subtotal;
       }
       const comision = comisionable * (comisionPct / 100) * sign;
 
