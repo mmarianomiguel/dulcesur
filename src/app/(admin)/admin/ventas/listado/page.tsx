@@ -907,7 +907,15 @@ export default function ListadoVentasPage() {
     const hora = nowTimeARG();
     let ventaId = (poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id;
     if (!ventaId) {
-      const { data: v } = await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).single();
+      const { data: v } = await supabase
+        .from("ventas")
+        .select("id")
+        .eq("numero", poSelectedPedido.numero)
+        .not("tipo_comprobante", "ilike", "Factura%")
+        .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
       ventaId = v?.id;
     }
     if (!ventaId) {
@@ -1798,7 +1806,16 @@ export default function ListadoVentasPage() {
       // when multiple ventas share the same numero (e.g., remito + factura)
       const ventaId = knownVentaId
         || (poSelectedPedido.numero
-          ? (await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).maybeSingle()).data?.id
+          ? (await supabase
+              .from("ventas")
+              .select("id")
+              .eq("numero", poSelectedPedido.numero)
+              .not("tipo_comprobante", "ilike", "Factura%")
+              .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle()
+            ).data?.id
           : null);
 
       if (ventaId) {
@@ -1965,7 +1982,15 @@ export default function ListadoVentasPage() {
     if (pedido._ventaId) {
       ventaLinked = { id: pedido._ventaId, cliente_id: pedido._clienteId || null };
     } else if (pedido.numero) {
-      const { data } = await supabase.from("ventas").select("id, cliente_id").eq("numero", pedido.numero).maybeSingle();
+      const { data } = await supabase
+        .from("ventas")
+        .select("id, cliente_id")
+        .eq("numero", pedido.numero)
+        .not("tipo_comprobante", "ilike", "Factura%")
+        .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
       ventaLinked = data as typeof ventaLinked;
     }
 
