@@ -2564,8 +2564,8 @@ export default function ProductosPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const ids = Array.from(selected).join(",");
-                  window.location.href = `/admin/productos/editar-precios?ids=${ids}`;
+                  sessionStorage.setItem("bulkEditIds", JSON.stringify(Array.from(selected)));
+                  window.location.href = "/admin/productos/editar-precios";
                 }}
               >
                 <Edit className="w-4 h-4 mr-2" />
@@ -4822,7 +4822,8 @@ export default function ProductosPage() {
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
               onClick={() => {
                 const p = contextMenu.product;
-                window.location.href = `/admin/productos/editar-precios?ids=${p.id}`;
+                sessionStorage.setItem("bulkEditIds", JSON.stringify([p.id]));
+                window.location.href = "/admin/productos/editar-precios";
                 setContextMenu(null);
               }}
             >

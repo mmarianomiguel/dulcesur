@@ -221,8 +221,14 @@ export default function EditarPreciosPage() {
   const [preFilterIds, setPreFilterIds] = useState<Set<string> | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const ids = params.get("ids");
-    if (ids) setPreFilterIds(new Set(ids.split(",")));
+    const idsFromUrl = params.get("ids");
+    const idsFromStorage = sessionStorage.getItem("bulkEditIds");
+    sessionStorage.removeItem("bulkEditIds");
+    if (idsFromUrl) {
+      setPreFilterIds(new Set(idsFromUrl.split(",")));
+    } else if (idsFromStorage) {
+      setPreFilterIds(new Set(JSON.parse(idsFromStorage)));
+    }
   }, []);
 
   // Filters
