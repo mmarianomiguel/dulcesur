@@ -62,7 +62,21 @@ export default function PedidosConfigPage() {
       .limit(1)
       .single();
     if (cfg) {
-      setConfig(cfg as TiendaConfig);
+      // Normalizar campos de array: pueden venir como string, null, o array desde Supabase
+      const normalized = {
+        ...cfg,
+        dias_entrega: Array.isArray(cfg.dias_entrega)
+          ? cfg.dias_entrega
+          : typeof cfg.dias_entrega === "string" && cfg.dias_entrega
+          ? JSON.parse(cfg.dias_entrega)
+          : [],
+        dias_atencion: Array.isArray(cfg.dias_atencion)
+          ? cfg.dias_atencion
+          : typeof cfg.dias_atencion === "string" && cfg.dias_atencion
+          ? JSON.parse(cfg.dias_atencion)
+          : [],
+      };
+      setConfig(normalized as TiendaConfig);
     }
     setLoading(false);
   }, []);
@@ -77,9 +91,10 @@ export default function PedidosConfigPage() {
 
   const toggleDia = (dia: string) => {
     if (!config) return;
-    const dias = config.dias_entrega.includes(dia)
-      ? config.dias_entrega.filter((d) => d !== dia)
-      : [...config.dias_entrega, dia];
+    const current = Array.isArray(config.dias_entrega) ? config.dias_entrega : [];
+    const dias = current.includes(dia)
+      ? current.filter((d) => d !== dia)
+      : [...current, dia];
     update("dias_entrega", dias);
   };
 
@@ -215,7 +230,7 @@ export default function PedidosConfigPage() {
         <CardContent className="space-y-2">
           <div className="flex flex-wrap gap-2">
             {DIAS_SEMANA.map((dia) => {
-              const selected = config?.dias_entrega?.includes(dia) ?? false;
+              const selected = Array.isArray(config?.dias_entrega) && config.dias_entrega.includes(dia);
               return (
                 <button
                   key={dia}
@@ -316,13 +331,13 @@ export default function PedidosConfigPage() {
               <Label className="text-xs text-muted-foreground font-normal">Días de atención</Label>
               <div className="flex flex-wrap gap-2">
                 {["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].map((dia) => {
-                  const selected = config?.dias_atencion?.includes(dia) ?? false;
+                  const selected = Array.isArray(config?.dias_atencion) && config.dias_atencion.includes(dia);
                   return (
                     <button
                       key={dia}
                       type="button"
                       onClick={() => {
-                        const current = config?.dias_atencion || [];
+                        const current = Array.isArray(config?.dias_atencion) ? config.dias_atencion : [];
                         const next = selected
                           ? current.filter((d) => d !== dia)
                           : [...current, dia];
