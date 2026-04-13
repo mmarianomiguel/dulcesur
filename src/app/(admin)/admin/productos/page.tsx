@@ -2035,6 +2035,7 @@ export default function ProductosPage() {
       fecha: string;
       usuario: string;
       valor: string;
+      orden_id: string | null;
     };
     const items: HistItem[] = [];
 
@@ -2053,6 +2054,7 @@ export default function ProductosPage() {
               ((h.precio_nuevo - h.precio_anterior) / h.precio_anterior) * 100
             )}%`
           : "—",
+        orden_id: null,
       });
     });
 
@@ -2066,6 +2068,7 @@ export default function ProductosPage() {
         fecha: h.created_at,
         usuario: h.usuario || "Sistema",
         valor: `${h.cantidad > 0 ? "+" : ""}${h.cantidad} un.`,
+        orden_id: h.orden_id || null,
       });
     });
 
@@ -4507,9 +4510,28 @@ export default function ProductosPage() {
                           : "~"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{item.descripcion}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{item.descripcion}</p>
+                          {item.orden_id && (item.tipo === "venta" || item.tipo === "compra") && (
+                            <button
+                              onClick={() => openOrdenDetail(item.orden_id!)}
+                              className="shrink-0 text-[10px] text-primary hover:underline font-medium"
+                            >
+                              Ver →
+                            </button>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {formatRelativeDate(item.fecha)} · {item.usuario}
+                          {formatRelativeDate(item.fecha)}
+                          {" · "}
+                          {new Date(item.fecha).toLocaleTimeString("es-AR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false,
+                            timeZone: "America/Argentina/Buenos_Aires",
+                          })}
+                          {" · "}
+                          {item.usuario}
                         </p>
                       </div>
                       <div
