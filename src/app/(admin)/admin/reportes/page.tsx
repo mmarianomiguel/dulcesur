@@ -185,11 +185,18 @@ export default function ReportesPage() {
           let cost = (i.costo_unitario && i.costo_unitario > 0) ? i.costo_unitario : 0;
           // Fallback: if NC item has no cost, use cost from original sale item
           if (cost === 0 && origItems.length > 0) {
+            const normDesc = (s: string) => (s || "").trim().toLowerCase();
             const origMatch = origItems.find((o: any) =>
               (i.producto_id && o.producto_id === i.producto_id) ||
-              (i.descripcion && o.descripcion === i.descripcion)
+              (i.descripcion && normDesc(o.descripcion) === normDesc(i.descripcion))
             );
-            if (origMatch) cost = (origMatch.costo_unitario && origMatch.costo_unitario > 0) ? origMatch.costo_unitario : 0;
+            if (origMatch) cost = (origMatch.costo_unitario && origMatch.costo_unitario > 0)
+              ? origMatch.costo_unitario
+              : ((origMatch.productos?.costo || 0) * (origMatch.unidades_por_presentacion || 1));
+          }
+          // Último fallback: usar costo del producto directamente si está en el join
+          if (cost === 0 && i.productos?.costo) {
+            cost = (i.productos.costo || 0) * (Number(i.unidades_por_presentacion) || 1);
           }
           return a + ((Number(i.subtotal) || 0) - cost * i.cantidad);
         }, 0);
@@ -403,10 +410,20 @@ export default function ReportesPage() {
       if (costoPres === 0 && ncVentaIds.has(item.venta_id)) {
         const ncVenta = ventas.find(v => v.id === item.venta_id);
         if (ncVenta?.remito_origen_id) {
+          const normDesc = (s: string) => (s || "").trim().toLowerCase();
           const origMatch = (ventaItems as any[]).find((o: any) =>
-            o.venta_id === ncVenta.remito_origen_id && ((item.producto_id && o.producto_id === item.producto_id) || (item.descripcion && o.descripcion === item.descripcion))
+            o.venta_id === ncVenta.remito_origen_id &&
+            ((item.producto_id && o.producto_id === item.producto_id) ||
+             (item.descripcion && normDesc(o.descripcion) === normDesc(item.descripcion)))
           );
-          if (origMatch) costoPres = getItemCost(origMatch);
+          if (origMatch) {
+            costoPres = getItemCost(origMatch) ||
+              ((origMatch.productos?.costo || 0) * (origMatch.unidades_por_presentacion || 1));
+          }
+        }
+        // Último fallback: producto directo
+        if (costoPres === 0 && item.productos?.costo) {
+          costoPres = (item.productos.costo || 0) * (Number(item.unidades_por_presentacion) || 1);
         }
       }
       const unidadesPres = getUnidadesPres(item);
@@ -477,10 +494,20 @@ export default function ReportesPage() {
       if (costoPres === 0 && filteredNCIds.has(item.venta_id)) {
         const origId = ncToOrig[item.venta_id];
         if (origId) {
+          const normDesc = (s: string) => (s || "").trim().toLowerCase();
           const origMatch = ventaItems.find((o: any) =>
-            o.venta_id === origId && ((item.producto_id && o.producto_id === item.producto_id) || (item.descripcion && o.descripcion === item.descripcion))
+            o.venta_id === origId &&
+            ((item.producto_id && o.producto_id === item.producto_id) ||
+             (item.descripcion && normDesc(o.descripcion) === normDesc(item.descripcion)))
           );
-          if (origMatch) costoPres = getItemCost(origMatch);
+          if (origMatch) {
+            costoPres = getItemCost(origMatch) ||
+              ((origMatch.productos?.costo || 0) * (origMatch.unidades_por_presentacion || 1));
+          }
+        }
+        // Último fallback: producto directo
+        if (costoPres === 0 && item.productos?.costo) {
+          costoPres = (item.productos.costo || 0) * (Number(item.unidades_por_presentacion) || 1);
         }
       }
       const ventaItem = Number(item.subtotal) || 0;
