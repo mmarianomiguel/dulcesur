@@ -1714,12 +1714,13 @@ export default function ListadoVentasPage() {
         : nuevoSubtotal + (poSelectedPedido.costo_envio || 0);
 
       // Calcular recargo de transferencia según forma de pago
-      // Leer forma_pago de la venta (más confiable que el pedido)
+      // Usar _ventaId (ya resuelto en poOpenDetail) para evitar ambigüedad por numero duplicado
       let ventaFormaPago = (poSelectedPedido as any).forma_pago || "";
-      if (isHistorial && poSelectedPedido._ventaId) {
-        const { data: fpData } = await supabase.from("ventas").select("forma_pago").eq("id", poSelectedPedido._ventaId).single();
+      const knownVentaId = poSelectedPedido._ventaId;
+      if (knownVentaId) {
+        const { data: fpData } = await supabase.from("ventas").select("forma_pago").eq("id", knownVentaId).single();
         if (fpData?.forma_pago) ventaFormaPago = fpData.forma_pago;
-      } else if (!isHistorial && poSelectedPedido.numero) {
+      } else if (poSelectedPedido.numero) {
         const { data: fpData } = await supabase.from("ventas").select("forma_pago").eq("numero", poSelectedPedido.numero).maybeSingle();
         if (fpData?.forma_pago) ventaFormaPago = fpData.forma_pago;
       }
@@ -1793,19 +1794,29 @@ export default function ListadoVentasPage() {
       }
 
       // Update venta + venta_items
-      const ventaId = isHistorial
-        ? poSelectedPedido._ventaId
-        : (await supabase.from("ventas").select("id, total, cliente_id, forma_pago").eq("numero", poSelectedPedido.numero).maybeSingle()).data?.id;
+      // Prefer _ventaId (already resolved in poOpenDetail) — querying by numero can fail
+      // when multiple ventas share the same numero (e.g., remito + factura)
+      const ventaId = knownVentaId
+        || (poSelectedPedido.numero
+          ? (await supabase.from("ventas").select("id").eq("numero", poSelectedPedido.numero).maybeSingle()).data?.id
+          : null);
+
+      console.log("[poHandleSave] ventaId:", ventaId, "| knownVentaId:", knownVentaId, "| isHistorial:", isHistorial);
+      console.log("[poHandleSave] nuevoSubtotal:", nuevoSubtotal, "| nuevoTotalBase:", nuevoTotalBase, "| surcharge:", nuevoTransferSurcharge, "| nuevoTotal:", nuevoTotal);
+      console.log("[poHandleSave] ventaFormaPago:", ventaFormaPago, "| pctTransfer:", pctTransfer);
 
       if (ventaId) {
         const { data: ventaData } = await supabase.from("ventas").select("total, cliente_id, forma_pago").eq("id", ventaId).single();
         const totalAnterior = ventaData?.total || 0;
         const diferencia = nuevoTotal - totalAnterior;
 
-        const { error: ventaErr } = await supabase.from("ventas").update({
+        console.log("[poHandleSave] totalAnterior:", totalAnterior, "| diferencia:", diferencia);
+
+        const { error: ventaErr, data: ventaUpdateResult } = await supabase.from("ventas").update({
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
-        }).eq("id", ventaId);
+        }).eq("id", ventaId).select();
+        console.log("[poHandleSave] ventaUpdateResult:", ventaUpdateResult, "| ventaErr:", ventaErr);
         if (ventaErr) errores.push(`Error sync venta: ${ventaErr.message}`);
 
         await supabase.from("venta_items").delete().eq("venta_id", ventaId);
@@ -1878,6 +1889,8 @@ export default function ListadoVentasPage() {
             }
           }
         }
+      } else {
+        console.warn("[poHandleSave] ventaId is null — venta NOT updated! numero:", poSelectedPedido.numero, "_ventaId:", poSelectedPedido._ventaId);
       }
 
       if (errores.length > 0) {
