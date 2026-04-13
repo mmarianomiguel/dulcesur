@@ -192,18 +192,18 @@ export default function ReportesPage() {
             );
             if (origMatch) cost = (origMatch.costo_unitario && origMatch.costo_unitario > 0)
               ? origMatch.costo_unitario
-              : ((origMatch.productos?.costo || 0) * (origMatch.unidades_por_presentacion || 1));
+              : (prodCosto(origMatch) * (origMatch.unidades_por_presentacion || 1));
           }
           // Último fallback: usar costo del producto directamente si está en el join
-          if (cost === 0 && i.productos?.costo) {
-            cost = (i.productos.costo || 0) * (Number(i.unidades_por_presentacion) || 1);
+          if (cost === 0 && prodCosto(i) > 0) {
+            cost = prodCosto(i) * (Number(i.unidades_por_presentacion) || 1);
           }
           return a + ((Number(i.subtotal) || 0) - cost * i.cantidad);
         }, 0);
         profitMap[origId] = (profitMap[origId] || 0) + ncProfit;
         if (!descMap[origId]) descMap[origId] = [];
         ncItems.forEach((i: any) => {
-          const desc = i.descripcion || i.productos?.nombre || "";
+          const desc = i.descripcion || prodNombre(i) || "";
           if (desc && !descMap[origId].includes(desc)) descMap[origId].push(desc);
         });
       }
@@ -290,6 +290,9 @@ export default function ReportesPage() {
   const getItemCost = (item: any) => {
     return (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
   };
+  // Supabase join can return productos as array or object — safely extract fields
+  const prodCosto = (item: any) => (Array.isArray(item.productos) ? item.productos[0]?.costo : item.productos?.costo) || 0;
+  const prodNombre = (item: any) => (Array.isArray(item.productos) ? item.productos[0]?.nombre : item.productos?.nombre) || "";
   const ncVentaIds = useMemo(() => new Set(ventas.filter(isNC).map(v => v.id)), [ventas]);
   const ganancia = useMemo(() => {
     // Sum ganancia from non-NC items
@@ -402,7 +405,7 @@ export default function ReportesPage() {
       if (!groupMap[groupId]) groupMap[groupId] = { nombre: groupName, productos: {} };
 
       const prodId = item.producto_id || item.descripcion;
-      const prodName = item.productos?.nombre || item.descripcion || "Producto";
+      const prodName = prodNombre(item) || item.descripcion || "Producto";
       if (!groupMap[groupId].productos[prodId]) groupMap[groupId].productos[prodId] = { producto_id: prodId, nombre: prodName, unidades: 0, venta: 0, costo: 0, ganancia: 0 };
 
       let costoPres = getItemCost(item);
@@ -418,12 +421,12 @@ export default function ReportesPage() {
           );
           if (origMatch) {
             costoPres = getItemCost(origMatch) ||
-              ((origMatch.productos?.costo || 0) * (origMatch.unidades_por_presentacion || 1));
+              (prodCosto(origMatch) * (origMatch.unidades_por_presentacion || 1));
           }
         }
         // Último fallback: producto directo
-        if (costoPres === 0 && item.productos?.costo) {
-          costoPres = (item.productos.costo || 0) * (Number(item.unidades_por_presentacion) || 1);
+        if (costoPres === 0 && prodCosto(item) > 0) {
+          costoPres = prodCosto(item) * (Number(item.unidades_por_presentacion) || 1);
         }
       }
       const unidadesPres = getUnidadesPres(item);
@@ -502,12 +505,12 @@ export default function ReportesPage() {
           );
           if (origMatch) {
             costoPres = getItemCost(origMatch) ||
-              ((origMatch.productos?.costo || 0) * (origMatch.unidades_por_presentacion || 1));
+              (prodCosto(origMatch) * (origMatch.unidades_por_presentacion || 1));
           }
         }
         // Último fallback: producto directo
-        if (costoPres === 0 && item.productos?.costo) {
-          costoPres = (item.productos.costo || 0) * (Number(item.unidades_por_presentacion) || 1);
+        if (costoPres === 0 && prodCosto(item) > 0) {
+          costoPres = prodCosto(item) * (Number(item.unidades_por_presentacion) || 1);
         }
       }
       const ventaItem = Number(item.subtotal) || 0;
@@ -773,12 +776,12 @@ export default function ReportesPage() {
                                     return (
                                       <tr key={idx} className="border-b border-muted/50 last:border-0">
                                         <td className="py-1.5 px-4 pl-12">
-                                          {item.productos?.nombre || item.descripcion}
+                                          {prodNombre(item) || item.descripcion}
                                           {(item as any).presentacion && (item as any).presentacion !== "Unidad" && (
                                             <span className="ml-1.5 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{(item as any).presentacion}</span>
                                           )}
                                           {descPct > 0 && <span className="ml-1 text-[10px] text-orange-600">(-{descPct}%)</span>}
-                                          {ncDescs.includes(item.descripcion || item.productos?.nombre || "") && (
+                                          {ncDescs.includes(item.descripcion || prodNombre(item) || "") && (
                                             <span className="ml-1.5 text-[10px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-medium">NC</span>
                                           )}
                                         </td>
