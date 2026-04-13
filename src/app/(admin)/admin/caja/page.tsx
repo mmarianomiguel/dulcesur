@@ -1537,233 +1537,487 @@ export default function CajaPage() {
             ))}
           </div>
 
-          {/* Payment method breakdown */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {[
-              { label: "Efectivo", value: ventasEfectivo, icon: Banknote },
-              { label: "Transferencia", value: ventasTransferencia, icon: ArrowRightLeft },
-            ].map((item) => (
-              <Card key={item.label}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center gap-3">
-                    <item.icon className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground truncate">{item.label}</p>
-                      <p className="text-base font-semibold">{formatCurrency(item.value)}</p>
-                    </div>
-                  </div>
-                  {/* Recargo transferencia */}
-                  {item.label === "Transferencia" && totalTransferSurcharge > 0 && (
-                    <p className="text-[11px] text-muted-foreground mt-1">inc. rec. {formatCurrency(totalTransferSurcharge)}</p>
-                  )}
-                  {/* Desglose de transferencias por cuenta bancaria */}
-                  {item.label === "Transferencia" && ventasTransferencia > 0 && Object.keys(transferenciaPorCuenta).length > 0 && (
-                    <div className="mt-2 pt-2 border-t space-y-1">
-                      {Object.entries(transferenciaPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
+          {/* Detalle por método + deudores + egresos + cobros CC */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            {/* Efectivo */}
+            <Card>
+              <CardContent className="pt-4 pb-4">
+                <p className="text-xs text-muted-foreground mb-1">Efectivo</p>
+                <p className="text-lg font-semibold">{formatCurrency(ventasEfectivo)}</p>
+              </CardContent>
+            </Card>
+
+            {/* Transferencia con desglose por cuenta */}
+            <Card>
+              <CardContent className="pt-4 pb-4">
+                <p className="text-xs text-muted-foreground mb-1">Transferencia</p>
+                <p className="text-lg font-semibold">{formatCurrency(ventasTransferencia)}</p>
+                {totalTransferSurcharge > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    inc. recargo {formatCurrency(totalTransferSurcharge)}
+                  </p>
+                )}
+                {Object.keys(transferenciaPorCuenta).length > 0 && (
+                  <div className="mt-2 pt-2 border-t space-y-1">
+                    {Object.entries(transferenciaPorCuenta)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([cuenta, monto]) => (
                         <div key={cuenta} className="flex justify-between text-[11px]">
                           <span className="text-muted-foreground truncate">{cuenta}</span>
                           <span className="font-medium shrink-0 ml-2">{formatCurrency(monto)}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Cuenta Corriente con lista de deudores */}
+            {(ventasDesglose["Cuenta Corriente"]?.total || 0) > 0 && (() => {
+              const deudoresHoy: { nombre: string; monto: number }[] = [];
+              const ccByCliente: Record<string, number> = {};
+              for (const e of (ccEntries || [])) {
+                const venta = ventas.find(v => v.id === e.venta_id);
+                const nombre = (venta as any)?.clientes?.nombre || "Sin cliente";
+                ccByCliente[nombre] = (ccByCliente[nombre] || 0) + (e.debe || 0);
+              }
+              for (const [nombre, monto] of Object.entries(ccByCliente)) {
+                deudoresHoy.push({ nombre, monto });
+              }
+              deudoresHoy.sort((a, b) => b.monto - a.monto);
+              return (
+                <Card>
+                  <CardContent className="pt-4 pb-4">
+                    <p className="text-xs text-muted-foreground mb-1">Cuenta corriente</p>
+                    <p className="text-lg font-semibold text-amber-600">
+                      {formatCurrency(ventasDesglose["Cuenta Corriente"].total)}
+                    </p>
+                    {deudoresHoy.length > 0 && (
+                      <div className="mt-2 pt-2 border-t space-y-1">
+                        {deudoresHoy.map((d, i) => (
+                          <div key={i} className="flex justify-between text-[11px]">
+                            <span className="text-muted-foreground truncate">{d.nombre}</span>
+                            <span className="font-medium text-amber-600 shrink-0 ml-2">
+                              {formatCurrency(d.monto)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+          </div>
+
+          {/* Cobros CC + Egresos + Ingresos manuales */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            {/* Cobros de deuda recibidos hoy */}
+            {cobrosCCTotal > 0 && (
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <p className="text-xs text-muted-foreground mb-1">Cobros de deuda recibidos</p>
+                  <p className="text-lg font-semibold text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
+                  <div className="mt-2 pt-2 border-t space-y-1.5">
+                    {movements
+                      .filter(m => m.tipo === "ingreso" && m.referencia_tipo === "cobro_saldo")
+                      .map((m, i) => {
+                        const desc = m.descripcion || "";
+                        const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
+                        const nombre = nombreMatch?.[1]?.trim() || desc;
+                        const saldado = !desc.toLowerCase().includes("parcial");
+                        return (
+                          <div key={i} className="flex justify-between items-start text-[11px]">
+                            <div className="min-w-0">
+                              <p className="text-foreground truncate">{nombre}</p>
+                              <p className="text-muted-foreground">{m.metodo_pago}</p>
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <p className="font-medium text-emerald-600">{formatCurrency(m.monto)}</p>
+                              {saldado && (
+                                <p className="text-[10px] text-emerald-500">saldado</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    }
+                  </div>
+                  {(cobrosCCEfectivo > 0 || cobrosCCTransferencia > 0) && (
+                    <div className="mt-2 pt-2 border-t flex justify-between text-[11px] text-muted-foreground">
+                      {cobrosCCEfectivo > 0 && <span>Efectivo: {formatCurrency(cobrosCCEfectivo)}</span>}
+                      {cobrosCCTransferencia > 0 && <span>Transf.: {formatCurrency(cobrosCCTransferencia)}</span>}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Egresos del día con detalle */}
+            {(gastos + retiros + notasCreditoEgresos + anulaciones) > 0 && (
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <p className="text-xs text-muted-foreground mb-1">Egresos</p>
+                  <p className="text-lg font-semibold text-red-500">
+                    -{formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}
+                  </p>
+                  {egresosDetalle.length > 0 && (
+                    <div className="mt-2 pt-2 border-t space-y-1">
+                      {egresosDetalle.map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px]">
+                          <span className="text-muted-foreground truncate mr-2">{d.descripcion}</span>
+                          <span className="font-medium text-red-500 shrink-0">-{formatCurrency(d.monto)}</span>
                         </div>
                       ))}
                     </div>
                   )}
                 </CardContent>
               </Card>
-            ))}
-            {/* Cuenta Corriente — todo lo que fue a CC hoy */}
-            {(ventasDesglose["Cuenta Corriente"]?.total || 0) > 0 && (
-              <Card>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center gap-3">
-                    <Wallet className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground truncate">Cuenta Corriente</p>
-                      <p className="text-base font-semibold">{formatCurrency(ventasDesglose["Cuenta Corriente"].total)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             )}
-            {/* Cobros CC del día — plata que entró por cobros de deuda */}
-            {cobrosCCTotal > 0 && (
+
+            {/* Ingresos manuales si los hay */}
+            {depositos > 0 && (
               <Card>
                 <CardContent className="pt-4 pb-4">
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="w-5 h-5 text-emerald-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground truncate">Cobros Cta Cte</p>
-                      <p className="text-base font-semibold text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
-                    </div>
-                  </div>
-                  {(cobrosCCEfectivo > 0 && cobrosCCTransferencia > 0) && (
+                  <p className="text-xs text-muted-foreground mb-1">Ingresos manuales</p>
+                  <p className="text-lg font-semibold text-emerald-600">{formatCurrency(depositos)}</p>
+                  {ingresosDetalle.length > 0 && (
                     <div className="mt-2 pt-2 border-t space-y-1">
-                      {cobrosCCEfectivo > 0 && (
-                        <div className="flex justify-between text-[11px]">
-                          <span className="text-muted-foreground">Efectivo</span>
-                          <span className="font-medium">{formatCurrency(cobrosCCEfectivo)}</span>
+                      {ingresosDetalle.map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px]">
+                          <span className="text-muted-foreground truncate mr-2">{d.descripcion}</span>
+                          <span className="font-medium text-emerald-600 shrink-0">{formatCurrency(d.monto)}</span>
                         </div>
-                      )}
-                      {cobrosCCTransferencia > 0 && (
-                        <div className="flex justify-between text-[11px]">
-                          <span className="text-muted-foreground">Transferencia</span>
-                          <span className="font-medium">{formatCurrency(cobrosCCTransferencia)}</span>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   )}
                 </CardContent>
               </Card>
             )}
+
           </div>
 
-          {/* Transactions table */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Ventas del día */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Ventas del día</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {ventas.length === 0 ? (
-                  <EmptyState title="No hay ventas hoy" icon={Wallet} />
-                ) : (
-                  <>
-                  {/* Mobile card list */}
+          {/* Entregas del día */}
+          {(() => {
+            const entregasMovs = movements.filter(m =>
+              m.tipo === "ingreso" &&
+              m.referencia_tipo === "venta" &&
+              (m.descripcion || "").toLowerCase().includes("cobro entrega")
+            );
+            if (entregasMovs.length === 0) return null;
+
+            const totalEfectivoEntregas = entregasMovs
+              .filter(m => m.metodo_pago === "Efectivo")
+              .reduce((s, m) => s + m.monto, 0);
+            const totalTransfEntregas = entregasMovs
+              .filter(m => m.metodo_pago === "Transferencia")
+              .reduce((s, m) => s + m.monto, 0);
+
+            const ventasEntregadas = ventas.filter(v =>
+              (v as any).entregado === true &&
+              (v as any).metodo_entrega &&
+              ["envio", "envio_a_domicilio", "envio a domicilio"].includes((v as any).metodo_entrega)
+            );
+            const ventaIdsConCobro = new Set(entregasMovs.map(m => m.referencia_id));
+            const sinCobrar = ventasEntregadas.filter(v => !ventaIdsConCobro.has(v.id));
+
+            return (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center justify-between">
+                    <span>Entregas del día</span>
+                    <div className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
+                      <span className="text-emerald-600 font-medium">
+                        {entregasMovs.length} cobradas
+                      </span>
+                      {sinCobrar.length > 0 && (
+                        <span className="text-red-500 font-medium">
+                          {sinCobrar.length} sin cobrar
+                        </span>
+                      )}
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="text-left py-2 px-3 font-medium text-xs">Hora</th>
+                          <th className="text-left py-2 px-3 font-medium text-xs">Cliente</th>
+                          <th className="text-left py-2 px-3 font-medium text-xs">Método</th>
+                          <th className="text-left py-2 px-3 font-medium text-xs">Cuenta</th>
+                          <th className="text-right py-2 px-3 font-medium text-xs">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entregasMovs
+                          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                          .map((m) => {
+                            const desc = m.descripcion || "";
+                            const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
+                            const nombre = nombreMatch?.[1]?.trim() || "—";
+                            const cuenta = (m as any).cuenta_bancaria || "";
+                            return (
+                              <tr key={m.id} className="border-b last:border-0 hover:bg-muted/30">
+                                <td className="py-2 px-3 text-muted-foreground text-xs">
+                                  {m.hora?.substring(0, 5) || "—"}
+                                </td>
+                                <td className="py-2 px-3 font-medium text-xs">{nombre}</td>
+                                <td className="py-2 px-3">
+                                  <Badge variant="secondary" className="text-[10px] font-normal">
+                                    {m.metodo_pago}
+                                  </Badge>
+                                </td>
+                                <td className="py-2 px-3 text-xs text-muted-foreground">
+                                  {cuenta || "—"}
+                                </td>
+                                <td className="py-2 px-3 text-right font-semibold text-emerald-600 text-xs">
+                                  {formatCurrency(m.monto)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        {sinCobrar.map((v) => (
+                          <tr key={v.id} className="border-b last:border-0 bg-red-50/40 dark:bg-red-950/10">
+                            <td className="py-2 px-3 text-muted-foreground text-xs">—</td>
+                            <td className="py-2 px-3 font-medium text-xs text-red-600">
+                              {(v as any).clientes?.nombre || "Sin cliente"}
+                            </td>
+                            <td className="py-2 px-3" colSpan={2}>
+                              <span className="text-[10px] text-red-500 font-medium">sin cobrar</span>
+                            </td>
+                            <td className="py-2 px-3 text-right font-semibold text-red-500 text-xs">
+                              {formatCurrency(v.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-muted/30">
+                          <td colSpan={4} className="py-2 px-3 text-xs text-muted-foreground">
+                            {totalEfectivoEntregas > 0 && (
+                              <span className="mr-4">
+                                Efectivo: <span className="font-medium text-foreground">{formatCurrency(totalEfectivoEntregas)}</span>
+                              </span>
+                            )}
+                            {totalTransfEntregas > 0 && (
+                              <span>
+                                Transferencia: <span className="font-medium text-foreground">{formatCurrency(totalTransfEntregas)}</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-right text-xs font-bold">
+                            {formatCurrency(entregasMovs.reduce((s, m) => s + m.monto, 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Ventas del día */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Ventas del día</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {ventas.length === 0 ? (
+                <EmptyState title="No hay ventas hoy" icon={Wallet} />
+              ) : (
+                <>
+                  {/* Tabla desktop */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="text-left py-2.5 px-3 font-medium text-xs">N°</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-xs">Cliente</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-xs">Origen</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-xs">Método</th>
+                          <th className="text-left py-2.5 px-3 font-medium text-xs">Estado</th>
+                          <th className="text-right py-2.5 px-3 font-medium text-xs">Total</th>
+                          <th className="w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ventas.map((v) => {
+                          const origen = (v as any).origen;
+                          const metodoEntrega = (v as any).metodo_entrega;
+                          const isWeb = origen === "tienda";
+                          const isEnvio = isWeb && metodoEntrega && ["envio", "envio_a_domicilio", "envio a domicilio"].includes(metodoEntrega);
+                          const isRetiro = isWeb && !isEnvio;
+
+                          const origenLabel = isEnvio ? "Web — envío" : isRetiro ? "Web — retiro" : "Local";
+                          const origenClass = isEnvio
+                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            : isRetiro
+                            ? "bg-purple-50 text-purple-800 border border-purple-200"
+                            : "bg-blue-50 text-blue-800 border border-blue-200";
+
+                          const montoPagado = (v as any).monto_pagado || 0;
+                          const isPagado = montoPagado >= v.total - 1;
+                          const isCC = v.forma_pago === "Cuenta Corriente" ||
+                            (ventasDesglose["Cuenta Corriente"] && ccEntries?.some(e => e.venta_id === v.id));
+                          const estadoLabel = isPagado ? "Cobrado" : isCC ? "Cta cte" : "Pendiente";
+                          const estadoClass = isPagado
+                            ? "bg-green-50 text-green-800 border border-green-200"
+                            : isCC
+                            ? "bg-amber-50 text-amber-800 border border-amber-200"
+                            : "bg-red-50 text-red-800 border border-red-200";
+
+                          return (
+                            <tr
+                              key={v.id}
+                              className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                              onClick={() => openVentaDetail(v)}
+                            >
+                              <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
+                                {v.numero}
+                              </td>
+                              <td className="py-2.5 px-3 text-xs">
+                                {(v as any).clientes?.nombre || "—"}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full ${origenClass}`}>
+                                  {origenLabel}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <div className="flex flex-col gap-0.5">
+                                  <Badge variant="secondary" className="text-[10px] font-normal w-fit">
+                                    {v.forma_pago}
+                                  </Badge>
+                                  {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && (v as any).cuenta_transferencia_alias && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      → {(v as any).cuenta_transferencia_alias}
+                                    </span>
+                                  )}
+                                  {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && !(v as any).cuenta_transferencia_alias && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 font-medium">
+                                      <AlertTriangle className="w-2.5 h-2.5" />
+                                      Sin cuenta
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full ${estadoClass}`}>
+                                  {estadoLabel}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-semibold text-xs">
+                                {formatCurrency(v.total)}
+                              </td>
+                              <td className="py-2.5 px-1">
+                                <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-muted/30">
+                          <td colSpan={5} className="py-2 px-3 text-xs text-muted-foreground">
+                            {ventas.length} ventas ·{" "}
+                            {ventas.filter(v => (v as any).origen !== "tienda").length} local ·{" "}
+                            {ventas.filter(v => (v as any).origen === "tienda").length} web
+                            {ventas.some(v =>
+                              (v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") &&
+                              !(v as any).cuenta_transferencia_alias
+                            ) && (
+                              <span className="ml-2 text-amber-600 font-medium">
+                                · {ventas.filter(v =>
+                                  (v.forma_pago === "Transferencia" || v.forma_pago === "Mixto") &&
+                                  !(v as any).cuenta_transferencia_alias
+                                ).length} sin cuenta asignada
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-right text-xs font-bold">
+                            {formatCurrency(ventas.reduce((s, v) => s + v.total, 0))}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Mobile */}
                   <div className="sm:hidden divide-y">
                     {ventas.map((v) => (
-                      <div key={v.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openVentaDetail(v)}>
+                      <div
+                        key={v.id}
+                        className="py-3 px-3 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => openVentaDetail(v)}
+                      >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs">{v.numero}</span>
+                            <span className="font-mono text-xs text-muted-foreground">{v.numero}</span>
                             {(v as any).origen === "tienda" && (
                               <Badge variant="outline" className="text-[10px] px-1 py-0 border-pink-300 text-pink-600">Web</Badge>
                             )}
                             <Badge variant="secondary" className="text-[10px] font-normal">{v.forma_pago}</Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{(v as any).clientes?.nombre || "—"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {(v as any).clientes?.nombre || "—"}
+                          </p>
                         </div>
-                        <span className="font-semibold text-sm text-emerald-600 shrink-0">{formatCurrency(v.total)}</span>
+                        <span className="font-semibold text-sm shrink-0">{formatCurrency(v.total)}</span>
                       </div>
                     ))}
                   </div>
-                  {/* Desktop table */}
-                  <div className="hidden sm:block overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-3 px-4 font-medium">N.</th>
-                          <th className="text-left py-3 px-4 font-medium">Cliente</th>
-                          <th className="text-left py-3 px-4 font-medium">Vendedor</th>
-                          <th className="text-left py-3 px-4 font-medium">Forma Pago</th>
-                          <th className="text-right py-3 px-4 font-medium">Total</th>
-                          <th className="w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ventas.map((v) => (
-                          <tr
-                            key={v.id}
-                            className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
-                            onClick={() => openVentaDetail(v)}
-                          >
-                            <td className="py-3 px-4 font-mono text-xs">
-                              {v.numero}
-                              {(v as any).origen === "tienda" && (
-                                <Badge variant="outline" className="ml-2 text-[10px] px-1 py-0 border-pink-300 text-pink-600">Web</Badge>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-xs">
-                              {(v as any).clientes?.nombre || "—"}
-                            </td>
-                            <td className="py-3 px-4 text-xs text-muted-foreground">
-                              {(v as any).vendedor_id ? sellersMap[(v as any).vendedor_id] || "—" : "—"}
-                            </td>
-                            <td className="py-3 px-4">
-                              <Badge variant="secondary" className="text-xs font-normal">
-                                {v.forma_pago}
-                              </Badge>
-                              {(v.forma_pago === "Transferencia" || (v.forma_pago === "Mixto" && (v as any).monto_transferencia > 0)) && !(v as any).cuenta_transferencia_alias && (
-                                <span className="ml-1 inline-flex items-center gap-0.5 text-[9px] text-amber-600 font-medium bg-amber-50 border border-amber-200 px-1 py-0 rounded">
-                                  <AlertTriangle className="w-2.5 h-2.5" />
-                                  Sin cuenta
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-right font-semibold text-emerald-600">
-                              {formatCurrency(v.total)}
-                            </td>
-                            <td className="py-3 px-1">
-                              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
 
-            {/* Movimientos de caja */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Movimientos de Caja</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {movements.length === 0 ? (
-                  <EmptyState title="No hay movimientos hoy" icon={Wallet} />
-                ) : (
-                  <>
-                  {/* Mobile card list */}
-                  <div className="sm:hidden divide-y">
-                    {movements.map((m) => (
-                      <div key={m.id} className="py-3 px-4 flex items-center gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{m.descripcion}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-muted-foreground">{m.hora?.substring(0, 5)}</span>
+          {/* Movimientos de Caja */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Movimientos de caja</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {movements.length === 0 ? (
+                <EmptyState title="No hay movimientos hoy" icon={Wallet} />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-2.5 px-3 font-medium text-xs">Hora</th>
+                        <th className="text-left py-2.5 px-3 font-medium text-xs">Descripción</th>
+                        <th className="text-left py-2.5 px-3 font-medium text-xs">Método</th>
+                        <th className="text-right py-2.5 px-3 font-medium text-xs">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {movements.map((m) => (
+                        <tr key={m.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                          <td className="py-2.5 px-3 text-muted-foreground text-xs">{m.hora?.substring(0, 5)}</td>
+                          <td className="py-2.5 px-3 text-xs">{m.descripcion}</td>
+                          <td className="py-2.5 px-3">
                             <Badge variant="secondary" className="text-[10px] font-normal">{m.metodo_pago}</Badge>
-                          </div>
-                        </div>
-                        <span className={`font-semibold text-sm shrink-0 ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
-                          {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Desktop table */}
-                  <div className="hidden sm:block overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="text-left py-3 px-4 font-medium">Hora</th>
-                          <th className="text-left py-3 px-4 font-medium">Descripción</th>
-                          <th className="text-left py-3 px-4 font-medium">Método</th>
-                          <th className="text-right py-3 px-4 font-medium">Monto</th>
+                          </td>
+                          <td className={`py-2.5 px-3 text-right font-semibold text-xs ${
+                            m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"
+                          }`}>
+                            {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {movements.map((m) => (
-                          <tr key={m.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                            <td className="py-3 px-4 text-muted-foreground">{m.hora?.substring(0, 5)}</td>
-                            <td className="py-3 px-4 font-medium">{m.descripcion}</td>
-                            <td className="py-3 px-4">
-                              <Badge variant="secondary" className="text-xs font-normal">{m.metodo_pago}</Badge>
-                            </td>
-                            <td className={`py-3 px-4 text-right font-semibold ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
-                              {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
 
