@@ -479,7 +479,7 @@ export default function DashboardPage() {
       { data: ultimasVentasRaw },
       // fetchPedidosOnline runs in parallel too
     ] = await Promise.all([
-      supabase.from("tienda_config").select("dias_entrega, recargo_transferencia, url_tienda").single(),
+      supabase.from("tienda_config").select("recargo_transferencia, url_tienda").single(),
       supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
       supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso"),
       supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true),
@@ -515,7 +515,6 @@ export default function DashboardPage() {
     setUltimasVentas((ultimasVentasRaw || []).map((v: any) => ({ id: v.id, numero: v.numero, cliente: v.clientes?.nombre || "Cons. Final", total: v.total, forma_pago: v.forma_pago, fecha: v.fecha })));
 
     // ─── Tienda config ───
-    if (tiendaConfig?.dias_entrega) setDiasEntrega(tiendaConfig.dias_entrega);
     if ((tiendaConfig as any)?.recargo_transferencia > 0) setRecargoTransferencia((tiendaConfig as any).recargo_transferencia);
     if ((tiendaConfig as any)?.url_tienda) setReceiptConfig((prev) => ({ ...prev, empresaWeb: prev.empresaWeb || (tiendaConfig as any).url_tienda }));
 
@@ -1206,14 +1205,14 @@ export default function DashboardPage() {
                 <CardTitle className="text-[15px]">Ventas vs Gastos</CardTitle>
                 <span className="text-xs text-muted-foreground">Últimos 6 meses</span>
               </CardHeader>
-              <CardContent><div className="h-[250px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.65 0.18 160)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></CardContent>
+              <CardContent><div className="h-[250px]" style={{ minWidth: 0 }}><ResponsiveContainer width="100%" height="100%" minWidth={0}><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.65 0.18 160)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div></CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-[15px]">Formas de Pago</CardTitle></CardHeader>
               <CardContent>
                 {paymentBreakdown.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p> : (
                   <>
-                    <div className="h-[180px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={paymentBreakdown} innerRadius={50} outerRadius={75} dataKey="value" stroke="none">{paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /></PieChart></ResponsiveContainer></div>
+                    <div className="h-[180px]" style={{ minWidth: 0 }}><ResponsiveContainer width="100%" height="100%" minWidth={0}><PieChart><Pie data={paymentBreakdown} innerRadius={50} outerRadius={75} dataKey="value" stroke="none">{paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /></PieChart></ResponsiveContainer></div>
                     <div className="space-y-2 mt-2">{paymentBreakdown.map((m, i) => (<div key={m.name} className="flex items-center justify-between text-[13px]"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span className="text-muted-foreground">{m.name}</span></div><span className="font-medium">{formatCurrency(m.value)}</span></div>))}</div>
                   </>
                 )}
