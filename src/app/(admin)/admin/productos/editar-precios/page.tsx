@@ -331,6 +331,7 @@ export default function EditarPreciosPage() {
 
   // Mass edit state
   const [massTarget, setMassTarget] = useState<"venta" | "costo" | "margen" | "fijar_venta" | "fijar_costo">("costo");
+  const [fijarCostoMode, setFijarCostoMode] = useState<"mantener_precio" | "mantener_margen">("mantener_precio");
   const [massType, setMassType] = useState<"percentage" | "fixed">("percentage");
   const [massOperation, setMassOperation] = useState<"increase" | "decrease">("increase");
   const [massAmount, setMassAmount] = useState("");
@@ -754,9 +755,16 @@ export default function EditarPreciosPage() {
 
       if (massTarget === "fijar_costo") {
         const newCosto = Math.max(0, Math.round(amount * 100) / 100);
-        const diff = newCosto - currentCosto;
-        const diffPercent = currentCosto > 0 ? ((newCosto - currentCosto) / currentCosto) * 100 : 0;
-        return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio: currentPrecio, diff, diffPercent };
+        let newPrecio: number;
+        if (fijarCostoMode === "mantener_margen" && currentCosto > 0) {
+          const margen = (currentPrecio - currentCosto) / currentCosto;
+          newPrecio = newCosto * (1 + margen);
+        } else {
+          newPrecio = currentPrecio;
+        }
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio, diff, diffPercent };
       }
 
       if (massTarget === "margen") {
@@ -841,7 +849,7 @@ export default function EditarPreciosPage() {
         };
       }
     });
-  }, [selectedProducts, massTarget, massType, massOperation, massAmount, priceChanges]);
+  }, [selectedProducts, massTarget, massType, massOperation, massAmount, priceChanges, fijarCostoMode]);
 
   const applyMassEdit = async () => {
     setSaving(true);
@@ -1584,6 +1592,36 @@ export default function EditarPreciosPage() {
                   />
                 </div>
               </div>
+
+              {/* Fijar costo mode selector */}
+              {massTarget === "fijar_costo" && (
+                <div className="space-y-1 pt-2 border-t">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">
+                    Al cambiar el costo
+                  </p>
+                  {([
+                    { val: "mantener_precio" as const, label: "Mantener precio venta" },
+                    { val: "mantener_margen" as const, label: "Mantener margen %" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.val}
+                      onClick={() => setFijarCostoMode(opt.val)}
+                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs border transition-all text-left ${
+                        fijarCostoMode === opt.val
+                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          : "border-transparent text-muted-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                        fijarCostoMode === opt.val ? "border-primary" : "border-muted-foreground"
+                      }`}>
+                        {fijarCostoMode === opt.val && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                      </div>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Rounding toggle */}
               <div className="space-y-2 pt-2 border-t mt-2">
