@@ -417,31 +417,54 @@ export default function DashboardPage() {
   const fetchCharts = useCallback(async (start: string, end: string) => {
     setChartsLoading(true);
     try {
-      const monthQueries: Promise<{ name: string; ventas: number; egresos: number }>[] = [];
+      // Calcular rango de 6 meses de una sola vez
+      const d = new Date(todayARG() + "T12:00:00");
+      d.setDate(1);
+      d.setMonth(d.getMonth() - 5);
+      const rangeStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+
+      // 2 queries en lugar de 12 — traer todos los meses juntos
+      const [{ data: ventasData }, { data: egresosData }] = await Promise.all([
+        supabase
+          .from("ventas")
+          .select("fecha, total, tipo_comprobante")
+          .gte("fecha", rangeStart)
+          .neq("estado", "anulada"),
+        supabase
+          .from("caja_movimientos")
+          .select("fecha, monto")
+          .eq("tipo", "egreso")
+          .gte("fecha", rangeStart),
+      ]);
+
+      // Agrupar por mes en el cliente
+      const monthMap: Record<string, { ventas: number; egresos: number; label: string }> = {};
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(todayARG() + "T12:00:00");
-        d.setDate(1);
-        d.setMonth(d.getMonth() - i);
-        const year = d.getFullYear(); const month = d.getMonth() + 1;
-        const mStart = `${year}-${String(month).padStart(2, "0")}-01`;
-        const mEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-        const label = d.toLocaleDateString("es-AR", { month: "short" });
-        monthQueries.push(
-          Promise.all([
-            supabase.from("ventas").select("total, tipo_comprobante").gte("fecha", mStart).lt("fecha", mEnd).neq("estado", "anulada"),
-            supabase.from("caja_movimientos").select("monto").eq("tipo", "egreso").gte("fecha", mStart).lt("fecha", mEnd),
-          ]).then(([{ data: mv }, { data: me }]) => {
-            const regularSales = (mv || []).filter((v: any) => !v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-            const ncSales = (mv || []).filter((v: any) => v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito"));
-            return {
-              name: label,
-              ventas: regularSales.reduce((a: number, v: any) => a + v.total, 0) - ncSales.reduce((a: number, v: any) => a + v.total, 0),
-              egresos: (me || []).reduce((a, e) => a + Math.abs(e.monto), 0),
-            };
-          })
-        );
+        const d2 = new Date(todayARG() + "T12:00:00");
+        d2.setDate(1);
+        d2.setMonth(d2.getMonth() - i);
+        const key = `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, "0")}`;
+        const label = d2.toLocaleDateString("es-AR", { month: "short" });
+        monthMap[key] = { ventas: 0, egresos: 0, label };
       }
-      const monthlyDataResult = await Promise.all(monthQueries);
+
+      for (const v of ventasData || []) {
+        const key = v.fecha?.slice(0, 7);
+        if (!key || !monthMap[key]) continue;
+        const isNC = v.tipo_comprobante?.toLowerCase().startsWith("nota de crédito");
+        monthMap[key].ventas += isNC ? -v.total : v.total;
+      }
+
+      for (const e of egresosData || []) {
+        const key = e.fecha?.slice(0, 7);
+        if (!key || !monthMap[key]) continue;
+        monthMap[key].egresos += Math.abs(e.monto);
+      }
+
+      const monthlyDataResult = Object.entries(monthMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, v]) => ({ name: v.label, ventas: v.ventas, egresos: v.egresos }));
+
       setMonthlyData(monthlyDataResult);
     } finally {
       setChartsLoading(false);
