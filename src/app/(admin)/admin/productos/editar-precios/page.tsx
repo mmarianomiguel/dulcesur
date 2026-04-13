@@ -866,6 +866,7 @@ export default function EditarPreciosPage() {
         return roundInModal ? calcRound(base, roundInModalMultiple, roundInModalMode) : base;
       };
 
+      const updates: PromiseLike<any>[] = [];
       for (const item of massEditPreview) {
         const prod = productos.find((p) => p.id === item.id);
         const finalPrecio = getFinalPrecio(item.newPrecio);
@@ -877,7 +878,7 @@ export default function EditarPreciosPage() {
         }
         if (massTarget === "costo" || massTarget === "fijar_costo") updateData.costo = item.newCosto;
         if (Object.keys(updateData).length > 0) {
-          await supabase.from("productos").update(updateData).eq("id", item.id);
+          updates.push(supabase.from("productos").update(updateData).eq("id", item.id).then());
         }
 
         // Update presentation prices and costs proportionally
@@ -897,10 +898,11 @@ export default function EditarPreciosPage() {
               : (pres.cantidad > 0 ? Math.round(item.newCosto * pres.cantidad) : item.newCosto);
           }
           if (Object.keys(presUpdate).length > 0) {
-            await supabase.from("presentaciones").update(presUpdate).eq("id", pres.id);
+            updates.push(supabase.from("presentaciones").update(presUpdate).eq("id", pres.id).then());
           }
         }
       }
+      await Promise.all(updates);
 
       // Update combos that contain edited products
       const editedProductIds = massEditPreview.map((item) => item.id);
