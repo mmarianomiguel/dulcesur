@@ -642,29 +642,29 @@ export default function HojaDeRutaPage() {
       pdf.text(fmtCur(dayTotal), w - margin - 2, y, { align: "right" });
       y += 5;
 
-      // Definir columnas
+      // Columnas ajustadas para A4 (w=210, margin=15, útil=180mm)
       const COL = {
-        num: margin,           // N° — ancho 22
-        cliente: margin + 23,  // Cliente — ancho 38
-        pago: margin + 62,     // Pago — ancho 65
-        total: margin + 130,   // Total — align right, ancho 22
-        cobrado: margin + 155, // Cobrado — align right, ancho 22
-        debe: margin + 175,    // Debe — align right, ancho 12
-        hora: w - margin,      // Hora — align right
+        num:     margin,        // N°       — hasta col+18
+        cliente: margin + 18,   // Cliente  — hasta col+44 (26mm)
+        pago:    margin + 64,   // Pago     — hasta col+100 (36mm) — más espacio para banco
+        total:   margin + 130,  // Total    — align right
+        cobrado: margin + 152,  // Cobrado  — align right
+        debe:    margin + 168,  // Debe     — align right
+        hora:    w - margin,    // Hora     — align right
       };
-      pdf.setFontSize(8);
+      pdf.setFontSize(7.5);
       pdf.setFont("helvetica", "bold");
-      pdf.setTextColor(120);
-      pdf.text("N°", COL.num, y);
+      pdf.setTextColor(100);
+      pdf.text("N", COL.num, y);
       pdf.text("Cliente", COL.cliente, y);
-      pdf.text("Pago", COL.pago, y);
+      pdf.text("Pago / Cuenta", COL.pago, y);
       pdf.text("Total", COL.total, y, { align: "right" });
       pdf.text("Cobrado", COL.cobrado, y, { align: "right" });
       pdf.text("Debe", COL.debe, y, { align: "right" });
       pdf.text("Hora", COL.hora, y, { align: "right" });
-      y += 4;
+      y += 3.5;
       pdf.setTextColor(0);
-      pdf.setDrawColor(220);
+      pdf.setDrawColor(200);
       pdf.line(margin, y - 1, w - margin, y - 1);
 
       for (const v of dayVentas) {
@@ -679,61 +679,60 @@ export default function HojaDeRutaPage() {
         const firstPagoConHora = pagosSinNC.find(p => (p as any).fecha_hora);
         const horaEntrega = firstPagoConHora ? (() => {
           const d = new Date((firstPagoConHora as any).fecha_hora);
-          return isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
-        })() : "—";
+          return isNaN(d.getTime()) ? "--:--" : d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" });
+        })() : "--:--";
 
-        // Armar líneas de pago
-        type PagoLine = { text: string; color: [number, number, number] };
+        // Armar líneas de pago (solo texto ASCII para evitar símbolos raros)
+        type PagoLine = { text: string; color: [number, number, number]; indent: number };
         const pagoLines: PagoLine[] = [];
         if (pagosSinNC.length === 0) {
-          pagoLines.push({ text: "Sin cobro registrado", color: [156, 163, 175] });
+          pagoLines.push({ text: "Sin cobro registrado", color: [156, 163, 175], indent: 0 });
         } else {
           for (const p of pagosSinNC) {
-            const color: [number, number, number] = p.metodo === "Transferencia" ? [37, 99, 235] : [22, 101, 52];
-            pagoLines.push({ text: `${p.metodo}  ${fmtCur(p.monto)}`, color });
+            const colorMetodo: [number, number, number] = p.metodo === "Transferencia" ? [37, 99, 235] : [22, 101, 52];
+            pagoLines.push({ text: `${p.metodo} ${fmtCur(p.monto)}`, color: colorMetodo, indent: 0 });
             if (p.metodo === "Transferencia" && (p as any).cuenta_bancaria) {
-              const cuentaText = `→ ${(p as any).cuenta_bancaria}`;
-              // Truncar si es muy largo (max ~30 chars para caber en columna)
-              pagoLines.push({ text: cuentaText.substring(0, 30), color: [59, 130, 246] });
+              // Usar ">" en lugar de "→" para evitar problemas de encoding en jsPDF
+              const cuentaLabel = `> ${String((p as any).cuenta_bancaria).substring(0, 28)}`;
+              pagoLines.push({ text: cuentaLabel, color: [59, 130, 246], indent: 2 });
             }
           }
         }
         if (ncMonto > 0) {
-          pagoLines.push({ text: `NC -${fmtCur(ncMonto)}`, color: [180, 83, 9] });
+          pagoLines.push({ text: `NC -${fmtCur(ncMonto)}`, color: [180, 83, 9], indent: 0 });
         }
 
-        const lineH = 3.8;
-        const rowHeight = Math.max(6, pagoLines.length * lineH + 2);
+        const lineH = 3.6;
+        const rowHeight = Math.max(5.5, pagoLines.length * lineH + 1.5);
 
         if (y + rowHeight > 275) { pdf.addPage(); y = 20; }
 
-        pdf.setFontSize(8);
-        pdf.setFont("helvetica", "normal");
-
         // N°
-        pdf.setTextColor(100);
-        pdf.text((v.numero || "—").slice(-8), COL.num, y);
+        pdf.setFontSize(7);
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(130);
+        pdf.text((v.numero || "").slice(-7), COL.num, y);
 
         // Cliente
-        pdf.setTextColor(0);
+        pdf.setFontSize(7.5);
         pdf.setFont("helvetica", "bold");
-        const nombreCliente = (v.clientes?.nombre || "Sin cliente").substring(0, 18);
-        pdf.text(nombreCliente, COL.cliente, y);
+        pdf.setTextColor(0);
+        pdf.text((v.clientes?.nombre || "Sin cliente").substring(0, 22), COL.cliente, y);
         pdf.setFont("helvetica", "normal");
 
         // Líneas de pago
         let lineY = y;
         for (const pl of pagoLines) {
+          pdf.setFontSize(7);
           pdf.setTextColor(...pl.color);
-          pdf.setFontSize(7.5);
-          pdf.text(pl.text, COL.pago, lineY);
+          pdf.text(pl.text, COL.pago + pl.indent, lineY);
           lineY += lineH;
         }
-        pdf.setFontSize(8);
 
         // Total
-        pdf.setTextColor(0);
+        pdf.setFontSize(7.5);
         pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(0);
         pdf.text(fmtCur(neto), COL.total, y, { align: "right" });
         pdf.setFont("helvetica", "normal");
 
@@ -742,7 +741,7 @@ export default function HojaDeRutaPage() {
           pdf.setTextColor(22, 101, 52);
           pdf.text(fmtCur(cobradoSinNC), COL.cobrado, y, { align: "right" });
         } else {
-          pdf.setTextColor(156, 163, 175);
+          pdf.setTextColor(180, 180, 180);
           pdf.text("$0", COL.cobrado, y, { align: "right" });
         }
 
@@ -753,16 +752,17 @@ export default function HojaDeRutaPage() {
           pdf.text(fmtCur(debe), COL.debe, y, { align: "right" });
           pdf.setFont("helvetica", "normal");
         } else {
-          pdf.setTextColor(156, 163, 175);
-          pdf.text("—", COL.debe, y, { align: "right" });
+          pdf.setTextColor(180, 180, 180);
+          pdf.text("-", COL.debe, y, { align: "right" });
         }
 
-        // Hora
-        pdf.setTextColor(107, 114, 128);
+        // Hora — separada en columna propia
+        pdf.setFontSize(7);
+        pdf.setTextColor(120, 120, 120);
         pdf.text(horaEntrega, COL.hora, y, { align: "right" });
 
         pdf.setTextColor(0);
-        y += rowHeight + 1;
+        y += rowHeight + 0.5;
       }
       y += 4;
     }
