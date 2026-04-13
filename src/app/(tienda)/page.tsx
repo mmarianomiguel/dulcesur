@@ -191,12 +191,6 @@ export default async function TiendaHomePage() {
   hace7dias.setDate(hace7dias.getDate() - 7);
   hace7dias.setHours(0, 0, 0, 0);
 
-  const topVentasPromise = supabase
-    .from("venta_items")
-    .select("producto_id, cantidad")
-    .gte("created_at", hace30.toISOString())
-    .limit(5000);
-
   const nuevosPromise = supabase
     .from("productos")
     .select("id, nombre, precio, imagen_url, stock, activo, es_combo, created_at, updated_at, categorias(id, nombre)")
@@ -207,17 +201,51 @@ export default async function TiendaHomePage() {
     .order("created_at", { ascending: false })
     .limit(32);
 
-  const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }, { data: topVentaItems }, { data: nuevosRaw }] = await Promise.all([
+  // Grupo 1: queries críticas en paralelo (categorías, productos, aumentos)
+  const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }, { data: nuevosRaw }] = await Promise.all([
     catPromise,
     prodPromise,
     aumentosPromise,
     masVendidosPromise,
     ultimasUnidadesPromise,
-    topVentasPromise,
     nuevosPromise,
   ]);
 
   const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+
+  // Nuevos ingresos
+  const nuevosIngresos = (nuevosRaw || []).filter((p: any) => {
+    const creadoReciente = new Date(p.created_at) >= hace4dias;
+    const stockRecuperado = new Date(p.updated_at) >= hace7dias && p.stock > 0;
+    return creadoReciente || stockRecuperado;
+  }).slice(0, 16);
+
+  // Grupo 2: presentaciones + top vendidos en paralelo (no bloquean las categorías)
+  const presPromise = productos.length > 0
+    ? supabase
+        .from("presentaciones")
+        .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
+        .in("producto_id", productos.map((p) => p.id))
+        .order("cantidad")
+    : Promise.resolve({ data: [] });
+
+  const topVentasResult = supabase
+    .from("venta_items")
+    .select("producto_id, cantidad")
+    .gte("created_at", hace30.toISOString())
+    .limit(1000);
+
+  const [{ data: presData }, { data: topVentaItems }] = await Promise.all([
+    presPromise,
+    topVentasResult,
+  ]);
+
+  // Presentaciones productos destacados
+  const presMap: Record<string, any[]> = {};
+  (presData || []).forEach((p: any) => {
+    if (!presMap[p.producto_id]) presMap[p.producto_id] = [];
+    presMap[p.producto_id].push(p);
+  });
 
   // Procesar más vendidos (tabs)
   const ventaMap: Record<string, number> = {};
@@ -231,53 +259,28 @@ export default async function TiendaHomePage() {
     .map(([id]) => id);
 
   let topVendidosProds: any[] = [];
+  const topPresMap: Record<string, any[]> = {};
   if (topIds.length > 0) {
-    const { data: mvData } = await supabase
-      .from("productos")
-      .select("id, nombre, precio, imagen_url, stock, activo, es_combo, precio_anterior, categorias(id, nombre)")
-      .eq("activo", true)
-      .eq("visibilidad", "visible")
-      .gt("stock", 0)
-      .in("id", topIds);
+    const [{ data: mvData }, { data: topPresData }] = await Promise.all([
+      supabase
+        .from("productos")
+        .select("id, nombre, precio, imagen_url, stock, activo, es_combo, precio_anterior, categorias(id, nombre)")
+        .eq("activo", true)
+        .eq("visibilidad", "visible")
+        .gt("stock", 0)
+        .in("id", topIds),
+      supabase
+        .from("presentaciones")
+        .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
+        .in("producto_id", topIds)
+        .order("cantidad"),
+    ]);
     topVendidosProds = topIds
       .map(id => (mvData || []).find((p: any) => p.id === id))
       .filter(Boolean);
-  }
-
-  // Presentaciones para top vendidos
-  const topPresMap: Record<string, any[]> = {};
-  if (topVendidosProds.length > 0) {
-    const topProdIds = topVendidosProds.map((p: any) => p.id);
-    const { data: topPresData } = await supabase
-      .from("presentaciones")
-      .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
-      .in("producto_id", topProdIds)
-      .order("cantidad");
     (topPresData || []).forEach((p: any) => {
       if (!topPresMap[p.producto_id]) topPresMap[p.producto_id] = [];
       topPresMap[p.producto_id].push(p);
-    });
-  }
-
-  // Nuevos ingresos
-  const nuevosIngresos = (nuevosRaw || []).filter((p: any) => {
-    const creadoReciente = new Date(p.created_at) >= hace4dias;
-    const stockRecuperado = new Date(p.updated_at) >= hace7dias && p.stock > 0;
-    return creadoReciente || stockRecuperado;
-  }).slice(0, 16);
-
-  // 3. Fetch presentaciones for products (needs product IDs from step 2)
-  const presMap: Record<string, any[]> = {};
-  if (productos.length > 0) {
-    const ids = productos.map((p) => p.id);
-    const { data: presData } = await supabase
-      .from("presentaciones")
-      .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
-      .in("producto_id", ids)
-      .order("cantidad");
-    (presData || []).forEach((p: any) => {
-      if (!presMap[p.producto_id]) presMap[p.producto_id] = [];
-      presMap[p.producto_id].push(p);
     });
   }
 
