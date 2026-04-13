@@ -29,8 +29,8 @@ export default function TiendaLayout({ children }: { children: React.ReactNode }
     <CartProvider>
       <>
         {/* Preconnect hints para recursos críticos */}
-        <link rel="preconnect" href="https://res.cloudinary.com" />
-        <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+        <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://oepqhdjuujfdlpjjktbs.supabase.co" crossOrigin="anonymous" />
         <div className="flex min-h-screen flex-col bg-white">
           <AdminBanner />
           <TiendaNavbar />
