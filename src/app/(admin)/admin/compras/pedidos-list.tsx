@@ -140,6 +140,7 @@ export function PedidosList({
 }: PedidosListProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; pedido: PedidoRow | null }>({ open: false, pedido: null });
   const [deleting, setDeleting] = useState(false);
+  const [mostrarIngresados, setMostrarIngresados] = useState(false);
 
   /* ── Stats ── */
   const borradores = pedidos.filter((p) => p.estado === "Borrador").length;
@@ -150,6 +151,8 @@ export function PedidosList({
   /* ── Filtered list ── */
   const filtered = useMemo(() => {
     return pedidos.filter((p) => {
+      // Ocultar Ingresados por defecto (ya fueron convertidos en compra)
+      if (!mostrarIngresados && (p.estado === "Ingresado" || p.estado === "Recibido")) return false;
       const matchSearch =
         norm(pedidoDisplayNum(p.id)).includes(norm(searchTerm)) ||
         norm(p.proveedores?.nombre || "").includes(norm(searchTerm));
@@ -159,7 +162,7 @@ export function PedidosList({
       else if (filterEstado !== "all") matchEstado = p.estado === filterEstado;
       return matchSearch && matchEstado;
     });
-  }, [pedidos, searchTerm, filterEstado]);
+  }, [pedidos, searchTerm, filterEstado, mostrarIngresados]);
 
   /* ── Delete handler ── */
   async function handleDelete() {
@@ -303,6 +306,15 @@ export function PedidosList({
               <X className="w-3.5 h-3.5 mr-1" />Limpiar filtro
             </Button>
           )}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none h-9 px-2">
+            <input
+              type="checkbox"
+              checked={mostrarIngresados}
+              onChange={(e) => setMostrarIngresados(e.target.checked)}
+              className="rounded"
+            />
+            Mostrar ingresados
+          </label>
         </div>
       </div>
 

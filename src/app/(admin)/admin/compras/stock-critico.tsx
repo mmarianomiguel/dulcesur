@@ -436,8 +436,8 @@ export default function StockCritico({ onHacerPedido, onGenerarTodos, setActiveT
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6 space-y-4">
+      <Card className="overflow-visible">
+        <CardContent className="pt-6 space-y-4 overflow-visible">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex-1">
               <Label className="uppercase text-xs text-muted-foreground font-semibold tracking-wide mb-1.5 block">Buscar</Label>
