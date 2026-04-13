@@ -472,33 +472,40 @@ export default function DashboardPage() {
       }
     });
 
-    // ─── All independent queries in parallel (including turno + últimas ventas) ───
+    // ─── GRUPO 1: Queries críticas (lo que se ve primero) ───
     const [
       { data: tiendaConfig },
       { data: periodSalesRaw },
       { data: periodExpenses },
+      { data: turnoData },
+      { data: ultimasVentasRaw },
+    ] = await Promise.all([
+      supabase.from("tienda_config").select("recargo_transferencia, url_tienda").single(),
+      supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
+      supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso"),
+      supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1),
+      supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").not("tipo_comprobante", "ilike", "Nota de Crédito%").not("tipo_comprobante", "ilike", "Nota de Débito%").order("created_at", { ascending: false }).limit(8),
+    ]);
+
+    // Mostrá el dashboard con los datos críticos ya disponibles
+    setLoading(false);
+
+    // ─── GRUPO 2: Queries secundarias en paralelo (sin bloquear la UI) ───
+    const [
       { data: prods },
       { data: allClients },
       { data: provs },
       { data: ccSums },
       { data: ventasCat },
-      { data: turnoData },
-      { data: ultimasVentasRaw },
-      // fetchPedidosOnline runs in parallel too
     ] = await Promise.all([
-      supabase.from("tienda_config").select("recargo_transferencia, url_tienda").single(),
-      supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
-      supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso"),
       supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true),
       supabase.from("clientes").select("id, nombre, saldo").eq("activo", true),
       supabase.from("proveedores").select("saldo").eq("activo", true),
       supabase.from("cuenta_corriente").select("cliente_id, debe, haber"),
       supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada"),
-      supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1),
-      supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").not("tipo_comprobante", "ilike", "Nota de Crédito%").not("tipo_comprobante", "ilike", "Nota de Débito%").order("created_at", { ascending: false }).limit(8),
     ]);
 
-    // Start pedidos online fetch in parallel with processing below
+    // Start pedidos online fetch en paralelo con el procesamiento
     const pedidosOnlinePromise = fetchPedidosOnline();
 
     // ─── Turno de caja abierto + totales del turno ───
@@ -625,8 +632,8 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Dashboard fetch error:", err);
       showAdminToast("Error cargando el dashboard", "error");
-    } finally {
       setLoading(false);
+    } finally {
       // Cargar gráficos en segundo plano sin bloquear la UI
       const { start: chartStart, end: chartEnd } = getDateRange();
       fetchCharts(chartStart, chartEnd);

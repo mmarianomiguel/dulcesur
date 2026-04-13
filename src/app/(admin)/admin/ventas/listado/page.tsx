@@ -1874,7 +1874,25 @@ export default function ListadoVentasPage() {
 
     // Return stock when cancelling (only if wasn't already cancelled)
     if (nuevoEstado === "cancelado" && estadoAnterior !== "cancelado") {
-      for (const item of pedido.items) {
+      // Si los items vienen vacíos (cancelación desde historial), cargarlos desde la DB
+      let itemsParaStock = pedido.items;
+      if (itemsParaStock.length === 0 && ventaLinked) {
+        const { data: ventaItems } = await supabase
+          .from("venta_items")
+          .select("producto_id, cantidad, presentacion, unidades_por_presentacion, descripcion")
+          .eq("venta_id", ventaLinked.id);
+        itemsParaStock = (ventaItems || []).map((vi: any) => ({
+          producto_id: vi.producto_id,
+          nombre: vi.descripcion,
+          presentacion: vi.presentacion || "Unidad",
+          cantidad: vi.cantidad,
+          precio_unitario: 0,
+          subtotal: 0,
+          unidades_por_presentacion: vi.unidades_por_presentacion || 1,
+        }));
+      }
+
+      for (const item of itemsParaStock) {
         if (!item.producto_id) continue;
         let upp = item.unidades_por_presentacion || 1;
         if (upp === 1 && item.presentacion && item.presentacion !== "Unidad") {
