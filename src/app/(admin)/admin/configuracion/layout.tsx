@@ -17,17 +17,17 @@ const NAV_GROUPS = [
     items: [
       { href: "/admin/configuracion", label: "Empresa", icon: Building2 },
       { href: "/admin/configuracion/facturacion", label: "Facturación", icon: Receipt },
-      { href: "/admin/configuracion/impresion", label: "Impresión", icon: Printer },
       { href: "/admin/configuracion/pagos", label: "Pagos", icon: CreditCard },
+      { href: "/admin/configuracion/impresion", label: "Impresión", icon: Printer },
     ],
   },
   {
     label: "Tienda Online",
     items: [
       { href: "/admin/configuracion/tienda", label: "General", icon: Store },
-      { href: "/admin/configuracion/pedidos", label: "Pedidos y Envíos", icon: Package },
       { href: "/admin/configuracion/catalogo", label: "Catálogo", icon: FolderOpen },
       { href: "/admin/configuracion/pagina-inicio", label: "Página de Inicio", icon: LayoutTemplate },
+      { href: "/admin/configuracion/pedidos", label: "Pedidos y Envíos", icon: Package },
       { href: "/admin/configuracion/footer", label: "Footer y Páginas", icon: FileText },
     ],
   },
@@ -35,8 +35,8 @@ const NAV_GROUPS = [
     label: "Sistema",
     items: [
       { href: "/admin/configuracion/apariencia", label: "Apariencia", icon: Palette },
-      { href: "/admin/configuracion/usuarios", label: "Usuarios y Roles", icon: Users },
       { href: "/admin/configuracion/modulos", label: "Módulos", icon: Puzzle },
+      { href: "/admin/configuracion/usuarios", label: "Usuarios y Roles", icon: Users },
       { href: "/admin/configuracion/backup", label: "Backup", icon: HardDrive },
     ],
   },

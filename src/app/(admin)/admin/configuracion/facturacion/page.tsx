@@ -18,11 +18,16 @@ export default function FacturacionPage() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [listasPrecios, setListasPrecios] = useState<{ id: string; nombre: string }[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("empresa").select("*").limit(1).single();
+    const [{ data }, { data: listas }] = await Promise.all([
+      supabase.from("empresa").select("*").limit(1).single(),
+      supabase.from("listas_precios").select("id, nombre").order("nombre"),
+    ]);
     setEmpresa(data);
+    setListasPrecios(listas || []);
     setLoading(false);
   }, []);
 
@@ -63,41 +68,60 @@ export default function FacturacionPage() {
 
       <Card>
         <CardContent className="pt-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-2">
-              <Label>Punto de venta</Label>
-              <Input value={empresa?.punto_venta || ""} onChange={(ev) => e("punto_venta", ev.target.value)} placeholder="0001" />
+          {/* Comprobantes */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Comprobantes</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <Label>Punto de venta</Label>
+                <Input value={empresa?.punto_venta || ""} onChange={(ev) => e("punto_venta", ev.target.value)} placeholder="0001" />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo comprobante default</Label>
+                <Select value={empresa?.tipo_comprobante_default || ""} onValueChange={(v) => e("tipo_comprobante_default", v || "")}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Remito X">Remito X</SelectItem>
+                    <SelectItem value="Factura B">Factura B</SelectItem>
+                    <SelectItem value="Factura C">Factura C</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Tipo comprobante default</Label>
-              <Select value={empresa?.tipo_comprobante_default || ""} onValueChange={(v) => e("tipo_comprobante_default", v || "")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Remito X">Remito X</SelectItem>
-                  <SelectItem value="Factura B">Factura B</SelectItem>
-                  <SelectItem value="Factura C">Factura C</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Lista de precios default</Label>
-              <Select value={empresa?.lista_precios_default || ""} onValueChange={(v) => e("lista_precios_default", v || "")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Contado">Contado</SelectItem>
-                  <SelectItem value="Mayorista">Mayorista</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Moneda</Label>
-              <Select value={empresa?.moneda_default || ""} onValueChange={(v) => e("moneda_default", v || "")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ARS">Pesos (ARS)</SelectItem>
-                  <SelectItem value="USD">Dólares (USD)</SelectItem>
-                </SelectContent>
-              </Select>
+          </div>
+          <Separator />
+          {/* Precios y moneda */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Precios y moneda</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <Label>Lista de precios default</Label>
+                <Select value={empresa?.lista_precios_default || ""} onValueChange={(v) => e("lista_precios_default", v || "")}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    {listasPrecios.length > 0 ? (
+                      listasPrecios.map((l) => (
+                        <SelectItem key={l.id} value={l.nombre}>{l.nombre}</SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="Contado">Contado</SelectItem>
+                        <SelectItem value="Mayorista">Mayorista</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Moneda</Label>
+                <Select value={empresa?.moneda_default || ""} onValueChange={(v) => e("moneda_default", v || "")}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ARS">Pesos (ARS)</SelectItem>
+                    <SelectItem value="USD">Dólares (USD)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <Separator />

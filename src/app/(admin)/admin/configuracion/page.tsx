@@ -65,37 +65,55 @@ export default function EmpresaPage() {
 
       <Card>
         <CardContent className="pt-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-2">
-              <Label>Nombre comercial</Label>
-              <Input value={empresa?.nombre || ""} onChange={(ev) => e("nombre", ev.target.value)} />
+          {/* Identidad comercial */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Identidad comercial</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <Label>Nombre comercial</Label>
+                <Input value={empresa?.nombre || ""} onChange={(ev) => e("nombre", ev.target.value)} placeholder="Dulce Sur" />
+              </div>
+              <div className="space-y-2">
+                <Label>Razón social</Label>
+                <Input value={empresa?.razon_social || ""} onChange={(ev) => e("razon_social", ev.target.value)} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>CUIT</Label>
-              <Input value={empresa?.cuit || ""} onChange={(ev) => e("cuit", ev.target.value)} placeholder="XX-XXXXXXXX-X" />
+          </div>
+          <Separator />
+          {/* Datos fiscales */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Datos fiscales</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <Label>CUIT</Label>
+                <Input value={empresa?.cuit || ""} onChange={(ev) => e("cuit", ev.target.value)} placeholder="XX-XXXXXXXX-X" />
+              </div>
+              <div className="space-y-2">
+                <Label>Situación IVA</Label>
+                <Select value={empresa?.situacion_iva || ""} onValueChange={(v) => e("situacion_iva", v || "")}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar situación IVA" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Responsable Inscripto">Responsable Inscripto</SelectItem>
+                    <SelectItem value="Monotributista">Monotributista</SelectItem>
+                    <SelectItem value="Exento">Exento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Razón social</Label>
-              <Input value={empresa?.razon_social || ""} onChange={(ev) => e("razon_social", ev.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Situación IVA</Label>
-              <Select value={empresa?.situacion_iva || ""} onValueChange={(v) => e("situacion_iva", v || "")}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar situación IVA" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Responsable Inscripto">Responsable Inscripto</SelectItem>
-                  <SelectItem value="Monotributista">Monotributista</SelectItem>
-                  <SelectItem value="Exento">Exento</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Domicilio fiscal</Label>
-              <Input value={empresa?.domicilio || ""} onChange={(ev) => e("domicilio", ev.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Teléfono</Label>
-              <Input value={empresa?.telefono || ""} onChange={(ev) => e("telefono", ev.target.value)} />
+          </div>
+          <Separator />
+          {/* Contacto */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Contacto</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <Label>Domicilio fiscal</Label>
+                <Input value={empresa?.domicilio || ""} onChange={(ev) => e("domicilio", ev.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Teléfono</Label>
+                <Input value={empresa?.telefono || ""} onChange={(ev) => e("telefono", ev.target.value)} />
+              </div>
             </div>
           </div>
           <Separator />

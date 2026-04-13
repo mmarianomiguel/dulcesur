@@ -144,7 +144,7 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
 
   return (
     <section
-      className="relative overflow-hidden"
+      className="relative overflow-hidden min-h-[120px] md:min-h-[140px]"
       style={{
         background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})`,
       }}
@@ -196,7 +196,7 @@ function TrustBadgesBlock({ config }: { config: Record<string, any> }) {
   if (items.length === 0) return null;
 
   return (
-    <section className="bg-white border-y border-gray-100 py-4">
+    <section className="bg-white border-y border-gray-100 py-4 min-h-[80px]">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 stagger-children">
           {items.map((b, i) => {
@@ -286,6 +286,7 @@ function CategoriasDestacadasBlock({
                         width={56}
                         height={56}
                         className="w-full h-full object-cover"
+                        loading="lazy"
                       />
                     </div>
                   ) : (
@@ -361,7 +362,7 @@ function ProductosDestacadosBlock({
     { key: "nuevos" as const, label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
   ].filter((t) => t.count > 0);
 
-  const renderProductCard = (prod: any) => {
+  const renderProductCard = (prod: any, isPriority = false) => {
     const qty = getQty(prod.id);
     const sinStock = prod.stock <= 0;
     const pres = presMap[prod.id];
@@ -376,7 +377,7 @@ function ProductosDestacadosBlock({
         <Link href={`/productos/${productSlug(prod.nombre, prod.id)}`}>
           <div className="relative aspect-square bg-gray-50 overflow-hidden">
             {prod.imagen_url ? (
-              <Image src={prod.imagen_url} alt={prod.nombre} fill sizes="(max-width: 768px) 50vw, 25vw" loading="lazy" className="card-product-img object-contain p-4" />
+              <Image src={prod.imagen_url} alt={prod.nombre} fill sizes="(max-width: 768px) 50vw, 25vw" {...(isPriority ? { priority: true } : { loading: "lazy" })} className="card-product-img object-contain p-4" />
             ) : (
               <div className="w-full h-full flex items-center justify-center"><Package className="w-12 h-12 text-gray-300" /></div>
             )}
@@ -472,7 +473,7 @@ function ProductosDestacadosBlock({
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-children">
-            {activeProds.map(renderProductCard)}
+            {activeProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
           </div>
         )}
 
@@ -1098,7 +1099,7 @@ export default function TiendaPage({
     return (
       <div className="min-h-screen bg-white">
         {/* hero skeleton */}
-        <div className="bg-gray-100 h-[120px] animate-pulse" />
+        <div className="bg-gray-100 min-h-[120px] md:min-h-[140px] animate-pulse" />
         {/* badges skeleton */}
         <div className="border-y border-gray-100 py-4">
           <div className="max-w-7xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-4">

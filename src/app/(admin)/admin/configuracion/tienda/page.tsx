@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Store,
   Loader2,
@@ -65,6 +67,8 @@ export default function TiendaGeneralPage() {
       logo_url: config.logo_url,
       descripcion: config.descripcion,
       tienda_activa: config.tienda_activa,
+      monto_minimo_pedido: config.monto_minimo_pedido,
+      umbral_envio_gratis: config.umbral_envio_gratis,
     }).eq("id", config.id);
     setSaving(false);
     showAdminToast("Configuración guardada", "success");
@@ -212,6 +216,27 @@ export default function TiendaGeneralPage() {
               placeholder="Describe tu tienda..."
               className="min-h-[100px] resize-none"
             />
+          </div>
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <Label>Monto mínimo de pedido</Label>
+              <p className="text-xs text-muted-foreground">Monto mínimo para que el cliente pueda hacer un pedido</p>
+              <MoneyInput
+                value={config?.monto_minimo_pedido ?? 0}
+                onValueChange={(v) => update("monto_minimo_pedido", v)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Umbral envío gratis</Label>
+              <p className="text-xs text-muted-foreground">Monto mínimo para acceder a envío sin costo</p>
+              <MoneyInput
+                value={config?.umbral_envio_gratis ?? 0}
+                onValueChange={(v) => update("umbral_envio_gratis", v)}
+                className="h-9"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
