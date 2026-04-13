@@ -37,6 +37,8 @@ export default function NotificationBell({ clienteId }: { clienteId: number }) {
   const router = useRouter();
 
   const fetchNotifs = useCallback(async () => {
+    // No hacer fetch si clienteId no es un número válido
+    if (!clienteId || isNaN(clienteId) || clienteId <= 0) return;
     try {
       const res = await fetch(`/api/notificaciones/cliente?cliente_id=${clienteId}&limit=10`);
       if (!res.ok) return;
