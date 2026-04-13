@@ -294,8 +294,8 @@ export function CobroVentaSection({
       // CC in Mixto also requires client
       if (mixtoCuentaCorriente > 0 && !clienteId) return false;
     }
-    // Transferencia requires a bank account (even if none configured — block it)
-    if (showTransferUI && !cuentaBancariaId) return false;
+    // Transferencia requires a bank account selection — but only if accounts exist
+    if (showTransferUI && cuentasBancarias.length > 0 && !cuentaBancariaId) return false;
     return true;
   }, [saving, done, metodo, clienteId, mixtoActiveMethods, mixtoRemaining, mixtoEfectivo, mixtoTransferencia, mixtoCuentaCorriente, showTransferUI, cuentaBancariaId]);
 
@@ -535,6 +535,22 @@ export function CobroVentaSection({
         </div>
       )}
 
+      {/* Warning: no bank accounts configured */}
+      {showTransferUI && cuentasBancarias.length === 0 && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 flex items-start gap-2">
+          <IconInfo className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-medium text-amber-800">
+              No hay cuentas bancarias configuradas
+            </p>
+            <p className="text-[10px] text-amber-600 mt-0.5">
+              Para cobrar por transferencia necesitás configurar al menos una cuenta en{" "}
+              <a href="/admin/configuracion" className="underline font-medium">Configuración → Cuentas bancarias</a>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Surcharge indicator */}
       {surcharge > 0 && (
         <div className="rounded-lg bg-violet-50 border border-violet-200/80 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -764,6 +780,11 @@ export function CobroVentaSection({
         }`}
         onClick={handleConfirmar}
         disabled={!canConfirm}
+        title={
+          !canConfirm && showTransferUI && cuentasBancarias.length > 0 && !cuentaBancariaId
+            ? "Seleccioná una cuenta bancaria para continuar"
+            : undefined
+        }
       >
         {saving ? (
           <Loader2 className="w-5 h-5 animate-spin" />
