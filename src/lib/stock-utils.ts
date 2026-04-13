@@ -1,7 +1,12 @@
 /**
  * Construye el payload de update para un producto considerando cambio de stock.
- * Si el nuevo stock es 0 (y el anterior era > 0), setea fecha_sin_stock.
- * Si el nuevo stock es > 0 (y el anterior era 0), limpia fecha_sin_stock.
+ *
+ * Reglas:
+ * - Si el nuevo stock es <= 0 (sin stock o negativo) Y el anterior era > 0:
+ *   setear fecha_sin_stock a ahora.
+ * - Si el nuevo stock es > 0 Y el anterior era <= 0:
+ *   limpiar fecha_sin_stock (hay stock de nuevo).
+ * - En cualquier otro caso: no tocar fecha_sin_stock.
  */
 export function buildStockUpdate(
   stockNuevo: number,
@@ -13,9 +18,12 @@ export function buildStockUpdate(
     ...extraFields,
   };
 
-  if (stockNuevo === 0 && stockAnterior > 0) {
+  // Pasó de CON stock a SIN stock (incluye negativo)
+  if (stockNuevo <= 0 && stockAnterior > 0) {
     payload.fecha_sin_stock = new Date().toISOString();
-  } else if (stockNuevo > 0 && stockAnterior === 0) {
+  }
+  // Pasó de SIN stock (o negativo) a CON stock
+  else if (stockNuevo > 0 && stockAnterior <= 0) {
     payload.fecha_sin_stock = null;
   }
 
