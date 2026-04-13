@@ -78,6 +78,7 @@ import {
 import { ImageUpload } from "@/components/image-upload";
 import { showAdminToast } from "@/components/admin-toast";
 import { APP_NAME } from "@/lib/constants";
+import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 
 
@@ -232,6 +233,17 @@ export default function ProductosPage() {
 
   // Mass selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Mass edit modal state
+  const [massEditOpen, setMassEditOpen] = useState(false);
+  const [massTarget, setMassTarget] = useState<"venta"|"costo"|"margen"|"fijar_venta"|"fijar_costo">("costo");
+  const [massType, setMassType] = useState<"percentage"|"fixed">("percentage");
+  const [massOperation, setMassOperation] = useState<"increase"|"decrease">("increase");
+  const [massAmount, setMassAmount] = useState("");
+  const [fijarCostoMode, setFijarCostoMode] = useState<"mantener_precio"|"mantener_margen">("mantener_precio");
+  const [roundInModal, setRoundInModal] = useState(false);
+  const [roundInModalMultiple, setRoundInModalMultiple] = useState<5|10>(10);
+  const [roundInModalMode, setRoundInModalMode] = useState<"nearest"|"up"|"down">("nearest");
+  const [massEditSaving, setMassEditSaving] = useState(false);
   const [actionConfirm, setActionConfirm] = useState<{ open: boolean; title: string; message: string; variant: "destructive" | "default"; onConfirm: () => void }>({ open: false, title: "", message: "", variant: "default", onConfirm: () => {} });
   const [deleting, setDeleting] = useState(false);
 
@@ -1738,6 +1750,191 @@ export default function ProductosPage() {
   const deselectAll = () => setSelected(new Set());
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
 
+  // ── Mass edit helpers ──────────────────────────────────────────────────
+  const calcRound = (price: number, mult: number, mode: string) => {
+    if (mode === "up") return Math.ceil(price / mult) * mult;
+    if (mode === "down") return Math.floor(price / mult) * mult;
+    return Math.round(price / mult) * mult;
+  };
+
+  const massEditPreview = useMemo(() => {
+    const amount = parseFloat(massAmount);
+    if (isNaN(amount) || amount < 0) return [];
+    if (amount === 0 && !["margen", "fijar_venta", "fijar_costo"].includes(massTarget)) return [];
+    const selectedProducts = products.filter((p) => selected.has(p.id));
+
+    return selectedProducts.map((p) => {
+      const currentCosto = p.costo || 0;
+      const currentPrecio = p.precio;
+
+      if (massTarget === "fijar_venta") {
+        const newPrecio = Math.max(0, Math.round(amount));
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto: currentCosto, currentPrecio, newPrecio, diff, diffPercent };
+      }
+
+      if (massTarget === "fijar_costo") {
+        const newCosto = Math.max(0, Math.round(amount * 100) / 100);
+        let newPrecio: number;
+        if (fijarCostoMode === "mantener_margen" && currentCosto > 0) {
+          const margen = (currentPrecio - currentCosto) / currentCosto;
+          newPrecio = newCosto * (1 + margen);
+        } else {
+          newPrecio = currentPrecio;
+        }
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio, diff, diffPercent };
+      }
+
+      if (massTarget === "margen") {
+        const newPrecio = currentCosto > 0 ? currentCosto * (1 + amount / 100) : currentPrecio;
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto: currentCosto, currentPrecio, newPrecio, diff, diffPercent };
+      }
+
+      if (massTarget === "venta") {
+        let newPrecio: number;
+        if (massType === "percentage") {
+          const factor = massOperation === "increase" ? 1 + amount / 100 : 1 - amount / 100;
+          newPrecio = currentPrecio * factor;
+        } else {
+          newPrecio = massOperation === "increase" ? currentPrecio + amount : currentPrecio - amount;
+        }
+        newPrecio = Math.max(0, newPrecio);
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto: currentCosto, currentPrecio, newPrecio, diff, diffPercent };
+      } else {
+        // costo: recalculate precio maintaining margin %
+        let marginPercent = 0;
+        if (currentCosto > 0) {
+          marginPercent = ((currentPrecio - currentCosto) / currentCosto) * 100;
+        }
+        let newCosto: number;
+        if (massType === "percentage") {
+          const factor = massOperation === "increase" ? 1 + amount / 100 : 1 - amount / 100;
+          newCosto = currentCosto * factor;
+        } else {
+          newCosto = massOperation === "increase" ? currentCosto + amount : currentCosto - amount;
+        }
+        newCosto = Math.max(0, Math.round(newCosto * 100) / 100);
+        let newPrecio: number;
+        if (currentCosto > 0) {
+          newPrecio = newCosto * (1 + marginPercent / 100);
+        } else {
+          if (massType === "percentage") {
+            const factor = massOperation === "increase" ? 1 + amount / 100 : 1 - amount / 100;
+            newPrecio = currentPrecio * factor;
+          } else {
+            newPrecio = massOperation === "increase" ? currentPrecio + amount : currentPrecio - amount;
+          }
+        }
+        newPrecio = Math.max(0, newPrecio);
+        const diff = newPrecio - currentPrecio;
+        const diffPercent = currentPrecio > 0 ? ((newPrecio - currentPrecio) / currentPrecio) * 100 : 0;
+        return { id: p.id, nombre: p.nombre, currentCosto, newCosto, currentPrecio, newPrecio, diff, diffPercent };
+      }
+    });
+  }, [products, selected, massTarget, massType, massOperation, massAmount, fijarCostoMode]);
+
+  const applyMassEdit = async () => {
+    setMassEditSaving(true);
+    try {
+      const getFinalPrecio = (exactPrecio: number) => {
+        const base = Math.round(exactPrecio);
+        return roundInModal ? calcRound(base, roundInModalMultiple, roundInModalMode) : base;
+      };
+
+      for (const item of massEditPreview) {
+        const prod = products.find((p) => p.id === item.id);
+        const finalPrecio = getFinalPrecio(item.newPrecio);
+        const updateData: Record<string, unknown> = {};
+        if (finalPrecio !== (prod?.precio ?? 0)) {
+          updateData.precio = finalPrecio;
+          updateData.fecha_actualizacion = new Date().toISOString();
+          if (prod) updateData.precio_anterior = prod.precio;
+        }
+        if (massTarget === "costo" || massTarget === "fijar_costo") updateData.costo = item.newCosto;
+        if (Object.keys(updateData).length > 0) {
+          await supabase.from("productos").update(updateData).eq("id", item.id);
+        }
+
+        // Update presentaciones proportionally
+        const oldPrecio = prod?.precio ?? 0;
+        const oldCosto = prod?.costo ?? 0;
+        const { data: prodPres } = await supabase
+          .from("presentaciones")
+          .select("id, producto_id, nombre, cantidad, sku, costo, precio, precio_oferta")
+          .eq("producto_id", item.id);
+        if (prodPres) {
+          for (const pres of prodPres) {
+            const presUpdate: Record<string, unknown> = {};
+            if (finalPrecio !== oldPrecio) {
+              presUpdate.precio = oldPrecio > 0
+                ? Math.round(pres.precio * (finalPrecio / oldPrecio))
+                : (pres.cantidad > 0 ? Math.round(finalPrecio * pres.cantidad) : finalPrecio);
+            }
+            if (item.newCosto !== oldCosto) {
+              presUpdate.costo = oldCosto > 0
+                ? Math.round(pres.costo * (item.newCosto / oldCosto))
+                : (pres.cantidad > 0 ? Math.round(item.newCosto * pres.cantidad) : item.newCosto);
+            }
+            if (Object.keys(presUpdate).length > 0) {
+              await supabase.from("presentaciones").update(presUpdate).eq("id", pres.id);
+            }
+          }
+        }
+      }
+
+      // Log to precio_historial
+      const historyInserts = massEditPreview
+        .filter((item) => {
+          const prod = products.find((p) => p.id === item.id);
+          return prod && (getFinalPrecio(item.newPrecio) !== prod.precio || item.newCosto !== prod.costo);
+        })
+        .map((item) => {
+          const prod = products.find((p) => p.id === item.id)!;
+          return {
+            producto_id: item.id,
+            precio_anterior: prod.precio,
+            precio_nuevo: getFinalPrecio(item.newPrecio),
+            costo_anterior: prod.costo,
+            costo_nuevo: item.newCosto,
+            usuario: "Admin",
+          };
+        });
+      if (historyInserts.length > 0) {
+        try { await supabase.from("precio_historial").insert(historyInserts); } catch { console.error("Error guardando historial de precios"); }
+      }
+
+      // Update local products state
+      setProducts((prev) =>
+        prev.map((p) => {
+          const preview = massEditPreview.find((i) => i.id === p.id);
+          if (preview) {
+            const fp = getFinalPrecio(preview.newPrecio);
+            return (massTarget === "costo" || massTarget === "fijar_costo")
+              ? { ...p, costo: preview.newCosto, precio: fp, precio_anterior: p.precio }
+              : { ...p, precio: fp, precio_anterior: p.precio };
+          }
+          return p;
+        })
+      );
+
+      setMassEditOpen(false);
+      setMassAmount("");
+      showAdminToast(`Se actualizaron ${massEditPreview.length} producto${massEditPreview.length !== 1 ? "s" : ""}`, "success");
+    } catch (err) {
+      console.error("Error applying mass edit:", err);
+      showAdminToast("No se pudieron aplicar los cambios", "error");
+    } finally {
+      setMassEditSaving(false);
+    }
+  };
+
   const handleMassDelete = () => {
     if (selected.size === 0) return;
     setActionConfirm({
@@ -2563,10 +2760,7 @@ export default function ProductosPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  sessionStorage.setItem("bulkEditIds", JSON.stringify(Array.from(selected)));
-                  window.location.href = "/admin/productos/editar-precios";
-                }}
+                onClick={() => { setMassEditOpen(true); setMassAmount(""); }}
               >
                 <Edit className="w-4 h-4 mr-2" />
                 Editar precios ({selected.size})
@@ -4822,8 +5016,9 @@ export default function ProductosPage() {
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
               onClick={() => {
                 const p = contextMenu.product;
-                sessionStorage.setItem("bulkEditIds", JSON.stringify([p.id]));
-                window.location.href = "/admin/productos/editar-precios";
+                setSelected(new Set([p.id]));
+                setMassEditOpen(true);
+                setMassAmount("");
                 setContextMenu(null);
               }}
             >
@@ -4923,6 +5118,304 @@ export default function ProductosPage() {
           </div>
         </div>
       )}
+
+      {/* Mass Edit Dialog */}
+      <Dialog open={massEditOpen} onOpenChange={setMassEditOpen}>
+        <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden">
+          <div className="flex items-start justify-between px-6 pt-5 pb-4">
+            <div>
+              <DialogTitle className="text-base font-semibold">Edición masiva de precios</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {selected.size} producto{selected.size !== 1 ? "s" : ""} seleccionado{selected.size !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex border-t overflow-hidden" style={{ maxHeight: "calc(85vh - 140px)" }}>
+            {/* Left column — config */}
+            <div className="w-48 min-w-48 flex-shrink-0 border-r overflow-y-auto p-3 space-y-3">
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Aplicar sobre</p>
+                {([
+                  { val: "costo" as const, label: "Precio de costo" },
+                  { val: "venta" as const, label: "Precio de venta" },
+                  { val: "margen" as const, label: "Setear Margen %" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.val}
+                    onClick={() => setMassTarget(opt.val)}
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs border transition-all text-left ${
+                      massTarget === opt.val
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-transparent text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      massTarget === opt.val ? "border-primary" : "border-muted-foreground"
+                    }`}>
+                      {massTarget === opt.val && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                    </div>
+                    {opt.label}
+                  </button>
+                ))}
+                <div className="h-px bg-border my-1" />
+                {([
+                  { val: "fijar_venta" as const, label: "Fijar Precio Venta" },
+                  { val: "fijar_costo" as const, label: "Fijar Precio Costo" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.val}
+                    onClick={() => setMassTarget(opt.val)}
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs border transition-all text-left ${
+                      massTarget === opt.val
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-transparent text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      massTarget === opt.val ? "border-primary" : "border-muted-foreground"
+                    }`}>
+                      {massTarget === opt.val && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                    </div>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Tipo</p>
+                  <div className="flex gap-1">
+                    {([
+                      { val: "percentage" as const, label: "Porcentaje" },
+                      { val: "fixed" as const, label: "Monto fijo" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.val}
+                        onClick={() => setMassType(opt.val)}
+                        className={`px-2.5 py-1 rounded-full text-xs border transition-all ${
+                          massType === opt.val
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!["margen", "fijar_venta", "fijar_costo"].includes(massTarget) && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">Operación</p>
+                  <div className="flex gap-1">
+                    {([
+                      { val: "increase" as const, label: "Aumentar" },
+                      { val: "decrease" as const, label: "Disminuir" },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.val}
+                        onClick={() => setMassOperation(opt.val)}
+                        className={`px-2.5 py-1 rounded-full text-xs border transition-all ${
+                          massOperation === opt.val
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">
+                  {massTarget === "margen" ? "Margen" : massTarget === "fijar_venta" ? "Precio venta" : massTarget === "fijar_costo" ? "Precio costo" : "Valor"}
+                </p>
+                <div className="flex items-center">
+                  <span className="px-2.5 py-1.5 bg-muted border border-r-0 border-input rounded-l-md text-sm text-muted-foreground">
+                    {massTarget === "margen" ? "%" : ["fijar_venta", "fijar_costo"].includes(massTarget) ? "$" : massType === "percentage" ? "%" : "$"}
+                  </span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={massAmount}
+                    onChange={(e) => setMassAmount(e.target.value)}
+                    className="rounded-l-none w-24 text-right font-mono"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {massTarget === "fijar_costo" && (
+                <div className="space-y-1 pt-2 border-t">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1.5">
+                    Al cambiar el costo
+                  </p>
+                  {([
+                    { val: "mantener_precio" as const, label: "Mantener precio venta" },
+                    { val: "mantener_margen" as const, label: "Mantener margen %" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.val}
+                      onClick={() => setFijarCostoMode(opt.val)}
+                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs border transition-all text-left ${
+                        fijarCostoMode === opt.val
+                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          : "border-transparent text-muted-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className={`w-3 h-3 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                        fijarCostoMode === opt.val ? "border-primary" : "border-muted-foreground"
+                      }`}>
+                        {fijarCostoMode === opt.val && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                      </div>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-2 pt-2 border-t mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Switch
+                    checked={roundInModal}
+                    onCheckedChange={setRoundInModal}
+                    className="scale-75"
+                  />
+                  <span className="text-xs text-muted-foreground">Redondear al aplicar</span>
+                </label>
+                {roundInModal && (
+                  <div className="space-y-2 pl-1">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Múltiplo</p>
+                      <div className="flex gap-1">
+                        {([5, 10] as const).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => setRoundInModalMultiple(m)}
+                            className={`px-2.5 py-1 rounded-full text-xs border transition-all ${
+                              roundInModalMultiple === m
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            ${m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Dirección</p>
+                      <div className="flex flex-col gap-1">
+                        {([
+                          { val: "nearest" as const, label: "Más cercano" },
+                          { val: "up" as const, label: "Hacia arriba" },
+                          { val: "down" as const, label: "Hacia abajo" },
+                        ]).map((opt) => (
+                          <button
+                            key={opt.val}
+                            onClick={() => setRoundInModalMode(opt.val)}
+                            className={`px-2.5 py-1 rounded-full text-xs border transition-all text-left ${
+                              roundInModalMode === opt.val
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right column — preview */}
+            <div className="flex-1 overflow-hidden flex flex-col p-3">
+              <div className="overflow-y-auto flex-1">
+                {massEditPreview.length > 0 ? (
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-background border-b">
+                      <tr className="text-muted-foreground">
+                        <th className="text-left py-1.5 px-1.5 font-medium">Producto</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium whitespace-nowrap">Costo ant.</th>
+                        <th className="text-center py-1.5 w-4"></th>
+                        <th className="text-right py-1.5 px-1.5 font-medium whitespace-nowrap">Costo nvo.</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium">Precio</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium">Margen</th>
+                        <th className="text-right py-1.5 px-1.5 font-medium">Dif.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {massEditPreview.map((item) => {
+                        const finalPrecio = (() => {
+                          const base = Math.round(item.newPrecio);
+                          return roundInModal ? calcRound(base, roundInModalMultiple, roundInModalMode) : base;
+                        })();
+                        const diff = finalPrecio - item.currentPrecio;
+                        const newMargen = item.newCosto > 0 ? ((finalPrecio - item.newCosto) / item.newCosto) * 100 : 0;
+                        return (
+                          <tr key={item.id} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-1 px-1.5 whitespace-nowrap">{item.nombre}</td>
+                            <td className="py-1 px-1.5 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                              {formatCurrency(item.currentCosto, true)}
+                            </td>
+                            <td className="py-1 text-center text-muted-foreground">&rarr;</td>
+                            <td className="py-1 px-1.5 text-right tabular-nums font-medium whitespace-nowrap">
+                              {formatCurrency(item.newCosto, true)}
+                            </td>
+                            <td className="py-1 px-1.5 text-right tabular-nums font-medium whitespace-nowrap">
+                              {formatCurrency(finalPrecio)}
+                            </td>
+                            <td className="py-1 px-1.5 text-right tabular-nums text-muted-foreground">
+                              {newMargen > 0 ? `${newMargen.toFixed(1)}%` : "\u2014"}
+                            </td>
+                            <td className={`py-1 px-1.5 text-right tabular-nums whitespace-nowrap ${diff >= 0 ? "text-green-600" : "text-red-500"}`}>
+                              {diff >= 0 ? "+" : ""}{formatCurrency(Math.abs(diff))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                    <p>Ingres&aacute; un valor para ver la vista previa</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between px-6 py-4 border-t">
+            <span className="text-xs text-muted-foreground">
+              {roundInModal && massEditPreview.length > 0 && (() => {
+                const n = massEditPreview.filter((i) => {
+                  const base = Math.round(i.newPrecio);
+                  return base !== (roundInModal ? calcRound(base, roundInModalMultiple, roundInModalMode) : base);
+                }).length;
+                return n > 0
+                  ? `${n} precio${n !== 1 ? "s" : ""} redondeado${n !== 1 ? "s" : ""} a múltiplo de $${roundInModalMultiple}`
+                  : "Sin diferencia por redondeo";
+              })()}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setMassEditOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={() => applyMassEdit()}
+                disabled={massEditPreview.length === 0 || massEditSaving}
+              >
+                {massEditSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Aplicar cambios
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
