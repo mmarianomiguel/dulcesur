@@ -562,7 +562,7 @@ export default function NotaCreditoPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Total NC emitidas</p><p className="text-2xl font-bold">{notas.length}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Monto total NC</p><p className="text-2xl font-bold">{formatCurrency(totalNC)}</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Monto total NC</p><p className="text-2xl font-bold text-red-600">-{formatCurrency(totalNC)}</p></CardContent></Card>
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">NC este mes</p><p className="text-2xl font-bold">{countMes}</p></CardContent></Card>
       </div>
 
@@ -595,7 +595,11 @@ export default function NotaCreditoPage() {
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Período</Label>
                     <Select value={ncFilterMode} onValueChange={(v) => setNcFilterMode((v ?? "day") as "day" | "month" | "range" | "all")}>
-                      <SelectTrigger className="w-36"><SelectValue placeholder="Período" /></SelectTrigger>
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Período">
+                          {ncFilterMode === "all" ? "Todos" : ncFilterMode === "day" ? "Día" : ncFilterMode === "month" ? "Mensual" : "Entre fechas"}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
                         <SelectItem value="day">Día</SelectItem>
@@ -651,13 +655,13 @@ export default function NotaCreditoPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2 px-3 font-medium">Número</th>
-                        <th className="text-left py-2 px-3 font-medium">Fecha</th>
-                        <th className="text-left py-2 px-3 font-medium">Tipo</th>
-                        <th className="text-left py-2 px-3 font-medium">Cliente</th>
-                        <th className="text-left py-2 px-3 font-medium">Devolución vía</th>
-                        <th className="text-right py-2 px-3 font-medium">Total</th>
+                      <tr className="bg-muted/40 border-b text-muted-foreground">
+                        <th className="text-left py-2.5 px-4 font-medium text-xs uppercase tracking-wide">Número</th>
+                        <th className="text-left py-2.5 px-4 font-medium text-xs uppercase tracking-wide">Fecha</th>
+                        <th className="text-left py-2.5 px-4 font-medium text-xs uppercase tracking-wide">Tipo</th>
+                        <th className="text-left py-2.5 px-4 font-medium text-xs uppercase tracking-wide">Cliente</th>
+                        <th className="text-left py-2.5 px-4 font-medium text-xs uppercase tracking-wide">Devolución vía</th>
+                        <th className="text-right py-2.5 px-4 font-medium text-xs uppercase tracking-wide">Total</th>
                         <th className="w-10"></th>
                       </tr>
                     </thead>
@@ -665,23 +669,39 @@ export default function NotaCreditoPage() {
                       {filteredNotas.map((n) => (
                         <tr
                           key={n.id}
-                          className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
+                          className="border-b last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
                           onClick={() => openDetail(n)}
                         >
-                          <td className="py-2 px-3 font-mono text-xs">{n.numero}</td>
-                          <td className="py-2 px-3">{n.fecha}</td>
-                          <td className="py-2 px-3">
-                            <Badge variant="secondary" className="text-xs">{n.tipo_comprobante}</Badge>
+                          <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{n.numero}</td>
+                          <td className="py-3 px-4 text-sm text-muted-foreground">
+                            {new Date(n.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}
                           </td>
-                          <td className="py-2 px-3">{n.clientes?.nombre || "-"}</td>
-                          <td className="py-2 px-3">
-                            <Badge variant="outline" className="text-xs">{n.forma_pago || "-"}</Badge>
+                          <td className="py-3 px-4">
+                            <Badge variant="secondary" className="text-xs">
+                              {(n.tipo_comprobante || "").replace("Nota de Crédito", "NC")}
+                            </Badge>
                           </td>
-                          <td className="py-2 px-3 text-right font-semibold text-red-500">
+                          <td className="py-3 px-4 font-medium">{n.clientes?.nombre || "-"}</td>
+                          <td className="py-3 px-4">
+                            <Badge variant="outline" className={`text-xs font-medium ${
+                              n.forma_pago === "Efectivo"
+                                ? "bg-green-50 border-green-200 text-green-700"
+                                : n.forma_pago === "Transferencia"
+                                ? "bg-blue-50 border-blue-200 text-blue-700"
+                                : n.forma_pago === "Cuenta Corriente"
+                                ? "bg-violet-50 border-violet-200 text-violet-700"
+                                : "bg-gray-50 border-gray-200 text-gray-600"
+                            }`}>
+                              {n.forma_pago === "Cuenta Corriente" ? "Cta. Corriente" : n.forma_pago || "-"}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right font-semibold text-red-600 font-mono text-sm">
                             -{formatCurrency(n.total)}
                           </td>
-                          <td className="py-2 px-3">
-                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                          <td className="py-3 px-4">
+                            <button className="w-7 h-7 flex items-center justify-center rounded-md border border-border hover:bg-muted transition-colors">
+                              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                            </button>
                           </td>
                         </tr>
                       ))}
