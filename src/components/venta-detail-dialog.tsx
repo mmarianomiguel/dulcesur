@@ -505,7 +505,14 @@ export function VentaDetailDialog({
                 clienteId={cobroConfig.clienteId}
                 clienteNombre={data.nombre_cliente || ""}
                 clienteSaldo={cobroConfig.clienteSaldo}
-                montoVenta={recPct > 0 ? Math.round(displayTotal / (1 + recPct / 100) * 100) / 100 : displayTotal}
+                montoVenta={(() => {
+                  // Pass base amount WITHOUT transferSurcharge — CobroVentaSection calculates it internally
+                  const rawSubtotal = data.subtotal || items.reduce((s, i) => s + i.subtotal, 0);
+                  const baseConDescRecargo = recPct > 0
+                    ? Math.round(rawSubtotal * (1 - descPct / 100) * (1 + recPct / 100))
+                    : rawSubtotal;
+                  return baseConDescRecargo + (data.costo_envio || 0);
+                })()}
                 subtotalItems={itemsSubtotal}
                 costoEnvio={envio}
                 recargoTransferencia={cobroConfig.recargoTransferencia}
