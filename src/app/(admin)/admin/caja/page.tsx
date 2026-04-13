@@ -1803,16 +1803,16 @@ export default function CajaPage() {
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <CardTitle className="text-base">
                   {ventaOrigenFilter === "todas" ? `${ventas.length} ventas` :
-                   ventaOrigenFilter === "pos" ? `${ventas.filter(v => (v as any).origen !== "tienda").length} ventas POS` :
-                   ventaOrigenFilter === "envio" ? `${ventas.filter(v => (v as any).origen === "tienda" && ["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length} envíos` :
-                   `${ventas.filter(v => (v as any).origen === "tienda" && !["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length} retiros`}
+                   ventaOrigenFilter === "pos" ? `${ventas.filter(v => { const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return (v as any).origen !== "tienda" && !isEnvio; }).length} ventas POS` :
+                   ventaOrigenFilter === "envio" ? `${ventas.filter(v => { const me = (v as any).metodo_entrega; return me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); }).length} envíos` :
+                   `${ventas.filter(v => { const isWeb = (v as any).origen === "tienda"; const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return isWeb && !isEnvio; }).length} retiros`}
                 </CardTitle>
                 <div className="flex gap-1.5 flex-wrap">
                   {([
                     { key: "todas", label: "Todas", dot: null, count: ventas.length },
-                    { key: "pos", label: "POS", dot: "bg-blue-600", count: ventas.filter(v => (v as any).origen !== "tienda").length },
-                    { key: "envio", label: "Envío", dot: "bg-emerald-600", count: ventas.filter(v => (v as any).origen === "tienda" && ["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length },
-                    { key: "retiro", label: "Retiro", dot: "bg-purple-600", count: ventas.filter(v => (v as any).origen === "tienda" && !["envio","envio_a_domicilio","envio a domicilio"].includes((v as any).metodo_entrega)).length },
+                    { key: "pos", label: "POS", dot: "bg-blue-600", count: ventas.filter(v => { const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return (v as any).origen !== "tienda" && !isEnvio; }).length },
+                    { key: "envio", label: "Envío", dot: "bg-emerald-600", count: ventas.filter(v => { const me = (v as any).metodo_entrega; return me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); }).length },
+                    { key: "retiro", label: "Retiro", dot: "bg-purple-600", count: ventas.filter(v => { const isWeb = (v as any).origen === "tienda"; const me = (v as any).metodo_entrega; const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me); return isWeb && !isEnvio; }).length },
                   ] as const).map(f => (
                     <button
                       key={f.key}
@@ -1854,17 +1854,18 @@ export default function CajaPage() {
                         {ventas.filter(v => {
                           if (ventaOrigenFilter === "todas") return true;
                           const isWeb = (v as any).origen === "tienda";
-                          const metodoEntrega = (v as any).metodo_entrega;
-                          const isEnvio = isWeb && metodoEntrega && ["envio","envio_a_domicilio","envio a domicilio"].includes(metodoEntrega);
-                          if (ventaOrigenFilter === "pos") return !isWeb;
-                          if (ventaOrigenFilter === "envio") return isEnvio;
-                          if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                          const me = (v as any).metodo_entrega;
+                          const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                          const isRetiro = isWeb && !isEnvio;
+                          if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
+                          if (ventaOrigenFilter === "envio") return !!isEnvio;
+                          if (ventaOrigenFilter === "retiro") return !!isRetiro;
                           return true;
                         }).map((v) => {
                           const origen = (v as any).origen;
                           const metodoEntrega = (v as any).metodo_entrega;
                           const isWeb = origen === "tienda";
-                          const isEnvio = isWeb && metodoEntrega && ["envio", "envio_a_domicilio", "envio a domicilio"].includes(metodoEntrega);
+                          const isEnvio = metodoEntrega && ["envio", "envio_a_domicilio", "envio a domicilio"].includes(metodoEntrega);
                           const isRetiro = isWeb && !isEnvio;
 
                           const origenLabel = isEnvio ? "Envío" : isRetiro ? "Retiro" : "POS";
@@ -1874,7 +1875,7 @@ export default function CajaPage() {
                             : isRetiro
                             ? "bg-purple-50 text-purple-800 border border-purple-200"
                             : "bg-blue-50 text-blue-800 border border-blue-200";
-                          const showWeb = isEnvio || isRetiro;
+                          const origenSub = isRetiro ? "Web" : (isEnvio && !isWeb) ? "POS" : isEnvio ? "Web" : null;
 
                           const montoPagado = (v as any).monto_pagado || 0;
                           const isPagado = montoPagado >= v.total - 1;
@@ -1905,7 +1906,7 @@ export default function CajaPage() {
                                     <span className={`w-1 h-1 rounded-full shrink-0 ${origenDot}`} />
                                     {origenLabel}
                                   </span>
-                                  {showWeb && <span className="text-[10px] text-muted-foreground pl-1">Web</span>}
+                                  {origenSub && <span className="text-[10px] text-muted-foreground pl-1">{origenSub}</span>}
                                 </div>
                               </td>
                               <td className="py-2.5 px-3">
@@ -1948,10 +1949,11 @@ export default function CajaPage() {
                               if (ventaOrigenFilter === "todas") return true;
                               const isWeb = (v as any).origen === "tienda";
                               const me = (v as any).metodo_entrega;
-                              const isEnvio = isWeb && me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
-                              if (ventaOrigenFilter === "pos") return !isWeb;
-                              if (ventaOrigenFilter === "envio") return isEnvio;
-                              if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                              const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                              const isRetiro = isWeb && !isEnvio;
+                              if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
+                              if (ventaOrigenFilter === "envio") return !!isEnvio;
+                              if (ventaOrigenFilter === "retiro") return !!isRetiro;
                               return true;
                             }).length} ventas
                             {ventas.some(v =>
@@ -1971,10 +1973,11 @@ export default function CajaPage() {
                               if (ventaOrigenFilter === "todas") return true;
                               const isWeb = (v as any).origen === "tienda";
                               const me = (v as any).metodo_entrega;
-                              const isEnvio = isWeb && me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
-                              if (ventaOrigenFilter === "pos") return !isWeb;
-                              if (ventaOrigenFilter === "envio") return isEnvio;
-                              if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                              const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                              const isRetiro = isWeb && !isEnvio;
+                              if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
+                              if (ventaOrigenFilter === "envio") return !!isEnvio;
+                              if (ventaOrigenFilter === "retiro") return !!isRetiro;
                               return true;
                             }).reduce((s, v) => s + v.total, 0))}
                           </td>
@@ -1990,10 +1993,11 @@ export default function CajaPage() {
                       if (ventaOrigenFilter === "todas") return true;
                       const isWeb = (v as any).origen === "tienda";
                       const me = (v as any).metodo_entrega;
-                      const isEnvio = isWeb && me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
-                      if (ventaOrigenFilter === "pos") return !isWeb;
-                      if (ventaOrigenFilter === "envio") return isEnvio;
-                      if (ventaOrigenFilter === "retiro") return isWeb && !isEnvio;
+                      const isEnvio = me && ["envio","envio_a_domicilio","envio a domicilio"].includes(me);
+                      const isRetiro = isWeb && !isEnvio;
+                      if (ventaOrigenFilter === "pos") return !isWeb && !isEnvio;
+                      if (ventaOrigenFilter === "envio") return !!isEnvio;
+                      if (ventaOrigenFilter === "retiro") return !!isRetiro;
                       return true;
                     }).map((v) => (
                       <div
