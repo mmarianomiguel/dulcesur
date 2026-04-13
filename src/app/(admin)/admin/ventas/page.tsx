@@ -1984,7 +1984,7 @@ export default function VentasPage() {
             .order("created_at", { ascending: true });
 
           let remainingCobro = saldoPendiente;
-          let runningSaldo = (newSaldoAfterCobro ?? 0) + saldoPendiente; // saldo antes del cobro
+          let runningSaldo = (finalSaldoAfterCobro ?? 0) + saldoPendiente; // saldo antes del cobro
 
           for (const pv of pendingVentas || []) {
             if (remainingCobro <= 0) break;
