@@ -18,13 +18,18 @@ export const metadata: Metadata = {
   manifest: "/manifest-tienda.json",
 };
 
+// Preconnect hints para recursos críticos — mejora LCP
+export const viewport = {
+  themeColor: "#ffffff",
+};
+
 export default function TiendaLayout({ children }: { children: React.ReactNode }) {
   return (
     <CartProvider>
       <div className="flex min-h-screen flex-col bg-white">
         <AdminBanner />
         <TiendaNavbar />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 min-h-[60vh]">{children}</main>
         <TiendaFooter />
         <ToastContainer />
         <WhatsAppFloat />

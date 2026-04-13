@@ -90,10 +90,14 @@ export default function TiendaNavbar() {
       if (emp || tc) setConfig({ ...emp, ...tc, logo_url: tc?.logo_url } as any);
       // Use tienda_config logo, fall back to white-label logo
       const wlLogo = (emp as any)?.white_label?.logo_url;
-      const logoUrl = tc?.logo_url || wlLogo;
-      if (logoUrl) {
-        setLogoSrc(logoUrl);
-        setMobilLogoSrc(logoUrl);
+      const rawLogoUrl = tc?.logo_url || wlLogo;
+      if (rawLogoUrl) {
+        // Optimizar logo de Cloudinary: reduce de ~17 KiB a ~1 KiB
+        const optimizedLogo = rawLogoUrl.includes("cloudinary.com")
+          ? rawLogoUrl.replace("/upload/", "/upload/w_200,h_80,c_fit,q_auto,f_auto/")
+          : rawLogoUrl;
+        setLogoSrc(optimizedLogo);
+        setMobilLogoSrc(optimizedLogo);
       }
     });
   }, []);
@@ -242,7 +246,7 @@ export default function TiendaNavbar() {
       <div className="h-0.5 bg-gradient-to-r from-primary via-rose-400 to-primary" />
 
       {/* ── Top bar ── */}
-      <div className="bg-gray-900 text-white">
+      <div className="bg-gray-900 text-white min-h-[28px]">
         <div className="mx-auto flex max-w-7xl items-center justify-center md:justify-between px-4 py-1.5 text-[10px] md:text-xs">
           <span className="flex items-center gap-1.5">
             <Truck className="h-3.5 w-3.5" />

@@ -95,10 +95,15 @@ export default function TiendaFooter() {
         setTiendaNombre(data.nombre_tienda || "DulceSur");
         const fc = (data as any).footer_config || {};
         const wlLogo = (emp as any)?.white_label?.logo_url;
+        const rawLogo = fc.logo_url || data.logo_url || wlLogo || "";
+        // Optimizar logo de Cloudinary: reduce de ~17 KiB a ~1 KiB
+        const optimizedLogo = rawLogo.includes("cloudinary.com")
+          ? rawLogo.replace("/upload/", "/upload/w_200,h_80,c_fit,q_auto,f_auto/")
+          : rawLogo;
         setConfig({
           ...DEFAULT_CONFIG,
           ...fc,
-          logo_url: fc.logo_url || data.logo_url || wlLogo || "",
+          logo_url: optimizedLogo,
           descripcion: fc.descripcion || data.descripcion || DEFAULT_CONFIG.descripcion,
         });
       }
@@ -106,7 +111,7 @@ export default function TiendaFooter() {
   }, []);
 
   return (
-    <footer>
+    <footer className="min-h-[400px]">
       {/* Coral accent line */}
       <div className="h-1 bg-gradient-to-r from-primary via-rose-400 to-primary" />
       <section className="bg-gray-900 text-gray-300">
