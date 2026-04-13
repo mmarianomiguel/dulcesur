@@ -1057,7 +1057,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-2 shrink-0">
             {pedidosPorArmar > 0 && (
-              <Link href="/admin/ventas/pedidos-online" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
+              <Link href="/admin/ventas/listado" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-card text-xs font-medium hover:border-primary transition-colors">
                 <PackageIcon className="w-3.5 h-3.5 text-amber-500" />
                 <span className="font-bold text-primary">{pedidosPorArmar}</span> pedidos
               </Link>
