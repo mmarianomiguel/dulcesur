@@ -790,7 +790,7 @@ export function VentaDetailDialog({
             {/* Totals + Payment Summary */}
             {(() => {
               const ncAmt = (ncs || []).reduce((s, nc) => s + nc.total, 0);
-              const ventaCalc = recalcFromVenta({ subtotal: itemsSubtotal, descuento_porcentaje: descPct, recargo_porcentaje: recPct, total: data.total - ncAmt });
+              const ventaCalc = recalcFromVenta({ subtotal: itemsSubtotal, descuento_porcentaje: descPct, recargo_porcentaje: recPct, total: data.total });
               const realPagos = (pagos || []).filter(p => !p.metodo.includes("Nota de Cr") && !p.metodo.includes("Pendiente"));
               const totalCobrado = realPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
               return (
@@ -833,12 +833,19 @@ export function VentaDetailDialog({
                     ) : null;
                   })()}
                   {/* Recargo transferencia — modo lectura */}
-                  {(!editable || !editItems) && ventaCalc.transferSurcharge > 0 && (
-                    <p className="text-muted-foreground">
-                      Recargo transferencia ({recPct || configRecargoPct}%):
-                      <span className="font-medium text-violet-600 ml-1">+{formatCurrency(ventaCalc.transferSurcharge)}</span>
-                    </p>
-                  )}
+                  {(!editable || !editItems) && (() => {
+                    const baseParaRecargo = itemsSubtotal - ncAmt;
+                    const pct = recPct || configRecargoPct;
+                    const surcharge = pct > 0 && baseParaRecargo > 0
+                      ? Math.round(baseParaRecargo * pct / 100)
+                      : ventaCalc.transferSurcharge;
+                    return surcharge > 0 ? (
+                      <p className="text-muted-foreground">
+                        Recargo transferencia ({pct}%):
+                        <span className="font-medium text-violet-600 ml-1">+{formatCurrency(surcharge)}</span>
+                      </p>
+                    ) : null;
+                  })()}
                   {envio > 0 && (
                     <p className="text-muted-foreground">Envío: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>
                   )}
