@@ -1248,32 +1248,46 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
           </div>
         </aside>
 
-        {/* Mobile filter drawer */}
+        {/* Mobile filter drawer — panel desde abajo */}
         {mobileFilters && (
-          <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
             <div
-              className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/40"
               onClick={() => setMobileFilters(false)}
             />
-            <div className="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl flex flex-col">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <h2 className="font-bold text-lg text-gray-900">Filtros</h2>
+            <div className="relative bg-white rounded-t-2xl shadow-xl max-h-[85vh] flex flex-col">
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-1 shrink-0">
+                <div className="w-10 h-1 rounded-full bg-gray-200" />
+              </div>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+                <h2 className="font-bold text-base text-gray-900">Filtros</h2>
                 <button
-                  onClick={() => setMobileFilters(false)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
+                  onClick={() => {
+                    updateParams({
+                      categoria: null, subcategoria: null, marca: null,
+                      precio_min: null, precio_max: null, disponibilidad: null,
+                      tipo: null, tag: null, q: null,
+                    });
+                  }}
+                  className="text-xs text-primary font-medium hover:text-primary/80 transition-colors"
                 >
-                  <X className="h-5 w-5" />
+                  Limpiar todo
                 </button>
               </div>
+              {/* Contenido scrolleable */}
               <div className="flex-1 overflow-y-auto p-5">
                 {sidebarContent}
               </div>
-              <div className="p-5 border-t border-gray-100">
+              {/* Footer */}
+              <div className="p-4 border-t border-gray-100 shrink-0">
                 <button
                   onClick={() => setMobileFilters(false)}
-                  className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-3 rounded-xl transition-colors"
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 rounded-xl transition-colors"
                 >
-                  Aplicar Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+                  Ver {total} resultado{total !== 1 ? "s" : ""}
+                  {activeFilterCount > 0 ? ` · ${activeFilterCount} filtro${activeFilterCount !== 1 ? "s" : ""}` : ""}
                 </button>
               </div>
             </div>
@@ -1322,6 +1336,10 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                   const isCurrentUnit = !isCurrentBox;
                   for (const d of activeDiscounts) {
                     if (!d.cantidad_minima || d.cantidad_minima <= 0 || qty >= d.cantidad_minima) continue;
+                    // Si es exclusivo para ciertos clientes, no mostrar el hint a menos que el cliente esté en la lista
+                    if (d.clientes_ids && d.clientes_ids.length > 0) {
+                      if (!tiendaClienteId || !d.clientes_ids.includes(tiendaClienteId)) continue;
+                    }
                     // Skip if presentation doesn't match current selection
                     if (d.presentacion === "caja" && isCurrentUnit) continue;
                     if (d.presentacion === "unidad" && isCurrentBox) continue;
