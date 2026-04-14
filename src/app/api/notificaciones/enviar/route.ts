@@ -122,24 +122,36 @@ export async function POST(req: NextRequest) {
     let failed = 0;
     const expired: string[] = [];
 
-    // Get push subscriptions for recipients
-    // push_subscriptions.cliente_id referencia clientes_auth.id (UUID),
-    // no clientes.id — hay que resolver el UUID de clientes_auth primero
+    // Obtener suscripciones push para los destinatarios
+    // push_subscriptions.cliente_id = clientes_auth.id (UUID)
+    // El join entre clientes y clientes_auth es por email
     let subs: any[] = [];
     if (clientes.length > 0) {
-      const { data: authLinks } = await supabase
-        .from("clientes_auth")
-        .select("id, cliente_id")
-        .in("cliente_id", clientes.map((c) => c.id));
+      // 1. Obtener emails de los clientes
+      const { data: clientesData } = await supabase
+        .from("clientes")
+        .select("id, email")
+        .in("id", clientes.map((c) => c.id));
 
-      const clienteAuthIds = (authLinks || []).map((a: any) => a.id).filter(Boolean);
+      const emails = (clientesData || []).map((c: any) => c.email).filter(Boolean);
 
-      if (clienteAuthIds.length > 0) {
-        const { data } = await supabase
-          .from("push_subscriptions")
-          .select("*")
-          .in("cliente_id", clienteAuthIds);
-        subs = [...subs, ...(data || [])];
+      if (emails.length > 0) {
+        // 2. Resolver clientes_auth.id por email
+        const { data: authData } = await supabase
+          .from("clientes_auth")
+          .select("id")
+          .in("email", emails);
+
+        const clienteAuthIds = (authData || []).map((a: any) => a.id).filter(Boolean);
+
+        if (clienteAuthIds.length > 0) {
+          // 3. Obtener suscripciones push
+          const { data } = await supabase
+            .from("push_subscriptions")
+            .select("*")
+            .in("cliente_id", clienteAuthIds);
+          subs = [...subs, ...(data || [])];
+        }
       }
     }
     if (usuarios.length > 0) {
