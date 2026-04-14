@@ -16,13 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -287,80 +280,171 @@ export default function PlantillasPage() {
           <DialogHeader>
             <DialogTitle>{editing.id ? "Editar plantilla" : "Nueva plantilla"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-2">
+          <div className="space-y-5 mt-2">
+
+            {/* Nombre */}
             <div>
-              <Label>Nombre</Label>
-              <Input value={editing.nombre || ""} onChange={(e) => setEditing((x) => ({ ...x, nombre: e.target.value }))} placeholder="Ej: Pedido en camino" />
+              <Label className="text-xs text-muted-foreground">Nombre</Label>
+              <Input
+                value={editing.nombre || ""}
+                onChange={(e) => setEditing((x) => ({ ...x, nombre: e.target.value }))}
+                placeholder="Ej: Pedido en camino"
+                className="mt-1.5"
+              />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Tipo</Label>
-                <Select value={editing.tipo || "pedido"} onValueChange={(v) => setEditing((x) => ({ ...x, tipo: v as any }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{TIPOS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Destinatario</Label>
-                <Select value={editing.destinatario_default || "cliente"} onValueChange={(v) => setEditing((x) => ({ ...x, destinatario_default: v as any }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{DESTINATARIOS.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
+
+            {/* Tipo como pills */}
             <div>
-              <Label>Variables disponibles</Label>
-              <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
+              <Label className="text-xs text-muted-foreground block mb-2">Tipo</Label>
+              <div className="flex flex-wrap gap-2">
+                {TIPOS.map((t) => {
+                  const colors: Record<string, string> = {
+                    pedido: "bg-blue-50 border-blue-200 text-blue-700",
+                    promocion: "bg-green-50 border-green-200 text-green-700",
+                    recordatorio: "bg-amber-50 border-amber-200 text-amber-700",
+                    catalogo: "bg-purple-50 border-purple-200 text-purple-700",
+                    cuenta_corriente: "bg-red-50 border-red-200 text-red-700",
+                    sistema: "bg-gray-100 border-gray-200 text-gray-700",
+                  };
+                  const active = (editing.tipo || "pedido") === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      onClick={() => setEditing((x) => ({ ...x, tipo: t.value as any }))}
+                      className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                        active ? colors[t.value] : "border-border text-muted-foreground hover:border-border/80"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Destinatario como pills */}
+            <div>
+              <Label className="text-xs text-muted-foreground block mb-2">Destinatario</Label>
+              <div className="flex flex-wrap gap-2">
+                {DESTINATARIOS.map((d) => {
+                  const active = (editing.destinatario_default || "cliente") === d.value;
+                  return (
+                    <button
+                      key={d.value}
+                      onClick={() => setEditing((x) => ({ ...x, destinatario_default: d.value as any }))}
+                      className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                        active
+                          ? "bg-blue-50 border-blue-200 text-blue-700"
+                          : "border-border text-muted-foreground hover:border-border/80"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Variables */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs text-muted-foreground">Variables disponibles</Label>
+                <span className="text-[10px] text-muted-foreground">Click en una variable para insertarla en el campo</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 min-h-[28px] mb-2">
                 {(editing.variables_disponibles || []).map((v) => (
-                  <Badge key={v} variant="secondary" className="cursor-pointer gap-1 pr-1 font-mono text-xs">
+                  <span
+                    key={v}
+                    className="inline-flex items-center gap-1 text-xs font-mono bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-900"
+                  >
                     {`{{${v}}}`}
-                    <button onClick={() => removeVariable(v)} className="ml-0.5 hover:text-red-500"><X className="h-3 w-3" /></button>
-                  </Badge>
+                    <button
+                      onClick={() => removeVariable(v)}
+                      className="text-blue-400 hover:text-blue-700 transition-colors ml-0.5"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
                 ))}
               </div>
               <div className="flex gap-2">
-                <Input value={varInput} onChange={(e) => setVarInput(e.target.value)} placeholder="nombre de variable" className="flex-1"
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addVariable(); } }} />
+                <Input
+                  value={varInput}
+                  onChange={(e) => setVarInput(e.target.value)}
+                  placeholder="nombre_variable"
+                  className="flex-1 font-mono text-xs"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addVariable(); } }}
+                />
                 <Button variant="outline" size="sm" onClick={addVariable}>Agregar</Button>
               </div>
             </div>
+
+            {/* Título */}
             <div>
-              <Label>Título</Label>
-              <Input ref={tituloRef} value={editing.titulo_template || ""} onChange={(e) => setEditing((x) => ({ ...x, titulo_template: e.target.value }))} placeholder="Ej: Tu pedido #{{numero}} está en camino" />
+              <Label className="text-xs text-muted-foreground block mb-1.5">Título</Label>
+              <Input
+                ref={tituloRef}
+                value={editing.titulo_template || ""}
+                onChange={(e) => setEditing((x) => ({ ...x, titulo_template: e.target.value }))}
+                placeholder="Ej: {{nombre}}, tu pedido está listo"
+              />
               {(editing.variables_disponibles || []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
+                <div className="flex flex-wrap gap-1.5 mt-2">
                   {(editing.variables_disponibles || []).map((v) => (
-                    <button key={v} onClick={() => insertVariable(v, "titulo")}
-                      className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
-                      {`{{${v}}}`}
+                    <button
+                      key={v}
+                      onClick={() => insertVariable(v, "titulo")}
+                      className="text-xs font-mono bg-muted hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 text-muted-foreground px-2 py-1 rounded-md border border-border transition-all"
+                    >
+                      + {`{{${v}}}`}
                     </button>
                   ))}
                 </div>
               )}
             </div>
+
+            {/* Mensaje */}
             <div>
-              <Label>Mensaje</Label>
-              <Textarea ref={mensajeRef} value={editing.mensaje_template || ""} onChange={(e) => setEditing((x) => ({ ...x, mensaje_template: e.target.value }))} placeholder="Ej: Hola {{cliente}}, tu pedido..." rows={3} />
+              <Label className="text-xs text-muted-foreground block mb-1.5">Mensaje</Label>
+              <Textarea
+                ref={mensajeRef}
+                value={editing.mensaje_template || ""}
+                onChange={(e) => setEditing((x) => ({ ...x, mensaje_template: e.target.value }))}
+                placeholder="Ej: Hola {{nombre}}, ya podés pasar a retirar tu pedido..."
+                rows={3}
+              />
               {(editing.variables_disponibles || []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
+                <div className="flex flex-wrap gap-1.5 mt-2">
                   {(editing.variables_disponibles || []).map((v) => (
-                    <button key={v} onClick={() => insertVariable(v, "mensaje")}
-                      className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
-                      {`{{${v}}}`}
+                    <button
+                      key={v}
+                      onClick={() => insertVariable(v, "mensaje")}
+                      className="text-xs font-mono bg-muted hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 text-muted-foreground px-2 py-1 rounded-md border border-border transition-all"
+                    >
+                      + {`{{${v}}}`}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={editing.activa ?? true} onCheckedChange={(v) => setEditing((x) => ({ ...x, activa: v }))} />
-              <Label>Activa</Label>
+
+            {/* Toggle activa */}
+            <div className="flex items-center justify-between px-3 py-3 bg-muted/50 rounded-xl">
+              <div>
+                <div className="text-sm font-medium text-foreground">Plantilla activa</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Disponible al enviar notificaciones</div>
+              </div>
+              <Switch
+                checked={editing.activa ?? true}
+                onCheckedChange={(v) => setEditing((x) => ({ ...x, activa: v }))}
+              />
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+
+            <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
               <Button onClick={handleSave} disabled={saving}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {editing.id ? "Guardar" : "Crear"}
+                {editing.id ? "Guardar cambios" : "Crear plantilla"}
               </Button>
             </div>
           </div>
