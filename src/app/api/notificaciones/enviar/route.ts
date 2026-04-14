@@ -111,12 +111,17 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Send push notifications
-    const payload = JSON.stringify({
-      title: ascii(titulo),
-      body: ascii(mensaje),
-      tag: `notif-${notif.id}`,
-      url: url || "/",
-    });
+
+    // Función para reemplazar variables en el mensaje por cliente
+    function resolverVariables(texto: string, cliente: any): string {
+      const nombre = cliente?.nombre || "";
+      const primerNombre = nombre.trim().split(" ")[0] || nombre;
+      const saldo = cliente?.saldo != null ? `$${Number(cliente.saldo).toLocaleString("es-AR")}` : "";
+      return texto
+        .replace(/\{\{nombre\}\}/g, primerNombre)
+        .replace(/\{\{cliente\}\}/g, primerNombre)
+        .replace(/\{\{saldo\}\}/g, saldo);
+    }
 
     let sent = 0;
     let failed = 0;
@@ -130,10 +135,10 @@ export async function POST(req: NextRequest) {
     let subs: any[] = [];
 
     if (clientes.length > 0) {
-      // Paso 1: obtener emails de los clientes resueltos
+      // Paso 1: obtener emails + nombre + saldo de los clientes resueltos
       const { data: clientesData } = await supabase
         .from("clientes")
-        .select("id, email")
+        .select("id, email, nombre, saldo")
         .in("id", clientes.map((c) => c.id));
 
       const emails = (clientesData || [])
@@ -171,12 +176,59 @@ export async function POST(req: NextRequest) {
       subs = [...subs, ...(usuarioSubs || [])];
     }
 
+    // Construir mapa de cliente_id → datos del cliente para personalizar mensajes
+    const clienteDataMap: Record<string, any> = {};
+    if (clientes.length > 0) {
+      const { data: clientesInfo } = await supabase
+        .from("clientes")
+        .select("id, nombre, saldo, email")
+        .in("id", clientes.map((c) => c.id));
+      (clientesInfo || []).forEach((c: any) => { clienteDataMap[c.id] = c; });
+    }
+
+    // Mapa de clientes_auth.id → cliente_data para resolver por suscripción
+    const authToClienteMap: Record<string, any> = {};
+    if (Object.keys(clienteDataMap).length > 0) {
+      const emails = Object.values(clienteDataMap)
+        .map((c: any) => c.email)
+        .filter(Boolean);
+      if (emails.length > 0) {
+        const { data: authData2 } = await supabase
+          .from("clientes_auth")
+          .select("id, email")
+          .in("email", emails);
+        const emailToCliente: Record<string, any> = {};
+        Object.values(clienteDataMap).forEach((c: any) => {
+          if (c.email) emailToCliente[c.email] = c;
+        });
+        (authData2 || []).forEach((a: any) => {
+          if (a.email && emailToCliente[a.email]) {
+            authToClienteMap[a.id] = emailToCliente[a.email];
+          }
+        });
+      }
+    }
+
     await Promise.allSettled(
       subs.map(async (sub) => {
         try {
+          // Personalizar mensaje por cliente si hay variables
+          let tituloFinal = titulo;
+          let mensajeFinal = mensaje;
+          if (sub.cliente_id && authToClienteMap[sub.cliente_id]) {
+            const clienteInfo = authToClienteMap[sub.cliente_id];
+            tituloFinal = resolverVariables(titulo, clienteInfo);
+            mensajeFinal = resolverVariables(mensaje, clienteInfo);
+          }
+          const personalizedPayload = JSON.stringify({
+            title: ascii(tituloFinal),
+            body: ascii(mensajeFinal),
+            tag: `notif-${notif.id}`,
+            url: url || "/",
+          });
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth } },
-            Buffer.from(payload, "utf-8")
+            Buffer.from(personalizedPayload, "utf-8")
           );
           sent++;
         } catch (err: any) {

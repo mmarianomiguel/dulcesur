@@ -266,15 +266,53 @@ export default function EnviarNotificacionPage() {
       ? new Date(desc.fecha_fin + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long" })
       : null;
     const venceTexto = vence ? ` Válido hasta el ${vence}.` : "";
+
+    // Armar texto descriptivo según aplica_a
+    let detalleAplica = "";
+    if (desc.aplica_a === "categorias" && desc.categorias_ids?.length > 0) {
+      const { data: cats } = await supabase
+        .from("categorias")
+        .select("nombre")
+        .in("id", desc.categorias_ids);
+      const nombres = (cats || []).map((c: any) => c.nombre).join(", ");
+      detalleAplica = nombres ? ` en ${nombres}` : "";
+    } else if (desc.aplica_a === "subcategorias" && desc.subcategorias_ids?.length > 0) {
+      const { data: subs } = await supabase
+        .from("subcategorias")
+        .select("nombre")
+        .in("id", desc.subcategorias_ids);
+      const nombres = (subs || []).map((s: any) => s.nombre).join(", ");
+      detalleAplica = nombres ? ` en ${nombres}` : "";
+    } else if (desc.aplica_a === "marcas" && desc.marcas_ids?.length > 0) {
+      const { data: marcasData } = await supabase
+        .from("marcas")
+        .select("nombre")
+        .in("id", desc.marcas_ids);
+      const nombres = (marcasData || []).map((m: any) => m.nombre).join(", ");
+      detalleAplica = nombres ? ` en ${nombres}` : "";
+    } else if (desc.aplica_a === "productos" && desc.productos_ids?.length > 0) {
+      const { data: prods } = await supabase
+        .from("productos")
+        .select("nombre")
+        .in("id", desc.productos_ids)
+        .limit(3);
+      const nombres = (prods || []).map((p: any) => p.nombre).join(", ");
+      detalleAplica = nombres ? ` en ${nombres}` : "";
+    }
+
+    // Aclarar si tiene cantidad mínima
+    const cantMinTexto = desc.cantidad_minima && desc.cantidad_minima > 1
+      ? ` comprando ${desc.cantidad_minima} o más unidades` : "";
+
     if (esExclusivo) {
       const { data } = await supabase.from("clientes").select("id, nombre").in("id", desc.clientes_ids);
       setClientesExclusivos(data || []);
       setTitulo(`${primerNombre}, tenés un descuento exclusivo`);
-      setMensaje(`Hola ${primerNombre}, tenés un ${pct} de descuento exclusivo.${venceTexto} ¡Aprovechalo!`);
+      setMensaje(`Hola ${primerNombre}, tenés un ${pct} de descuento exclusivo${detalleAplica}${cantMinTexto}.${venceTexto} ¡Aprovechalo!`);
     } else {
       setClientesExclusivos([]);
-      setTitulo(`¡${pct} de descuento hoy!`);
-      setMensaje(`Hola ${primerNombre}, aprovechá el ${pct} de descuento.${venceTexto} ¡Entrá a ver qué hay!`);
+      setTitulo(`¡${pct} de descuento${detalleAplica ? ` en ${(detalleAplica).replace(/^ en /, "")}` : " hoy"}!`);
+      setMensaje(`Hola ${primerNombre}, aprovechá el ${pct} de descuento${detalleAplica}${cantMinTexto}.${venceTexto} ¡Entrá a ver qué hay!`);
     }
     setTipo("promocion");
     setUrl("/productos");
