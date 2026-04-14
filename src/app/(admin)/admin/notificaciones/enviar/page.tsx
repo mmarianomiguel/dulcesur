@@ -2,35 +2,22 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Send,
-  Loader2,
-  Users,
-  User,
-  MapPin,
-  Shield,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  Smartphone,
+  Send, Loader2, Users, User, MapPin, Shield, Clock,
+  CheckCircle, Smartphone, Tag, Calendar, X, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { showAdminToast } from "@/components/admin-toast";
 import { supabase } from "@/lib/supabase";
+import { formatCurrency } from "@/lib/formatters";
 import type { NotificacionPlantilla } from "@/types/database";
 
 const SEG_TYPES = [
@@ -40,6 +27,12 @@ const SEG_TYPES = [
   { value: "rol", label: "Rol", fullLabel: "Por rol", icon: Shield },
   { value: "inactividad", label: "Inactivos", fullLabel: "Por inactividad", icon: Clock },
 ];
+
+function getHorarioTexto(horario: string | null): string {
+  if (!horario) return "";
+  const h = horario.substring(0, 5).replace(":00", "");
+  return ` hasta las ${h}hs`;
+}
 
 export default function EnviarNotificacionPage() {
   const [plantillas, setPlantillas] = useState<NotificacionPlantilla[]>([]);
@@ -53,12 +46,31 @@ export default function EnviarNotificacionPage() {
   const [sending, setSending] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [result, setResult] = useState<any>(null);
-  // Search state
+
+  // Cliente search
   const [clienteQuery, setClienteQuery] = useState("");
   const [clienteResults, setClienteResults] = useState<any[]>([]);
   const [selectedCliente, setSelectedCliente] = useState<any>(null);
+
+  // Zona
   const [zonas, setZonas] = useState<any[]>([]);
+
+  // Estimado
   const [estimado, setEstimado] = useState<number | null>(null);
+
+  // Descuentos
+  const [descuentos, setDescuentos] = useState<any[]>([]);
+  const [selectedDescuento, setSelectedDescuento] = useState<any>(null);
+  const [showDescuentos, setShowDescuentos] = useState(false);
+
+  // Programado
+  const [programado, setProgramado] = useState(false);
+  const [fechaProgramada, setFechaProgramada] = useState("");
+  const [horaProgramada, setHoraProgramada] = useState("");
+  const [programadas, setProgramadas] = useState<any[]>([]);
+
+  // Tienda config para horario
+  const [horarioCierre, setHorarioCierre] = useState<string | null>(null);
 
   const fetchPlantillas = useCallback(async () => {
     try {
@@ -68,21 +80,38 @@ export default function EnviarNotificacionPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchPlantillas(); }, [fetchPlantillas]);
-
-  useEffect(() => {
-    supabase.from("zona_entrega").select("id, nombre").then(({ data }) => {
-      if (data) setZonas(data);
-    });
+  const fetchProgramadas = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notificaciones/programadas");
+      const data = await res.json();
+      setProgramadas(data);
+    } catch {}
   }, []);
 
-  // Search clients
+  useEffect(() => {
+    fetchPlantillas();
+    fetchProgramadas();
+
+    // Cargar zonas, descuentos y horario en paralelo
+    const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    Promise.all([
+      supabase.from("zona_entrega").select("id, nombre"),
+      supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", hoy).or(`fecha_fin.is.null,fecha_fin.gte.${hoy}`).order("nombre"),
+      supabase.from("tienda_config").select("horario_atencion_fin").limit(1).single(),
+    ]).then(([zonaRes, descRes, cfgRes]) => {
+      if (zonaRes.data) setZonas(zonaRes.data);
+      if (descRes.data) setDescuentos(descRes.data);
+      if (cfgRes.data?.horario_atencion_fin) setHorarioCierre(cfgRes.data.horario_atencion_fin);
+    });
+  }, [fetchPlantillas, fetchProgramadas]);
+
+  // Buscar clientes
   useEffect(() => {
     if (clienteQuery.length < 2) { setClienteResults([]); return; }
     const t = setTimeout(async () => {
       const { data } = await supabase
         .from("clientes")
-        .select("id, nombre, email")
+        .select("id, nombre, email, saldo")
         .eq("activo", true)
         .ilike("nombre", `%${clienteQuery}%`)
         .limit(8);
@@ -91,7 +120,7 @@ export default function EnviarNotificacionPage() {
     return () => clearTimeout(t);
   }, [clienteQuery]);
 
-  // Estimate recipients
+  // Estimar destinatarios
   useEffect(() => {
     const estimate = async () => {
       if (segTipo === "todos") {
@@ -112,9 +141,26 @@ export default function EnviarNotificacionPage() {
     estimate();
   }, [segTipo, segValor, selectedCliente]);
 
+  // Reemplazar variables en plantilla con datos reales del cliente
+  const reemplazarVariables = (texto: string, cliente: any): string => {
+    const nombre = cliente?.nombre || "";
+    const primerNombre = nombre.trim().split(" ")[0] || nombre;
+    const horarioTexto = getHorarioTexto(horarioCierre);
+
+    return texto
+      .replace(/\{\{nombre\}\}/g, primerNombre)
+      .replace(/\{\{horario_texto\}\}/g, horarioTexto)
+      .replace(/\{\{cliente\}\}/g, primerNombre)
+      .replace(/\{\{total\}\}/g, cliente?.saldo ? formatCurrency(cliente.saldo) : "")
+      .replace(/\{\{monto_efectivo\}\}/g, "")
+      .replace(/\{\{titulo\}\}/g, titulo)
+      .replace(/\{\{mensaje\}\}/g, mensaje);
+  };
+
   const handlePlantillaChange = (id: string | null) => {
     if (!id) return;
     setPlantillaId(id);
+    setSelectedDescuento(null);
     if (id === "libre") {
       setTitulo("");
       setMensaje("");
@@ -122,9 +168,65 @@ export default function EnviarNotificacionPage() {
     }
     const p = plantillas.find((x) => x.id === id);
     if (p) {
-      setTitulo(p.titulo_template);
-      setMensaje(p.mensaje_template);
+      // Si hay cliente seleccionado, reemplazar variables inmediatamente
+      if (selectedCliente) {
+        setTitulo(reemplazarVariables(p.titulo_template, selectedCliente));
+        setMensaje(reemplazarVariables(p.mensaje_template, selectedCliente));
+      } else {
+        setTitulo(p.titulo_template);
+        setMensaje(p.mensaje_template);
+      }
       setTipo(p.tipo);
+    }
+  };
+
+  // Cuando se selecciona un cliente, reemplazar variables si hay plantilla
+  const handleClienteSelect = (cliente: any) => {
+    setSelectedCliente(cliente);
+    setClienteResults([]);
+    if (plantillaId && plantillaId !== "libre") {
+      const p = plantillas.find((x) => x.id === plantillaId);
+      if (p) {
+        setTitulo(reemplazarVariables(p.titulo_template, cliente));
+        setMensaje(reemplazarVariables(p.mensaje_template, cliente));
+      }
+    }
+  };
+
+  // Seleccionar descuento y armar mensaje automático
+  const handleDescuentoSelect = (desc: any) => {
+    setSelectedDescuento(desc);
+    setShowDescuentos(false);
+
+    const nombreDesc = desc.nombre || "descuento especial";
+    const pct = desc.porcentaje ? `${desc.porcentaje}%` : "";
+    const vence = desc.fecha_fin
+      ? ` Válido hasta el ${new Date(desc.fecha_fin + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long" })}.`
+      : "";
+
+    // Si hay cliente seleccionado, personalizar
+    const primerNombre = selectedCliente
+      ? selectedCliente.nombre.trim().split(" ")[0]
+      : "{{nombre}}";
+
+    // Si es descuento exclusivo para clientes específicos
+    const esExclusivo = desc.clientes_ids && desc.clientes_ids.length > 0;
+
+    const nuevoTitulo = esExclusivo
+      ? `${primerNombre}, tenés un descuento exclusivo 🎁`
+      : `${pct} de descuento en ${nombreDesc}`;
+
+    const nuevoMensaje = esExclusivo
+      ? `Hola ${primerNombre}, tenés un ${pct} de descuento exclusivo en ${nombreDesc}.${vence} ¡Aprovechalo!`
+      : `Hola ${primerNombre}, tenés ${pct} de descuento en ${nombreDesc}.${vence} ¡No te lo pierdas!`;
+
+    setTitulo(nuevoTitulo);
+    setMensaje(nuevoMensaje);
+    setTipo("promocion");
+
+    // Si el descuento es exclusivo para clientes específicos, preseleccionar segmentación
+    if (esExclusivo && desc.clientes_ids.length > 0) {
+      showAdminToast(`Descuento exclusivo — se enviará a ${desc.clientes_ids.length} cliente${desc.clientes_ids.length !== 1 ? "s" : ""}`, "info");
     }
   };
 
@@ -139,22 +241,52 @@ export default function EnviarNotificacionPage() {
       else if (segTipo === "rol") segmentacion.valor = segValor;
       else if (segTipo === "inactividad") segmentacion.valor = Number(segValor) || 30;
 
-      const res = await fetch("/api/notificaciones/enviar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          titulo,
-          mensaje,
-          tipo,
-          url: url || null,
-          plantilla_id: plantillaId && plantillaId !== "libre" ? plantillaId : null,
-          segmentacion,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setResult(data);
-      showAdminToast("Notificación enviada", "success");
+      // Si el descuento tiene clientes específicos, usar esa segmentación
+      if (selectedDescuento?.clientes_ids?.length > 0 && segTipo === "todos") {
+        segmentacion.tipo = "clientes_ids";
+        segmentacion.valor = selectedDescuento.clientes_ids;
+      }
+
+      if (programado && fechaProgramada && horaProgramada) {
+        // Guardar como programada
+        const programadaPara = new Date(`${fechaProgramada}T${horaProgramada}:00-03:00`).toISOString();
+        await fetch("/api/notificaciones/programadas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titulo,
+            mensaje,
+            tipo,
+            url: url || null,
+            plantilla_id: plantillaId && plantillaId !== "libre" ? plantillaId : null,
+            segmentacion,
+            programada_para: programadaPara,
+          }),
+        });
+        showAdminToast("Notificación programada correctamente", "success");
+        fetchProgramadas();
+        setProgramado(false);
+        setFechaProgramada("");
+        setHoraProgramada("");
+      } else {
+        // Enviar inmediatamente
+        const res = await fetch("/api/notificaciones/enviar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titulo,
+            mensaje,
+            tipo,
+            url: url || null,
+            plantilla_id: plantillaId && plantillaId !== "libre" ? plantillaId : null,
+            segmentacion,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        setResult(data);
+        showAdminToast("Notificación enviada", "success");
+      }
     } catch (err: any) {
       showAdminToast(err.message || "Error al enviar", "error");
     } finally {
@@ -162,7 +294,22 @@ export default function EnviarNotificacionPage() {
     }
   };
 
-  const canSend = titulo.trim() && mensaje.trim() && (segTipo !== "cliente" || selectedCliente) && (segTipo !== "zona" || segValor) && (segTipo !== "rol" || segValor) && (segTipo !== "inactividad" || segValor);
+  const cancelarProgramada = async (id: string) => {
+    await fetch("/api/notificaciones/programadas", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    fetchProgramadas();
+    showAdminToast("Notificación cancelada", "success");
+  };
+
+  const canSend = titulo.trim() && mensaje.trim()
+    && (segTipo !== "cliente" || selectedCliente)
+    && (segTipo !== "zona" || segValor)
+    && (segTipo !== "rol" || segValor)
+    && (segTipo !== "inactividad" || segValor)
+    && (!programado || (fechaProgramada && horaProgramada));
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -184,16 +331,63 @@ export default function EnviarNotificacionPage() {
           Contenido
         </div>
 
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1.5">Plantilla (opcional)</label>
-          <Select value={plantillaId || "libre"} onValueChange={handlePlantillaChange}>
-            <SelectTrigger><SelectValue placeholder="Seleccionar plantilla..." /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="libre">Notificación libre</SelectItem>
-              {plantillas.map((p) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        {/* Plantilla o descuento */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">Plantilla (opcional)</label>
+            <Select value={plantillaId || "libre"} onValueChange={handlePlantillaChange}>
+              <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="libre">Notificación libre</SelectItem>
+                {plantillas.map((p) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">Descuento vigente (opcional)</label>
+            <button
+              onClick={() => setShowDescuentos(!showDescuentos)}
+              className="w-full flex items-center justify-between px-3 py-2 border rounded-md text-sm text-left hover:bg-muted/50 transition-colors"
+            >
+              <span className={selectedDescuento ? "text-foreground" : "text-muted-foreground"}>
+                {selectedDescuento ? selectedDescuento.nombre : "Seleccionar descuento..."}
+              </span>
+              <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+            {showDescuentos && (
+              <div className="absolute z-10 mt-1 bg-white dark:bg-gray-900 border rounded-xl shadow-lg max-h-60 overflow-y-auto w-72">
+                {descuentos.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-muted-foreground text-center">No hay descuentos vigentes</div>
+                ) : (
+                  descuentos.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => handleDescuentoSelect(d)}
+                      className="w-full text-left px-3 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0"
+                    >
+                      <div className="font-medium">{d.nombre}</div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                        <span className="text-green-600 font-semibold">{d.porcentaje}% off</span>
+                        {d.fecha_fin && <span>Hasta {new Date(d.fecha_fin + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short" })}</span>}
+                        {d.clientes_ids?.length > 0 && <Badge className="text-[10px] px-1 py-0 bg-purple-100 text-purple-700">Exclusivo</Badge>}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
+        {selectedDescuento && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-lg">
+            <Tag className="h-3.5 w-3.5 text-green-600" />
+            <span className="text-xs text-green-700 font-medium flex-1">{selectedDescuento.nombre} — {selectedDescuento.porcentaje}% off</span>
+            <button onClick={() => setSelectedDescuento(null)} className="text-green-500 hover:text-green-700">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         <div>
           <label className="text-xs text-muted-foreground block mb-1.5">Título</label>
@@ -226,7 +420,7 @@ export default function EnviarNotificacionPage() {
           </div>
         </div>
 
-        {/* Vista previa — siempre visible si hay contenido */}
+        {/* Vista previa */}
         {(titulo || mensaje) && (
           <div className="bg-muted/50 rounded-xl p-3.5">
             <div className="flex items-center gap-1.5 mb-2">
@@ -278,7 +472,7 @@ export default function EnviarNotificacionPage() {
             {clienteResults.length > 0 && !selectedCliente && (
               <div className="absolute z-10 top-full left-0 right-0 bg-white dark:bg-gray-900 border rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
                 {clienteResults.map((c) => (
-                  <button key={c.id} onClick={() => { setSelectedCliente(c); setClienteResults([]); }}
+                  <button key={c.id} onClick={() => handleClienteSelect(c)}
                     className="w-full text-left px-3 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0">
                     <div className="font-medium">{c.nombre}</div>
                     {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
@@ -324,6 +518,81 @@ export default function EnviarNotificacionPage() {
         )}
       </div>
 
+      {/* Card 3 — Programar envío */}
+      <div className="bg-white dark:bg-gray-900 border rounded-xl p-4 sm:p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-xs flex items-center justify-center shrink-0 font-semibold">3</span>
+            ¿Cuándo enviarlo?
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{programado ? "Programado" : "Ahora"}</span>
+            <button
+              onClick={() => setProgramado(!programado)}
+              className={`w-9 h-5 rounded-full transition-colors relative ${programado ? "bg-blue-600" : "bg-muted"}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${programado ? "left-4" : "left-0.5"}`} />
+            </button>
+          </div>
+        </div>
+
+        {programado ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5">Fecha</label>
+              <Input
+                type="date"
+                value={fechaProgramada}
+                onChange={(e) => setFechaProgramada(e.target.value)}
+                min={new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1.5">Hora (Argentina)</label>
+              <Input
+                type="time"
+                value={horaProgramada}
+                onChange={(e) => setHoraProgramada(e.target.value)}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">La notificación se enviará inmediatamente al confirmar.</p>
+        )}
+      </div>
+
+      {/* Programadas pendientes */}
+      {programadas.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Programadas pendientes ({programadas.length})</span>
+          </div>
+          <div className="divide-y">
+            {programadas.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{p.titulo}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {new Date(p.programada_para).toLocaleString("es-AR", {
+                      day: "2-digit", month: "2-digit",
+                      hour: "2-digit", minute: "2-digit",
+                      timeZone: "America/Argentina/Buenos_Aires",
+                    })}
+                  </div>
+                </div>
+                <button
+                  onClick={() => cancelarProgramada(p.id)}
+                  className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Resultado */}
       {result && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 space-y-2">
@@ -365,8 +634,10 @@ export default function EnviarNotificacionPage() {
           className="w-full sm:w-auto"
         >
           {sending
-            ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Enviando...</>
-            : <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>
+            ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {programado ? "Programando..." : "Enviando..."}</>
+            : programado
+              ? <><Calendar className="h-4 w-4 mr-2" /> Programar envío</>
+              : <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>
           }
         </Button>
       </div>
@@ -374,14 +645,22 @@ export default function EnviarNotificacionPage() {
       {/* Dialog confirmación */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Confirmar envío</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{programado ? "Confirmar programación" : "Confirmar envío"}</DialogTitle>
+          </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Se enviará la notificación a <strong>{estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}</strong>. ¿Confirmar?
+            {programado
+              ? <>Se programará la notificación para el <strong>{fechaProgramada} a las {horaProgramada}hs</strong>.</>
+              : <>Se enviará a <strong>{estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}</strong>.</>
+            }
           </p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
             <Button onClick={handleSend}>
-              <Send className="h-4 w-4 mr-1.5" /> Enviar
+              {programado
+                ? <><Calendar className="h-4 w-4 mr-1.5" /> Programar</>
+                : <><Send className="h-4 w-4 mr-1.5" /> Enviar</>
+              }
             </Button>
           </div>
         </DialogContent>
