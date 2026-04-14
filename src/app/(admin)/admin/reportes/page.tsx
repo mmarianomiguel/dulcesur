@@ -106,7 +106,7 @@ export default function ReportesPage() {
     const { desde: dEff, hasta: hEff } = effectiveDates;
 
     const [{ data: vts }, { data: cmps }, { data: prods }] = await Promise.all([
-      supabase.from("ventas").select("id, fecha, total, forma_pago, tipo_comprobante, created_at, cliente_id, origen, estado, remito_origen_id, clientes(nombre)")
+      supabase.from("ventas").select("id, fecha, total, subtotal, forma_pago, tipo_comprobante, created_at, cliente_id, origen, estado, remito_origen_id, clientes(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
         .neq("estado", "anulada")
         .order("created_at", { ascending: false }),
@@ -273,7 +273,16 @@ export default function ReportesPage() {
 
   // --- Derived ---
   const isNC = (v: VentaRow) => (v.tipo_comprobante || "").toLowerCase().includes("nota de crédito");
-  const totalVentas = useMemo(() => ventas.reduce((a, v) => a + (isNC(v) ? -v.total : v.total), 0), [ventas]);
+  const totalVentas = useMemo(() => ventas.reduce((a, v) => {
+    if (isNC(v)) return a - v.total;
+    const ncAmt = ncPorVenta[v.id] || 0;
+    if (ncAmt === 0) return a + v.total;
+    const vSub = (v as any).subtotal || v.total;
+    const rImpl = v.total - vSub;
+    const pctImpl = rImpl > 0 && vSub > 0 ? rImpl / vSub : 0;
+    const bNeta = vSub - ncAmt;
+    return a + bNeta + (bNeta > 0 ? Math.round(bNeta * pctImpl) : 0);
+  }, 0), [ventas, ncPorVenta]);
   const totalCompras = useMemo(() => compras.reduce((a, c) => a + c.total, 0), [compras]);
   const getUnidadesPres = (item: any) => {
     let u = Number(item.unidades_por_presentacion) || 1;
@@ -484,7 +493,16 @@ export default function ReportesPage() {
   }, [compras]);
 
   // Profit for filtered ventas
-  const filteredVentasTotal = useMemo(() => filteredVentas.reduce((a, v) => a + (isNC(v) ? -v.total : v.total), 0), [filteredVentas]);
+  const filteredVentasTotal = useMemo(() => filteredVentas.reduce((a, v) => {
+    if (isNC(v)) return a - v.total;
+    const ncAmt = ncPorVenta[v.id] || 0;
+    if (ncAmt === 0) return a + v.total;
+    const vSub = (v as any).subtotal || v.total;
+    const rImpl = v.total - vSub;
+    const pctImpl = rImpl > 0 && vSub > 0 ? rImpl / vSub : 0;
+    const bNeta = vSub - ncAmt;
+    return a + bNeta + (bNeta > 0 ? Math.round(bNeta * pctImpl) : 0);
+  }, 0), [filteredVentas, ncPorVenta]);
   const filteredVentasGanancia = useMemo(() => {
     const filteredIds = new Set(filteredVentas.map((v) => v.id));
     const filteredNCIds = new Set(filteredVentas.filter(isNC).map(v => v.id));
@@ -713,7 +731,13 @@ export default function ReportesPage() {
                   const isExpanded = expandedVentas.has(v.id);
                   const items = ventaItemsMap[v.id] || [];
                   const ncAmt = ncPorVenta[v.id] || 0;
-                  const netTotal = v.total - ncAmt;
+                  const vSubR = (v as any).subtotal || v.total;
+                  const rImplR = v.total - vSubR;
+                  const pctImplR = rImplR > 0 && vSubR > 0 ? rImplR / vSubR : 0;
+                  const bNetaR = vSubR - ncAmt;
+                  const netTotal = ncAmt > 0
+                    ? bNetaR + (bNetaR > 0 ? Math.round(bNetaR * pctImplR) : 0)
+                    : v.total;
                   const ncProfitAmt = ncItemsProfitMap[v.id] || 0;
                   const ventaProfit = calcVentaProfit(v.id) - ncProfitAmt;
                   const ncDescs = ncItemsDescMap[v.id] || [];

@@ -1807,7 +1807,13 @@ export default function CajaPage() {
                               const origenSub = isRetiro ? "Web" : (isEnvio && !isWeb) ? "POS" : isEnvio ? "Web" : null;
                               const montoPagado = (v as any).monto_pagado || 0;
                               const ncAmt = ncByVenta[v.id] || 0;
-                              const totalEfectivo = v.total - ncAmt;
+                              const ventaSubtotalCaja = (v as any).subtotal || v.total;
+                              const recargoImplicitoCaja = v.total - ventaSubtotalCaja;
+                              const pctCaja = recargoImplicitoCaja > 0 && ventaSubtotalCaja > 0 ? recargoImplicitoCaja / ventaSubtotalCaja : 0;
+                              const baseNetaCaja = ventaSubtotalCaja - ncAmt;
+                              const totalEfectivo = ncAmt > 0
+                                ? baseNetaCaja + (baseNetaCaja > 0 ? Math.round(baseNetaCaja * pctCaja) : 0)
+                                : v.total;
                               const isPagado = montoPagado >= totalEfectivo - 1;
                               const isCC = v.forma_pago === "Cuenta Corriente" ||
                                 (ventasDesglose["Cuenta Corriente"] && ccEntries?.some(e => e.venta_id === v.id));
@@ -1848,7 +1854,23 @@ export default function CajaPage() {
                                       {estadoLabel}
                                     </span>
                                   </td>
-                                  <td className="py-2.5 px-3 text-right font-medium text-xs">{formatCurrency(v.total - (ncByVenta[v.id] || 0))}</td>
+                                  <td className="py-2.5 px-3 text-right font-medium text-xs">
+                                    {(() => {
+                                      const ncAmtCol = ncByVenta[v.id] || 0;
+                                      if (ncAmtCol === 0) return formatCurrency(v.total);
+                                      const vSub = (v as any).subtotal || v.total;
+                                      const rImpl = v.total - vSub;
+                                      const pctImpl = rImpl > 0 && vSub > 0 ? rImpl / vSub : 0;
+                                      const bNeta = vSub - ncAmtCol;
+                                      const totalConNC = bNeta + (bNeta > 0 ? Math.round(bNeta * pctImpl) : 0);
+                                      return (
+                                        <div>
+                                          <span className="line-through text-gray-400 text-[10px] block">{formatCurrency(v.total)}</span>
+                                          <span className="font-semibold text-primary">{formatCurrency(totalConNC)}</span>
+                                        </div>
+                                      );
+                                    })()}
+                                  </td>
                                   <td className="py-2.5 px-1"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td>
                                 </tr>
                               );

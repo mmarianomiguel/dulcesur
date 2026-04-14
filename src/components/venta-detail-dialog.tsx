@@ -275,10 +275,12 @@ export function VentaDetailDialog({
         return base;
       })()
     : (() => {
-        // Recalcular total: restar NC del subtotal, luego aplicar recargo sobre la base neta
+        // Recalcular total: derivar recargo implícito del total almacenado
         const baseNeta = itemsSubtotal - ncDisplay;
-        const pct = recPct || (isTransferenciaPura || isMixto ? configRecargoPct : 0);
-        const recargo = pct > 0 && baseNeta > 0 ? Math.round(baseNeta * pct / 100) : 0;
+        const recargoImplicito = data.total - itemsSubtotal;
+        const pctDerivado = recargoImplicito > 0 && itemsSubtotal > 0 ? recargoImplicito / itemsSubtotal : 0;
+        const pct = recPct > 0 ? recPct / 100 : pctDerivado;
+        const recargo = pct > 0 && baseNeta > 0 ? Math.round(baseNeta * pct) : 0;
         return baseNeta + recargo + envio;
       })();
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
@@ -840,13 +842,16 @@ export function VentaDetailDialog({
                   {/* Recargo transferencia — modo lectura */}
                   {(!editable || !editItems) && (() => {
                     const baseParaRecargo = itemsSubtotal - ncAmt;
-                    const pct = recPct || configRecargoPct;
-                    const surcharge = pct > 0 && baseParaRecargo > 0
-                      ? Math.round(baseParaRecargo * pct / 100)
+                    const recargoImplicitoR = data.total - itemsSubtotal;
+                    const pctDerivadoR = recargoImplicitoR > 0 && itemsSubtotal > 0 ? recargoImplicitoR / itemsSubtotal : 0;
+                    const surcharge = recPct > 0
+                      ? Math.round(baseParaRecargo * recPct / 100)
+                      : pctDerivadoR > 0
+                      ? Math.round(baseParaRecargo * pctDerivadoR)
                       : ventaCalc.transferSurcharge;
                     return surcharge > 0 ? (
                       <p className="text-muted-foreground">
-                        Recargo transferencia ({pct}%):
+                        Recargo transferencia ({recPct > 0 ? recPct : Math.round(pctDerivadoR * 10000) / 100}%):
                         <span className="font-medium text-violet-600 ml-1">+{formatCurrency(surcharge)}</span>
                       </p>
                     ) : null;

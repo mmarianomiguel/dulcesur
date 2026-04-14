@@ -2499,16 +2499,16 @@ export default function ListadoVentasPage() {
   // Unified stats — NCs are already reflected in parent venta's total, don't subtract again
   const activeOrders = filteredOrders.filter((o) => o.estado !== "cancelado" && o.estado !== "anulada" && !o._tipo_comprobante?.includes("Nota de Crédito"));
 
-  // Para cada venta activa, calcular el total correcto descontando NC con recargo
+  // Para cada venta activa, calcular el total correcto descontando NC con recargo implícito
   const unifiedTotal = activeOrders.reduce((s, o) => {
     const ventaId = (o as any)._ventaId || "";
     const ncAmt = ncPorVenta[ventaId] || 0;
     if (ncAmt === 0) return s + o.total;
     const ventaSubtotal = (o as any).subtotal || o.total;
-    const recPct = (o as any)._recargo_porcentaje || 0;
+    const recargoImplicito = o.total - ventaSubtotal;
+    const pctEfectivo = recargoImplicito > 0 && ventaSubtotal > 0 ? recargoImplicito / ventaSubtotal : 0;
     const baseNeta = ventaSubtotal - ncAmt;
-    const recargo = recPct > 0 && baseNeta > 0 ? Math.round(baseNeta * recPct / 100) : 0;
-    return s + baseNeta + recargo;
+    return s + baseNeta + (baseNeta > 0 ? Math.round(baseNeta * pctEfectivo) : 0);
   }, 0);
   const unifiedPendientes = filteredOrders.filter((o) => o.estado === "pendiente" || o.estado === "armado").length;
 
@@ -2810,13 +2810,13 @@ export default function ListadoVentasPage() {
                                 </>
                               );
                             }
-                            // Total con NC recalculado correctamente
+                            // Total con NC recalculado con recargo implícito
                             if (ncAmt > 0 && !cancelled) {
                               const ventaSubtotal = (order as any).subtotal || order.total;
-                              const recPct = (order as any)._recargo_porcentaje || 0;
+                              const recargoImplicito = order.total - ventaSubtotal;
+                              const pctEfectivo = recargoImplicito > 0 && ventaSubtotal > 0 ? recargoImplicito / ventaSubtotal : 0;
                               const baseNeta = ventaSubtotal - ncAmt;
-                              const recargo = recPct > 0 && baseNeta > 0 ? Math.round(baseNeta * recPct / 100) : 0;
-                              const totalConNC = baseNeta + recargo;
+                              const totalConNC = baseNeta + (baseNeta > 0 ? Math.round(baseNeta * pctEfectivo) : 0);
                               return (
                                 <>
                                   <p className="text-sm text-muted-foreground line-through">{formatCurrency(order.total)}</p>

@@ -657,16 +657,22 @@ export default function PedidosPage() {
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <div className="text-right">
-                {pedido.venta?.notas_credito && pedido.venta.notas_credito.length > 0 ? (
-                  <>
-                    <span className="text-sm text-gray-400 line-through">{formatCurrency(pedido.total)}</span>
-                    <span className="text-lg font-bold text-primary ml-1">
-                      {formatCurrency(pedido.total - pedido.venta.notas_credito.reduce((s, nc) => s + nc.total, 0))}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-lg font-bold text-gray-900">{formatCurrency(pedido.total)}</span>
-                )}
+                {(() => {
+                  const ncAmtPed = (pedido.venta?.notas_credito || []).reduce((s: number, nc: any) => s + nc.total, 0);
+                  if (ncAmtPed === 0) return <span className="text-lg font-bold text-gray-900">{formatCurrency(pedido.venta?.total || pedido.total)}</span>;
+                  const vtTotal = pedido.venta?.total || pedido.total;
+                  const vtSub = (pedido.venta as any)?.subtotal || vtTotal;
+                  const rImpl = vtTotal - vtSub;
+                  const pctImpl = rImpl > 0 && vtSub > 0 ? rImpl / vtSub : 0;
+                  const bNeta = vtSub - ncAmtPed;
+                  const totalConNC = bNeta + (bNeta > 0 ? Math.round(bNeta * pctImpl) : 0);
+                  return (
+                    <>
+                      <span className="text-sm text-gray-400 line-through">{formatCurrency(vtTotal)}</span>
+                      <span className="text-lg font-bold text-primary ml-1">{formatCurrency(totalConNC)}</span>
+                    </>
+                  );
+                })()}
               </div>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                 isExpanded ? "bg-primary/5" : "bg-gray-50"
@@ -870,11 +876,14 @@ export default function PedidosPage() {
                       recargo_porcentaje: recPct,
                       total: pedido.venta.total,
                     }) : null;
-                    // Recargo sobre base descontada la NC
-                    const baseParaRecargo = itemsTotal - ncTotal;
-                    const pct = recPct;
-                    const recargoTotal = pct > 0 && baseParaRecargo > 0
-                      ? Math.round(baseParaRecargo * pct / 100)
+                    // Derivar recargo implícito del total almacenado
+                    const ventaTotalFoot = pedido.venta?.total || pedido.total;
+                    const ventaSubtotalFoot = (pedido.venta as any)?.subtotal || ventaTotalFoot;
+                    const recargoImplicitoFoot = ventaTotalFoot - ventaSubtotalFoot;
+                    const pctFoot = recargoImplicitoFoot > 0 && ventaSubtotalFoot > 0 ? recargoImplicitoFoot / ventaSubtotalFoot : 0;
+                    const baseNetaFoot = ventaSubtotalFoot - ncTotal;
+                    const recargoTotal = ncTotal > 0 && pctFoot > 0
+                      ? Math.round(baseNetaFoot * pctFoot)
                       : (vCalc?.recargoMonto || 0) + (vCalc?.transferSurcharge || 0);
                     return (
                       <>
@@ -902,7 +911,9 @@ export default function PedidosPage() {
                         )}
                         <tr className="border-t border-gray-200">
                           <td colSpan={4} className="py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider">Total</td>
-                          <td className="py-3 text-right font-bold text-primary text-base">{formatCurrency(pedido.venta?.total || pedido.total)}</td>
+                          <td className="py-3 text-right font-bold text-primary text-base">
+                            {formatCurrency(ncTotal > 0 ? baseNetaFoot + recargoTotal : (pedido.venta?.total || pedido.total))}
+                          </td>
                         </tr>
                       </>
                     );
