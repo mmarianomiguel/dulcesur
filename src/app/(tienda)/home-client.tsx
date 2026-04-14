@@ -338,19 +338,6 @@ function ProductosDestacadosBlock({
   const intervalo = (config.carrusel_intervalo as number) ?? 0;
   const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">(tabDefecto);
 
-  // Rotación automática entre tabs
-  useEffect(() => {
-    if (!intervalo || intervalo <= 0) return;
-    const timer = setInterval(() => {
-      setActiveTab((current) => {
-        const activeTabs = tabs.map((t) => t.key);
-        const currentIndex = activeTabs.indexOf(current);
-        const nextIndex = (currentIndex + 1) % activeTabs.length;
-        return activeTabs[nextIndex] as "destacados" | "mas_vendidos" | "nuevos";
-      });
-    }, intervalo * 1000);
-    return () => clearInterval(timer);
-  }, [intervalo, tabs.length]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
 
@@ -378,6 +365,20 @@ function ProductosDestacadosBlock({
     { key: "mas_vendidos" as const, label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
     { key: "nuevos" as const, label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
   ].filter((t) => t.count > 0);
+
+  // Rotación automática entre tabs
+  useEffect(() => {
+    if (!intervalo || intervalo <= 0) return;
+    const timer = setInterval(() => {
+      setActiveTab((current) => {
+        const activeTabs = tabs.map((t) => t.key);
+        const currentIndex = activeTabs.indexOf(current);
+        const nextIndex = (currentIndex + 1) % activeTabs.length;
+        return activeTabs[nextIndex] as "destacados" | "mas_vendidos" | "nuevos";
+      });
+    }, intervalo * 1000);
+    return () => clearInterval(timer);
+  }, [intervalo, tabs.length]);
 
   const renderProductCard = (prod: any, isPriority = false) => {
     const qty = getQty(prod.id);
