@@ -310,7 +310,7 @@ export default function ListadoVentasPage() {
     setLoading(true);
     let query = supabase
       .from("ventas")
-      .select("*, remito_origen_id, created_at, clientes(id, nombre, cuit, tipo_factura, domicilio, telefono, email, situacion_iva, localidad, provincia, codigo_postal, numero_documento)")
+      .select("*, remito_origen_id, created_at, cuenta_transferencia_alias, clientes(id, nombre, cuit, tipo_factura, domicilio, telefono, email, situacion_iva, localidad, provincia, codigo_postal, numero_documento)")
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -2942,15 +2942,22 @@ export default function ListadoVentasPage() {
                             }
 
                             if (alreadyPaid) {
-                              // Already paid — just mark as entregado, no payment
-                              if (ventaId) {
-                                await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", ventaId);
-                                await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
+                              const fp = (order.forma_pago || order.metodo_pago || "").toLowerCase();
+                              const tieneCuenta = (order as any).cuenta_transferencia_alias;
+                              const necesitaCuenta = (fp.includes("transferencia") || fp.includes("mixto")) && !tieneCuenta;
+                              if (necesitaCuenta) {
+                                // Tiene cobro pero sin cuenta bancaria — abrir dialog para completar
+                                setEntregarDialog({ open: true, order });
+                              } else {
+                                if (ventaId) {
+                                  await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", ventaId);
+                                  await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
+                                }
+                                await poHandleEstadoChange(order, "entregado");
+                                setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p));
+                                setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v));
+                                showAdminToast("Marcado como entregado", "success");
                               }
-                              await poHandleEstadoChange(order, "entregado");
-                              setPoPedidos(prev => prev.map(p => p.numero === order.numero ? { ...p, estado: "entregado" } : p));
-                              setVentas(prev => prev.map(v => v.numero === order.numero ? { ...v, estado: "entregado", entregado: true } : v));
-                              showAdminToast("Marcado como entregado", "success");
                             } else {
                               // Check if order needs payment dialog
                               const fp = (order.forma_pago || order.metodo_pago || "").toLowerCase();
