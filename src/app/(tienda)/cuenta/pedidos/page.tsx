@@ -864,17 +864,18 @@ export default function PedidosPage() {
                     const itemsTotal = pedido.items.reduce((s, i) => s + (i.subtotal ?? (i.precio_unitario * i.cantidad)), 0);
                     const ncTotal = pedido.venta?.notas_credito?.reduce((s, nc) => s + nc.total, 0) || 0;
                     const recPct = (pedido.venta as any)?.recargo_porcentaje || 0;
-                    const ncTotalForCalc = pedido.venta?.notas_credito?.reduce((s, nc) => s + nc.total, 0) || 0;
                     const vCalc = pedido.venta ? recalcFromVenta({
                       subtotal: (pedido.venta as any)?.subtotal || itemsTotal,
                       descuento_porcentaje: (pedido.venta as any)?.descuento_porcentaje || 0,
                       recargo_porcentaje: recPct,
-                      total: pedido.venta.total - ncTotalForCalc,
+                      total: pedido.venta.total,
                     }) : null;
-                    // Combined surcharge: recargoMonto (order-level or legacy transfer %) + transferSurcharge (residual)
-                    const recargoOrden = vCalc?.recargoMonto || 0;
-                    const recargoTransf = vCalc?.transferSurcharge || 0;
-                    const recargoTotal = recargoOrden + recargoTransf;
+                    // Recargo sobre base descontada la NC
+                    const baseParaRecargo = itemsTotal - ncTotal;
+                    const pct = recPct;
+                    const recargoTotal = pct > 0 && baseParaRecargo > 0
+                      ? Math.round(baseParaRecargo * pct / 100)
+                      : (vCalc?.recargoMonto || 0) + (vCalc?.transferSurcharge || 0);
                     return (
                       <>
                         <tr className="border-t border-gray-200">
@@ -901,7 +902,7 @@ export default function PedidosPage() {
                         )}
                         <tr className="border-t border-gray-200">
                           <td colSpan={4} className="py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider">Total</td>
-                          <td className="py-3 text-right font-bold text-primary text-base">{formatCurrency((pedido.venta?.total || pedido.total) - ncTotalForCalc)}</td>
+                          <td className="py-3 text-right font-bold text-primary text-base">{formatCurrency(pedido.venta?.total || pedido.total)}</td>
                         </tr>
                       </>
                     );
