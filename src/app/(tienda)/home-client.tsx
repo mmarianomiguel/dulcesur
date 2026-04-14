@@ -334,7 +334,23 @@ function ProductosDestacadosBlock({
   const titulo = config.titulo_seccion || "Productos";
   const maxItems = config.max_items || 8;
 
-  const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">("destacados");
+  const tabDefecto = (config.tab_defecto as "destacados" | "mas_vendidos" | "nuevos") ?? "destacados";
+  const intervalo = (config.carrusel_intervalo as number) ?? 0;
+  const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">(tabDefecto);
+
+  // Rotación automática entre tabs
+  useEffect(() => {
+    if (!intervalo || intervalo <= 0) return;
+    const timer = setInterval(() => {
+      setActiveTab((current) => {
+        const activeTabs = tabs.map((t) => t.key);
+        const currentIndex = activeTabs.indexOf(current);
+        const nextIndex = (currentIndex + 1) % activeTabs.length;
+        return activeTabs[nextIndex] as "destacados" | "mas_vendidos" | "nuevos";
+      });
+    }, intervalo * 1000);
+    return () => clearInterval(timer);
+  }, [intervalo, tabs.length]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
 
@@ -467,21 +483,32 @@ function ProductosDestacadosBlock({
         <div className="w-12 h-0.5 bg-primary rounded-full mb-6 -mt-3" />
 
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: maxItems }).map((_, i) => (<SkeletonCard key={i} />))}
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4" style={{ scrollbarWidth: "none" }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex-shrink-0 w-44">
+                <SkeletonCard />
+              </div>
+            ))}
           </div>
         ) : activeProds.length === 0 ? (
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-children">
-            {activeProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
+          <div
+            className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {activeProds.slice(0, 16).map((prod, idx) => (
+              <div key={prod.id} className="flex-shrink-0 w-44">
+                {renderProductCard(prod, idx < 2)}
+              </div>
+            ))}
           </div>
         )}
 
         {!loading && activeProds.length > 0 && (
-          <div className="text-center mt-6">
-            <Link href="/productos" className="inline-block border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white rounded-full px-8 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95">
-              Ver todos los productos
+          <div className="flex justify-end mt-3">
+            <Link href="/productos" className="text-sm font-semibold text-primary hover:underline flex items-center gap-1">
+              Ver todos <span aria-hidden>→</span>
             </Link>
           </div>
         )}

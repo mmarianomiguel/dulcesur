@@ -58,6 +58,7 @@ import {
   DollarSign,
   Zap,
   ShoppingCart,
+  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -181,6 +182,53 @@ const BLOCK_TYPES: BlockTypeDef[] = [
     icon: Image,
     defaultTitulo: "Imagen Banner",
     defaultConfig: { url_imagen: "", link: "", alt: "", alto: "mediano" },
+  },
+  {
+    tipo: "aumentos_recientes",
+    label: "Aumentos Recientes",
+    description: "Productos con precio actualizado recientemente",
+    icon: TrendingUp,
+    defaultTitulo: "Aumentos Recientes",
+    defaultConfig: {
+      dias_atras: 3,
+      max_items_home: 8,
+    },
+  },
+  {
+    tipo: "ultimas_unidades",
+    label: "Últimas Unidades",
+    description: "Productos con stock bajo",
+    icon: Package,
+    defaultTitulo: "Últimas Unidades",
+    defaultConfig: {
+      umbral_stock: 5,
+      max_items: 8,
+      titulo: "Últimas Unidades",
+    },
+  },
+  {
+    tipo: "mas_vendidos",
+    label: "Más Vendidos",
+    description: "Top productos por ventas recientes",
+    icon: Star,
+    defaultTitulo: "Más Vendidos",
+    defaultConfig: {
+      dias_atras: 30,
+      max_items: 8,
+      titulo: "Los Más Vendidos",
+    },
+  },
+  {
+    tipo: "nuevos_ingresos",
+    label: "Nuevos Ingresos",
+    description: "Productos repuestos o ingresados recientemente",
+    icon: Zap,
+    defaultTitulo: "Nuevos Ingresos",
+    defaultConfig: {
+      dias_atras: 7,
+      max_items: 16,
+      titulo: "Nuevos Ingresos",
+    },
   },
 ];
 
@@ -660,6 +708,107 @@ function BlockPreview({ bloque, onConfigChange }: { bloque: Bloque; onConfigChan
       return <PreviewTextoLibre config={bloque.config} />;
     case "imagen_banner":
       return <PreviewImagenBanner config={bloque.config} />;
+
+    case "aumentos_recientes":
+      return (
+        <section className="py-8 bg-orange-50/40 border-t border-orange-100">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-orange-500" />
+                Aumentos Recientes
+              </h2>
+              <span className="text-xs text-orange-500 font-medium">Ver todos →</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Array.from({ length: Math.min((bloque.config.max_items_home as number) || 4, 4) }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-orange-100 bg-white p-3">
+                  <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center">
+                    <Package className="w-8 h-8 text-gray-300" />
+                  </div>
+                  <div className="text-xs font-medium text-gray-700 line-clamp-1">Producto ejemplo {i + 1}</div>
+                  <div className="text-sm font-bold text-gray-900 mt-1">$1.200</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-[10px] text-gray-400 line-through">$1.000</span>
+                    <span className="text-[10px] bg-orange-100 text-orange-700 px-1 rounded">↑ +20%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+
+    case "ultimas_unidades":
+      return (
+        <section className="py-8 bg-red-50/40 border-t border-red-100">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="text-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">{(bloque.config.titulo as string) || "Últimas Unidades"}</h2>
+              <div className="w-12 h-0.5 bg-red-400 rounded-full mx-auto mt-2" />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-red-100 bg-white p-3">
+                  <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center relative">
+                    <Package className="w-8 h-8 text-gray-300" />
+                    <span className="absolute bottom-1 right-1 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">¡Últimas {i + 1}!</span>
+                  </div>
+                  <div className="text-xs font-medium text-gray-700 line-clamp-1">Producto ejemplo {i + 1}</div>
+                  <div className="text-sm font-bold text-gray-900 mt-1">$1.200</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+
+    case "mas_vendidos":
+      return (
+        <section className="py-8">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="text-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">{(bloque.config.titulo as string) || "Los Más Vendidos"}</h2>
+              <div className="w-12 h-0.5 bg-primary rounded-full mx-auto mt-2" />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-gray-100 bg-white p-3">
+                  <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center">
+                    <Package className="w-8 h-8 text-gray-300" />
+                  </div>
+                  <div className="text-xs font-medium text-gray-700 line-clamp-1">Producto ejemplo {i + 1}</div>
+                  <div className="text-sm font-bold text-gray-900 mt-1">$1.200</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+
+    case "nuevos_ingresos":
+      return (
+        <section className="py-8 bg-emerald-50/40 border-t border-emerald-100">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="text-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">{(bloque.config.titulo as string) || "Nuevos Ingresos"}</h2>
+              <div className="w-12 h-0.5 bg-emerald-500 rounded-full mx-auto mt-2" />
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-emerald-100 bg-white p-3 flex-shrink-0 w-36">
+                  <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center">
+                    <Package className="w-8 h-8 text-gray-300" />
+                  </div>
+                  <div className="text-xs font-medium text-gray-700 line-clamp-1">Producto {i + 1}</div>
+                  <div className="text-sm font-bold text-gray-900 mt-1">$1.200</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+
     default:
       return (
         <section className="py-8">
@@ -1450,6 +1599,38 @@ function BlockConfigForm({
             </Select>
           </div>
           <div className="space-y-1.5">
+            <Label>Tab por defecto</Label>
+            <Select
+              value={(c.tab_defecto as string) ?? "destacados"}
+              onValueChange={(v) => onConfigChange("tab_defecto", v ?? "destacados")}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="destacados">Destacados</SelectItem>
+                <SelectItem value="mas_vendidos">Más vendidos</SelectItem>
+                <SelectItem value="nuevos">Nuevos ingresos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Rotación automática</Label>
+            <Select
+              value={String((c.carrusel_intervalo as number) ?? 0)}
+              onValueChange={(v) => onConfigChange("carrusel_intervalo", parseInt(v ?? "0", 10))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Sin rotación</SelectItem>
+                <SelectItem value="3">Cada 3 segundos</SelectItem>
+                <SelectItem value="5">Cada 5 segundos</SelectItem>
+                <SelectItem value="8">Cada 8 segundos</SelectItem>
+                <SelectItem value="10">Cada 10 segundos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
             <Label>Productos destacados actuales</Label>
             <FeaturedProductsPanel />
           </div>
@@ -1554,6 +1735,154 @@ function BlockConfigForm({
                 <SelectItem value="pequeno">Pequeño (200px)</SelectItem>
                 <SelectItem value="mediano">Mediano (300px)</SelectItem>
                 <SelectItem value="grande">Grande (400px)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+
+    case "aumentos_recientes":
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Días hacia atrás</Label>
+            <Input
+              type="number"
+              min={1}
+              max={30}
+              value={(c.dias_atras as number) ?? 3}
+              onChange={(e) => onConfigChange("dias_atras", parseInt(e.target.value) || 3)}
+            />
+            <p className="text-[11px] text-muted-foreground">Productos con precio actualizado en los últimos X días.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Productos en el home</Label>
+            <Select
+              value={String((c.max_items_home as number) ?? 8)}
+              onValueChange={(v) => onConfigChange("max_items_home", parseInt(v || "8", 10))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="4">4</SelectItem>
+                <SelectItem value="8">8</SelectItem>
+                <SelectItem value="12">12</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">La página de aumentos siempre muestra todos.</p>
+          </div>
+        </div>
+      );
+
+    case "ultimas_unidades":
+      return (
+        <div className="space-y-3">
+          <Field
+            label="Título de sección"
+            value={(c.titulo as string) ?? "Últimas Unidades"}
+            onChange={(v) => onConfigChange("titulo", v)}
+          />
+          <div className="space-y-1.5">
+            <Label>Umbral de stock</Label>
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              value={(c.umbral_stock as number) ?? 5}
+              onChange={(e) => onConfigChange("umbral_stock", parseInt(e.target.value) || 5)}
+            />
+            <p className="text-[11px] text-muted-foreground">Mostrar productos con stock menor o igual a este número.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cantidad máxima</Label>
+            <Select
+              value={String((c.max_items as number) ?? 8)}
+              onValueChange={(v) => onConfigChange("max_items", parseInt(v || "8", 10))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="4">4</SelectItem>
+                <SelectItem value="8">8</SelectItem>
+                <SelectItem value="12">12</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+
+    case "mas_vendidos":
+      return (
+        <div className="space-y-3">
+          <Field
+            label="Título de sección"
+            value={(c.titulo as string) ?? "Los Más Vendidos"}
+            onChange={(v) => onConfigChange("titulo", v)}
+          />
+          <div className="space-y-1.5">
+            <Label>Días a considerar</Label>
+            <Select
+              value={String((c.dias_atras as number) ?? 30)}
+              onValueChange={(v) => onConfigChange("dias_atras", parseInt(v || "30", 10))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Últimos 7 días</SelectItem>
+                <SelectItem value="15">Últimos 15 días</SelectItem>
+                <SelectItem value="30">Últimos 30 días</SelectItem>
+                <SelectItem value="60">Últimos 60 días</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cantidad máxima</Label>
+            <Select
+              value={String((c.max_items as number) ?? 8)}
+              onValueChange={(v) => onConfigChange("max_items", parseInt(v || "8", 10))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="4">4</SelectItem>
+                <SelectItem value="8">8</SelectItem>
+                <SelectItem value="12">12</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+
+    case "nuevos_ingresos":
+      return (
+        <div className="space-y-3">
+          <Field
+            label="Título de sección"
+            value={(c.titulo as string) ?? "Nuevos Ingresos"}
+            onChange={(v) => onConfigChange("titulo", v)}
+          />
+          <div className="space-y-1.5">
+            <Label>Días hacia atrás</Label>
+            <Select
+              value={String((c.dias_atras as number) ?? 7)}
+              onValueChange={(v) => onConfigChange("dias_atras", parseInt(v || "7", 10))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3">Últimos 3 días</SelectItem>
+                <SelectItem value="7">Últimos 7 días</SelectItem>
+                <SelectItem value="14">Últimos 14 días</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">Productos con movimiento de compra o ajuste de ingreso.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cantidad máxima</Label>
+            <Select
+              value={String((c.max_items as number) ?? 16)}
+              onValueChange={(v) => onConfigChange("max_items", parseInt(v || "16", 10))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="8">8</SelectItem>
+                <SelectItem value="16">16</SelectItem>
+                <SelectItem value="24">24</SelectItem>
               </SelectContent>
             </Select>
           </div>

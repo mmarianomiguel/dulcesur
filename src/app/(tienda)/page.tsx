@@ -140,11 +140,26 @@ export default async function TiendaHomePage() {
       })()
     : Promise.resolve([]);
 
-  // Cutoff for aumentos recientes (3 days in AR timezone)
-  const cutoffAumentos = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" })
-  );
-  cutoffAumentos.setDate(cutoffAumentos.getDate() - 3);
+  // Leer configuración de los bloques
+  const bloqueMasVendidos = blocks.find((b: any) => b.tipo === "mas_vendidos");
+  const bloqueNuevos = blocks.find((b: any) => b.tipo === "nuevos_ingresos");
+  const bloqueAumentos = blocks.find((b: any) => b.tipo === "aumentos_recientes");
+  const bloqueUltimas = blocks.find((b: any) => b.tipo === "ultimas_unidades");
+
+  const diasMasVendidos = bloqueMasVendidos?.config?.dias_atras ?? 30;
+  const diasNuevos = bloqueNuevos?.config?.dias_atras ?? 7;
+  const diasAumentos = bloqueAumentos?.config?.dias_atras ?? 3;
+  const maxNuevos = bloqueNuevos?.config?.max_items ?? 16;
+  const maxMasVendidos = bloqueMasVendidos?.config?.max_items ?? 8;
+  const maxUltimas = bloqueUltimas?.config?.umbral_stock ?? 5;
+  const maxUltimasItems = bloqueUltimas?.config?.max_items ?? 8;
+  const maxAumentosHome = bloqueAumentos?.config?.max_items_home ?? 8;
+
+  // Cutoff for aumentos recientes
+  const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+
+  const cutoffAumentos = new Date(ahoraAR);
+  cutoffAumentos.setDate(cutoffAumentos.getDate() - diasAumentos);
   cutoffAumentos.setHours(0, 0, 0, 0);
   const cutoffStr = cutoffAumentos.toISOString();
 
@@ -156,7 +171,7 @@ export default async function TiendaHomePage() {
     .gt("precio_anterior", 0)
     .gt("fecha_actualizacion", cutoffStr)
     .order("fecha_actualizacion", { ascending: false })
-    .limit(12);
+    .limit(maxAumentosHome);
 
   const masVendidosPromise = supabase
     .from("productos")
@@ -165,7 +180,7 @@ export default async function TiendaHomePage() {
     .eq("visibilidad", "visible")
     .gt("stock", 0)
     .order("stock", { ascending: false })
-    .limit(24);
+    .limit(maxMasVendidos * 3);
 
   const ultimasUnidadesPromise = supabase
     .from("productos")
@@ -174,22 +189,21 @@ export default async function TiendaHomePage() {
     .eq("visibilidad", "visible")
     .eq("es_combo", false)
     .gt("stock", 0)
-    .lte("stock", 5)
+    .lte("stock", maxUltimas)
     .order("stock", { ascending: true })
-    .limit(24);
+    .limit(maxUltimasItems);
 
-  // Más vendidos (tabs): top productos por ventas en 30 días
-  const ahoraAR = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+  // Más vendidos (tabs): top productos por ventas
   const hace30 = new Date(ahoraAR);
-  hace30.setDate(hace30.getDate() - 30);
+  hace30.setDate(hace30.getDate() - diasMasVendidos);
 
   const hace4dias = new Date(ahoraAR);
   hace4dias.setDate(hace4dias.getDate() - 4);
   hace4dias.setHours(0, 0, 0, 0);
 
-  const hace7dias = new Date(ahoraAR);
-  hace7dias.setDate(hace7dias.getDate() - 7);
-  hace7dias.setHours(0, 0, 0, 0);
+  const haceNuevosDias = new Date(ahoraAR);
+  haceNuevosDias.setDate(haceNuevosDias.getDate() - diasNuevos);
+  haceNuevosDias.setHours(0, 0, 0, 0);
 
   const nuevosPromise = supabase
     .from("productos")
@@ -197,9 +211,9 @@ export default async function TiendaHomePage() {
     .eq("activo", true)
     .eq("visibilidad", "visible")
     .gt("stock", 0)
-    .or(`created_at.gte.${hace4dias.toISOString()},updated_at.gte.${hace7dias.toISOString()}`)
+    .or(`created_at.gte.${hace4dias.toISOString()},updated_at.gte.${haceNuevosDias.toISOString()}`)
     .order("created_at", { ascending: false })
-    .limit(32);
+    .limit(maxNuevos * 2);
 
   // Grupo 1: queries críticas en paralelo (categorías, productos, aumentos)
   const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }, { data: nuevosRaw }] = await Promise.all([
@@ -216,9 +230,9 @@ export default async function TiendaHomePage() {
   // Nuevos ingresos
   const nuevosIngresos = (nuevosRaw || []).filter((p: any) => {
     const creadoReciente = new Date(p.created_at) >= hace4dias;
-    const stockRecuperado = new Date(p.updated_at) >= hace7dias && p.stock > 0;
+    const stockRecuperado = new Date(p.updated_at) >= haceNuevosDias && p.stock > 0;
     return creadoReciente || stockRecuperado;
-  }).slice(0, 16);
+  }).slice(0, maxNuevos);
 
   // Grupo 2: presentaciones + top vendidos en paralelo (no bloquean las categorías)
   const presPromise = productos.length > 0
