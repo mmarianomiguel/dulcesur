@@ -487,7 +487,9 @@ function ProductosDestacadosBlock({
                   }`}>
                   <Icon className="w-3 h-3" />
                   <span className="hidden sm:inline">{label}</span>
-                  <span className="sm:hidden">{label.split(" ")[0]}</span>
+                  <span className="sm:hidden">
+                    {key === "mas_vendidos" ? "Top" : key === "nuevos" ? "Nuevos" : label.split(" ")[0]}
+                  </span>
                 </button>
               ))}
             </div>
@@ -513,10 +515,9 @@ function ProductosDestacadosBlock({
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
           <>
-            {/* Mobile: scroll horizontal con peek — se ven 2 cards + borde de la siguiente */}
+            {/* Mobile: grilla 2x2 con swipe táctil */}
             <div
-              className="md:hidden -mx-4"
-              style={{ overflowX: "auto", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+              className="md:hidden grid grid-cols-2 gap-3"
               onTouchStart={(e) => {
                 setPausado(true);
                 touchStartX.current = e.touches[0].clientX;
@@ -531,42 +532,7 @@ function ProductosDestacadosBlock({
                 setTimeout(() => setPausado(false), 3000);
               }}
             >
-              <div
-                className="flex gap-3 px-4"
-                style={{ width: "max-content" }}
-              >
-                {/* Grupo actual: 2 columnas de 2 filas */}
-                <div className="grid grid-rows-2 grid-cols-2 gap-3" style={{ width: "calc(100vw - 56px)" }}>
-                  {grupoProds.slice(0, 4).map((prod, idx) => (
-                    <div key={prod.id}>
-                      {renderProductCard(prod, idx < 2)}
-                    </div>
-                  ))}
-                </div>
-                {/* Peek del siguiente grupo — solo el borde de las primeras 2 cards */}
-                {grupoActual < grupos - 1 && (
-                  <div className="grid grid-rows-2 gap-3" style={{ width: "32px", overflow: "hidden", flexShrink: 0 }}>
-                    {activeProds.slice((grupoActual + 1) * GRUPO_SIZE, (grupoActual + 1) * GRUPO_SIZE + 2).map((prod) => (
-                      <div
-                        key={prod.id}
-                        className="rounded-2xl border border-gray-100 bg-white overflow-hidden"
-                        style={{ aspectRatio: "1", minHeight: "0" }}
-                      >
-                        {prod.imagen_url ? (
-                          <img
-                            src={prod.imagen_url}
-                            alt=""
-                            className="w-full h-full object-contain p-2"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-50" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
             </div>
 
             {/* Desktop: grilla 1x4 normal */}
@@ -578,36 +544,41 @@ function ProductosDestacadosBlock({
 
         {/* Navegación entre grupos */}
         {!loading && grupos > 1 && (
-          <div className="flex items-center justify-center gap-3 mt-4">
-            <button
-              onClick={() => setGrupoActual((g) => Math.max(0, g - 1))}
-              disabled={grupoActual === 0}
-              className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-            </button>
+          <div className="flex flex-col items-center gap-2 mt-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setGrupoActual((g) => Math.max(0, g - 1))}
+                disabled={grupoActual === 0}
+                className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
 
-            <div className="flex gap-1.5">
-              {Array.from({ length: grupos }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setGrupoActual(i)}
-                  className={`transition-all rounded-full ${
-                    i === grupoActual
-                      ? "w-5 h-2 bg-primary"
-                      : "w-2 h-2 bg-gray-200 hover:bg-gray-300"
-                  }`}
-                />
-              ))}
+              <div className="flex gap-2">
+                {Array.from({ length: grupos }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setGrupoActual(i)}
+                    className={`transition-all rounded-full ${
+                      i === grupoActual
+                        ? "w-6 h-2.5 bg-primary"
+                        : "w-2.5 h-2.5 bg-gray-200 hover:bg-gray-300"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={() => setGrupoActual((g) => Math.min(grupos - 1, g + 1))}
+                disabled={grupoActual === grupos - 1}
+                className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
             </div>
-
-            <button
-              onClick={() => setGrupoActual((g) => Math.min(grupos - 1, g + 1))}
-              disabled={grupoActual === grupos - 1}
-              className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
+            <p className="text-xs text-gray-400">
+              {grupoActual + 1} de {grupos} · deslizá para ver más
+            </p>
           </div>
         )}
 
