@@ -122,44 +122,53 @@ export async function POST(req: NextRequest) {
     let failed = 0;
     const expired: string[] = [];
 
-    // Obtener suscripciones push para los destinatarios
+    // ── Resolver suscripciones push por segmentación ──
     // push_subscriptions.cliente_id = clientes_auth.id (UUID)
+    // push_subscriptions.user_id = usuarios.id (UUID)
     // El join entre clientes y clientes_auth es por email
+
     let subs: any[] = [];
+
     if (clientes.length > 0) {
-      // 1. Obtener emails de los clientes
+      // Paso 1: obtener emails de los clientes resueltos
       const { data: clientesData } = await supabase
         .from("clientes")
         .select("id, email")
         .in("id", clientes.map((c) => c.id));
 
-      const emails = (clientesData || []).map((c: any) => c.email).filter(Boolean);
+      const emails = (clientesData || [])
+        .map((c: any) => c.email)
+        .filter(Boolean);
 
       if (emails.length > 0) {
-        // 2. Resolver clientes_auth.id por email
+        // Paso 2: resolver clientes_auth.id por email
         const { data: authData } = await supabase
           .from("clientes_auth")
           .select("id")
           .in("email", emails);
 
-        const clienteAuthIds = (authData || []).map((a: any) => a.id).filter(Boolean);
+        const clienteAuthIds = (authData || [])
+          .map((a: any) => a.id)
+          .filter(Boolean);
 
         if (clienteAuthIds.length > 0) {
-          // 3. Obtener suscripciones push
-          const { data } = await supabase
+          // Paso 3: obtener suscripciones push
+          const { data: clienteSubs } = await supabase
             .from("push_subscriptions")
             .select("*")
             .in("cliente_id", clienteAuthIds);
-          subs = [...subs, ...(data || [])];
+          subs = [...subs, ...(clienteSubs || [])];
         }
       }
     }
+
     if (usuarios.length > 0) {
-      const { data } = await supabase
+      // Para usuarios (por rol): push_subscriptions.user_id = usuarios.id
+      const { data: usuarioSubs } = await supabase
         .from("push_subscriptions")
         .select("*")
         .in("user_id", usuarios.map((u) => u.id));
-      subs = [...subs, ...(data || [])];
+      subs = [...subs, ...(usuarioSubs || [])];
     }
 
     await Promise.allSettled(
