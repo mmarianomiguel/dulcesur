@@ -274,7 +274,13 @@ export function VentaDetailDialog({
 
         return base;
       })()
-    : data.total - ncDisplay;
+    : (() => {
+        // Recalcular total: restar NC del subtotal, luego aplicar recargo sobre la base neta
+        const baseNeta = itemsSubtotal - ncDisplay;
+        const pct = recPct || (isTransferenciaPura || isMixto ? configRecargoPct : 0);
+        const recargo = pct > 0 && baseNeta > 0 ? Math.round(baseNeta * pct / 100) : 0;
+        return baseNeta + recargo + envio;
+      })();
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const canCobrar = editable && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr") && !p.metodo.includes("(a cobrar)"));
