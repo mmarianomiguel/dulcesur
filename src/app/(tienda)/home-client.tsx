@@ -33,6 +33,7 @@ import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
+import InstallPrompt from "@/components/tienda/install-prompt";
 
 /* ──────────────── types ──────────────── */
 
@@ -870,6 +871,17 @@ export default function TiendaPage({
   const [presMap, setPresMap] = useState<Record<string, any[]>>({ ...(initialPresMap || {}), ...(initialTopPresMap || {}) });
   const [loading, setLoading] = useState(!hasInitial);
   const [diasNuevo, setDiasNuevo] = useState(initialDiasNuevo);
+  const [clienteAuthId, setClienteAuthId] = useState<number | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("cliente_auth");
+      if (stored) {
+        const p = JSON.parse(stored);
+        if (p?.id) setClienteAuthId(p.id);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (hasInitial) return; // Skip client fetch — server provided initial data
@@ -1162,6 +1174,7 @@ export default function TiendaPage({
   return (
     <div className="min-h-screen bg-white">
       {orderedBloques.map((bloque) => renderBlock(bloque))}
+      <InstallPrompt clienteId={clienteAuthId} />
       <AumentosRecientesBlock productos={initialAumentos} />
       {afterAumentosBloques.map((bloque) => renderBlock(bloque))}
       {remaining.map((bloque) => renderBlock(bloque))}
