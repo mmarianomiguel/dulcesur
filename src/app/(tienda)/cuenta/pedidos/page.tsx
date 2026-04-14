@@ -6,7 +6,7 @@ import { ArrowLeft, Package, ChevronDown, ChevronUp, ChevronRight, Calendar, Has
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
 import { formatCurrency } from "@/lib/formatters";
-import { recalcFromVenta } from "@/lib/order-calc";
+import { recalcFromVenta, calcTotalConNC } from "@/lib/order-calc";
 
 interface ComboComponent {
   producto_id: string;
@@ -1101,7 +1101,12 @@ export default function PedidosPage() {
                   <>
                     <span className="text-sm text-gray-400 line-through">{formatCurrency(v.total)}</span>
                     <span className="text-lg font-bold text-indigo-600 ml-1">
-                      {formatCurrency(v.total - v.notas_credito.reduce((s, nc) => s + nc.total, 0))}
+                      {formatCurrency(calcTotalConNC({
+                        subtotal: (v as any).subtotal || v.total,
+                        total: v.total,
+                        recargo_porcentaje: (v as any).recargo_porcentaje,
+                        ncTotal: v.notas_credito.reduce((s, nc) => s + nc.total, 0),
+                      }))}
                     </span>
                   </>
                 ) : (
@@ -1208,7 +1213,17 @@ export default function PedidosPage() {
                 <tfoot>
                   <tr className="border-t border-gray-200">
                     <td colSpan={4} className="py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider">Total</td>
-                    <td className="py-3 text-right font-bold text-indigo-600 text-base">{formatCurrency(v.total)}</td>
+                    <td className="py-3 text-right font-bold text-indigo-600 text-base">
+                      {v.notas_credito.length > 0
+                        ? formatCurrency(calcTotalConNC({
+                            subtotal: (v as any).subtotal || v.total,
+                            total: v.total,
+                            recargo_porcentaje: (v as any).recargo_porcentaje,
+                            ncTotal: v.notas_credito.reduce((s, nc) => s + nc.total, 0),
+                          }))
+                        : formatCurrency(v.total)
+                      }
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -1285,7 +1300,12 @@ export default function PedidosPage() {
                 <div className="flex justify-between items-center mt-3 pt-3 border-t border-red-200">
                   <span className="text-sm font-semibold text-gray-700">Total final</span>
                   <span className="text-lg font-bold text-indigo-600">
-                    {formatCurrency(v.total - v.notas_credito.reduce((s, nc) => s + nc.total, 0))}
+                    {formatCurrency(calcTotalConNC({
+                      subtotal: (v as any).subtotal || v.total,
+                      total: v.total,
+                      recargo_porcentaje: (v as any).recargo_porcentaje,
+                      ncTotal: v.notas_credito.reduce((s, nc) => s + nc.total, 0),
+                    }))}
                   </span>
                 </div>
               </div>

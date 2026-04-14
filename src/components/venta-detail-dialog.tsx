@@ -798,6 +798,16 @@ export function VentaDetailDialog({
             {(() => {
               const ncAmt = (ncs || []).reduce((s, nc) => s + nc.total, 0);
               const ventaCalc = recalcFromVenta({ subtotal: itemsSubtotal, descuento_porcentaje: descPct, recargo_porcentaje: recPct, total: data.total });
+              const transferSurchargeCorregido = (() => {
+                if (ncAmt === 0) return ventaCalc.transferSurcharge;
+                const base = itemsSubtotal - ncAmt;
+                const pct = recPct > 0
+                  ? recPct / 100
+                  : (data.total - itemsSubtotal) > 0 && itemsSubtotal > 0
+                    ? (data.total - itemsSubtotal) / itemsSubtotal
+                    : 0;
+                return pct > 0 && base > 0 ? Math.round(base * pct) : 0;
+              })();
               const realPagos = (pagos || []).filter(p => !p.metodo.includes("Nota de Cr") && !p.metodo.includes("Pendiente"));
               const totalCobrado = realPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
               return (
@@ -840,21 +850,16 @@ export function VentaDetailDialog({
                     ) : null;
                   })()}
                   {/* Recargo transferencia — modo lectura */}
-                  {(!editable || !editItems) && (() => {
-                    const baseParaRecargo = itemsSubtotal - ncAmt;
-                    const recargoImplicitoR = data.total - itemsSubtotal;
-                    const pctDerivadoR = recargoImplicitoR > 0 && itemsSubtotal > 0 ? recargoImplicitoR / itemsSubtotal : 0;
-                    const surcharge = recPct > 0
-                      ? Math.round(baseParaRecargo * recPct / 100)
-                      : pctDerivadoR > 0
-                      ? Math.round(baseParaRecargo * pctDerivadoR)
-                      : ventaCalc.transferSurcharge;
-                    return surcharge > 0 ? (
+                  {(!editable || !editItems) && transferSurchargeCorregido > 0 && (() => {
+                    const pctMostrar = recPct > 0
+                      ? recPct
+                      : Math.round(((data.total - itemsSubtotal) / itemsSubtotal) * 10000) / 100;
+                    return (
                       <p className="text-muted-foreground">
-                        Recargo transferencia ({recPct > 0 ? recPct : Math.round(pctDerivadoR * 10000) / 100}%):
-                        <span className="font-medium text-violet-600 ml-1">+{formatCurrency(surcharge)}</span>
+                        Recargo transferencia ({pctMostrar > 0 ? `${pctMostrar}%` : ""}):
+                        <span className="font-medium text-violet-600 ml-1">+{formatCurrency(transferSurchargeCorregido)}</span>
                       </p>
-                    ) : null;
+                    );
                   })()}
                   {envio > 0 && (
                     <p className="text-muted-foreground">Envío: <span className="font-medium text-foreground">{formatCurrency(envio)}</span></p>

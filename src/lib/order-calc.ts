@@ -119,6 +119,29 @@ export function calculateOrderFinancials(input: OrderCalcInput): OrderCalcResult
 }
 
 /**
+ * Calcula el total de una venta después de aplicar NCs, respetando el recargo de
+ * transferencia. El recargo se recalcula sobre la base neta (subtotal - NC),
+ * no sobre el total original.
+ */
+export function calcTotalConNC(params: {
+  subtotal: number;
+  total: number;
+  recargo_porcentaje?: number;
+  ncTotal: number;
+}): number {
+  const { subtotal, total, recargo_porcentaje, ncTotal } = params;
+  if (ncTotal === 0) return total;
+  const baseNeta = subtotal - ncTotal;
+  if (baseNeta <= 0) return 0;
+  const pct = recargo_porcentaje != null && recargo_porcentaje > 0
+    ? recargo_porcentaje / 100
+    : (total - subtotal) > 0 && subtotal > 0
+      ? (total - subtotal) / subtotal
+      : 0;
+  return baseNeta + Math.round(baseNeta * pct);
+}
+
+/**
  * Reconstruye el desglose financiero desde una venta almacenada.
  * Útil para display en listados, detalle y pedidos sin recalcular desde items.
  */

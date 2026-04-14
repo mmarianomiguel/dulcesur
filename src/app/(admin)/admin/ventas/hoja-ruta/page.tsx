@@ -2322,17 +2322,21 @@ export default function HojaDeRutaPage() {
             // Si hay items disponibles, usar la suma de sus subtotales (más preciso).
             // Si no, revertir matemáticamente dividiendo por (1 + recargo/100).
             const subtotalSinRecargo = allVentas.reduce((s, vt) => {
+              // Preferir vt.subtotal (campo guardado en DB, siempre correcto)
+              if ((vt as any).subtotal > 0) {
+                return s + (vt as any).subtotal;
+              }
+              // Fallback: sumar subtotales de items si están cargados
               const items = vt.venta_items;
               if (items && items.length > 0) {
                 return s + items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
               }
-              // Fallback: revertir recargo si la forma de pago es transferencia
+              // Último fallback: revertir recargo matemáticamente
               const fp = (vt.forma_pago || "").toLowerCase();
               const tieneRecargo = fp === "transferencia" && porcentajeTransferencia > 0;
-              const baseTotal = vt.total - (pagadoPorVenta[vt.id] || 0);
               return s + (tieneRecargo
-                ? Math.round((baseTotal / (1 + porcentajeTransferencia / 100)) * 100) / 100
-                : baseTotal);
+                ? Math.round((vt.total / (1 + porcentajeTransferencia / 100)) * 100) / 100
+                : vt.total);
             }, 0);
 
             const preDebeGrupo = Math.max(0, subtotalSinRecargo - totalNCGrupo);

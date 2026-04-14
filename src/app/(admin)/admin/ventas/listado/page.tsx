@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { buildStockUpdate } from "@/lib/stock-utils";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
-import { recalcFromVenta } from "@/lib/order-calc";
+import { recalcFromVenta, calcTotalConNC } from "@/lib/order-calc";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1150,14 +1150,23 @@ export default function ListadoVentasPage() {
     const ventaCalc = recalcFromVenta({ subtotal: v.subtotal, descuento_porcentaje: v.descuento_porcentaje || 0, recargo_porcentaje: v.recargo_porcentaje || 0, total: v.total });
     // Recalcular surcharge sobre base neta (subtotal - NC)
     const ncAmtPrint = ncPorVenta[v.id] || 0;
+    const totalImpreso = calcTotalConNC({
+      subtotal: v.subtotal || 0,
+      total: v.total,
+      recargo_porcentaje: v.recargo_porcentaje,
+      ncTotal: ncAmtPrint,
+    });
     const baseNetaPrint = (v.subtotal || 0) - ncAmtPrint;
     const recPctPrint = v.recargo_porcentaje || 0;
-    const surchargeCorregido = recPctPrint > 0 && baseNetaPrint > 0
-      ? Math.round(baseNetaPrint * recPctPrint / 100)
-      : ventaCalc.transferSurcharge;
+    const pctDerivadoPrint = (v.total - (v.subtotal || 0)) > 0 && (v.subtotal || 0) > 0
+      ? (v.total - (v.subtotal || 0)) / (v.subtotal || 0) : 0;
+    const pctUsarPrint = recPctPrint > 0 ? recPctPrint / 100 : pctDerivadoPrint;
+    const surchargeCorregido = baseNetaPrint > 0 && pctUsarPrint > 0
+      ? Math.round(baseNetaPrint * pctUsarPrint)
+      : 0;
     setPrintSaleObj({
       numero: v.numero,
-      total: v.total - ncAmtPrint,
+      total: totalImpreso,
       subtotal: v.subtotal,
       descuento: ventaCalc.descuentoMonto,
       recargo: ventaCalc.recargoMonto,
