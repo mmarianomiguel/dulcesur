@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         endpoint: subscription.endpoint,
         keys_p256dh: subscription.keys.p256dh,
         keys_auth: subscription.keys.auth,
-        cliente_id: cliente_id || null,
+        cliente_id: cliente_id ? String(cliente_id) : null,
       },
       { onConflict: "endpoint" }
     );

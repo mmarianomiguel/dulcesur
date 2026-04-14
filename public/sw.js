@@ -3,28 +3,35 @@
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
-  let data;
-  try {
-    // Decode as UTF-8 explicitly to preserve accented characters
-    const raw = new TextDecoder("utf-8").decode(event.data.arrayBuffer());
-    data = JSON.parse(raw);
-  } catch {
-    try { data = event.data.json(); } catch { data = { title: "DulceSur", body: event.data.text() }; }
-  }
+  const showNotif = async () => {
+    let data;
+    try {
+      data = event.data.json();
+    } catch {
+      try {
+        const buf = await event.data.arrayBuffer();
+        const raw = new TextDecoder("utf-8").decode(buf);
+        data = JSON.parse(raw);
+      } catch {
+        data = { title: "DulceSur", body: event.data.text() };
+      }
+    }
 
-  const options = {
-    body: data.body || "Nueva notificacion",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
-    tag: data.tag || "notif-" + Date.now(),
-    renotify: true,
-    vibrate: [200, 100, 200],
-    data: {
-      url: data.url || "/",
-    },
+    const options = {
+      body: data.body || "Nueva notificacion",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: data.tag || "notif-" + Date.now(),
+      vibrate: [200, 100, 200],
+      data: {
+        url: data.url || "/",
+      },
+    };
+
+    await self.registration.showNotification(data.title || "DulceSur", options);
   };
 
-  event.waitUntil(self.registration.showNotification(data.title || "DulceSur", options));
+  event.waitUntil(showNotif());
 });
 
 self.addEventListener("notificationclick", (event) => {
