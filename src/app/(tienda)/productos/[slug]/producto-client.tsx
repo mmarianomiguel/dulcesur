@@ -248,6 +248,7 @@ export default function ProductoClient({
   const volumeDiscountHint = producto ? (() => {
     for (const d of activeDiscounts) {
       if (!d.cantidad_minima || d.cantidad_minima <= 0) continue;
+      if (d.clientes_ids?.length > 0 && (!tiendaClienteId || !d.clientes_ids.includes(tiendaClienteId))) continue;
       if (cantidad >= d.cantidad_minima) continue; // Already getting it
       // Check if this discount applies to this product
       const applies = d.aplica_a === "todos" ||
@@ -493,7 +494,7 @@ export default function ProductoClient({
                 alt={producto.nombre}
                 fill
                 priority
-                sizes="(max-width: 768px) 100vw, 50vw"
+                sizes="(max-width: 768px) 100vw, 400px"
                 className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
               />
             ) : (
@@ -871,6 +872,7 @@ export default function ProductoClient({
                   const isBox = presLabel !== "Unidad";
                   for (const d of activeDiscounts) {
                     if (!d.cantidad_minima || d.cantidad_minima <= 0) continue;
+                    if (d.clientes_ids?.length > 0 && (!tiendaClienteId || !d.clientes_ids.includes(tiendaClienteId))) continue;
                     if (d.presentacion === "caja" && !isBox) continue;
                     if (d.presentacion === "unidad" && isBox) continue;
                     const applies = d.aplica_a === "todos" || (d.aplica_a === "productos" && (d.productos_ids || []).includes(rel.id)) || (d.aplica_a === "categorias" && ((d.categorias_ids || []).includes(rel.categoria_id)));

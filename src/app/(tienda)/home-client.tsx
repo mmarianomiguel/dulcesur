@@ -604,7 +604,7 @@ function AumentosRecientesBlock({ productos: initialData = [] }: { productos?: a
                       src={prod.imagen_url}
                       alt={prod.nombre}
                       fill
-                      sizes="(max-width: 640px) 256px, (max-width: 1024px) 25vw, 20vw"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 200px"
                       loading="lazy"
                       className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                     />
@@ -680,7 +680,7 @@ function MasVendidosBlock({ config, productos: initialData = [] }: { config: Rec
                     src={prod.imagen_url}
                     alt={prod.nombre}
                     fill
-                    sizes="(max-width: 640px) 256px, (max-width: 1024px) 25vw, 20vw"
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 200px"
                     loading="lazy"
                     className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                   />
@@ -747,7 +747,7 @@ function UltimasUnidadesBlock({ config, productos: initialData = [] }: { config:
                     src={prod.imagen_url}
                     alt={prod.nombre}
                     fill
-                    sizes="(max-width: 640px) 256px, (max-width: 1024px) 25vw, 20vw"
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 200px"
                     loading="lazy"
                     className="object-contain p-3 group-hover:scale-105 transition-transform duration-300"
                   />
