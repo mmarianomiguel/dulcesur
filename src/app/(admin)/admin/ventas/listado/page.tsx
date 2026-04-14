@@ -979,9 +979,7 @@ export default function ListadoVentasPage() {
     const realPaid = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
     const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: pagado + realPaid };
     if (result.cuentaBancaria) ventaUpd.cuenta_transferencia_alias = result.cuentaBancaria;
-    if (pagado === 0) {
-      ventaUpd.total = result.monto + (result.surcharge || 0);
-    }
+    ventaUpd.total = result.monto + (result.surcharge || 0);
     await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
 
     // FIFO allocation: update monto_pagado on old invoices
