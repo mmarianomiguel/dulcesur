@@ -18,15 +18,30 @@ export function VentasHoyWidget() {
       timeZone: "America/Argentina/Buenos_Aires",
     });
 
-    const { data } = await supabase
-      .from("ventas")
-      .select("total, estado, entregado, created_at")
-      .eq("fecha", hoy)
-      .neq("estado", "anulada")
-      .not("tipo_comprobante", "ilike", "Nota de Crédito%");
+    // Traer ventas normales y NCs del día en paralelo
+    const [{ data }, { data: ncsData }] = await Promise.all([
+      supabase
+        .from("ventas")
+        .select("id, total, estado, entregado, created_at")
+        .eq("fecha", hoy)
+        .neq("estado", "anulada")
+        .not("tipo_comprobante", "ilike", "Nota de Crédito%"),
+      supabase
+        .from("ventas")
+        .select("remito_origen_id, total")
+        .eq("fecha", hoy)
+        .neq("estado", "anulada")
+        .ilike("tipo_comprobante", "Nota de Crédito%"),
+    ]);
 
     const ventas = data || [];
-    const total = ventas.reduce((s, v) => s + v.total, 0);
+    const ncs = ncsData || [];
+
+    // Total neto = total bruto - NCs
+    const totalBruto = ventas.reduce((s, v) => s + v.total, 0);
+    const totalNC = ncs.reduce((s, nc) => s + nc.total, 0);
+    const total = totalBruto - totalNC;
+
     const pendientes = ventas.filter((v) => !v.entregado).length;
     const ultima = ventas.sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
