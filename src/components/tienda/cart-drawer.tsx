@@ -454,7 +454,7 @@ function CartDrawer() {
               </div>
               <Link
                 href="/checkout"
-                onClick={closeCart}
+                onClick={() => { closeCart(); window.scrollTo(0, 0); }}
                 className="block w-full rounded-xl bg-primary py-3.5 text-center text-base font-semibold text-white transition-all hover:bg-primary/90 hover:shadow-lg"
               >
                 Iniciar compra
