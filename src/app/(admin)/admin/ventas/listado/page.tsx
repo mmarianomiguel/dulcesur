@@ -1073,13 +1073,16 @@ export default function ListadoVentasPage() {
       for (const p of prods || []) {
         if ((p as any).es_combo) comboIds.add(p.id);
       }
-      for (const comboId of comboIds) {
+      await Promise.all([...comboIds].map(async (comboId) => {
         const { data: ciData } = await supabase
           .from("combo_items")
           .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
           .eq("combo_id", comboId);
-        comboItemsMap[comboId] = (ciData || []).map((ci: any) => ({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad }));
-      }
+        comboItemsMap[comboId] = (ciData || []).map((ci: any) => ({
+          nombre: ci.productos?.nombre || "",
+          cantidad: ci.cantidad,
+        }));
+      }));
     }
 
     const lineItems: ReceiptLineItem[] = items.map((item) => ({
@@ -1680,25 +1683,30 @@ export default function ListadoVentasPage() {
       // Apply stock adjustments
       const isHistorialRef = poSelectedPedido._source === "historial";
       const refLabelStock = isHistorialRef ? `Edición Venta #${poSelectedPedido.numero}` : `Edición Pedido Web #${poSelectedPedido.numero}`;
-      for (const [productoId, diff] of Object.entries(stockDiffs)) {
-        if (Math.abs(diff) < 0.001) continue;
-        const { data: prod, error: prodErr } = await supabase.from("productos").select("stock").eq("id", productoId).single();
-        if (prodErr || !prod) { errores.push(`Producto ${productoId} no encontrado`); continue; }
-        const stockAntes = prod.stock;
-        const stockDespues = stockAntes + diff;
-        const { error: updErr } = await supabase.from("productos").update(buildStockUpdate(stockDespues, stockAntes)).eq("id", productoId);
-        if (updErr) { errores.push(`Error stock: ${updErr.message}`); continue; }
-        await supabase.from("stock_movimientos").insert({
-          producto_id: productoId,
-          tipo: diff > 0 ? "Ajuste" : "Venta",
-          cantidad: diff,
-          cantidad_antes: stockAntes,
-          cantidad_despues: stockDespues,
-          referencia: refLabelStock,
-          descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
-          usuario: currentUser?.nombre || "Admin Sistema",
-        });
-      }
+      await Promise.all(
+        Object.entries(stockDiffs)
+          .filter(([, diff]) => Math.abs(diff) >= 0.001)
+          .map(async ([productoId, diff]) => {
+            const { data: prod, error: prodErr } = await supabase
+              .from("productos").select("stock").eq("id", productoId).single();
+            if (prodErr || !prod) { errores.push(`Producto ${productoId} no encontrado`); return; }
+            const stockAntes = prod.stock;
+            const stockDespues = stockAntes + diff;
+            const { error: updErr } = await supabase.from("productos")
+              .update(buildStockUpdate(stockDespues, stockAntes)).eq("id", productoId);
+            if (updErr) { errores.push(`Error stock: ${updErr.message}`); return; }
+            await supabase.from("stock_movimientos").insert({
+              producto_id: productoId,
+              tipo: diff > 0 ? "Ajuste" : "Venta",
+              cantidad: diff,
+              cantidad_antes: stockAntes,
+              cantidad_despues: stockDespues,
+              referencia: refLabelStock,
+              descripcion: diff > 0 ? "Devolución por edición de pedido" : "Agregado por edición de pedido",
+              usuario: currentUser?.nombre || "Admin Sistema",
+            });
+          })
+      );
 
       const nuevoSubtotal = poEditItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0);
       const isHistorial = poSelectedPedido._source === "historial";
@@ -1947,8 +1955,16 @@ export default function ListadoVentasPage() {
         showAdminToast("Guardado con advertencias: " + errores.join(". "), "info");
       }
       setPoHasChanges(false);
-      await fetchPedidos();
-      await fetchVentas();
+      setPoPedidos(prev => prev.map(p =>
+        p.numero === poSelectedPedido.numero
+          ? { ...p, items: poEditItems.map(i => ({ ...i })), total: nuevoTotal, subtotal: nuevoSubtotal }
+          : p
+      ));
+      setVentas(prev => prev.map(v =>
+        v.numero === poSelectedPedido.numero
+          ? { ...v, total: nuevoTotal, subtotal: nuevoSubtotal }
+          : v
+      ));
       setPoDetailOpen(false);
     } catch (err: any) {
       showAdminToast("Error al guardar: " + (err.message || "Error desconocido"), "error");
@@ -1966,13 +1982,13 @@ export default function ListadoVentasPage() {
 
     // Single update to pedidos_tienda by numero (covers all sources)
     if (pedido.numero) {
-      const { error: ptErr } = await supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("numero", pedido.numero);
-      if (ptErr) showAdminToast(`Error al sincronizar pedido: ${ptErr.message}`, "error");
-      // Registrar en historial para que el cliente vea el timeline
-      await supabase.from("pedido_estado_historial").insert({
-        pedido_numero: pedido.numero,
-        estado: nuevoEstado,
-      });
+      await Promise.all([
+        supabase.from("pedidos_tienda").update({ estado: nuevoEstado }).eq("numero", pedido.numero),
+        supabase.from("pedido_estado_historial").insert({
+          pedido_numero: pedido.numero,
+          estado: nuevoEstado,
+        }),
+      ]);
     }
 
     // Find linked venta (use cached _ventaId first, then query)
