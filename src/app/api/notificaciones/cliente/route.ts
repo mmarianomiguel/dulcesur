@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (clienteId) query = query.eq("cliente_id", Number(clienteId));
+    if (clienteId) query = query.eq("cliente_id", clienteId);
     if (usuarioId) query = query.eq("usuario_id", usuarioId);
 
     const { data, error, count } = await query;
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       .eq("leida", false)
       .gte("created_at", desde.toISOString());
 
-    if (clienteId) unreadQuery = unreadQuery.eq("cliente_id", Number(clienteId));
+    if (clienteId) unreadQuery = unreadQuery.eq("cliente_id", clienteId);
     if (usuarioId) unreadQuery = unreadQuery.eq("usuario_id", usuarioId);
 
     const { count: unread } = await unreadQuery;
