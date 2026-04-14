@@ -1248,43 +1248,162 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
           </div>
         </aside>
 
-        {/* Mobile filter drawer — panel desde abajo */}
+        {/* Mobile filter drawer — panel compacto desde abajo */}
         {mobileFilters && (
           <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => setMobileFilters(false)}
             />
-            <div className="relative bg-white rounded-t-2xl shadow-xl max-h-[85vh] flex flex-col">
+            <div className="relative bg-white rounded-t-2xl shadow-xl flex flex-col" style={{ maxHeight: "75vh" }}>
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1 shrink-0">
                 <div className="w-10 h-1 rounded-full bg-gray-200" />
               </div>
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
-                <h2 className="font-bold text-base text-gray-900">Filtros</h2>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+                <span className="font-bold text-base text-gray-900">Filtros</span>
                 <button
                   onClick={() => {
                     updateParams({
-                      categoria: null, subcategoria: null, marca: null,
-                      precio_min: null, precio_max: null, disponibilidad: null,
-                      tipo: null, tag: null, q: null,
+                      marca: null, disponibilidad: null, tipo: null,
+                      precio_min: null, precio_max: null,
                     });
                   }}
-                  className="text-xs text-primary font-medium hover:text-primary/80 transition-colors"
+                  className="text-xs text-primary font-medium"
                 >
                   Limpiar todo
                 </button>
               </div>
+
               {/* Contenido scrolleable */}
-              <div className="flex-1 overflow-y-auto p-5">
-                {sidebarContent}
+              <div className="overflow-y-auto flex-1 px-4 py-4 space-y-5">
+
+                {/* Ordenar */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ordenar por</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: "recientes", label: "Más recientes" },
+                      { value: "az", label: "A-Z" },
+                      { value: "precio_asc", label: "Menor precio" },
+                      { value: "precio_desc", label: "Mayor precio" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateParams({ sort: opt.value })}
+                        className={`px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                          sort === opt.value
+                            ? "bg-primary border-primary text-white"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-primary/40"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tipo */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Tipo</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: "", label: "Todos" },
+                      { value: "combos", label: "Combos" },
+                      { value: "precio_actualizado", label: "Precio actualizado" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateParams({ tipo: opt.value || null })}
+                        className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                          tipoFilter === opt.value
+                            ? "bg-primary border-primary text-white"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-primary/40"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Disponibilidad */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Disponibilidad</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: "", label: "Todos" },
+                      { value: "en_stock", label: "En stock" },
+                      { value: "sin_stock", label: "Sin stock" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateParams({ disponibilidad: opt.value || null })}
+                        className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                          disponibilidad === opt.value
+                            ? "bg-primary border-primary text-white"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-primary/40"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Marcas */}
+                {marcas.filter((m) => (m.count || 0) > 0).length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      Marca
+                      {marcaParam && (
+                        <button
+                          onClick={() => updateParams({ marca: null })}
+                          className="ml-2 text-primary normal-case font-medium"
+                        >
+                          · Limpiar
+                        </button>
+                      )}
+                    </p>
+                    <input
+                      type="text"
+                      placeholder="Buscar marca..."
+                      value={marcaSearch}
+                      onChange={(e) => setMarcaSearch(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                      {marcas
+                        .filter((m) => (m.count || 0) > 0)
+                        .filter((m) => !marcaSearch || m.nombre.toLowerCase().includes(marcaSearch.toLowerCase()))
+                        .sort((a, b) => (b.count || 0) - (a.count || 0))
+                        .map((m) => (
+                          <button
+                            key={m.id}
+                            onClick={() => updateParams({ marca: marcaParam === m.id ? null : slugify(m.nombre) })}
+                            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all whitespace-nowrap ${
+                              marcaParam === m.id
+                                ? "bg-primary border-primary text-white"
+                                : "bg-white border-gray-200 text-gray-600 hover:border-primary/40"
+                            }`}
+                          >
+                            {m.nombre}
+                            <span className={`ml-1 text-[10px] ${marcaParam === m.id ? "opacity-70" : "text-gray-400"}`}>
+                              {m.count}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
+
               {/* Footer */}
               <div className="p-4 border-t border-gray-100 shrink-0">
                 <button
                   onClick={() => setMobileFilters(false)}
-                  className="w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 rounded-xl transition-colors"
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
                 >
                   Ver {total} resultado{total !== 1 ? "s" : ""}
                   {activeFilterCount > 0 ? ` · ${activeFilterCount} filtro${activeFilterCount !== 1 ? "s" : ""}` : ""}
