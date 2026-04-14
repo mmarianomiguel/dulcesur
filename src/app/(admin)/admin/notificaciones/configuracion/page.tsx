@@ -82,24 +82,44 @@ export default function NotificacionesConfigPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <Settings className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Configuración de Notificaciones</h1>
+        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+          <Settings className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div>
+          <h1 className="text-lg sm:text-2xl font-bold">Configuración</h1>
+          <p className="text-xs text-muted-foreground hidden sm:block">Activá o desactivá tipos de notificación</p>
+        </div>
       </div>
 
-      <div className="space-y-3">
+      {/* Aviso explicativo */}
+      <div className="text-sm text-muted-foreground bg-muted/50 rounded-xl px-4 py-3">
+        Desactivar un tipo bloquea todas sus notificaciones, aunque el cliente las tenga activadas en su cuenta.
+      </div>
+
+      {/* Lista de tipos */}
+      <div className="space-y-2">
         {TIPOS.map((tipo) => {
           const count = tipoCount(tipo.value);
           const active = isTipoActive(tipo.value);
           return (
-            <div key={tipo.value} className="bg-white dark:bg-gray-900 border rounded-xl p-5 flex items-center justify-between">
-              <div className="min-w-0">
-                <div className="font-semibold">{tipo.label}</div>
-                <div className="text-sm text-gray-500 mt-0.5">{tipo.description}</div>
-                <div className="text-xs text-gray-400 mt-1">{count} plantilla{count !== 1 ? "s" : ""} configurada{count !== 1 ? "s" : ""}</div>
+            <div
+              key={tipo.value}
+              className="bg-white dark:bg-gray-900 border rounded-xl p-4 sm:p-5 flex items-center justify-between gap-4"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm sm:text-base">{tipo.label}</div>
+                <div className="text-xs sm:text-sm text-muted-foreground mt-0.5 leading-relaxed">{tipo.description}</div>
+                <div className="text-xs text-muted-foreground/60 mt-1.5">
+                  {count === 0
+                    ? "Sin plantillas configuradas"
+                    : `${count} plantilla${count !== 1 ? "s" : ""} configurada${count !== 1 ? "s" : ""}`
+                  }
+                </div>
               </div>
-              <div className="shrink-0 ml-4">
+              <div className="shrink-0">
                 {count > 0 ? (
                   <Switch
                     checked={active}
@@ -107,7 +127,7 @@ export default function NotificacionesConfigPage() {
                     disabled={toggling === tipo.value}
                   />
                 ) : (
-                  <span className="text-xs text-gray-400">Sin plantillas</span>
+                  <span className="text-xs text-muted-foreground/50">Sin plantillas</span>
                 )}
               </div>
             </div>
