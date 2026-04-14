@@ -789,7 +789,8 @@ export function VentaDetailDialog({
 
             {/* Totals + Payment Summary */}
             {(() => {
-              const ventaCalc = recalcFromVenta({ subtotal: itemsSubtotal, descuento_porcentaje: descPct, recargo_porcentaje: recPct, total: data.total });
+              const ncAmt = (ncs || []).reduce((s, nc) => s + nc.total, 0);
+              const ventaCalc = recalcFromVenta({ subtotal: itemsSubtotal, descuento_porcentaje: descPct, recargo_porcentaje: recPct, total: data.total - ncAmt });
               const realPagos = (pagos || []).filter(p => !p.metodo.includes("Nota de Cr") && !p.metodo.includes("Pendiente"));
               const totalCobrado = realPagos.filter(p => !p.metodo.includes("(a cobrar)")).reduce((s, p) => s + p.monto, 0);
               return (
