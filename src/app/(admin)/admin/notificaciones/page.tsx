@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   Bell,
   Send,
-  FileText,
   Clock,
   Settings,
   Users,
@@ -89,91 +88,93 @@ export default function NotificacionesDashboard() {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <Bell className="h-4.5 w-4.5 text-primary" />
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+          <Bell className="h-4 w-4 text-blue-600" />
         </div>
         <div>
           <h1 className="text-lg sm:text-2xl font-bold">Notificaciones</h1>
-          <p className="text-xs text-muted-foreground hidden sm:block">Gestión y envío de notificaciones</p>
+          <p className="text-xs text-muted-foreground hidden sm:block">Mantené informados a tus clientes</p>
         </div>
       </div>
 
-      {/* Stats - horizontal scroll on mobile */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        <div className="bg-white dark:bg-gray-900 border rounded-xl p-3 sm:p-5">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-              <Send className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xl sm:text-2xl font-bold">{stats.hoy}</div>
-              <div className="text-[10px] sm:text-sm text-gray-500 truncate">Enviadas hoy</div>
-            </div>
+        <div className="bg-muted/50 rounded-xl p-3 sm:p-5">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 flex items-center justify-center mb-2 sm:mb-3">
+            <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600" />
           </div>
+          <div className="text-xl sm:text-2xl font-bold">{stats.hoy}</div>
+          <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Enviadas hoy</div>
         </div>
-        <div className="bg-white dark:bg-gray-900 border rounded-xl p-3 sm:p-5">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
-              <Users className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xl sm:text-2xl font-bold">{stats.suscriptores}</div>
-              <div className="text-[10px] sm:text-sm text-gray-500 truncate">Suscriptores</div>
-            </div>
+        <div className="bg-muted/50 rounded-xl p-3 sm:p-5">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-green-50 flex items-center justify-center mb-2 sm:mb-3">
+            <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600" />
           </div>
+          <div className="text-xl sm:text-2xl font-bold">{stats.suscriptores}</div>
+          <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Suscriptores</div>
         </div>
-        <div className="bg-white dark:bg-gray-900 border rounded-xl p-3 sm:p-5">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xl sm:text-2xl font-bold">{stats.tasaLectura}%</div>
-              <div className="text-[10px] sm:text-sm text-gray-500 truncate">Lectura 7d</div>
-            </div>
+        <div className="bg-muted/50 rounded-xl p-3 sm:p-5">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-50 flex items-center justify-center mb-2 sm:mb-3">
+            <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600" />
           </div>
+          <div className="text-xl sm:text-2xl font-bold">{stats.tasaLectura}%</div>
+          <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Leídas 7d</div>
         </div>
       </div>
 
-      {/* Quick actions */}
-      <div className="space-y-1.5">
+      {/* Acción principal: Enviar */}
+      <Link
+        href="/admin/notificaciones/enviar"
+        className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 rounded-xl p-4 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-all"
+      >
+        <div className="w-10 h-10 rounded-lg bg-white/60 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+          <Send className="h-5 w-5 text-blue-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm text-blue-800 dark:text-blue-200">Enviar notificación</div>
+          <div className="text-xs text-blue-600/70 dark:text-blue-400 mt-0.5">Mandá un mensaje a uno o todos tus clientes</div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-blue-400 shrink-0" />
+      </Link>
+
+      {/* Acciones secundarias */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         {[
-          { href: "/admin/notificaciones/enviar", label: "Enviar notificación", desc: "Enviá una notificación push", icon: Send, color: "text-blue-600 bg-blue-50" },
-          { href: "/admin/notificaciones/plantillas", label: "Plantillas", desc: "Configurá las plantillas", icon: FileText, color: "text-purple-600 bg-purple-50" },
-          { href: "/admin/notificaciones/historial", label: "Historial", desc: "Notificaciones enviadas", icon: Clock, color: "text-amber-600 bg-amber-50" },
-          { href: "/admin/notificaciones/configuracion", label: "Configuración", desc: "Activar/desactivar tipos", icon: Settings, color: "text-gray-600 bg-gray-100" },
+          { href: "/admin/notificaciones/historial", label: "Historial", desc: "Ver notificaciones enviadas", icon: Clock, color: "text-amber-600 bg-amber-50" },
+          { href: "/admin/notificaciones/configuracion", label: "Configuración", desc: "Activar o desactivar tipos", icon: Settings, color: "text-muted-foreground bg-muted" },
         ].map((link) => {
           const Icon = link.icon;
           return (
             <Link
               key={link.href}
               href={link.href}
-              className="flex items-center gap-3 bg-white dark:bg-gray-900 border rounded-xl p-3.5 sm:p-4 hover:border-primary/20 hover:shadow-sm transition-all group"
+              className="flex items-center gap-3 bg-white dark:bg-gray-900 border rounded-xl p-3.5 hover:border-border/80 hover:shadow-sm transition-all group"
             >
-              <div className={`w-10 h-10 rounded-lg ${link.color} flex items-center justify-center shrink-0`}>
-                <Icon className="h-5 w-5" />
+              <div className={`w-9 h-9 rounded-lg ${link.color} flex items-center justify-center shrink-0`}>
+                <Icon className="h-4 w-4" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm group-hover:text-primary transition-colors">{link.label}</div>
-                <div className="text-xs text-gray-400 hidden sm:block">{link.desc}</div>
+                <div className="text-xs text-muted-foreground hidden sm:block mt-0.5">{link.desc}</div>
               </div>
-              <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-primary shrink-0" />
             </Link>
           );
         })}
       </div>
 
-      {/* Recent notifications */}
-      <div className="bg-white dark:bg-gray-900 border rounded-xl">
+      {/* Últimas notificaciones */}
+      <div className="bg-white dark:bg-gray-900 border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="font-semibold text-sm">Últimas notificaciones</h2>
-          <Link href="/admin/notificaciones/historial" className="text-xs text-primary hover:underline">Ver todo</Link>
+          <h2 className="font-semibold text-sm">Últimas enviadas</h2>
+          <Link href="/admin/notificaciones/historial" className="text-xs text-primary hover:underline">
+            Ver todo
+          </Link>
         </div>
         {recientes.length === 0 ? (
           <div className="px-4 py-8 text-center">
-            <Inbox className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">No hay notificaciones aún</p>
+            <Inbox className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No hay notificaciones aún</p>
           </div>
         ) : (
           <div className="divide-y">
@@ -182,8 +183,8 @@ export default function NotificacionesDashboard() {
                 <Badge className={`${TIPO_COLORS[n.tipo] || ""} shrink-0 text-[10px] px-1.5 py-0`}>
                   {TIPO_LABELS[n.tipo] || n.tipo}
                 </Badge>
-                <span className="text-sm font-medium truncate flex-1">{n.titulo}</span>
-                <span className="text-[11px] text-gray-400 shrink-0">{tiempoRelativo(n.created_at)}</span>
+                <span className="text-sm truncate flex-1">{n.titulo}</span>
+                <span className="text-[11px] text-muted-foreground shrink-0">{tiempoRelativo(n.created_at)}</span>
               </div>
             ))}
           </div>
