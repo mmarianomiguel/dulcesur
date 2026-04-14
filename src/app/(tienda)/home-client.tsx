@@ -363,9 +363,16 @@ function ProductosDestacadosBlock({
     activeTab === "mas_vendidos" ? vendidos :
     nuevos;
 
-  const GRUPO_SIZE = 4;
-  const grupos = Math.ceil(activeProds.length / GRUPO_SIZE);
-  const grupoProds = activeProds.slice(grupoActual * GRUPO_SIZE, (grupoActual + 1) * GRUPO_SIZE);
+  const GRUPO_SIZE_MOBILE = 2;
+  const GRUPO_SIZE_DESKTOP = 4;
+  const gruposMobile = Math.ceil(activeProds.length / GRUPO_SIZE_MOBILE);
+  const gruposDesktop = Math.ceil(activeProds.length / GRUPO_SIZE_DESKTOP);
+  const grupos = gruposMobile; // usado para la rotación automática
+  const grupoProds = activeProds.slice(grupoActual * GRUPO_SIZE_MOBILE, (grupoActual + 1) * GRUPO_SIZE_MOBILE);
+  const grupoProdsDesktop = activeProds.slice(
+    Math.floor(grupoActual / 2) * GRUPO_SIZE_DESKTOP,
+    Math.floor(grupoActual / 2) * GRUPO_SIZE_DESKTOP + GRUPO_SIZE_DESKTOP
+  );
 
   const tabs = [
     { key: "destacados" as const, label: "Destacados", icon: Star, count: destacados.length },
@@ -515,7 +522,7 @@ function ProductosDestacadosBlock({
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
           <>
-            {/* Mobile: grilla 2x2 con swipe táctil */}
+            {/* Mobile: 2 productos por grupo, swipe para ver más */}
             <div
               className="md:hidden grid grid-cols-2 gap-3"
               onTouchStart={(e) => {
@@ -525,7 +532,7 @@ function ProductosDestacadosBlock({
               onTouchEnd={(e) => {
                 if (touchStartX.current !== null) {
                   const diff = touchStartX.current - e.changedTouches[0].clientX;
-                  if (diff > 50) setGrupoActual((g) => Math.min(grupos - 1, g + 1));
+                  if (diff > 50) setGrupoActual((g) => Math.min(gruposMobile - 1, g + 1));
                   else if (diff < -50) setGrupoActual((g) => Math.max(0, g - 1));
                   touchStartX.current = null;
                 }
@@ -537,7 +544,7 @@ function ProductosDestacadosBlock({
 
             {/* Desktop: grilla 1x4 normal */}
             <div className="hidden md:grid grid-cols-4 gap-3">
-              {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
+              {grupoProdsDesktop.map((prod, idx) => renderProductCard(prod, idx < 2))}
             </div>
           </>
         )}
@@ -576,8 +583,8 @@ function ProductosDestacadosBlock({
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
-            <p className="text-xs text-gray-400">
-              {grupoActual + 1} de {grupos} · deslizá para ver más
+            <p className="text-xs text-gray-400 md:hidden">
+              {grupoActual + 1} de {gruposMobile} · deslizá para ver más
             </p>
           </div>
         )}
