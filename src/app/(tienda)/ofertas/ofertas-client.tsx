@@ -94,7 +94,7 @@ export default function OfertasClient({ initialProductos, initialDescuentos, ini
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [cartUnits, setCartUnits] = useState<Record<string, number>>({});
-  const [showFiltros, setShowFiltros] = useState(false);
+  const [filtroOpen, setFiltroOpen] = useState(false);
   const [countdown, setCountdown] = useState<{ h: string; m: string; s: string } | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { filtrarCategorias } = useCategoriasPermitidas();
@@ -579,88 +579,162 @@ export default function OfertasClient({ initialProductos, initialDescuentos, ini
       })()}
 
       {/* ─── Controles: filtros + ordenar ─── */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Botón filtros mobile */}
+      <div className="flex items-center justify-between gap-2">
         <button
-          onClick={() => setShowFiltros(!showFiltros)}
-          className={`md:hidden flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full border transition-all ${
+          onClick={() => setFiltroOpen(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
             activeFiltersCount > 0
-              ? "bg-primary text-white border-primary"
-              : "bg-white text-gray-600 border-gray-200"
+              ? "bg-green-500 border-green-500 text-white"
+              : "bg-white border-gray-200 text-gray-600 hover:border-green-300"
           }`}
         >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          Filtros
-          {activeFiltersCount > 0 && <span className="bg-white/20 text-white text-[10px] font-bold px-1.5 rounded-full">{activeFiltersCount}</span>}
+          <SlidersHorizontal className="w-3 h-3" />
+          Filtrar
+          {activeFiltersCount > 0 && (
+            <span className="w-1.5 h-1.5 rounded-full bg-white/80 ml-0.5" />
+          )}
         </button>
 
-        {/* Filtros desktop */}
-        <div className={`${showFiltros ? "flex" : "hidden md:flex"} items-center gap-2 flex-wrap w-full md:w-auto`}>
-          {/* Filtro por descuento */}
-          {descuentosDisponibles.length > 1 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setFiltroDescuento("todos")} className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${filtroDescuento === "todos" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}>
-                Todas
-              </button>
-              {descuentosDisponibles.map((d) => (
-                <button key={d.id} onClick={() => setFiltroDescuento(filtroDescuento === d.id ? "todos" : d.id)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${filtroDescuento === d.id ? "bg-primary text-white border-primary" : "bg-white text-gray-600 border-gray-200 hover:border-primary/40 hover:text-primary"}`}>
-                  {d.nombre} <span className={`text-[10px] ml-0.5 ${filtroDescuento === d.id ? "opacity-70" : "text-gray-400"}`}>{d.count}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Separador */}
-          {descuentosDisponibles.length > 1 && categoriasDisponibles.length > 1 && (
-            <div className="hidden md:block w-px h-5 bg-gray-200" />
-          )}
-
-          {/* Filtro por categoría */}
-          {categoriasDisponibles.length > 1 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setFiltroCategoria("todas")} className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${filtroCategoria === "todas" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}>
-                Todas las categorías
-              </button>
-              {categoriasDisponibles.map((c) => (
-                <button key={c.id} onClick={() => setFiltroCategoria(filtroCategoria === c.id ? "todas" : c.id)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${filtroCategoria === c.id ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}>
-                  {c.nombre} <span className={`text-[10px] ml-0.5 ${filtroCategoria === c.id ? "opacity-70" : "text-gray-400"}`}>{c.count}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Limpiar filtros */}
-        {activeFiltersCount > 0 && (
-          <button onClick={() => { setFiltroDescuento("todos"); setFiltroCategoria("todas"); }}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-            <X className="w-3.5 h-3.5" /> Limpiar
-          </button>
-        )}
-
-        {/* Ordenar */}
-        <div className="ml-auto">
-          <select
-            value={ordenar}
-            onChange={(e) => setOrdenar(e.target.value as any)}
-            className="text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary bg-white text-gray-700 font-medium cursor-pointer"
-          >
-            <option value="descuento">Mayor descuento %</option>
-            <option value="ahorro">Mayor ahorro $</option>
-            <option value="precio_asc">Menor precio</option>
-            <option value="precio_desc">Mayor precio</option>
-          </select>
-        </div>
+        <span className="text-xs text-gray-400">
+          {filtered.length} producto{filtered.length !== 1 ? "s" : ""}
+          {activeFiltersCount > 0 && " · filtrado"}
+        </span>
       </div>
 
-      {/* Contador */}
-      <p className="text-sm text-gray-500">
-        {filtered.length} {filtered.length === 1 ? "producto" : "productos"} en oferta
-        {filtroDescuento !== "todos" && <span className="text-primary font-medium"> · {descuentosDisponibles.find(d => d.id === filtroDescuento)?.nombre}</span>}
-        {filtroCategoria !== "todas" && <span className="text-gray-700 font-medium"> · {categoriasDisponibles.find(c => c.id === filtroCategoria)?.nombre}</span>}
-      </p>
+      {/* Panel de filtros desde abajo */}
+      {filtroOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setFiltroOpen(false)}
+          />
+          <div className="relative bg-white rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="px-4 pb-8 pt-2 space-y-5">
+
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <span className="text-base font-bold text-gray-900">Filtros</span>
+                <button
+                  onClick={() => {
+                    setFiltroDescuento("todos");
+                    setFiltroCategoria("todas");
+                    setOrdenar("descuento");
+                  }}
+                  className="text-xs text-green-500 font-medium hover:text-green-600 transition-colors"
+                >
+                  Limpiar todo
+                </button>
+              </div>
+
+              {/* Ordenar */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-2">Ordenar por</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "descuento", label: "Mayor descuento %" },
+                    { value: "ahorro", label: "Mayor ahorro $" },
+                    { value: "precio_asc", label: "Menor precio" },
+                    { value: "precio_desc", label: "Mayor precio" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setOrdenar(opt.value as any)}
+                      className={`px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                        ordenar === opt.value
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "bg-white border-gray-200 text-gray-600 hover:border-green-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtro por descuento */}
+              {descuentosDisponibles.length > 1 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 block mb-2">Tipo de oferta</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setFiltroDescuento("todos")}
+                      className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                        filtroDescuento === "todos"
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "bg-white border-gray-200 text-gray-600 hover:border-green-200"
+                      }`}
+                    >
+                      Todas
+                    </button>
+                    {descuentosDisponibles.map((d) => (
+                      <button
+                        key={d.id}
+                        onClick={() => setFiltroDescuento(filtroDescuento === d.id ? "todos" : d.id)}
+                        className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                          filtroDescuento === d.id
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-green-200"
+                        }`}
+                      >
+                        {d.nombre}
+                        <span className={`ml-1 text-[10px] ${filtroDescuento === d.id ? "opacity-70" : "text-gray-400"}`}>
+                          {d.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filtro por categoría */}
+              {categoriasDisponibles.length > 1 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 block mb-2">Categoría</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setFiltroCategoria("todas")}
+                      className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                        filtroCategoria === "todas"
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "bg-white border-gray-200 text-gray-600 hover:border-green-200"
+                      }`}
+                    >
+                      Todas
+                    </button>
+                    {categoriasDisponibles.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setFiltroCategoria(filtroCategoria === c.id ? "todas" : c.id)}
+                        className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                          filtroCategoria === c.id
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-green-200"
+                        }`}
+                      >
+                        {c.nombre}
+                        <span className={`ml-1 text-[10px] ${filtroCategoria === c.id ? "opacity-70" : "text-gray-400"}`}>
+                          {c.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Botón aplicar */}
+              <button
+                onClick={() => setFiltroOpen(false)}
+                className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-colors"
+              >
+                Ver {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Grid ─── */}
       {filtered.length === 0 ? (
