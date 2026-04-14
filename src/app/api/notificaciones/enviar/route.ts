@@ -123,13 +123,24 @@ export async function POST(req: NextRequest) {
     const expired: string[] = [];
 
     // Get push subscriptions for recipients
+    // push_subscriptions.cliente_id referencia clientes_auth.id (UUID),
+    // no clientes.id — hay que resolver el UUID de clientes_auth primero
     let subs: any[] = [];
     if (clientes.length > 0) {
-      const { data } = await supabase
-        .from("push_subscriptions")
-        .select("*")
+      const { data: authLinks } = await supabase
+        .from("clientes_auth")
+        .select("id, cliente_id")
         .in("cliente_id", clientes.map((c) => c.id));
-      subs = [...subs, ...(data || [])];
+
+      const clienteAuthIds = (authLinks || []).map((a: any) => a.id).filter(Boolean);
+
+      if (clienteAuthIds.length > 0) {
+        const { data } = await supabase
+          .from("push_subscriptions")
+          .select("*")
+          .in("cliente_id", clienteAuthIds);
+        subs = [...subs, ...(data || [])];
+      }
     }
     if (usuarios.length > 0) {
       const { data } = await supabase
