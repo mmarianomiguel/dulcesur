@@ -1117,7 +1117,16 @@ export default function ListadoVentasPage() {
       if (v.forma_pago === "Efectivo") pagoEf = v.total;
       else if (v.forma_pago === "Transferencia") pagoTr = v.total;
       else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
-      else if (v.forma_pago === "Mixto") { pagoEf = (v as any).monto_efectivo || 0; pagoTr = (v as any).monto_transferencia || 0; }
+      else if (v.forma_pago === "Mixto") {
+        // Leer desde pedidos_tienda que es lo que se actualiza al editar
+        const { data: ptPrint } = await supabase
+          .from("pedidos_tienda")
+          .select("monto_efectivo, monto_transferencia")
+          .eq("numero", v.numero)
+          .maybeSingle();
+        pagoEf = ptPrint?.monto_efectivo || (v as any).monto_efectivo || 0;
+        pagoTr = ptPrint?.monto_transferencia || (v as any).monto_transferencia || 0;
+      }
     }
     // Derive formaPago from actual payments (v.forma_pago may be stale if cobro was just registered)
     let derivedFormaPago: string;
