@@ -1236,8 +1236,9 @@ export default function CajaPage() {
       if (!sub || !recPct) continue;
       const hasTransferMov = movements.some(m => m.referencia_id === v.id && m.tipo === "ingreso" && m.metodo_pago === "Transferencia");
       if (hasTransferMov) {
-        const vCalc = recalcFromVenta({ subtotal: sub, descuento_porcentaje: (v as any).descuento_porcentaje || 0, recargo_porcentaje: recPct, total: v.total });
-        totalTransferSurcharge += vCalc.transferSurcharge;
+        const ncAmt = ncByVenta[v.id] || 0;
+        const baseNeta = sub - ncAmt;
+        totalTransferSurcharge += baseNeta > 0 ? Math.round(baseNeta * recPct / 100) : 0;
       }
     }
 

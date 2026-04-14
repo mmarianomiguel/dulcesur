@@ -1148,13 +1148,20 @@ export default function ListadoVentasPage() {
     // Build sale object and show preview
     const vendedorName = getVendedorNombre(v.vendedor_id) === "—" && (v.origen === "tienda" || v.tipo_comprobante?.toLowerCase().includes("web")) ? "Tienda Online" : getVendedorNombre(v.vendedor_id);
     const ventaCalc = recalcFromVenta({ subtotal: v.subtotal, descuento_porcentaje: v.descuento_porcentaje || 0, recargo_porcentaje: v.recargo_porcentaje || 0, total: v.total });
+    // Recalcular surcharge sobre base neta (subtotal - NC)
+    const ncAmtPrint = ncPorVenta[v.id] || 0;
+    const baseNetaPrint = (v.subtotal || 0) - ncAmtPrint;
+    const recPctPrint = v.recargo_porcentaje || 0;
+    const surchargeCorregido = recPctPrint > 0 && baseNetaPrint > 0
+      ? Math.round(baseNetaPrint * recPctPrint / 100)
+      : ventaCalc.transferSurcharge;
     setPrintSaleObj({
       numero: v.numero,
-      total: v.total,
+      total: v.total - ncAmtPrint,
       subtotal: v.subtotal,
       descuento: ventaCalc.descuentoMonto,
       recargo: ventaCalc.recargoMonto,
-      transferSurcharge: ventaCalc.transferSurcharge,
+      transferSurcharge: surchargeCorregido,
       tipoComprobante: v.tipo_comprobante,
       formaPago: derivedFormaPago,
       moneda: v.moneda || "ARS",

@@ -732,10 +732,11 @@ export default function PedidosOnlinePage() {
   const handlePrint = async (pedido: Pedido) => {
     // If we have a linked venta, fetch real data (tipoComprobante, surcharge, item discounts, etc.)
     if (pedido.ventaId) {
-      const [{ data: v }, { data: vitems }, { data: movs }] = await Promise.all([
+      const [{ data: v }, { data: vitems }, { data: movs }, { data: ncVentas }] = await Promise.all([
         supabase.from("ventas").select("id, numero, total, subtotal, descuento_porcentaje, recargo_porcentaje, tipo_comprobante, forma_pago, monto_efectivo, monto_transferencia, metodo_entrega, cliente_id, moneda").eq("id", pedido.ventaId).single(),
         supabase.from("venta_items").select("*").eq("venta_id", pedido.ventaId).order("created_at"),
         supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", pedido.ventaId).eq("referencia_tipo", "venta"),
+        supabase.from("ventas").select("total").eq("remito_origen_id", pedido.ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       ]);
       if (v) {
         const lineItems: ReceiptLineItem[] = (vitems || []).map((item: any) => ({
@@ -770,7 +771,13 @@ export default function PedidosOnlinePage() {
         const ventaCalc = recalcFromVenta({ subtotal: ventaSub, descuento_porcentaje: v.descuento_porcentaje || 0, recargo_porcentaje: v.recargo_porcentaje || 0, total: v.total });
         const descAmt = ventaCalc.descuentoMonto;
         const recAmt = ventaCalc.recargoMonto;
-        const surchargeCalc = ventaCalc.transferSurcharge;
+        // Recalcular surcharge sobre base neta (subtotal - NC)
+        const ncAmtPrint = (ncVentas || []).reduce((s: number, nc: any) => s + (nc.total || 0), 0);
+        const baseNetaPrint = ventaSub - ncAmtPrint;
+        const recPctPrint = v.recargo_porcentaje || 0;
+        const surchargeCalc = recPctPrint > 0 && baseNetaPrint > 0
+          ? Math.round(baseNetaPrint * recPctPrint / 100)
+          : ventaCalc.transferSurcharge;
         // Derive formaPago from actual caja_movimientos payments (overrides v.forma_pago which may be stale)
         let derivedFormaPago: string;
         if ((movs || []).length > 0) {
@@ -784,7 +791,7 @@ export default function PedidosOnlinePage() {
         }
         setPrintSale({
           numero: v.numero || pedido.numero,
-          total: v.total,
+          total: v.total - ncAmtPrint,
           subtotal: v.subtotal || pedido.subtotal,
           descuento: descAmt,
           recargo: recAmt,
