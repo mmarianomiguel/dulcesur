@@ -339,6 +339,8 @@ function ProductosDestacadosBlock({
   const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">(tabDefecto);
   const [grupoActual, setGrupoActual] = useState(0);
   const [pausado, setPausado] = useState(false);
+  const [slideDir, setSlideDir] = useState<"left" | "right" | null>(null);
+  const [animating, setAnimating] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -366,8 +368,7 @@ function ProductosDestacadosBlock({
   const GRUPO_SIZE_MOBILE = 2;
   const GRUPO_SIZE_DESKTOP = 4;
   const gruposMobile = Math.ceil(activeProds.length / GRUPO_SIZE_MOBILE);
-  const gruposDesktop = Math.ceil(activeProds.length / GRUPO_SIZE_DESKTOP);
-  const grupos = gruposMobile; // usado para la rotación automática
+  const grupos = gruposMobile;
   const grupoProds = activeProds.slice(grupoActual * GRUPO_SIZE_MOBILE, (grupoActual + 1) * GRUPO_SIZE_MOBILE);
   const grupoProdsDesktop = activeProds.slice(
     Math.floor(grupoActual / 2) * GRUPO_SIZE_DESKTOP,
@@ -380,19 +381,73 @@ function ProductosDestacadosBlock({
     { key: "nuevos" as const, label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
   ].filter((t) => t.count > 0);
 
-  // Resetear grupo al cambiar tab
+  // Resetear grupo al cambiar tab (sin animación cuando viene del selector)
   useEffect(() => {
     setGrupoActual(0);
+    setSlideDir(null);
+    setAnimating(false);
   }, [activeTab]);
+
+  // Función para avanzar con animación
+  const irAlSiguiente = () => {
+    if (animating) return;
+    const tabKeys = tabs.map((t) => t.key);
+    const currentTabIndex = tabKeys.indexOf(activeTab);
+
+    if (grupoActual < gruposMobile - 1) {
+      setSlideDir("left");
+      setAnimating(true);
+      setTimeout(() => {
+        setGrupoActual((g) => g + 1);
+        setAnimating(false);
+      }, 200);
+    } else if (currentTabIndex < tabKeys.length - 1) {
+      setSlideDir("left");
+      setAnimating(true);
+      setTimeout(() => {
+        setActiveTab(tabKeys[currentTabIndex + 1] as any);
+        setAnimating(false);
+      }, 200);
+    } else {
+      setSlideDir("left");
+      setAnimating(true);
+      setTimeout(() => {
+        setActiveTab(tabKeys[0] as any);
+        setAnimating(false);
+      }, 200);
+    }
+  };
+
+  const irAlAnterior = () => {
+    if (animating) return;
+    const tabKeys = tabs.map((t) => t.key);
+    const currentTabIndex = tabKeys.indexOf(activeTab);
+
+    if (grupoActual > 0) {
+      setSlideDir("right");
+      setAnimating(true);
+      setTimeout(() => {
+        setGrupoActual((g) => g - 1);
+        setAnimating(false);
+      }, 200);
+    } else if (currentTabIndex > 0) {
+      setSlideDir("right");
+      setAnimating(true);
+      setTimeout(() => {
+        setActiveTab(tabKeys[currentTabIndex - 1] as any);
+        setAnimating(false);
+      }, 200);
+    }
+  };
 
   // Rotación automática por grupos
   useEffect(() => {
-    if (!intervalo || intervalo <= 0 || pausado || grupos <= 1) return;
+    if (!intervalo || intervalo <= 0 || pausado) return;
     const timer = setInterval(() => {
-      setGrupoActual((current) => (current + 1) % grupos);
+      irAlSiguiente();
     }, intervalo * 1000);
     return () => clearInterval(timer);
-  }, [intervalo, grupos, pausado, activeTab]);
+  }, [intervalo, pausado, grupoActual, activeTab, tabs.length]);
 
   const renderProductCard = (prod: any, isPriority = false) => {
     const qty = getQty(prod.id);
@@ -486,12 +541,21 @@ function ProductosDestacadosBlock({
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
           {!loading && tabs.length > 1 && (
-            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+            <div className="relative flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               {tabs.map(({ key, label, icon: Icon }) => (
-                <button key={key} onClick={() => setActiveTab(key)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    activeTab === key ? "bg-gray-900 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                  }`}>
+                <button
+                  key={key}
+                  onClick={() => {
+                    setSlideDir(tabs.findIndex(t => t.key === key) > tabs.findIndex(t => t.key === activeTab) ? "left" : "right");
+                    setActiveTab(key);
+                  }}
+                  className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                    activeTab === key
+                      ? "bg-gray-900 text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  }`}
+                  style={{ transition: "background-color 0.2s ease, color 0.2s ease" }}
+                >
                   <Icon className="w-3 h-3" />
                   <span className="hidden sm:inline">{label}</span>
                   <span className="sm:hidden">
@@ -522,24 +586,33 @@ function ProductosDestacadosBlock({
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
           <>
-            {/* Mobile: 2 productos por grupo, swipe para ver más */}
-            <div
-              className="md:hidden grid grid-cols-2 gap-3"
-              onTouchStart={(e) => {
-                setPausado(true);
-                touchStartX.current = e.touches[0].clientX;
-              }}
-              onTouchEnd={(e) => {
-                if (touchStartX.current !== null) {
-                  const diff = touchStartX.current - e.changedTouches[0].clientX;
-                  if (diff > 50) setGrupoActual((g) => Math.min(gruposMobile - 1, g + 1));
-                  else if (diff < -50) setGrupoActual((g) => Math.max(0, g - 1));
-                  touchStartX.current = null;
-                }
-                setTimeout(() => setPausado(false), 3000);
-              }}
-            >
-              {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
+            {/* Mobile: 2 productos por grupo con animación de slide */}
+            <div className="md:hidden overflow-hidden">
+              <div
+                className="grid grid-cols-2 gap-3"
+                style={{
+                  transform: animating
+                    ? `translateX(${slideDir === "left" ? "-8%" : "8%"})`
+                    : "translateX(0)",
+                  opacity: animating ? 0.6 : 1,
+                  transition: "transform 0.2s ease-out, opacity 0.2s ease-out",
+                }}
+                onTouchStart={(e) => {
+                  setPausado(true);
+                  touchStartX.current = e.touches[0].clientX;
+                }}
+                onTouchEnd={(e) => {
+                  if (touchStartX.current !== null) {
+                    const diff = touchStartX.current - e.changedTouches[0].clientX;
+                    if (diff > 50) irAlSiguiente();
+                    else if (diff < -50) irAlAnterior();
+                    touchStartX.current = null;
+                  }
+                  setTimeout(() => setPausado(false), 3000);
+                }}
+              >
+                {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
+              </div>
             </div>
 
             {/* Desktop: grilla 1x4 normal */}
@@ -554,8 +627,8 @@ function ProductosDestacadosBlock({
           <div className="flex flex-col items-center gap-2 mt-4">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setGrupoActual((g) => Math.max(0, g - 1))}
-                disabled={grupoActual === 0}
+                onClick={irAlAnterior}
+                disabled={grupoActual === 0 && tabs.findIndex(t => t.key === activeTab) === 0}
                 className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -576,8 +649,8 @@ function ProductosDestacadosBlock({
               </div>
 
               <button
-                onClick={() => setGrupoActual((g) => Math.min(grupos - 1, g + 1))}
-                disabled={grupoActual === grupos - 1}
+                onClick={irAlSiguiente}
+                disabled={false}
                 className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
