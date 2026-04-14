@@ -81,6 +81,16 @@ export interface Database {
         Insert: Partial<NotificacionPreferencia>;
         Update: Partial<NotificacionPreferencia>;
       };
+      equipo: {
+        Row: Equipo;
+        Insert: Partial<Equipo>;
+        Update: Partial<Equipo>;
+      };
+      pedido_armado: {
+        Row: PedidoArmado;
+        Insert: Partial<PedidoArmado>;
+        Update: Partial<PedidoArmado>;
+      };
     };
     Functions: {
       next_numero: {
@@ -416,6 +426,26 @@ export interface NotificacionPreferencia {
   cliente_id: number;
   tipo: NotificacionTipo;
   push_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Equipo {
+  id: string;
+  nombre: string;
+  pin: string;
+  rol: string;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface PedidoArmado {
+  id: string;
+  venta_id: string;
+  estado: string;
+  armador_id: string | null;
+  notas: string | null;
+  orden_entrega: number | null;
   created_at: string;
   updated_at: string;
 }
