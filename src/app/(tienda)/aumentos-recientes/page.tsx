@@ -34,5 +34,20 @@ export default async function AumentosRecientesPage() {
       marcas: Array.isArray(p.marcas) ? (p.marcas[0] ?? null) : p.marcas,
     }));
 
-  return <AumentosRecientesClient productos={productos} />;
+  // Traer presentaciones de los productos con aumento
+  let presentacionesMap: Record<string, any[]> = {};
+  if (productos.length > 0) {
+    const ids = productos.map((p: any) => p.id);
+    const { data: presData } = await supabase
+      .from("presentaciones")
+      .select("id, producto_id, nombre, cantidad, precio, precio_oferta")
+      .in("producto_id", ids)
+      .order("cantidad", { ascending: true });
+    (presData || []).forEach((p: any) => {
+      if (!presentacionesMap[p.producto_id]) presentacionesMap[p.producto_id] = [];
+      presentacionesMap[p.producto_id].push(p);
+    });
+  }
+
+  return <AumentosRecientesClient productos={productos} presentacionesMap={presentacionesMap} />;
 }
