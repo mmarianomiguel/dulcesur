@@ -8,7 +8,6 @@ import {
   Trash2,
   X,
   Loader2,
-  MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -192,18 +191,19 @@ export default function PlantillasPage() {
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <FileText className="h-4.5 w-4.5 text-primary" />
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </div>
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-2xl font-bold truncate">Plantillas</h1>
-            <p className="text-xs text-muted-foreground hidden sm:block">Configurá las plantillas de notificación</p>
+          <div>
+            <h1 className="text-lg sm:text-2xl font-bold">Plantillas</h1>
+            <p className="text-xs text-muted-foreground hidden sm:block">Mensajes predefinidos reutilizables</p>
           </div>
         </div>
         <Button size="sm" onClick={() => { setEditing(EMPTY); setDialogOpen(true); }}>
           <Plus className="h-4 w-4 sm:mr-1.5" />
-          <span className="hidden sm:inline">Nueva</span>
+          <span className="hidden sm:inline">Nueva plantilla</span>
+          <span className="sm:hidden">Nueva</span>
         </Button>
       </div>
 
@@ -211,11 +211,11 @@ export default function PlantillasPage() {
         <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : plantillas.length === 0 ? (
         <div className="text-center py-16">
-          <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-3">
-            <FileText className="h-7 w-7 text-gray-400" />
+          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
+            <FileText className="h-7 w-7 text-muted-foreground" />
           </div>
-          <p className="text-gray-500 font-medium">No hay plantillas</p>
-          <p className="text-sm text-gray-400 mt-1">Creá tu primera plantilla de notificación</p>
+          <p className="font-medium text-muted-foreground">No hay plantillas</p>
+          <p className="text-sm text-muted-foreground/60 mt-1">Creá tu primera plantilla de notificación</p>
           <Button size="sm" className="mt-4" onClick={() => { setEditing(EMPTY); setDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-1.5" /> Crear plantilla
           </Button>
@@ -225,43 +225,28 @@ export default function PlantillasPage() {
           {plantillas.map((p) => (
             <div
               key={p.id}
-              className={`bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all ${
-                !p.activa ? "opacity-60" : ""
-              }`}
+              className={`bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all ${!p.activa ? "opacity-50" : ""}`}
             >
-              <div className="flex items-start gap-3">
-                {/* Content */}
-                <div className="flex-1 min-w-0">
+              {/* Top row: nombre + acciones */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-sm">{p.nombre}</span>
                     <Badge className={`${TIPO_COLORS[p.tipo] || ""} text-[10px] px-1.5 py-0`}>
                       {TIPOS.find((t) => t.value === p.tipo)?.label || p.tipo}
                     </Badge>
-                    <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                       {DEST_LABELS[p.destinatario_default] || p.destinatario_default}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1 truncate">{p.titulo_template}</div>
-                  <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{p.mensaje_template}</div>
-                  {(p.variables_disponibles || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {(p.variables_disponibles as string[]).map((v: string) => (
-                        <span key={v} className="text-[10px] bg-primary/8 text-primary/70 px-1.5 py-0.5 rounded font-mono">
-                          {`{{${v}}}`}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <Switch checked={p.activa} onCheckedChange={() => handleToggle(p)} />
                   <button
                     onClick={() => { setEditing(p); setDialogOpen(true); }}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
                   >
-                    <Pencil className="h-3.5 w-3.5 text-gray-400" />
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                   <button
                     onClick={() => setDeleteId(p.id)}
@@ -271,12 +256,32 @@ export default function PlantillasPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Preview del mensaje */}
+              <div className="mt-3 bg-muted/50 rounded-lg p-2.5">
+                <div className="text-xs font-semibold text-foreground truncate">{p.titulo_template}</div>
+                <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{p.mensaje_template}</div>
+              </div>
+
+              {/* Variables */}
+              {(p.variables_disponibles || []).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {(p.variables_disponibles as string[]).map((v: string) => (
+                    <span
+                      key={v}
+                      className="text-[10px] font-mono bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded"
+                    >
+                      {`{{${v}}}`}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Create/Edit Dialog */}
+      {/* Dialog crear/editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -303,8 +308,6 @@ export default function PlantillasPage() {
                 </Select>
               </div>
             </div>
-
-            {/* Variables */}
             <div>
               <Label>Variables disponibles</Label>
               <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
@@ -316,44 +319,43 @@ export default function PlantillasPage() {
                 ))}
               </div>
               <div className="flex gap-2">
-                <Input value={varInput} onChange={(e) => setVarInput(e.target.value)} placeholder="nombre de variable" className="flex-1" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addVariable(); } }} />
+                <Input value={varInput} onChange={(e) => setVarInput(e.target.value)} placeholder="nombre de variable" className="flex-1"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addVariable(); } }} />
                 <Button variant="outline" size="sm" onClick={addVariable}>Agregar</Button>
               </div>
             </div>
-
             <div>
               <Label>Título</Label>
               <Input ref={tituloRef} value={editing.titulo_template || ""} onChange={(e) => setEditing((x) => ({ ...x, titulo_template: e.target.value }))} placeholder="Ej: Tu pedido #{{numero}} está en camino" />
               {(editing.variables_disponibles || []).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {(editing.variables_disponibles || []).map((v) => (
-                    <button key={v} onClick={() => insertVariable(v, "titulo")} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
+                    <button key={v} onClick={() => insertVariable(v, "titulo")}
+                      className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
                       {`{{${v}}}`}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-
             <div>
               <Label>Mensaje</Label>
               <Textarea ref={mensajeRef} value={editing.mensaje_template || ""} onChange={(e) => setEditing((x) => ({ ...x, mensaje_template: e.target.value }))} placeholder="Ej: Hola {{cliente}}, tu pedido..." rows={3} />
               {(editing.variables_disponibles || []).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {(editing.variables_disponibles || []).map((v) => (
-                    <button key={v} onClick={() => insertVariable(v, "mensaje")} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
+                    <button key={v} onClick={() => insertVariable(v, "mensaje")}
+                      className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md hover:bg-primary/20 transition-colors font-mono">
                       {`{{${v}}}`}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-
             <div className="flex items-center gap-2">
               <Switch checked={editing.activa ?? true} onCheckedChange={(v) => setEditing((x) => ({ ...x, activa: v }))} />
               <Label>Activa</Label>
             </div>
-
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
               <Button onClick={handleSave} disabled={saving}>
@@ -365,11 +367,11 @@ export default function PlantillasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Dialog eliminar */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>¿Eliminar plantilla?</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-500">Esta acción no se puede deshacer.</p>
+          <p className="text-sm text-muted-foreground">Esta acción no se puede deshacer.</p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setDeleteId(null)}>Cancelar</Button>
             <Button variant="destructive" onClick={handleDelete}>Eliminar</Button>
