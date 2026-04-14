@@ -513,16 +513,29 @@ export default function NotaCreditoPage() {
       });
     }
 
-    // Actualizar total de la venta origen si existe
+    // Actualizar total de la venta origen recalculando con recargo/descuento
     if (origenId && origenId !== "none") {
-      const { data: ventaOrigen } = await supabase
+      const { data: ventaOrigenFull } = await supabase
         .from("ventas")
-        .select("total")
+        .select("total, subtotal, recargo_porcentaje, descuento_porcentaje")
         .eq("id", origenId)
         .single();
 
-      if (ventaOrigen) {
-        const nuevoTotal = Math.max(0, ventaOrigen.total - total);
+      if (ventaOrigenFull) {
+        const subtotalBase = ventaOrigenFull.subtotal || ventaOrigenFull.total;
+        const descPct = ventaOrigenFull.descuento_porcentaje || 0;
+        const recPct = ventaOrigenFull.recargo_porcentaje || 0;
+
+        const descMonto = Math.round(subtotalBase * descPct / 100);
+        const subtotalConDesc = subtotalBase - descMonto;
+        const baseNeta = subtotalConDesc - total;
+
+        const recargo = recPct > 0 && baseNeta > 0
+          ? Math.round(baseNeta * recPct / 100)
+          : 0;
+
+        const nuevoTotal = Math.max(0, baseNeta + recargo);
+
         await supabase
           .from("ventas")
           .update({ total: nuevoTotal })
