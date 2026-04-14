@@ -5,13 +5,6 @@ import { Clock, Loader2, Eye, ChevronLeft, ChevronRight, CheckCircle, XCircle, S
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -184,85 +177,101 @@ export default function HistorialPage() {
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <Clock className="h-4.5 w-4.5 text-primary" />
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+            <Clock className="h-4 w-4 text-amber-600" />
           </div>
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-2xl font-bold truncate">Historial</h1>
-            <p className="text-xs text-muted-foreground hidden sm:block">Todas las notificaciones enviadas</p>
+          <div>
+            <h1 className="text-lg sm:text-2xl font-bold">Historial</h1>
+            <p className="text-xs text-muted-foreground hidden sm:block">Notificaciones enviadas</p>
           </div>
         </div>
-        <Select value={tipoFilter} onValueChange={(v) => { if (v) { setTipoFilter(v); setPage(0); } }}>
-          <SelectTrigger className="w-32 sm:w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            {Object.entries(TIPO_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      </div>
+
+      {/* Filtros como pills */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { value: "all", label: "Todos" },
+          ...Object.entries(TIPO_LABELS).map(([k, v]) => ({ value: k, label: v })),
+        ].map((f) => (
+          <button
+            key={f.value}
+            onClick={() => { setTipoFilter(f.value); setPage(0); }}
+            className={`px-3 py-1.5 rounded-full border text-sm transition-all ${
+              tipoFilter === f.value
+                ? "border-border bg-secondary text-foreground font-medium"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : notifs.length === 0 ? (
         <div className="text-center py-16">
-          <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-3">
-            <Inbox className="h-7 w-7 text-gray-400" />
+          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
+            <Inbox className="h-7 w-7 text-muted-foreground" />
           </div>
-          <p className="text-gray-500 font-medium">No hay notificaciones</p>
-          <p className="text-sm text-gray-400 mt-1">Las notificaciones enviadas aparecerán acá</p>
+          <p className="font-medium text-muted-foreground">No hay notificaciones</p>
+          <p className="text-sm text-muted-foreground/60 mt-1">Las notificaciones enviadas aparecerán acá</p>
         </div>
       ) : (
         <>
-          {/* Card list */}
           <div className="space-y-2">
-            {notifs.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => openDetail(n)}
-                className="w-full text-left bg-white dark:bg-gray-900 border rounded-xl p-3.5 sm:p-4 hover:border-primary/20 hover:shadow-sm transition-all"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    {/* Title row */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm truncate">{n.titulo}</span>
-                      <Badge className={`${TIPO_COLORS[n.tipo] || ""} text-[10px] px-1.5 py-0 shrink-0`}>
-                        {TIPO_LABELS[n.tipo] || n.tipo}
-                      </Badge>
-                    </div>
-
-                    {/* Message preview */}
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">{n.mensaje}</p>
-
-                    {/* Meta row */}
-                    <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400">
-                      <span>{formatDateARG(n.created_at)}</span>
-                      <span className="flex items-center gap-0.5">
-                        <Users className="h-3 w-3" /> {n.dest_count}
-                      </span>
-                      <span>
+            {notifs.map((n) => {
+              const pct = n.dest_count ? Math.round(((n.leidas_count ?? 0) / n.dest_count) * 100) : 0;
+              const todasLeidas = n.dest_count ? n.dest_count > 0 && n.leidas_count === n.dest_count : false;
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => openDetail(n)}
+                  className="w-full text-left bg-white dark:bg-gray-900 border rounded-xl p-3.5 sm:p-4 hover:border-border/80 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-semibold text-sm truncate">{n.titulo}</span>
+                        <Badge className={`${TIPO_COLORS[n.tipo] || ""} text-[10px] px-1.5 py-0 shrink-0`}>
+                          {TIPO_LABELS[n.tipo] || n.tipo}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{n.mensaje}</p>
+                      <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground/70">
+                        <span>{formatDateARG(n.created_at)}</span>
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3 w-3" /> {n.dest_count}
+                        </span>
                         {n.dest_count ? (
-                          <span className={n.leidas_count === n.dest_count ? "text-green-500" : ""}>
+                          <span className={todasLeidas ? "text-green-500" : ""}>
                             {n.leidas_count}/{n.dest_count} leídas
                           </span>
-                        ) : "—"}
-                      </span>
-                      <span className="hidden sm:inline">{SEG_LABELS[n.segmentacion?.tipo] || ""}</span>
+                        ) : null}
+                        <span className="hidden sm:inline">{SEG_LABELS[n.segmentacion?.tipo] || ""}</span>
+                      </div>
+                      {/* Barra de progreso de lecturas */}
+                      {n.dest_count ? (
+                        <div className="h-1 rounded-full bg-muted mt-2.5 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${todasLeidas ? "bg-green-500" : "bg-primary/40"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      ) : null}
                     </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-1" />
                   </div>
-
-                  {/* Arrow indicator */}
-                  <ChevronRight className="h-4 w-4 text-gray-300 shrink-0 mt-1" />
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
 
-          {/* Pagination */}
+          {/* Paginación */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
-              <span className="text-xs sm:text-sm text-gray-500">{total} notificaciones</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">{total} notificaciones</span>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
                   <ChevronLeft className="h-4 w-4" />
@@ -277,7 +286,7 @@ export default function HistorialPage() {
         </>
       )}
 
-      {/* Detail dialog */}
+      {/* Dialog detalle */}
       <Dialog open={!!detailNotif} onOpenChange={() => setDetailNotif(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -288,39 +297,41 @@ export default function HistorialPage() {
           </DialogHeader>
           {detailNotif && (
             <div className="space-y-4 mt-2">
-              {/* Notification content */}
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3.5">
+              <div className="bg-muted/50 rounded-xl p-3.5">
                 <div className="font-semibold text-sm">{detailNotif.titulo}</div>
-                <div className="text-xs text-gray-500 mt-1 whitespace-pre-wrap">{detailNotif.mensaje}</div>
+                <div className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{detailNotif.mensaje}</div>
               </div>
-
-              <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
+              <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
                 <Badge className={TIPO_COLORS[detailNotif.tipo] || ""}>{TIPO_LABELS[detailNotif.tipo]}</Badge>
                 <span>{formatDateARG(detailNotif.created_at)}</span>
                 <span>{SEG_LABELS[detailNotif.segmentacion?.tipo] || ""}</span>
               </div>
-
-              {/* Recipients */}
               <div className="border-t pt-3">
                 <div className="text-sm font-medium mb-2 flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-gray-400" />
+                  <Users className="h-4 w-4 text-muted-foreground" />
                   Destinatarios ({detailDests.length})
                 </div>
                 {loadingDetail ? (
                   <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
                 ) : detailDests.length === 0 ? (
-                  <div className="text-sm text-gray-400 py-4 text-center">Sin destinatarios</div>
+                  <div className="text-sm text-muted-foreground py-4 text-center">Sin destinatarios</div>
                 ) : (
                   <div className="space-y-0.5 max-h-64 overflow-y-auto">
                     {detailDests.map((d) => (
-                      <div key={d.id} className="flex items-center justify-between text-sm py-2 px-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <div key={d.id} className="flex items-center justify-between text-sm py-2 px-2.5 rounded-lg hover:bg-muted/50">
                         <span className="truncate font-medium text-xs">{d.cliente_nombre || d.usuario_nombre || "—"}</span>
                         <div className="flex items-center gap-2.5 shrink-0">
-                          <span className="flex items-center gap-1 text-[11px]" title="Push enviada">
-                            {d.push_enviada ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <XCircle className="h-3.5 w-3.5 text-gray-300" />}
+                          <span title="Push enviada">
+                            {d.push_enviada
+                              ? <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                              : <XCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
+                            }
                           </span>
-                          <span className="flex items-center gap-1 text-[11px]" title="Leída">
-                            {d.leida ? <Eye className="h-3.5 w-3.5 text-green-500" /> : <Eye className="h-3.5 w-3.5 text-gray-300" />}
+                          <span title="Leída">
+                            {d.leida
+                              ? <Eye className="h-3.5 w-3.5 text-green-500" />
+                              : <Eye className="h-3.5 w-3.5 text-muted-foreground/30" />
+                            }
                           </span>
                         </div>
                       </div>
