@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Send, Loader2, Users, User, MapPin, Shield, Clock,
-  CheckCircle, Smartphone, Tag, Calendar, X, Bell,
+  CheckCircle, Smartphone, Tag, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,12 +63,6 @@ export default function EnviarNotificacionPage() {
   const [selectedDescuento, setSelectedDescuento] = useState<any>(null);
   const [showDescuentos, setShowDescuentos] = useState(false);
 
-  // Programado
-  const [programado, setProgramado] = useState(false);
-  const [fechaProgramada, setFechaProgramada] = useState("");
-  const [horaProgramada, setHoraProgramada] = useState("");
-  const [programadas, setProgramadas] = useState<any[]>([]);
-
   // Tienda config para horario
   const [horarioCierre, setHorarioCierre] = useState<string | null>(null);
 
@@ -80,17 +74,8 @@ export default function EnviarNotificacionPage() {
     } catch {}
   }, []);
 
-  const fetchProgramadas = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notificaciones/programadas");
-      const data = await res.json();
-      setProgramadas(data);
-    } catch {}
-  }, []);
-
   useEffect(() => {
     fetchPlantillas();
-    fetchProgramadas();
 
     // Cargar zonas, descuentos y horario en paralelo
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
@@ -103,7 +88,7 @@ export default function EnviarNotificacionPage() {
       if (descRes.data) setDescuentos(descRes.data);
       if (cfgRes.data?.horario_atencion_fin) setHorarioCierre(cfgRes.data.horario_atencion_fin);
     });
-  }, [fetchPlantillas, fetchProgramadas]);
+  }, [fetchPlantillas]);
 
   // Buscar clientes
   useEffect(() => {
@@ -247,46 +232,22 @@ export default function EnviarNotificacionPage() {
         segmentacion.valor = selectedDescuento.clientes_ids;
       }
 
-      if (programado && fechaProgramada && horaProgramada) {
-        // Guardar como programada
-        const programadaPara = new Date(`${fechaProgramada}T${horaProgramada}:00-03:00`).toISOString();
-        await fetch("/api/notificaciones/programadas", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            titulo,
-            mensaje,
-            tipo,
-            url: url || null,
-            plantilla_id: plantillaId && plantillaId !== "libre" ? plantillaId : null,
-            segmentacion,
-            programada_para: programadaPara,
-          }),
-        });
-        showAdminToast("Notificación programada correctamente", "success");
-        fetchProgramadas();
-        setProgramado(false);
-        setFechaProgramada("");
-        setHoraProgramada("");
-      } else {
-        // Enviar inmediatamente
-        const res = await fetch("/api/notificaciones/enviar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            titulo,
-            mensaje,
-            tipo,
-            url: url || null,
-            plantilla_id: plantillaId && plantillaId !== "libre" ? plantillaId : null,
-            segmentacion,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        setResult(data);
-        showAdminToast("Notificación enviada", "success");
-      }
+      const res = await fetch("/api/notificaciones/enviar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo,
+          mensaje,
+          tipo,
+          url: url || null,
+          plantilla_id: plantillaId && plantillaId !== "libre" ? plantillaId : null,
+          segmentacion,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResult(data);
+      showAdminToast("Notificación enviada", "success");
     } catch (err: any) {
       showAdminToast(err.message || "Error al enviar", "error");
     } finally {
@@ -294,22 +255,11 @@ export default function EnviarNotificacionPage() {
     }
   };
 
-  const cancelarProgramada = async (id: string) => {
-    await fetch("/api/notificaciones/programadas", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    fetchProgramadas();
-    showAdminToast("Notificación cancelada", "success");
-  };
-
   const canSend = titulo.trim() && mensaje.trim()
     && (segTipo !== "cliente" || selectedCliente)
     && (segTipo !== "zona" || segValor)
     && (segTipo !== "rol" || segValor)
-    && (segTipo !== "inactividad" || segValor)
-    && (!programado || (fechaProgramada && horaProgramada));
+    && (segTipo !== "inactividad" || segValor);
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -518,81 +468,6 @@ export default function EnviarNotificacionPage() {
         )}
       </div>
 
-      {/* Card 3 — Programar envío */}
-      <div className="bg-white dark:bg-gray-900 border rounded-xl p-4 sm:p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-xs flex items-center justify-center shrink-0 font-semibold">3</span>
-            ¿Cuándo enviarlo?
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{programado ? "Programado" : "Ahora"}</span>
-            <button
-              onClick={() => setProgramado(!programado)}
-              className={`w-9 h-5 rounded-full transition-colors relative ${programado ? "bg-blue-600" : "bg-muted"}`}
-            >
-              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${programado ? "left-4" : "left-0.5"}`} />
-            </button>
-          </div>
-        </div>
-
-        {programado ? (
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">Fecha</label>
-              <Input
-                type="date"
-                value={fechaProgramada}
-                onChange={(e) => setFechaProgramada(e.target.value)}
-                min={new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">Hora (Argentina)</label>
-              <Input
-                type="time"
-                value={horaProgramada}
-                onChange={(e) => setHoraProgramada(e.target.value)}
-              />
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">La notificación se enviará inmediatamente al confirmar.</p>
-        )}
-      </div>
-
-      {/* Programadas pendientes */}
-      {programadas.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Programadas pendientes ({programadas.length})</span>
-          </div>
-          <div className="divide-y">
-            {programadas.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{p.titulo}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(p.programada_para).toLocaleString("es-AR", {
-                      day: "2-digit", month: "2-digit",
-                      hour: "2-digit", minute: "2-digit",
-                      timeZone: "America/Argentina/Buenos_Aires",
-                    })}
-                  </div>
-                </div>
-                <button
-                  onClick={() => cancelarProgramada(p.id)}
-                  className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Resultado */}
       {result && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 space-y-2">
@@ -634,10 +509,8 @@ export default function EnviarNotificacionPage() {
           className="w-full sm:w-auto"
         >
           {sending
-            ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {programado ? "Programando..." : "Enviando..."}</>
-            : programado
-              ? <><Calendar className="h-4 w-4 mr-2" /> Programar envío</>
-              : <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>
+            ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Enviando...</>
+            : <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>
           }
         </Button>
       </div>
@@ -646,21 +519,15 @@ export default function EnviarNotificacionPage() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{programado ? "Confirmar programación" : "Confirmar envío"}</DialogTitle>
+            <DialogTitle>Confirmar envío</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {programado
-              ? <>Se programará la notificación para el <strong>{fechaProgramada} a las {horaProgramada}hs</strong>.</>
-              : <>Se enviará a <strong>{estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}</strong>.</>
-            }
+            Se enviará a <strong>{estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}</strong>.
           </p>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
             <Button onClick={handleSend}>
-              {programado
-                ? <><Calendar className="h-4 w-4 mr-1.5" /> Programar</>
-                : <><Send className="h-4 w-4 mr-1.5" /> Enviar</>
-              }
+              <Send className="h-4 w-4 mr-1.5" /> Enviar
             </Button>
           </div>
         </DialogContent>

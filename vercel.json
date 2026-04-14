@@ -3,10 +3,6 @@
     {
       "path": "/api/push/caja-reminder",
       "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/notificaciones/cron",
-      "schedule": "0 9 * * *"
     }
   ]
 }
