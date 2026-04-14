@@ -706,7 +706,7 @@ export function CobroVentaSection({
       <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-2">
         <div className="flex justify-between text-sm text-gray-600">
           <span>Pedido (subtotal efectivo)</span>
-          <span className="font-medium text-gray-800">{formatCurrency(subtotalItems)}</span>
+          <span className="font-medium text-gray-800">{formatCurrency(montoVenta)}</span>
         </div>
         {costoEnvio > 0 && (
           <div className="flex justify-between text-sm text-gray-600">
