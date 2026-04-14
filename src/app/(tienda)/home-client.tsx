@@ -105,7 +105,7 @@ function resolveIcon(name: string): LucideIcon {
 function SkeletonCard() {
   return (
     <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden animate-pulse">
-      <div className="aspect-[4/3] bg-gray-100" />
+      <div className="aspect-square bg-gray-100" />
       <div className="p-4 space-y-3">
         <div className="h-3 w-16 bg-gray-100 rounded-full" />
         <div className="h-4 w-3/4 bg-gray-100 rounded" />
@@ -269,7 +269,7 @@ function CategoriasDestacadasBlock({
           </div>
         ) : cats.length > 0 ? (
           <div className="grid grid-cols-3 md:grid-cols-6 gap-3 stagger-children">
-            {cats.map((cat) => {
+            {cats.map((cat, idx) => {
               const key = cat.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
               const Icon = categoryIcons[key] || Package;
               const colorClasses = categoryColors[key] || "bg-gray-50 text-gray-600 group-hover:bg-gray-100";
@@ -287,7 +287,7 @@ function CategoriasDestacadasBlock({
                         width={56}
                         height={56}
                         className="w-full h-full object-cover"
-                        loading="lazy"
+                        {...(idx < 3 ? { priority: true } : { loading: "lazy" })}
                       />
                     </div>
                   ) : (
@@ -1323,7 +1323,7 @@ export default function TiendaPage({
         {/* products skeleton */}
         <div className="py-16 bg-gray-50/50 max-w-7xl mx-auto px-4">
           <div className="h-8 w-56 bg-gray-100 rounded mx-auto mb-10 animate-pulse" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
