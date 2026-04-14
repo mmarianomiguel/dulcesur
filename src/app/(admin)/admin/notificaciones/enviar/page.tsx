@@ -12,11 +12,9 @@ import {
   CheckCircle,
   AlertCircle,
   Smartphone,
-  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -55,8 +53,6 @@ export default function EnviarNotificacionPage() {
   const [sending, setSending] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [showPreview, setShowPreview] = useState(false);
-
   // Search state
   const [clienteQuery, setClienteQuery] = useState("");
   const [clienteResults, setClienteResults] = useState<any[]>([]);
@@ -169,27 +165,27 @@ export default function EnviarNotificacionPage() {
   const canSend = titulo.trim() && mensaje.trim() && (segTipo !== "cliente" || selectedCliente) && (segTipo !== "zona" || segValor) && (segTipo !== "rol" || segValor) && (segTipo !== "inactividad" || segValor);
 
   return (
-    <div className="space-y-4 sm:space-y-6 max-w-2xl">
+    <div className="space-y-4 max-w-2xl">
       {/* Header */}
-      <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <Send className="h-4.5 w-4.5 text-primary" />
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+          <Send className="h-4 w-4 text-blue-600" />
         </div>
         <div>
-          <h1 className="text-lg sm:text-2xl font-bold">Enviar Notificación</h1>
-          <p className="text-xs text-muted-foreground hidden sm:block">Enviá notificaciones push a tus clientes</p>
+          <h1 className="text-lg sm:text-2xl font-bold">Enviar notificación</h1>
+          <p className="text-xs text-muted-foreground hidden sm:block">Mandá un mensaje push a tus clientes</p>
         </div>
       </div>
 
-      {/* Step 1: Template or free text */}
+      {/* Card 1 — Contenido */}
       <div className="bg-white dark:bg-gray-900 border rounded-xl p-4 sm:p-5 space-y-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-          <span className="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center shrink-0">1</span>
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-xs flex items-center justify-center shrink-0 font-semibold">1</span>
           Contenido
         </div>
 
         <div>
-          <Label className="text-xs text-gray-500">Plantilla (opcional)</Label>
+          <label className="text-xs text-muted-foreground block mb-1.5">Plantilla (opcional)</label>
           <Select value={plantillaId || "libre"} onValueChange={handlePlantillaChange}>
             <SelectTrigger><SelectValue placeholder="Seleccionar plantilla..." /></SelectTrigger>
             <SelectContent>
@@ -200,18 +196,18 @@ export default function EnviarNotificacionPage() {
         </div>
 
         <div>
-          <Label className="text-xs text-gray-500">Título</Label>
-          <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título de la notificación" />
+          <label className="text-xs text-muted-foreground block mb-1.5">Título</label>
+          <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej: María, tu pedido está listo 🎉" />
         </div>
 
         <div>
-          <Label className="text-xs text-gray-500">Mensaje</Label>
-          <Textarea value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Cuerpo del mensaje" rows={3} />
+          <label className="text-xs text-muted-foreground block mb-1.5">Mensaje</label>
+          <Textarea value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Ej: Hola María, ya podés pasar a retirar tu pedido..." rows={3} />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs text-gray-500">Tipo</Label>
+            <label className="text-xs text-muted-foreground block mb-1.5">Tipo</label>
             <Select value={tipo} onValueChange={(v) => v && setTipo(v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -225,45 +221,32 @@ export default function EnviarNotificacionPage() {
             </Select>
           </div>
           <div>
-            <Label className="text-xs text-gray-500">URL (opcional)</Label>
+            <label className="text-xs text-muted-foreground block mb-1.5">URL destino (opcional)</label>
             <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="/cuenta/pedidos" />
           </div>
         </div>
 
-        {/* Mobile preview toggle */}
+        {/* Vista previa — siempre visible si hay contenido */}
         {(titulo || mensaje) && (
-          <button
-            onClick={() => setShowPreview(!showPreview)}
-            className="flex items-center gap-1.5 text-xs text-primary hover:underline lg:hidden"
-          >
-            <Eye className="h-3.5 w-3.5" />
-            {showPreview ? "Ocultar" : "Ver"} vista previa
-          </button>
-        )}
-
-        {/* Inline preview (mobile: collapsible, desktop: always visible) */}
-        {(titulo || mensaje) && (
-          <div className={`${showPreview ? "block" : "hidden"} lg:block`}>
-            <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-800">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Smartphone className="h-3.5 w-3.5 text-gray-400" />
-                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Vista previa</span>
-              </div>
-              <div className="font-semibold text-sm">{titulo || "Título..."}</div>
-              <div className="text-xs text-gray-500 mt-0.5 whitespace-pre-wrap">{mensaje || "Mensaje..."}</div>
+          <div className="bg-muted/50 rounded-xl p-3.5">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Smartphone className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Vista previa</span>
             </div>
+            <div className="text-sm font-semibold text-foreground">{titulo || "Título..."}</div>
+            <div className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{mensaje || "Mensaje..."}</div>
           </div>
         )}
       </div>
 
-      {/* Step 2: Segmentation */}
+      {/* Card 2 — Destinatarios */}
       <div className="bg-white dark:bg-gray-900 border rounded-xl p-4 sm:p-5 space-y-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-          <span className="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center shrink-0">2</span>
-          Destinatarios
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-xs flex items-center justify-center shrink-0 font-semibold">2</span>
+          ¿A quién le llega?
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {SEG_TYPES.map((s) => {
             const Icon = s.icon;
             const active = segTipo === s.value;
@@ -271,10 +254,10 @@ export default function EnviarNotificacionPage() {
               <button
                 key={s.value}
                 onClick={() => { setSegTipo(s.value); setSegValor(""); setSelectedCliente(null); }}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs sm:text-sm transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-full border text-sm transition-all ${
                   active
-                    ? "border-primary bg-primary/5 text-primary font-medium shadow-sm"
-                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 text-gray-600"
+                    ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
+                    : "border-border hover:border-border/80 text-muted-foreground"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -285,7 +268,6 @@ export default function EnviarNotificacionPage() {
           })}
         </div>
 
-        {/* Segmentation value inputs */}
         {segTipo === "cliente" && (
           <div className="relative">
             <Input
@@ -294,11 +276,12 @@ export default function EnviarNotificacionPage() {
               placeholder="Buscar cliente por nombre..."
             />
             {clienteResults.length > 0 && !selectedCliente && (
-              <div className="absolute z-10 top-full left-0 right-0 bg-white dark:bg-gray-900 border rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
+              <div className="absolute z-10 top-full left-0 right-0 bg-white dark:bg-gray-900 border rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
                 {clienteResults.map((c) => (
-                  <button key={c.id} onClick={() => { setSelectedCliente(c); setClienteResults([]); }} className="w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm border-b last:border-0">
+                  <button key={c.id} onClick={() => { setSelectedCliente(c); setClienteResults([]); }}
+                    className="w-full text-left px-3 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0">
                     <div className="font-medium">{c.nombre}</div>
-                    {c.email && <div className="text-xs text-gray-400">{c.email}</div>}
+                    {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
                   </button>
                 ))}
               </div>
@@ -327,71 +310,72 @@ export default function EnviarNotificacionPage() {
         {segTipo === "inactividad" && (
           <div className="flex items-center gap-2">
             <Input type="number" value={segValor} onChange={(e) => setSegValor(e.target.value)} placeholder="30" className="w-20" />
-            <span className="text-sm text-gray-500">días sin comprar</span>
+            <span className="text-sm text-muted-foreground">días sin comprar</span>
           </div>
         )}
 
         {estimado !== null && (
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 rounded-lg">
-            <Users className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-primary">{estimado} destinatario{estimado !== 1 ? "s" : ""}</span>
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 dark:bg-blue-950/30 rounded-xl">
+            <Users className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
+              {estimado} destinatario{estimado !== 1 ? "s" : ""}
+            </span>
           </div>
         )}
       </div>
 
-      {/* Result card */}
+      {/* Resultado */}
       {result && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-400">
-            <CheckCircle className="h-4.5 w-4.5" />
+            <CheckCircle className="h-4 w-4" />
             Notificación enviada
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
-              <div className="text-lg font-bold text-gray-900 dark:text-white">{result.destinatarios}</div>
-              <div className="text-gray-500">Destinatarios</div>
+              <div className="text-lg font-bold text-foreground">{result.destinatarios}</div>
+              <div className="text-muted-foreground">Destinatarios</div>
             </div>
             <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
               <div className="text-lg font-bold text-green-600">{result.push_enviadas}</div>
-              <div className="text-gray-500">Push enviadas</div>
+              <div className="text-muted-foreground">Push enviadas</div>
             </div>
             {result.push_fallidas > 0 && (
               <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
                 <div className="text-lg font-bold text-red-500">{result.push_fallidas}</div>
-                <div className="text-gray-500">Fallidas</div>
+                <div className="text-muted-foreground">Fallidas</div>
               </div>
             )}
             {result.sin_push > 0 && (
               <div className="bg-white/60 dark:bg-gray-900/40 rounded-lg px-3 py-2">
-                <div className="text-lg font-bold text-gray-400">{result.sin_push}</div>
-                <div className="text-gray-500">Sin push</div>
+                <div className="text-lg font-bold text-muted-foreground">{result.sin_push}</div>
+                <div className="text-muted-foreground">Sin push</div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Send button - sticky on mobile */}
-      <div className="sticky bottom-0 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent dark:from-gray-950 dark:via-gray-950 pt-4 pb-2 -mx-4 px-4 sm:static sm:bg-transparent sm:p-0 sm:m-0">
+      {/* Botón enviar */}
+      <div className="flex justify-end">
         <Button
           onClick={() => setConfirmOpen(true)}
           disabled={!canSend || sending}
           size="lg"
           className="w-full sm:w-auto"
         >
-          {sending ? (
-            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Enviando...</>
-          ) : (
-            <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>
-          )}
+          {sending
+            ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Enviando...</>
+            : <><Send className="h-4 w-4 mr-2" /> Enviar notificación</>
+          }
         </Button>
       </div>
 
-      {/* Confirm dialog */}
+      {/* Dialog confirmación */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Confirmar envío</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Se enviará la notificación a <strong>{estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}</strong>. ¿Confirmar?
           </p>
           <div className="flex justify-end gap-2 mt-4">
