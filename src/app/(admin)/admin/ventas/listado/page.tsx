@@ -2203,6 +2203,32 @@ export default function ListadoVentasPage() {
       }
     }
 
+    // Notificar al cliente si se marca como armado y es retiro
+    if (nuevoEstado === "armado") {
+      const esRetiro = (pedido.metodo_entrega || "").includes("retiro");
+      if (esRetiro && pedido.numero) {
+        const { data: ptNotif } = await supabase
+          .from("pedidos_tienda")
+          .select("cliente_auth_id")
+          .eq("numero", pedido.numero)
+          .maybeSingle();
+        const clienteAuthId = ptNotif?.cliente_auth_id;
+        if (clienteAuthId) {
+          fetch("/api/notificaciones/enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              titulo: "Tu pedido esta listo para retirar",
+              mensaje: `Tu pedido #${pedido.numero} ya esta armado. Podes pasar a buscarlo cuando quieras!`,
+              tipo: "pedido",
+              url: "/cuenta/pedidos",
+              segmentacion: { tipo: "cliente", valor: Number(clienteAuthId) },
+            }),
+          }).catch(() => {});
+        }
+      }
+    }
+
     // Update local state instead of full refetch for speed
     setPoPedidos((prev) => prev.map((p) => p.numero === pedido.numero ? { ...p, estado: nuevoEstado } : p));
     setVentas((prev) => prev.map((v) => v.numero === pedido.numero ? { ...v, estado: nuevoEstado === "cancelado" ? "anulada" : nuevoEstado, entregado: nuevoEstado === "entregado" } as any : v));

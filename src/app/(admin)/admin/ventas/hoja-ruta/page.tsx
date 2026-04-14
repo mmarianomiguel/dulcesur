@@ -863,6 +863,36 @@ export default function HojaDeRutaPage() {
         await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
       }
     }
+    // Notificar al siguiente cliente en la ruta
+    const grupoActualIdx = clientGroups.findIndex(g => g.ventas.some(v => ids.includes(v.id)));
+    const siguienteGrupo = clientGroups[grupoActualIdx + 1];
+
+    if (siguienteGrupo && siguienteGrupo.ventas.length > 0) {
+      const ventaSiguiente = siguienteGrupo.ventas[0];
+      if (ventaSiguiente.numero) {
+        const { data: ptSiguiente } = await supabase
+          .from("pedidos_tienda")
+          .select("cliente_auth_id")
+          .eq("numero", ventaSiguiente.numero)
+          .maybeSingle();
+
+        const clienteAuthIdSiguiente = ptSiguiente?.cliente_auth_id;
+        if (clienteAuthIdSiguiente) {
+          fetch("/api/notificaciones/enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              titulo: "Tu pedido esta en camino",
+              mensaje: "El repartidor ya esta yendo hacia tu domicilio. En breve llega!",
+              tipo: "pedido",
+              url: "/cuenta/pedidos",
+              segmentacion: { tipo: "cliente", valor: Number(clienteAuthIdSiguiente) },
+            }),
+          }).catch(() => {});
+        }
+      }
+    }
+
     setVentas((prev) => prev.filter((v) => !ids.includes(v.id)));
   };
 
