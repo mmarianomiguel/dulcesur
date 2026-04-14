@@ -287,7 +287,7 @@ export function VentaDetailDialog({
   // Calculate real payments total (excluding NCs and "Pendiente de cobro")
   const totalPagado = (pagos || []).reduce((s, p) => {
     if (p.metodo === "Pendiente de cobro") return s;
-    if (p.metodo.includes("Nota de Cr")) return s - p.monto;
+    if (p.metodo.includes("Nota de Cr")) return s;
     return s + p.monto;
   }, 0);
   const saldoPendiente = displayTotal - totalPagado;
@@ -436,8 +436,7 @@ export function VentaDetailDialog({
                 {!(cobroConfig && canCobrar && !hasCobro) && pagos && pagos.length > 0 ? (
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-muted-foreground">Detalle de pago:</p>
-                    {pagos.map((p, i) => {
-                      const isNC = p.metodo.includes("Nota de Cr");
+                    {pagos.filter(p => !p.metodo.includes("Nota de Cr")).map((p, i) => {
                       const isPending = p.metodo === "Pendiente de cobro";
                       return (
                         <React.Fragment key={i}>
@@ -447,14 +446,14 @@ export function VentaDetailDialog({
                             {p.metodo === "Transferencia" && <Landmark className="w-3 h-3 text-blue-600" />}
                             {p.metodo === "Cuenta Corriente" && <FileText className="w-3 h-3 text-orange-600" />}
                             {isPending && <AlertTriangle className="w-3 h-3 text-amber-500" />}
-                            {!["Efectivo", "Transferencia", "Cuenta Corriente", "Pendiente de cobro"].includes(p.metodo) && !isNC && <CreditCard className="w-3 h-3 text-muted-foreground" />}
-                            <span className={isNC ? "text-amber-600" : isPending ? "text-amber-600" : "text-muted-foreground"}>
+                            {!["Efectivo", "Transferencia", "Cuenta Corriente", "Pendiente de cobro"].includes(p.metodo) && <CreditCard className="w-3 h-3 text-muted-foreground" />}
+                            <span className={isPending ? "text-amber-600" : "text-muted-foreground"}>
                               {p.metodo}
                             </span>
                             {p.cuenta_bancaria && <span className="text-[10px] ml-0.5">→ {p.cuenta_bancaria}</span>}
                           </div>
-                          <span className={`font-semibold ${isNC ? "text-amber-600" : isPending ? "text-amber-600" : ""}`}>
-                            {isNC ? `-${formatCurrency(p.monto)}` : formatCurrency(p.monto)}
+                          <span className={`font-semibold ${isPending ? "text-amber-600" : ""}`}>
+                            {formatCurrency(p.monto)}
                           </span>
                         </div>
                         {p.fecha_hora && (
@@ -465,7 +464,7 @@ export function VentaDetailDialog({
                         </React.Fragment>
                       );
                     })}
-                    {pagos.length > 1 && (
+                    {pagos.filter(p => !p.metodo.includes("Nota de Cr")).length > 1 && (
                       <div className="flex items-center justify-between text-xs border-t pt-1">
                         <span className="font-bold">Total cobrado</span>
                         <span className="font-bold">{formatCurrency(totalPagado)}</span>
