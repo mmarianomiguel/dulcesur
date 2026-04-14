@@ -513,6 +513,23 @@ export default function NotaCreditoPage() {
       });
     }
 
+    // Actualizar total de la venta origen si existe
+    if (origenId && origenId !== "none") {
+      const { data: ventaOrigen } = await supabase
+        .from("ventas")
+        .select("total")
+        .eq("id", origenId)
+        .single();
+
+      if (ventaOrigen) {
+        const nuevoTotal = Math.max(0, ventaOrigen.total - total);
+        await supabase
+          .from("ventas")
+          .update({ total: nuevoTotal })
+          .eq("id", origenId);
+      }
+    }
+
     // Reset form
     setItems([]);
     setObservacion("");

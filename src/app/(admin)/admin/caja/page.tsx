@@ -1023,6 +1023,7 @@ export default function CajaPage() {
     ingresosDetalle,
     ventasDesglose,
     totalTransferSurcharge,
+    ncByVenta,
   } = useMemo(() => {
     const ventasPorMetodo = (metodo: string) =>
       ventas.filter((v) => v.forma_pago === metodo).reduce((a, v) => a + v.total, 0);
@@ -1261,6 +1262,7 @@ export default function CajaPage() {
       ingresosDetalle,
       ventasDesglose,
       totalTransferSurcharge,
+      ncByVenta,
     };
   }, [ventas, movements, turno, ccEntries, ncEntries]);
 
@@ -1804,7 +1806,9 @@ export default function CajaPage() {
                                 : "bg-blue-50 text-blue-800 border border-blue-200";
                               const origenSub = isRetiro ? "Web" : (isEnvio && !isWeb) ? "POS" : isEnvio ? "Web" : null;
                               const montoPagado = (v as any).monto_pagado || 0;
-                              const isPagado = montoPagado >= v.total - 1;
+                              const ncAmt = ncByVenta[v.id] || 0;
+                              const totalEfectivo = v.total - ncAmt;
+                              const isPagado = montoPagado >= totalEfectivo - 1;
                               const isCC = v.forma_pago === "Cuenta Corriente" ||
                                 (ventasDesglose["Cuenta Corriente"] && ccEntries?.some(e => e.venta_id === v.id));
                               const estadoLabel = isPagado ? "Cobrado" : isCC ? "Cta cte" : "Pendiente";
@@ -1844,7 +1848,7 @@ export default function CajaPage() {
                                       {estadoLabel}
                                     </span>
                                   </td>
-                                  <td className="py-2.5 px-3 text-right font-medium text-xs">{formatCurrency(v.total)}</td>
+                                  <td className="py-2.5 px-3 text-right font-medium text-xs">{formatCurrency(v.total - (ncByVenta[v.id] || 0))}</td>
                                   <td className="py-2.5 px-1"><Eye className="w-3.5 h-3.5 text-muted-foreground" /></td>
                                 </tr>
                               );
