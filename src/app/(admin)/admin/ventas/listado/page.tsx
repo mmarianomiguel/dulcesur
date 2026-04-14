@@ -2203,23 +2203,57 @@ export default function ListadoVentasPage() {
       }
     }
 
-    // Notificar al cliente si se marca como armado y es retiro
+    // Notificar al cliente si se marca como armado y es retiro en local
     if (nuevoEstado === "armado") {
       const esRetiro = (pedido.metodo_entrega || "").includes("retiro");
       if (esRetiro && pedido.numero) {
-        const { data: ptNotif } = await supabase
-          .from("pedidos_tienda")
-          .select("cliente_auth_id")
-          .eq("numero", pedido.numero)
-          .maybeSingle();
-        const clienteAuthId = ptNotif?.cliente_auth_id;
+        const [{ data: ptArmado }, { data: tiendaCfg }] = await Promise.all([
+          supabase
+            .from("pedidos_tienda")
+            .select("cliente_auth_id, metodo_pago, monto_efectivo, total")
+            .eq("numero", pedido.numero)
+            .maybeSingle(),
+          supabase
+            .from("tienda_config")
+            .select("horario_atencion_fin")
+            .limit(1)
+            .single(),
+        ]);
+
+        const clienteAuthId = ptArmado?.cliente_auth_id;
         if (clienteAuthId) {
+          const nombre = pedido.nombre_cliente || "";
+          const primerNombre = nombre.trim().split(" ")[0] || "Hola";
+          const horarioCierre = tiendaCfg?.horario_atencion_fin
+            ? tiendaCfg.horario_atencion_fin.substring(0, 5).replace(":00", "")
+            : undefined;
+
+          const formaPago = ptArmado?.metodo_pago || "";
+          const fp = formaPago.toLowerCase();
+          const montoPendiente = ptArmado?.total || pedido.total || 0;
+          const montoEfectivo = fp === "mixto"
+            ? (ptArmado?.monto_efectivo || 0)
+            : fp === "efectivo" ? montoPendiente : 0;
+          const esMixto = fp === "mixto";
+          const esEfectivo = fp === "efectivo";
+
+          const fmtMonto = (n: number) =>
+            "$" + Math.round(n).toLocaleString("es-AR");
+
+          const horarioTexto = horarioCierre ? ` hasta las ${horarioCierre}hs` : "";
+          let mensaje = `Hola ${primerNombre}, ya podés pasar a retirar tu pedido${horarioTexto}.`;
+          if (esMixto && montoEfectivo > 0) {
+            mensaje += ` Te quedan ${fmtMonto(montoEfectivo)} para completar el pago.`;
+          } else if (esEfectivo && montoPendiente > 0) {
+            mensaje += ` Recordá que el total a abonar es ${fmtMonto(montoPendiente)}.`;
+          }
+
           fetch("/api/notificaciones/enviar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              titulo: "Tu pedido esta listo para retirar",
-              mensaje: `Tu pedido #${pedido.numero} ya esta armado. Podes pasar a buscarlo cuando quieras!`,
+              titulo: `${primerNombre}, tu pedido está listo 🎉`,
+              mensaje,
               tipo: "pedido",
               url: "/cuenta/pedidos",
               segmentacion: { tipo: "cliente", valor: Number(clienteAuthId) },

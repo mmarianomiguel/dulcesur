@@ -110,6 +110,54 @@ function getArgentinaToday() {
   });
 }
 
+function buildNotifMensaje({
+  tipo,
+  primerNombre,
+  formaPago,
+  montoPendiente,
+  montoEfectivo,
+  horarioCierre,
+}: {
+  tipo: "retiro" | "envio";
+  primerNombre: string;
+  formaPago: string;
+  montoPendiente: number;
+  montoEfectivo: number;
+  horarioCierre?: string;
+}): { titulo: string; mensaje: string } {
+  const fp = (formaPago || "").toLowerCase();
+  const esMixto = fp === "mixto";
+  const esEfectivo = fp === "efectivo";
+
+  const fmtMonto = (n: number) =>
+    "$" + Math.round(n).toLocaleString("es-AR");
+
+  if (tipo === "retiro") {
+    const horario = horarioCierre ? ` hasta las ${horarioCierre}hs` : "";
+    let mensaje = `Hola ${primerNombre}, ya podés pasar a retirar tu pedido${horario}.`;
+    if (esMixto && montoEfectivo > 0) {
+      mensaje += ` Te quedan ${fmtMonto(montoEfectivo)} para completar el pago.`;
+    } else if (esEfectivo && montoPendiente > 0) {
+      mensaje += ` Recordá que el total a abonar es ${fmtMonto(montoPendiente)}.`;
+    }
+    return {
+      titulo: `${primerNombre}, tu pedido está listo 🎉`,
+      mensaje,
+    };
+  } else {
+    let mensaje = `Hola ${primerNombre}, ¡tu pedido es el próximo a entregar! Ya salimos hacia tu local.`;
+    if (esMixto && montoEfectivo > 0) {
+      mensaje += ` Te quedan ${fmtMonto(montoEfectivo)} para completar el pago.`;
+    } else if (esEfectivo && montoPendiente > 0) {
+      mensaje += ` Recordá que el total a abonar es ${fmtMonto(montoPendiente)}.`;
+    }
+    return {
+      titulo: `${primerNombre}, tu pedido está en camino 🛵`,
+      mensaje,
+    };
+  }
+}
+
 export default function HojaDeRutaPage() {
   const [selectedDate, setSelectedDate] = useState(getArgentinaToday());
   const [ventas, setVentas] = useState<VentaRow[]>([]);
@@ -154,6 +202,16 @@ export default function HojaDeRutaPage() {
   const [notifSending, setNotifSending] = useState(false);
   const [notifSent, setNotifSent] = useState(false);
   const [showNotifDialog, setShowNotifDialog] = useState(false);
+  const [notifSiguienteDialog, setNotifSiguienteDialog] = useState<{
+    open: boolean;
+    clienteNombre: string;
+    clienteAuthId: string | null;
+    numeroPedido: string;
+    formaPago: string;
+    montoPendiente: number;
+    montoEfectivo: number;
+  } | null>(null);
+  const [notifSiguienteLoading, setNotifSiguienteLoading] = useState(false);
 
   const fetchVentas = useCallback(async () => {
     setLoading(true);
@@ -863,8 +921,10 @@ export default function HojaDeRutaPage() {
         await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
       }
     }
-    // Notificar al siguiente cliente en la ruta
-    const grupoActualIdx = clientGroups.findIndex(g => g.ventas.some(v => ids.includes(v.id)));
+    // Buscar el siguiente cliente en la ruta antes de remover el actual
+    const grupoActualIdx = clientGroups.findIndex(g =>
+      g.ventas.some(v => ids.includes(v.id))
+    );
     const siguienteGrupo = clientGroups[grupoActualIdx + 1];
 
     if (siguienteGrupo && siguienteGrupo.ventas.length > 0) {
@@ -872,24 +932,26 @@ export default function HojaDeRutaPage() {
       if (ventaSiguiente.numero) {
         const { data: ptSiguiente } = await supabase
           .from("pedidos_tienda")
-          .select("cliente_auth_id")
+          .select("cliente_auth_id, metodo_pago, monto_efectivo, total")
           .eq("numero", ventaSiguiente.numero)
           .maybeSingle();
 
-        const clienteAuthIdSiguiente = ptSiguiente?.cliente_auth_id;
-        if (clienteAuthIdSiguiente) {
-          fetch("/api/notificaciones/enviar", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              titulo: "Tu pedido esta en camino",
-              mensaje: "El repartidor ya esta yendo hacia tu domicilio. En breve llega!",
-              tipo: "pedido",
-              url: "/cuenta/pedidos",
-              segmentacion: { tipo: "cliente", valor: Number(clienteAuthIdSiguiente) },
-            }),
-          }).catch(() => {});
-        }
+        // Calcular monto pendiente en efectivo
+        const formaPago = ptSiguiente?.metodo_pago || ventaSiguiente.forma_pago || "";
+        const montoPendiente = Math.max(0, ventaSiguiente.total - (pagadoPorVenta[ventaSiguiente.id] || 0));
+        const montoEfectivo = formaPago.toLowerCase() === "mixto"
+          ? (ptSiguiente?.monto_efectivo || 0)
+          : formaPago.toLowerCase() === "efectivo" ? montoPendiente : 0;
+
+        setNotifSiguienteDialog({
+          open: true,
+          clienteNombre: siguienteGrupo.cliente?.nombre || "el siguiente cliente",
+          clienteAuthId: ptSiguiente?.cliente_auth_id || null,
+          numeroPedido: ventaSiguiente.numero,
+          formaPago,
+          montoPendiente,
+          montoEfectivo,
+        });
       }
     }
 
@@ -1148,6 +1210,44 @@ export default function HojaDeRutaPage() {
       console.error("Error sending notifications:", err);
     } finally {
       setNotifSending(false);
+    }
+  };
+
+  const enviarNotifSiguiente = async () => {
+    if (!notifSiguienteDialog?.clienteAuthId) return;
+    setNotifSiguienteLoading(true);
+
+    const nombre = notifSiguienteDialog.clienteNombre;
+    const primerNombre = nombre.trim().split(" ")[0];
+
+    const { titulo, mensaje } = buildNotifMensaje({
+      tipo: "envio",
+      primerNombre,
+      formaPago: notifSiguienteDialog.formaPago,
+      montoPendiente: notifSiguienteDialog.montoPendiente,
+      montoEfectivo: notifSiguienteDialog.montoEfectivo,
+    });
+
+    try {
+      await fetch("/api/notificaciones/enviar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo,
+          mensaje,
+          tipo: "pedido",
+          url: "/cuenta/pedidos",
+          segmentacion: {
+            tipo: "cliente",
+            valor: Number(notifSiguienteDialog.clienteAuthId),
+          },
+        }),
+      });
+    } catch {
+      console.error("Error enviando notificacion al siguiente");
+    } finally {
+      setNotifSiguienteLoading(false);
+      setNotifSiguienteDialog(null);
     }
   };
 
@@ -2559,6 +2659,88 @@ export default function HojaDeRutaPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog — notificar al siguiente cliente */}
+      {notifSiguienteDialog?.open && (() => {
+        const nombre = notifSiguienteDialog.clienteNombre;
+        const primerNombre = nombre.trim().split(" ")[0];
+        const tieneApp = !!notifSiguienteDialog.clienteAuthId;
+        const { titulo, mensaje } = buildNotifMensaje({
+          tipo: "envio",
+          primerNombre,
+          formaPago: notifSiguienteDialog.formaPago,
+          montoPendiente: notifSiguienteDialog.montoPendiente,
+          montoEfectivo: notifSiguienteDialog.montoEfectivo,
+        });
+
+        return (
+          <Dialog
+            open={notifSiguienteDialog.open}
+            onOpenChange={(o) => { if (!o) setNotifSiguienteDialog(null); }}
+          >
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-primary" />
+                  Avisar al siguiente cliente?
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {/* Info del siguiente cliente */}
+                <div className="bg-muted/50 rounded-xl p-4 space-y-1">
+                  <p className="text-sm font-semibold text-foreground">{nombre}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pedido #{notifSiguienteDialog.numeroPedido}
+                  </p>
+                </div>
+
+                {tieneApp ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Se le enviara esta notificacion:
+                    </p>
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 space-y-1">
+                      <p className="text-sm font-semibold text-blue-900">{titulo}</p>
+                      <p className="text-xs text-blue-700">{mensaje}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl p-3">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700">
+                      Este cliente no tiene la app instalada o no activo las
+                      notificaciones. No se puede enviar push.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setNotifSiguienteDialog(null)}
+                    disabled={notifSiguienteLoading}
+                  >
+                    Omitir
+                  </Button>
+                  {tieneApp && (
+                    <Button
+                      className="flex-1"
+                      onClick={enviarNotifSiguiente}
+                      disabled={notifSiguienteLoading}
+                    >
+                      {notifSiguienteLoading
+                        ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Enviando...</>
+                        : <><Bell className="w-4 h-4 mr-1.5" />Notificar</>
+                      }
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }
