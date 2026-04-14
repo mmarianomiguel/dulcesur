@@ -86,6 +86,7 @@ interface VentaRow {
   metodo_entrega: string | null;
   clientes: ClienteInfo | null;
   venta_items: VentaItemRow[];
+  pedido_armado: { orden_entrega: number | null; estado: string | null } | null;
 }
 
 interface CuentaBancaria {
@@ -218,7 +219,7 @@ export default function HojaDeRutaPage() {
     let query = supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion), pedido_armado(orden_entrega, estado)"
       )
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -360,13 +361,25 @@ export default function HojaDeRutaPage() {
     // Find the max saved orden to append new ventas after it
     const maxSaved = Object.values(saved).length > 0 ? Math.max(...Object.values(saved)) : 0;
     let nextOrden = maxSaved + 1;
+    // For ventas not yet saved, sort by pedido_armado.orden_entrega (if available) before assigning sequential numbers
+    const unsavedRows = rows.filter((v) => saved[v.id] === undefined && orden[v.id] === undefined);
+    const unsavedSorted = [...unsavedRows].sort((a, b) => {
+      const oa = a.pedido_armado?.orden_entrega ?? null;
+      const ob = b.pedido_armado?.orden_entrega ?? null;
+      if (oa !== null && ob !== null) return oa - ob;
+      if (oa !== null) return -1;
+      if (ob !== null) return 1;
+      return 0;
+    });
+    const unsavedOrderMap: Record<string, number> = {};
+    unsavedSorted.forEach((v) => { unsavedOrderMap[v.id] = nextOrden++; });
     rows.forEach((v) => {
       if (saved[v.id] !== undefined) {
         newOrden[v.id] = saved[v.id];
       } else if (orden[v.id] !== undefined) {
         newOrden[v.id] = orden[v.id];
       } else {
-        newOrden[v.id] = nextOrden++;
+        newOrden[v.id] = unsavedOrderMap[v.id];
       }
     });
     setOrden(newOrden);
