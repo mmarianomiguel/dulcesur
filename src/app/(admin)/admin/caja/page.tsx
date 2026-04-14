@@ -1139,9 +1139,9 @@ export default function CajaPage() {
       .filter((m) => m.tipo === "egreso" || (m.tipo === "cancelacion" && (m.referencia_tipo === "nota_credito" || m.referencia_tipo === "anulacion") && m.metodo_pago === "Efectivo"))
       .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: Math.abs(m.monto) }));
 
-    // Individual ingreso items (non-venta, non-cobro_saldo) for breakdown display
+    // Individual ingreso items (non-venta, non-cobro_saldo, non-cobro) for breakdown display
     const ingresosDetalle = movements
-      .filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo")
+      .filter((m) => m.tipo === "ingreso" && m.referencia_tipo !== "venta" && m.referencia_tipo !== "cobro_saldo" && m.referencia_tipo !== "cobro")
       .map((m) => ({ descripcion: m.descripcion || "Sin descripción", monto: m.monto, metodo: m.metodo_pago || "Efectivo" }));
 
     // Ventas breakdown by ACTUAL money flow (caja_movimientos + CC entries)
@@ -1600,7 +1600,7 @@ export default function CajaPage() {
                   <p className="text-lg font-medium text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
                   <div className="mt-2 pt-2 border-t space-y-1.5">
                     {movements
-                      .filter(m => m.tipo === "ingreso" && m.referencia_tipo === "cobro_saldo")
+                      .filter(m => m.tipo === "ingreso" && (m.referencia_tipo === "cobro_saldo" || m.referencia_tipo === "cobro"))
                       .map((m, i) => {
                         const desc = m.descripcion || "";
                         const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
