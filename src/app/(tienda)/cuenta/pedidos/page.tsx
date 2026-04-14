@@ -52,6 +52,8 @@ interface VentaRecord {
   created_at: string;
   forma_pago: string;
   total: number;
+  subtotal?: number;
+  recargo_porcentaje?: number;
   origen: string;
   estado?: string;
   entregado?: boolean;
@@ -394,6 +396,8 @@ export default function PedidosPage() {
           created_at: v.created_at,
           forma_pago: v.forma_pago,
           total: v.total,
+          subtotal: v.subtotal || undefined,
+          recargo_porcentaje: v.recargo_porcentaje || undefined,
           origen: v.origen || "admin",
           estado: v.estado || undefined,
           entregado: v.entregado || false,
