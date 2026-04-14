@@ -2285,14 +2285,15 @@ export default function ClientesPage() {
                                         const ncAmt = info.linkedNCs.reduce((s: number, nc: any) => s + (nc.baked ? nc.total : 0), 0);
                                         const expectedBase = info.subtotal - descAmt - ncAmt;
                                         const impliedSurcharge = Math.max(0, info.total - expectedBase);
-                                        if (impliedSurcharge > 0) {
-                                          const impliedBase = transferTotal - impliedSurcharge;
-                                          recPct = impliedBase > 0 ? Math.round(impliedSurcharge / impliedBase * 10000) / 100 : 2;
+                                        if (impliedSurcharge > 0 && expectedBase > 0) {
+                                          recPct = Math.round(impliedSurcharge / expectedBase * 10000) / 100;
                                         }
                                       }
-                                      // Surcharge: transferTotal includes surcharge. base = transferTotal / (1 + pct/100)
-                                      const transferBase = recPct > 0 && transferTotal > 0 ? Math.round(transferTotal / (1 + recPct / 100)) : transferTotal;
-                                      const surchargeAmount = transferTotal - transferBase;
+                                      const descAmt2 = info.descuento_porcentaje > 0 ? Math.round(info.subtotal * info.descuento_porcentaje / 100) : 0;
+                                      const ncAmt2 = info.linkedNCs.reduce((s: number, nc: any) => s + (nc.baked ? nc.total : 0), 0);
+                                      const baseNeta2 = info.subtotal - descAmt2 - ncAmt2;
+                                      const surchargeAmount = recPct > 0 && transferTotal > 0 ? Math.round(baseNeta2 * recPct / 100) : 0;
+                                      const transferBase = transferTotal - surchargeAmount;
                                       // Cobro posterior: monto_pagado includes cobro allocations not in caja
                                       const cajaTotal = efectivoTotal + transferTotal + ccTotal;
                                       const cobroPosterior = Math.max(0, Math.round((info.effectivePaid - cajaTotal) * 100) / 100);
