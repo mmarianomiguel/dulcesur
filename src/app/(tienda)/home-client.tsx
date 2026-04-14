@@ -473,24 +473,6 @@ function ProductosDestacadosBlock({
       className="py-8 md:py-10 bg-gray-50/50"
       onMouseEnter={() => setPausado(true)}
       onMouseLeave={() => setPausado(false)}
-      onTouchStart={(e) => {
-        setPausado(true);
-        touchStartX.current = e.touches[0].clientX;
-      }}
-      onTouchEnd={(e) => {
-        if (touchStartX.current !== null) {
-          const diff = touchStartX.current - e.changedTouches[0].clientX;
-          if (diff > 50) {
-            // Swipe izquierda → siguiente grupo
-            setGrupoActual((g) => Math.min(grupos - 1, g + 1));
-          } else if (diff < -50) {
-            // Swipe derecha → grupo anterior
-            setGrupoActual((g) => Math.max(0, g - 1));
-          }
-          touchStartX.current = null;
-        }
-        setTimeout(() => setPausado(false), 3000);
-      }}
     >
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
@@ -513,17 +495,85 @@ function ProductosDestacadosBlock({
         </div>
         <div className="w-12 h-0.5 bg-primary rounded-full mb-4" />
 
-        {/* Grid 2x2 mobile / 1x4 desktop */}
+        {/* Grid: scroll horizontal 2x2 en mobile con peek / 1x4 en desktop */}
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
-          </div>
+          <>
+            {/* Mobile skeleton */}
+            <div className="md:hidden -mx-4 px-4 grid grid-cols-2 gap-3" style={{ gridTemplateColumns: "repeat(2, calc(50% - 20px))", overflowX: "auto", scrollbarWidth: "none" }}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex-shrink-0"><SkeletonCard /></div>
+              ))}
+            </div>
+            {/* Desktop skeleton */}
+            <div className="hidden md:grid grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          </>
         ) : activeProds.length === 0 ? (
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
-          </div>
+          <>
+            {/* Mobile: scroll horizontal con peek — se ven 2 cards + borde de la siguiente */}
+            <div
+              className="md:hidden -mx-4"
+              style={{ overflowX: "auto", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+              onTouchStart={(e) => {
+                setPausado(true);
+                touchStartX.current = e.touches[0].clientX;
+              }}
+              onTouchEnd={(e) => {
+                if (touchStartX.current !== null) {
+                  const diff = touchStartX.current - e.changedTouches[0].clientX;
+                  if (diff > 50) setGrupoActual((g) => Math.min(grupos - 1, g + 1));
+                  else if (diff < -50) setGrupoActual((g) => Math.max(0, g - 1));
+                  touchStartX.current = null;
+                }
+                setTimeout(() => setPausado(false), 3000);
+              }}
+            >
+              <div
+                className="flex gap-3 px-4"
+                style={{ width: "max-content" }}
+              >
+                {/* Grupo actual: 2 columnas de 2 filas */}
+                <div className="grid grid-rows-2 grid-cols-2 gap-3" style={{ width: "calc(100vw - 56px)" }}>
+                  {grupoProds.slice(0, 4).map((prod, idx) => (
+                    <div key={prod.id}>
+                      {renderProductCard(prod, idx < 2)}
+                    </div>
+                  ))}
+                </div>
+                {/* Peek del siguiente grupo — solo el borde de las primeras 2 cards */}
+                {grupoActual < grupos - 1 && (
+                  <div className="grid grid-rows-2 gap-3" style={{ width: "32px", overflow: "hidden", flexShrink: 0 }}>
+                    {activeProds.slice((grupoActual + 1) * GRUPO_SIZE, (grupoActual + 1) * GRUPO_SIZE + 2).map((prod) => (
+                      <div
+                        key={prod.id}
+                        className="rounded-2xl border border-gray-100 bg-white overflow-hidden"
+                        style={{ aspectRatio: "1", minHeight: "0" }}
+                      >
+                        {prod.imagen_url ? (
+                          <img
+                            src={prod.imagen_url}
+                            alt=""
+                            className="w-full h-full object-contain p-2"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-50" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Desktop: grilla 1x4 normal */}
+            <div className="hidden md:grid grid-cols-4 gap-3">
+              {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
+            </div>
+          </>
         )}
 
         {/* Navegación entre grupos */}
