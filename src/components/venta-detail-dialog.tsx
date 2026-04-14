@@ -511,7 +511,8 @@ export function VentaDetailDialog({
                   const baseConDescRecargo = recPct > 0
                     ? Math.round(rawSubtotal * (1 - descPct / 100) * (1 + recPct / 100))
                     : rawSubtotal;
-                  return baseConDescRecargo + (data.costo_envio || 0);
+                  const ncAmt = (ncs || []).reduce((s, nc) => s + nc.total, 0);
+                  return Math.max(0, baseConDescRecargo + (data.costo_envio || 0) - ncAmt);
                 })()}
                 subtotalItems={itemsSubtotal}
                 costoEnvio={envio}
