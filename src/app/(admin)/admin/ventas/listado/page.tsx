@@ -1587,7 +1587,35 @@ export default function ListadoVentasPage() {
   };
 
   // Add product to pedido
-  const poAddProduct = (product: ProductoSearch, pres?: { nombre: string; precio: number; unidades_por_presentacion: number }) => {
+  const poAddProduct = async (product: ProductoSearch, pres?: { nombre: string; precio: number; unidades_por_presentacion: number }) => {
+    if (product.es_combo) {
+      const { data: comboItems } = await supabase
+        .from("combo_items")
+        .select("cantidad, productos!combo_items_producto_id_fkey(nombre, stock)")
+        .eq("combo_id", product.id);
+      const sinStock = (comboItems || []).filter((ci: any) =>
+        ((ci.productos?.stock || 0) < ci.cantidad)
+      );
+      if (sinStock.length > 0) {
+        showAdminToast(
+          `Sin stock suficiente: ${sinStock.map((ci: any) => ci.productos?.nombre).join(", ")}`,
+          "info"
+        );
+      }
+    } else {
+      const { data: prodFresh } = await supabase
+        .from("productos")
+        .select("stock")
+        .eq("id", product.id)
+        .single();
+      if ((prodFresh?.stock ?? 0) <= 0) {
+        showAdminToast(
+          `Sin stock: ${product.nombre}`,
+          "info"
+        );
+      }
+    }
+
     const presNombre = pres?.nombre || "Unidad";
     const presPrecio = pres?.precio ?? product.precio;
     const presUpp = pres?.unidades_por_presentacion ?? 1;
@@ -3257,7 +3285,10 @@ export default function ListadoVentasPage() {
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                             <span className="font-mono">{p.codigo}</span>
                             <span>·</span>
-                            {stockVal !== null && <><span>Stock: <strong className={stockVal <= 0 ? "text-red-500" : ""}>{stockVal}</strong></span><span>·</span></>}
+                            {p.es_combo
+                              ? <><span className="text-violet-600 font-medium">Combo</span><span>·</span></>
+                              : stockVal !== null && <><span>Stock: <strong className={stockVal <= 0 ? "text-red-500" : ""}>{stockVal}</strong></span><span>·</span></>
+                            }
                             <span className="font-semibold text-foreground">{formatCurrency(p.precio)}</span>
                           </div>
                         </div>
