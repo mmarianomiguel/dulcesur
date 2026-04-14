@@ -24,7 +24,7 @@ interface SendBody {
   url?: string;
   plantilla_id?: string;
   enviada_por?: string;
-  segmentacion: { tipo: string; valor?: string | number | number[] };
+  segmentacion: { tipo: string; valor?: string | number | string[] | number[] };
 }
 
 export async function POST(req: NextRequest) {
@@ -41,14 +41,14 @@ export async function POST(req: NextRequest) {
     if (notifErr) throw notifErr;
 
     // 2. Resolve recipients based on segmentation
-    let clientes: { id: number }[] = [];
+    let clientes: { id: string }[] = [];
     let usuarios: { id: string }[] = [];
 
     if (segmentacion.tipo === "todos") {
       const { data } = await supabase.from("clientes").select("id").eq("activo", true);
       clientes = data || [];
     } else if (segmentacion.tipo === "cliente") {
-      clientes = [{ id: Number(segmentacion.valor) }];
+      clientes = [{ id: String(segmentacion.valor) }];
     } else if (segmentacion.tipo === "zona") {
       const { data } = await supabase
         .from("clientes")
@@ -75,8 +75,8 @@ export async function POST(req: NextRequest) {
       const activosSet = new Set((activos || []).map((v: any) => v.cliente_id));
       clientes = (allClientes || []).filter((c: any) => !activosSet.has(c.id));
     } else if (segmentacion.tipo === "clientes_ids") {
-      const ids = segmentacion.valor as number[];
-      clientes = (Array.isArray(ids) ? ids : []).map((id) => ({ id }));
+      const ids = segmentacion.valor as unknown as string[];
+      clientes = (Array.isArray(ids) ? ids : []).map((id) => ({ id: String(id) }));
     }
 
     // 3. Check preferences - filter out clients who disabled this notification type
