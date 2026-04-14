@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { TrendingUp, Package, ArrowLeft, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { TrendingUp, Package, ArrowLeft, Search, X, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import { productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
@@ -46,6 +46,7 @@ export default function AumentosRecientesClient({
   const [sort, setSort] = useState<SortKey>("reciente");
   const [page, setPage] = useState(1);
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
+  const [filtroOpen, setFiltroOpen] = useState(false);
 
   // Categorías únicas para los filtros
   const categorias = useMemo(() => {
@@ -138,99 +139,164 @@ export default function AumentosRecientesClient({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header sticky */}
+      {/* Header sticky compacto */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors mb-3"
-          >
-            <ArrowLeft className="w-4 h-4" /> Volver al inicio
-          </Link>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
-              <TrendingUp className="w-5 h-5 text-orange-500" />
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-3.5 h-3.5 text-orange-500" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-sm font-bold text-gray-900 leading-tight">Aumentos Recientes</h1>
+                <p className="text-[11px] text-gray-400 leading-tight">
+                  {totalCount} producto{totalCount !== 1 ? "s" : ""}
+                  {(search || categoriaFiltro !== "todos") && " · filtrado"}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Aumentos Recientes</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {productos.length === 0
-                  ? "Sin actualizaciones en los últimos 3 días"
-                  : `${productos.length} producto${productos.length !== 1 ? "s" : ""} con precio actualizado en los últimos 3 días`}
-              </p>
-            </div>
-          </div>
-
-          {/* Búsqueda */}
-          {productos.length > 0 && (
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar producto, categoría o marca..."
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-9 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-300 transition-all"
-              />
-              {search && (
-                <button
-                  onClick={() => handleSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Filtros por categoría */}
-          {categorias.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {productos.length > 0 && (
               <button
-                onClick={() => handleFiltro("todos")}
-                className={`px-3 py-1.5 rounded-full border text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${
-                  categoriaFiltro === "todos"
+                onClick={() => setFiltroOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all shrink-0 ${
+                  search || categoriaFiltro !== "todos" || sort !== "reciente"
                     ? "bg-orange-500 border-orange-500 text-white"
-                    : "bg-white border-gray-200 text-gray-600 hover:border-orange-200"
+                    : "bg-white border-gray-200 text-gray-600 hover:border-orange-300"
                 }`}
               >
-                Todos
+                <SlidersHorizontal className="w-3 h-3" />
+                Filtrar
+                {(search || categoriaFiltro !== "todos" || sort !== "reciente") && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/80 ml-0.5" />
+                )}
               </button>
-              {categorias.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => handleFiltro(cat.id)}
-                  className={`px-3 py-1.5 rounded-full border text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${
-                    categoriaFiltro === cat.id
-                      ? "bg-orange-500 border-orange-500 text-white"
-                      : "bg-white border-gray-200 text-gray-600 hover:border-orange-200"
-                  }`}
-                >
-                  {cat.nombre}
-                </button>
-              ))}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Sort row */}
-      {productos.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <span className="text-xs text-gray-500">
-            {totalCount} producto{totalCount !== 1 ? "s" : ""}
-            {search && ` para "${search}"`}
-          </span>
-          <select
-            value={sort}
-            onChange={(e) => handleSort(e.target.value as SortKey)}
-            className="text-xs text-gray-700 border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
-          >
-            <option value="reciente">Más reciente</option>
-            <option value="pct_desc">Mayor aumento %</option>
-            <option value="monto_desc">Mayor aumento $</option>
-            <option value="nombre_asc">Nombre A-Z</option>
-          </select>
+      {/* Panel de filtros — overlay desde abajo */}
+      {filtroOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setFiltroOpen(false)}
+          />
+          {/* Panel */}
+          <div className="relative bg-white rounded-t-2xl shadow-xl max-h-[80vh] overflow-y-auto">
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="px-4 pb-6 pt-2 space-y-5">
+              {/* Header del panel */}
+              <div className="flex items-center justify-between">
+                <span className="text-base font-bold text-gray-900">Filtros</span>
+                <button
+                  onClick={() => {
+                    handleSearch("");
+                    handleFiltro("todos");
+                    handleSort("reciente");
+                  }}
+                  className="text-xs text-orange-500 font-medium hover:text-orange-600 transition-colors"
+                >
+                  Limpiar todo
+                </button>
+              </div>
+
+              {/* Buscador */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-2">Buscar</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Producto, categoría o marca..."
+                    value={search}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    className="w-full pl-9 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-300 transition-all"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => handleSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Ordenar */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-2">Ordenar por</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "reciente", label: "Más reciente" },
+                    { value: "pct_desc", label: "Mayor aumento %" },
+                    { value: "monto_desc", label: "Mayor aumento $" },
+                    { value: "nombre_asc", label: "Nombre A-Z" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleSort(opt.value as SortKey)}
+                      className={`px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                        sort === opt.value
+                          ? "bg-orange-500 border-orange-500 text-white"
+                          : "bg-white border-gray-200 text-gray-600 hover:border-orange-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categorías */}
+              {categorias.length > 1 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 block mb-2">Categoría</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleFiltro("todos")}
+                      className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                        categoriaFiltro === "todos"
+                          ? "bg-orange-500 border-orange-500 text-white"
+                          : "bg-white border-gray-200 text-gray-600 hover:border-orange-200"
+                      }`}
+                    >
+                      Todos
+                    </button>
+                    {categorias.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => handleFiltro(cat.id)}
+                        className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                          categoriaFiltro === cat.id
+                            ? "bg-orange-500 border-orange-500 text-white"
+                            : "bg-white border-gray-200 text-gray-600 hover:border-orange-200"
+                        }`}
+                      >
+                        {cat.nombre}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Botón aplicar */}
+              <button
+                onClick={() => setFiltroOpen(false)}
+                className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-colors"
+              >
+                Ver {totalCount} resultado{totalCount !== 1 ? "s" : ""}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
