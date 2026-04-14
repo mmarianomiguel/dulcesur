@@ -2498,8 +2498,18 @@ export default function ListadoVentasPage() {
 
   // Unified stats — NCs are already reflected in parent venta's total, don't subtract again
   const activeOrders = filteredOrders.filter((o) => o.estado !== "cancelado" && o.estado !== "anulada" && !o._tipo_comprobante?.includes("Nota de Crédito"));
-  const ncTotal = filteredOrders.filter((o) => o.estado !== "cancelado" && o.estado !== "anulada" && o._tipo_comprobante?.includes("Nota de Crédito")).reduce((s, o) => s + o.total, 0);
-  const unifiedTotal = activeOrders.reduce((s, o) => s + o.total, 0) - ncTotal;
+
+  // Para cada venta activa, calcular el total correcto descontando NC con recargo
+  const unifiedTotal = activeOrders.reduce((s, o) => {
+    const ventaId = (o as any)._ventaId || "";
+    const ncAmt = ncPorVenta[ventaId] || 0;
+    if (ncAmt === 0) return s + o.total;
+    const ventaSubtotal = (o as any).subtotal || o.total;
+    const recPct = (o as any)._recargo_porcentaje || 0;
+    const baseNeta = ventaSubtotal - ncAmt;
+    const recargo = recPct > 0 && baseNeta > 0 ? Math.round(baseNeta * recPct / 100) : 0;
+    return s + baseNeta + recargo;
+  }, 0);
   const unifiedPendientes = filteredOrders.filter((o) => o.estado === "pendiente" || o.estado === "armado").length;
 
   // ══════════════════════════════════════════════════════════════
@@ -2800,19 +2810,28 @@ export default function ListadoVentasPage() {
                                 </>
                               );
                             }
-                            // Total shown is the stored total (already net of NC)
-                            return (
-                              <>
-                                <p className={`text-lg font-bold ${cancelled ? "line-through text-muted-foreground" : ""}`}>
-                                  {formatCurrency(order.total)}
-                                </p>
-                                {ncAmt > 0 && !cancelled && (
+                            // Total con NC recalculado correctamente
+                            if (ncAmt > 0 && !cancelled) {
+                              const ventaSubtotal = (order as any).subtotal || order.total;
+                              const recPct = (order as any)._recargo_porcentaje || 0;
+                              const baseNeta = ventaSubtotal - ncAmt;
+                              const recargo = recPct > 0 && baseNeta > 0 ? Math.round(baseNeta * recPct / 100) : 0;
+                              const totalConNC = baseNeta + recargo;
+                              return (
+                                <>
+                                  <p className="text-sm text-muted-foreground line-through">{formatCurrency(order.total)}</p>
+                                  <p className="text-lg font-bold text-primary">{formatCurrency(totalConNC)}</p>
                                   <p className="text-[10px] text-red-500 flex items-center justify-end gap-1">
                                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
                                     NC -{formatCurrency(ncAmt)}
                                   </p>
-                                )}
-                              </>
+                                </>
+                              );
+                            }
+                            return (
+                              <p className={`text-lg font-bold ${cancelled ? "line-through text-muted-foreground" : ""}`}>
+                                {formatCurrency(order.total)}
+                              </p>
                             );
                           })()}
                           <p className="text-[10px] text-muted-foreground font-mono">#{order.numero}</p>
