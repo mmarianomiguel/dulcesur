@@ -1255,14 +1255,22 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               className="absolute inset-0 bg-black/40"
               onClick={() => setMobileFilters(false)}
             />
-            <div className="relative bg-white rounded-t-2xl shadow-xl flex flex-col" style={{ maxHeight: "75vh" }}>
+            <div className="relative bg-white rounded-t-2xl shadow-xl flex flex-col" style={{ maxHeight: "60vh" }}>
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1 shrink-0">
                 <div className="w-10 h-1 rounded-full bg-gray-200" />
               </div>
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
-                <span className="font-bold text-base text-gray-900">Filtros</span>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setMobileFilters(false)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  <span className="font-bold text-sm text-gray-900">Filtros</span>
+                </div>
                 <button
                   onClick={() => {
                     updateParams({
@@ -1277,11 +1285,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               </div>
 
               {/* Contenido scrolleable */}
-              <div className="overflow-y-auto flex-1 px-4 py-4 space-y-5">
+              <div className="overflow-y-auto flex-1 px-4 py-3 space-y-4">
 
                 {/* Ordenar */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ordenar por</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Ordenar por</p>
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { value: "recientes", label: "Más recientes" },
@@ -1306,7 +1314,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
                 {/* Tipo */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Tipo</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Tipo</p>
                   <div className="flex flex-wrap gap-2">
                     {[
                       { value: "", label: "Todos" },
@@ -1330,7 +1338,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
                 {/* Disponibilidad */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Disponibilidad</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Disponibilidad</p>
                   <div className="flex flex-wrap gap-2">
                     {[
                       { value: "", label: "Todos" },
