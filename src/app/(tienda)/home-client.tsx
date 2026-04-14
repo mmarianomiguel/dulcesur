@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { showToast } from "@/components/tienda/toast";
@@ -339,6 +339,7 @@ function ProductosDestacadosBlock({
   const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">(tabDefecto);
   const [grupoActual, setGrupoActual] = useState(0);
   const [pausado, setPausado] = useState(false);
+  const touchStartX = useRef<number | null>(null);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
@@ -472,8 +473,24 @@ function ProductosDestacadosBlock({
       className="py-8 md:py-10 bg-gray-50/50"
       onMouseEnter={() => setPausado(true)}
       onMouseLeave={() => setPausado(false)}
-      onTouchStart={() => setPausado(true)}
-      onTouchEnd={() => setTimeout(() => setPausado(false), 3000)}
+      onTouchStart={(e) => {
+        setPausado(true);
+        touchStartX.current = e.touches[0].clientX;
+      }}
+      onTouchEnd={(e) => {
+        if (touchStartX.current !== null) {
+          const diff = touchStartX.current - e.changedTouches[0].clientX;
+          if (diff > 50) {
+            // Swipe izquierda → siguiente grupo
+            setGrupoActual((g) => Math.min(grupos - 1, g + 1));
+          } else if (diff < -50) {
+            // Swipe derecha → grupo anterior
+            setGrupoActual((g) => Math.max(0, g - 1));
+          }
+          touchStartX.current = null;
+        }
+        setTimeout(() => setPausado(false), 3000);
+      }}
     >
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
