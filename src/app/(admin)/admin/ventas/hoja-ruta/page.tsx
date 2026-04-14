@@ -2194,6 +2194,8 @@ export default function HojaDeRutaPage() {
           forma_pago: detailVenta.forma_pago,
           metodo_entrega: detailVenta.metodo_entrega || undefined,
           total: detailVenta.total,
+          subtotal: detailVenta.subtotal || undefined,
+          recargo_porcentaje: detailVenta.recargo_porcentaje || undefined,
           observacion: detailVenta.observacion,
           entregado: detailVenta.entregado,
           nombre_cliente: detailVenta.clientes?.nombre || "Sin cliente",
