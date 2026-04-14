@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Send, Loader2, Users, User, MapPin, Shield, Clock,
-  CheckCircle, Smartphone, Tag, X,
+  CheckCircle, Smartphone, X, Search, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { showAdminToast } from "@/components/admin-toast";
 import { supabase } from "@/lib/supabase";
+import { productSlug } from "@/lib/utils";
 import type { NotificacionPlantilla } from "@/types/database";
 
 const SEG_TYPES = [
@@ -23,15 +24,6 @@ const SEG_TYPES = [
   { value: "inactividad", label: "Inactivos", icon: Clock },
 ];
 
-const GRUPOS_PLANTILLA = [
-  { label: "Pedidos", tipos: ["pedido"], destExcluir: ["admin"] },
-  { label: "Promociones", tipos: ["promocion"] },
-  { label: "Catálogo", tipos: ["catalogo"] },
-  { label: "Cuenta corriente", tipos: ["cuenta_corriente"] },
-  { label: "Recordatorios", tipos: ["recordatorio"] },
-  { label: "Admin", tipos: ["pedido"], soloAdmin: true },
-];
-
 const URL_POR_TIPO: Record<string, string> = {
   pedido: "/cuenta/pedidos",
   promocion: "/productos",
@@ -39,6 +31,24 @@ const URL_POR_TIPO: Record<string, string> = {
   cuenta_corriente: "/cuenta",
   recordatorio: "/productos",
 };
+
+const TIPO_COLORES: Record<string, string> = {
+  pedido: "#185FA5",
+  promocion: "#3B6D11",
+  catalogo: "#3B6D11",
+  cuenta_corriente: "#A32D2D",
+  recordatorio: "#854F0B",
+  sistema: "#5F5E5A",
+};
+
+const GRUPOS: { label: string; filtro: (p: NotificacionPlantilla) => boolean }[] = [
+  { label: "Pedidos", filtro: (p) => p.tipo === "pedido" && p.destinatario_default !== "admin" },
+  { label: "Promociones", filtro: (p) => p.tipo === "promocion" },
+  { label: "Catálogo y aumentos", filtro: (p) => p.tipo === "catalogo" },
+  { label: "Cuenta corriente", filtro: (p) => p.tipo === "cuenta_corriente" },
+  { label: "Recordatorios", filtro: (p) => p.tipo === "recordatorio" },
+  { label: "Admin", filtro: (p) => p.destinatario_default === "admin" },
+];
 
 export default function EnviarNotificacionPage() {
   const [plantillas, setPlantillas] = useState<NotificacionPlantilla[]>([]);
@@ -68,12 +78,19 @@ export default function EnviarNotificacionPage() {
   // Descuentos
   const [descuentos, setDescuentos] = useState<any[]>([]);
   const [selectedDescuento, setSelectedDescuento] = useState<any>(null);
+  const [clientesExclusivos, setClientesExclusivos] = useState<any[]>([]);
 
   // Horario
   const [horarioCierre, setHorarioCierre] = useState<string | null>(null);
 
-  // Clientes exclusivos del descuento
-  const [clientesExclusivos, setClientesExclusivos] = useState<any[]>([]);
+  // Producto (para plantilla catálogo)
+  const [productoQuery, setProductoQuery] = useState("");
+  const [productoResults, setProductoResults] = useState<any[]>([]);
+  const [selectedProducto, setSelectedProducto] = useState<any>(null);
+
+  // Marcas con aumentos (para plantilla aumento por marca)
+  const [marcasConAumento, setMarcasConAumento] = useState<any[]>([]);
+  const [selectedMarca, setSelectedMarca] = useState<any>(null);
 
   const fetchPlantillas = useCallback(async () => {
     try {
@@ -95,6 +112,37 @@ export default function EnviarNotificacionPage() {
       if (descRes.data) setDescuentos(descRes.data);
       if (cfgRes.data?.horario_atencion_fin) setHorarioCierre(cfgRes.data.horario_atencion_fin);
     });
+
+    // Cargar marcas con aumentos recientes
+    const hace3dias = new Date();
+    hace3dias.setDate(hace3dias.getDate() - 3);
+    supabase
+      .from("productos")
+      .select("marca_id, precio, precio_anterior, fecha_actualizacion, marcas(id, nombre)")
+      .eq("activo", true)
+      .gt("precio_anterior", 0)
+      .gt("fecha_actualizacion", hace3dias.toISOString())
+      .then(({ data }) => {
+        if (!data) return;
+        const filtrados = data.filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+        const marcaMap: Record<string, { nombre: string; pcts: number[]; fechas: string[] }> = {};
+        filtrados.forEach((p: any) => {
+          const marca = Array.isArray(p.marcas) ? p.marcas[0] : p.marcas;
+          if (!marca?.id || !marca?.nombre) return;
+          if (!marcaMap[marca.id]) marcaMap[marca.id] = { nombre: marca.nombre, pcts: [], fechas: [] };
+          const pct = ((Number(p.precio) - Number(p.precio_anterior)) / Number(p.precio_anterior)) * 100;
+          marcaMap[marca.id].pcts.push(pct);
+          if (p.fecha_actualizacion) marcaMap[marca.id].fechas.push(p.fecha_actualizacion);
+        });
+        const marcas = Object.entries(marcaMap).map(([id, v]) => ({
+          id,
+          nombre: v.nombre,
+          cantidad: v.pcts.length,
+          pct_promedio: Math.round((v.pcts.reduce((a, b) => a + b, 0) / v.pcts.length) * 10) / 10,
+          ultima_actualizacion: v.fechas.sort().reverse()[0] || null,
+        })).sort((a, b) => b.pct_promedio - a.pct_promedio);
+        setMarcasConAumento(marcas);
+      });
   }, [fetchPlantillas]);
 
   // Buscar clientes
@@ -103,7 +151,7 @@ export default function EnviarNotificacionPage() {
     const t = setTimeout(async () => {
       const { data } = await supabase
         .from("clientes")
-        .select("id, nombre, email, saldo")
+        .select("id, nombre, email")
         .eq("activo", true)
         .ilike("nombre", `%${clienteQuery}%`)
         .limit(8);
@@ -111,6 +159,22 @@ export default function EnviarNotificacionPage() {
     }, 300);
     return () => clearTimeout(t);
   }, [clienteQuery]);
+
+  // Buscar productos (para catálogo)
+  useEffect(() => {
+    if (productoQuery.length < 2) { setProductoResults([]); return; }
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from("productos")
+        .select("id, nombre, stock, categorias(nombre)")
+        .eq("activo", true)
+        .eq("visibilidad", "visible")
+        .ilike("nombre", `%${productoQuery}%`)
+        .limit(8);
+      setProductoResults(data || []);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [productoQuery]);
 
   // Estimar destinatarios
   useEffect(() => {
@@ -126,8 +190,6 @@ export default function EnviarNotificacionPage() {
       } else if (segTipo === "rol" && segValor) {
         const { count } = await supabase.from("usuarios").select("*", { count: "exact", head: true }).eq("activo", true).eq("rol", segValor);
         setEstimado(count ?? 0);
-      } else if (segTipo === "inactividad") {
-        setEstimado(null);
       } else {
         setEstimado(null);
       }
@@ -135,36 +197,29 @@ export default function EnviarNotificacionPage() {
     estimate();
   }, [segTipo, segValor, selectedCliente]);
 
-  const reemplazarVariables = (texto: string, cliente: any): string => {
+  const reemplazarVariables = (texto: string, cliente?: any): string => {
     const nombre = cliente?.nombre || "";
     const primerNombre = nombre.trim().split(" ")[0] || nombre;
-    const horario = horarioCierre
-      ? horarioCierre.substring(0, 5).replace(":00", "")
-      : "";
-
+    const horario = horarioCierre ? horarioCierre.substring(0, 5).replace(":00", "") : "";
     return texto
-      .replace(/\{\{nombre\}\}/g, primerNombre)
+      .replace(/\{\{nombre\}\}/g, primerNombre || "{{nombre}}")
       .replace(/\{\{horario\}\}/g, horario)
       .replace(/\{\{horario_texto\}\}/g, horario ? ` hasta las ${horario}hs` : "")
-      .replace(/\{\{cliente\}\}/g, primerNombre)
-      .replace(/\{\{total\}\}/g, "")
-      .replace(/\{\{monto_efectivo\}\}/g, "")
-      .replace(/\{\{saldo\}\}/g, cliente?.saldo ? `$${Math.round(cliente.saldo).toLocaleString("es-AR")}` : "");
+      .replace(/\{\{cliente\}\}/g, primerNombre || "{{nombre}}")
+      .replace(/\{\{producto\}\}/g, selectedProducto?.nombre || "{{producto}}")
+      .replace(/\{\{marca\}\}/g, selectedMarca?.nombre || "{{marca}}")
+      .replace(/\{\{porcentaje\}\}/g, selectedMarca ? String(selectedMarca.pct_promedio) : "{{porcentaje}}");
   };
 
   const handlePlantillaChange = (p: NotificacionPlantilla) => {
     setPlantillaSeleccionada(p);
     setSelectedDescuento(null);
+    setSelectedProducto(null);
+    setSelectedMarca(null);
     setClientesExclusivos([]);
     setModoLibre(false);
-
-    if (selectedCliente) {
-      setTitulo(reemplazarVariables(p.titulo_template, selectedCliente));
-      setMensaje(reemplazarVariables(p.mensaje_template, selectedCliente));
-    } else {
-      setTitulo(p.titulo_template);
-      setMensaje(p.mensaje_template);
-    }
+    setTitulo(selectedCliente ? reemplazarVariables(p.titulo_template, selectedCliente) : p.titulo_template);
+    setMensaje(selectedCliente ? reemplazarVariables(p.mensaje_template, selectedCliente) : p.mensaje_template);
     setTipo(p.tipo);
     setUrl(URL_POR_TIPO[p.tipo] || "");
   };
@@ -178,27 +233,42 @@ export default function EnviarNotificacionPage() {
     }
   };
 
+  const handleProductoSelect = (prod: any) => {
+    setSelectedProducto(prod);
+    setProductoResults([]);
+    setProductoQuery("");
+    // Actualizar título y mensaje con el producto
+    if (plantillaSeleccionada) {
+      const t = plantillaSeleccionada.titulo_template.replace(/\{\{producto\}\}/g, prod.nombre);
+      const m = plantillaSeleccionada.mensaje_template.replace(/\{\{producto\}\}/g, prod.nombre);
+      setTitulo(selectedCliente ? reemplazarVariables(t, selectedCliente) : t);
+      setMensaje(selectedCliente ? reemplazarVariables(m, selectedCliente) : m);
+      // URL al producto específico
+      setUrl(`/productos/${productSlug(prod.nombre, prod.id)}`);
+    }
+  };
+
+  const handleMarcaSelect = (marca: any) => {
+    setSelectedMarca(marca);
+    const nuevoTitulo = `Actualización de precios ${marca.nombre}`;
+    const nuevoMensaje = `Hola {{nombre}}, los precios de ${marca.nombre} aumentaron un ${marca.pct_promedio}% promedio. Te avisamos para que puedas planificar tu próximo pedido.`;
+    setTitulo(nuevoTitulo);
+    setMensaje(nuevoMensaje);
+    setUrl("/productos");
+  };
+
   const handleDescuentoSelect = async (desc: any) => {
     setSelectedDescuento(desc);
     const esExclusivo = desc.clientes_ids && desc.clientes_ids.length > 0;
-    const primerNombre = selectedCliente
-      ? selectedCliente.nombre.trim().split(" ")[0]
-      : "{{nombre}}";
+    const primerNombre = selectedCliente ? selectedCliente.nombre.trim().split(" ")[0] : "{{nombre}}";
     const pct = desc.porcentaje ? `${desc.porcentaje}%` : "";
     const vence = desc.fecha_fin
       ? new Date(desc.fecha_fin + "T12:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "long" })
       : null;
     const venceTexto = vence ? ` Válido hasta el ${vence}.` : "";
-
     if (esExclusivo) {
-      // Cargar nombres de los clientes exclusivos
-      const { data } = await supabase
-        .from("clientes")
-        .select("id, nombre")
-        .in("id", desc.clientes_ids);
+      const { data } = await supabase.from("clientes").select("id, nombre").in("id", desc.clientes_ids);
       setClientesExclusivos(data || []);
-      // Cambiar segmentación automáticamente a clientes exclusivos
-      setSegTipo("todos"); // se sobreescribe en handleSend
       setTitulo(`${primerNombre}, tenés un descuento exclusivo`);
       setMensaje(`Hola ${primerNombre}, tenés un ${pct} de descuento exclusivo.${venceTexto} ¡Aprovechalo!`);
     } else {
@@ -213,6 +283,8 @@ export default function EnviarNotificacionPage() {
   const limpiarPlantilla = () => {
     setPlantillaSeleccionada(null);
     setSelectedDescuento(null);
+    setSelectedProducto(null);
+    setSelectedMarca(null);
     setClientesExclusivos([]);
     setTitulo("");
     setMensaje("");
@@ -229,13 +301,10 @@ export default function EnviarNotificacionPage() {
       else if (segTipo === "zona") segmentacion.valor = segValor;
       else if (segTipo === "rol") segmentacion.valor = segValor;
       else if (segTipo === "inactividad") segmentacion.valor = Number(segValor) || 30;
-
-      // Si el descuento tiene clientes exclusivos, enviar solo a ellos
       if (selectedDescuento?.clientes_ids?.length > 0) {
         segmentacion.tipo = "clientes_ids";
         segmentacion.valor = selectedDescuento.clientes_ids;
       }
-
       const res = await fetch("/api/notificaciones/enviar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -265,33 +334,24 @@ export default function EnviarNotificacionPage() {
     && (segTipo !== "rol" || segValor)
     && (segTipo !== "inactividad" || segValor);
 
+  const esCatalogo = plantillaSeleccionada?.tipo === "catalogo";
+  const esAumentoPorMarca = plantillaSeleccionada?.nombre === "Aumento por marca";
+  const esPromocion = plantillaSeleccionada?.tipo === "promocion" && !esAumentoPorMarca;
+
   // Agrupar plantillas
-  const plantillasPorGrupo = [
-    {
-      label: "Pedidos",
-      items: plantillas.filter(p => p.tipo === "pedido" && p.destinatario_default !== "admin"),
-    },
-    {
-      label: "Promociones",
-      items: plantillas.filter(p => p.tipo === "promocion"),
-    },
-    {
-      label: "Catálogo",
-      items: plantillas.filter(p => p.tipo === "catalogo"),
-    },
-    {
-      label: "Cuenta corriente",
-      items: plantillas.filter(p => p.tipo === "cuenta_corriente"),
-    },
-    {
-      label: "Recordatorios",
-      items: plantillas.filter(p => p.tipo === "recordatorio"),
-    },
-    {
-      label: "Admin",
-      items: plantillas.filter(p => p.destinatario_default === "admin"),
-    },
-  ].filter(g => g.items.length > 0);
+  const grupos = GRUPOS.map((g) => ({
+    ...g,
+    items: plantillas.filter(g.filtro),
+  })).filter((g) => g.items.length > 0);
+
+  // Formato fecha relativa
+  const fechaRelativa = (fecha: string | null) => {
+    if (!fecha) return "";
+    const dias = Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000);
+    if (dias === 0) return "actualizado hoy";
+    if (dias === 1) return "actualizado ayer";
+    return `hace ${dias} días`;
+  };
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -314,57 +374,57 @@ export default function EnviarNotificacionPage() {
             Contenido
           </div>
           {!modoLibre && !plantillaSeleccionada && (
-            <button
-              onClick={() => { setModoLibre(true); limpiarPlantilla(); }}
-              className="text-xs text-muted-foreground hover:text-primary transition-colors"
-            >
+            <button onClick={() => { setModoLibre(true); limpiarPlantilla(); }} className="text-xs text-muted-foreground hover:text-primary transition-colors">
               Escribir sin plantilla
             </button>
           )}
           {(modoLibre || plantillaSeleccionada) && (
-            <button
-              onClick={() => { setModoLibre(false); limpiarPlantilla(); }}
-              className="text-xs text-muted-foreground hover:text-primary transition-colors"
-            >
-              Usar plantilla
+            <button onClick={() => { setModoLibre(false); limpiarPlantilla(); }} className="text-xs text-muted-foreground hover:text-primary transition-colors">
+              ← Elegir plantilla
             </button>
           )}
         </div>
 
-        {/* Selector de plantilla */}
+        {/* Selector de plantillas como cards agrupadas */}
         {!modoLibre && !plantillaSeleccionada && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Elegí una plantilla</label>
-            <div className="border rounded-xl overflow-hidden divide-y max-h-72 overflow-y-auto">
-              {plantillasPorGrupo.map((grupo) => (
-                <div key={grupo.label}>
-                  <div className="px-3 py-1.5 bg-muted/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {grupo.label}
-                  </div>
+          <div className="space-y-3">
+            {grupos.map((grupo) => (
+              <div key={grupo.label}>
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-0.5">
+                  {grupo.label}
+                </div>
+                <div className="space-y-1.5">
                   {grupo.items.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => handlePlantillaChange(p)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-muted/40 transition-colors border-b last:border-0"
+                      className="w-full text-left px-3 py-2.5 border border-border rounded-xl hover:border-border/80 hover:bg-muted/30 transition-all group"
                     >
-                      <div className="text-sm font-medium text-foreground">{p.nombre}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5 truncate">{p.titulo_template}</div>
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ background: TIPO_COLORES[p.tipo] || "#888" }}
+                        />
+                        <span className="text-sm font-medium text-foreground flex-1">{p.nombre}</span>
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 pl-4.5 truncate">
+                        {p.mensaje_template}
+                      </p>
                     </button>
                   ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Plantilla seleccionada */}
+        {/* Plantilla seleccionada — chip */}
         {plantillaSeleccionada && (
           <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 rounded-xl">
             <div className="min-w-0">
               <div className="text-sm font-medium text-blue-800 dark:text-blue-200 truncate">{plantillaSeleccionada.nombre}</div>
-              <div className="text-xs text-blue-600/70 dark:text-blue-400 mt-0.5">
-                {plantillaSeleccionada.tipo} · {url || "sin URL"}
-              </div>
+              <div className="text-xs text-blue-600/70 dark:text-blue-400 mt-0.5">{plantillaSeleccionada.tipo} · {url || "sin URL"}</div>
             </div>
             <button onClick={limpiarPlantilla} className="shrink-0 text-blue-400 hover:text-blue-600 transition-colors">
               <X className="h-4 w-4" />
@@ -372,16 +432,95 @@ export default function EnviarNotificacionPage() {
           </div>
         )}
 
-        {/* Selector de descuento — solo si tipo es promocion */}
-        {(plantillaSeleccionada?.tipo === "promocion" || (modoLibre && tipo === "promocion")) && (
+        {/* Selector de producto — solo para plantilla catálogo */}
+        {esCatalogo && (
           <div>
             <label className="text-xs text-muted-foreground block mb-1.5">
-              Descuento vigente <span className="text-muted-foreground/60">(opcional — autocompleta el mensaje)</span>
+              Producto <span className="text-muted-foreground/60">(buscá el que ingresó)</span>
+            </label>
+            {selectedProducto ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border border-green-100 dark:border-green-900 rounded-lg">
+                <span className="text-xs text-green-700 dark:text-green-400 font-medium flex-1">{selectedProducto.nombre}</span>
+                <button onClick={() => { setSelectedProducto(null); }} className="text-green-500 hover:text-green-700">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={productoQuery}
+                  onChange={(e) => setProductoQuery(e.target.value)}
+                  placeholder="Buscar producto..."
+                  className="pl-8"
+                />
+                {productoResults.length > 0 && (
+                  <div className="absolute z-10 top-full left-0 right-0 bg-white dark:bg-gray-900 border rounded-xl mt-1 shadow-lg max-h-48 overflow-y-auto">
+                    {productoResults.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleProductoSelect(p)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0"
+                      >
+                        <div className="font-medium">{p.nombre}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {p.categorias?.nombre && `${p.categorias.nombre} · `}Stock: {p.stock}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Selector de marca — solo para plantilla "Aumento por marca" */}
+        {esAumentoPorMarca && (
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">
+              Marca <span className="text-muted-foreground/60">(el % se calcula automáticamente)</span>
+            </label>
+            {marcasConAumento.length === 0 ? (
+              <div className="text-xs text-muted-foreground px-3 py-4 text-center border rounded-xl">
+                No hay marcas con aumentos en los últimos 3 días
+              </div>
+            ) : (
+              <div className="border rounded-xl overflow-hidden divide-y max-h-60 overflow-y-auto">
+                {marcasConAumento.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => handleMarcaSelect(m)}
+                    className={`w-full text-left px-3 py-2.5 flex items-center justify-between transition-colors ${
+                      selectedMarca?.id === m.id
+                        ? "bg-orange-50 dark:bg-orange-950/20"
+                        : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-foreground">{m.nombre}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {m.cantidad} producto{m.cantidad !== 1 ? "s" : ""} · {fechaRelativa(m.ultima_actualizacion)}
+                      </div>
+                    </div>
+                    <div className="text-sm font-bold text-orange-500">+{m.pct_promedio}%</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Selector de descuento — solo para promociones que no sean "Aumento por marca" */}
+        {esPromocion && (
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">
+              Descuento vigente <span className="text-muted-foreground/60">(opcional)</span>
             </label>
             <select
               value={selectedDescuento?.id || ""}
               onChange={(e) => {
-                const desc = descuentos.find(d => d.id === e.target.value);
+                const desc = descuentos.find((d) => d.id === e.target.value);
                 if (desc) handleDescuentoSelect(desc);
                 else { setSelectedDescuento(null); setClientesExclusivos([]); }
               }}
@@ -396,23 +535,7 @@ export default function EnviarNotificacionPage() {
                 </option>
               ))}
             </select>
-
-            {/* Chip del descuento seleccionado */}
-            {selectedDescuento && (
-              <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border border-green-100 dark:border-green-900 rounded-lg">
-                <Tag className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                <span className="text-xs text-green-700 dark:text-green-400 font-medium flex-1">
-                  {selectedDescuento.nombre} — {selectedDescuento.porcentaje}% off
-                  {clientesExclusivos.length > 0 && ` · ${clientesExclusivos.length} clientes exclusivos`}
-                </span>
-                <button onClick={() => { setSelectedDescuento(null); setClientesExclusivos([]); }} className="text-green-500 hover:text-green-700 shrink-0">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Lista de clientes exclusivos */}
-            {clientesExclusivos.length > 0 && (
+            {selectedDescuento && clientesExclusivos.length > 0 && (
               <div className="mt-2 px-3 py-2 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
                 <div className="text-xs font-medium text-purple-700 dark:text-purple-400 mb-1">
                   Se enviará solo a estos clientes:
@@ -429,7 +552,7 @@ export default function EnviarNotificacionPage() {
           </div>
         )}
 
-        {/* Título y mensaje — visibles si hay plantilla o modo libre */}
+        {/* Título y mensaje — visibles si hay plantilla seleccionada o modo libre */}
         {(plantillaSeleccionada || modoLibre) && (
           <>
             <div>
@@ -488,7 +611,6 @@ export default function EnviarNotificacionPage() {
             ¿A quién le llega?
           </div>
 
-          {/* Si hay descuento exclusivo, mostrar aviso */}
           {clientesExclusivos.length > 0 ? (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-purple-50 dark:bg-purple-950/20 rounded-xl">
               <Users className="h-4 w-4 text-purple-600" />
@@ -631,7 +753,7 @@ export default function EnviarNotificacionPage() {
           <DialogHeader><DialogTitle>Confirmar envío</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
             {clientesExclusivos.length > 0
-              ? <>Se enviará a <strong>{clientesExclusivos.length} clientes exclusivos</strong> del descuento.</>
+              ? <>Se enviará a <strong>{clientesExclusivos.length} clientes exclusivos</strong>.</>
               : <>Se enviará a <strong>{estimado ?? "?"} destinatario{(estimado ?? 0) !== 1 ? "s" : ""}</strong>.</>
             }
           </p>
