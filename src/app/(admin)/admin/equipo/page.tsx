@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, Pencil, EyeOff, Eye, Loader2, Users } from "lucide-react";
+import { Plus, Pencil, EyeOff, Eye, Trash2, Loader2, Users } from "lucide-react";
 import type { Equipo } from "@/types/equipo";
 
 export default function EquipoAdminPage() {
@@ -74,6 +74,12 @@ export default function EquipoAdminPage() {
 
   const toggleActivo = async (m: Equipo) => {
     await supabase.from("equipo").update({ activo: !m.activo }).eq("id", m.id);
+    await fetchMiembros();
+  };
+
+  const handleDelete = async (m: Equipo) => {
+    if (!confirm(`¿Eliminar a ${m.nombre}? Esta acción no se puede deshacer.`)) return;
+    await supabase.from("equipo").delete().eq("id", m.id);
     await fetchMiembros();
   };
 
@@ -151,6 +157,9 @@ export default function EquipoAdminPage() {
                     </button>
                     <button onClick={() => toggleActivo(m)} className="text-gray-400 hover:text-gray-700">
                       {m.activo ? <EyeOff className="w-4 h-4 inline" /> : <Eye className="w-4 h-4 inline" />}
+                    </button>
+                    <button onClick={() => handleDelete(m)} className="text-gray-400 hover:text-red-600">
+                      <Trash2 className="w-4 h-4 inline" />
                     </button>
                   </td>
                 </tr>
