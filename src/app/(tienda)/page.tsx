@@ -197,23 +197,31 @@ export default async function TiendaHomePage() {
   const hace30 = new Date(ahoraAR);
   hace30.setDate(hace30.getDate() - diasMasVendidos);
 
-  const hace4dias = new Date(ahoraAR);
-  hace4dias.setDate(hace4dias.getDate() - 4);
-  hace4dias.setHours(0, 0, 0, 0);
-
   const haceNuevosDias = new Date(ahoraAR);
   haceNuevosDias.setDate(haceNuevosDias.getDate() - diasNuevos);
   haceNuevosDias.setHours(0, 0, 0, 0);
 
-  const nuevosPromise = supabase
-    .from("productos")
-    .select("id, nombre, precio, imagen_url, stock, activo, es_combo, created_at, updated_at, categorias(id, nombre)")
-    .eq("activo", true)
-    .eq("visibilidad", "visible")
-    .gt("stock", 0)
-    .or(`created_at.gte.${hace4dias.toISOString()},updated_at.gte.${haceNuevosDias.toISOString()}`)
-    .order("created_at", { ascending: false })
-    .limit(maxNuevos * 2);
+  const nuevosPromise = (async () => {
+    const { data: movimientos } = await supabase
+      .from("stock_movimientos")
+      .select("producto_id")
+      .in("tipo", ["compra", "ajuste_ingreso"])
+      .gt("cantidad_despues", 0)
+      .gt("created_at", haceNuevosDias.toISOString());
+
+    const ids = [...new Set((movimientos || []).map((m: any) => m.producto_id))];
+    if (ids.length === 0) return { data: [] };
+
+    return supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url, stock, activo, es_combo, created_at, updated_at, categorias(id, nombre)")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .gt("stock", 0)
+      .in("id", ids)
+      .order("created_at", { ascending: false })
+      .limit(maxNuevos);
+  })();
 
   // Grupo 1: queries críticas en paralelo (categorías, productos, aumentos)
   const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }, { data: nuevosRaw }] = await Promise.all([
@@ -228,11 +236,7 @@ export default async function TiendaHomePage() {
   const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
 
   // Nuevos ingresos
-  const nuevosIngresos = (nuevosRaw || []).filter((p: any) => {
-    const creadoReciente = new Date(p.created_at) >= hace4dias;
-    const stockRecuperado = new Date(p.updated_at) >= haceNuevosDias && p.stock > 0;
-    return creadoReciente || stockRecuperado;
-  }).slice(0, maxNuevos);
+  const nuevosIngresos = (nuevosRaw || []).slice(0, maxNuevos);
 
   // Grupo 2: presentaciones + top vendidos en paralelo (no bloquean las categorías)
   const presPromise = productos.length > 0
