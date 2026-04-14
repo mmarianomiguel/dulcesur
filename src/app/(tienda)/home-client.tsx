@@ -332,11 +332,13 @@ function ProductosDestacadosBlock({
 }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
   const titulo = config.titulo_seccion || "Productos";
-  const maxItems = config.max_items || 8;
+  const maxItems = 24;
 
   const tabDefecto = (config.tab_defecto as "destacados" | "mas_vendidos" | "nuevos") ?? "destacados";
   const intervalo = (config.carrusel_intervalo as number) ?? 0;
   const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">(tabDefecto);
+  const [grupoActual, setGrupoActual] = useState(0);
+  const [pausado, setPausado] = useState(false);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
@@ -360,25 +362,29 @@ function ProductosDestacadosBlock({
     activeTab === "mas_vendidos" ? vendidos :
     nuevos;
 
+  const GRUPO_SIZE = 4;
+  const grupos = Math.ceil(activeProds.length / GRUPO_SIZE);
+  const grupoProds = activeProds.slice(grupoActual * GRUPO_SIZE, (grupoActual + 1) * GRUPO_SIZE);
+
   const tabs = [
     { key: "destacados" as const, label: "Destacados", icon: Star, count: destacados.length },
     { key: "mas_vendidos" as const, label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
     { key: "nuevos" as const, label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
   ].filter((t) => t.count > 0);
 
-  // Rotación automática entre tabs
+  // Resetear grupo al cambiar tab
   useEffect(() => {
-    if (!intervalo || intervalo <= 0) return;
+    setGrupoActual(0);
+  }, [activeTab]);
+
+  // Rotación automática por grupos
+  useEffect(() => {
+    if (!intervalo || intervalo <= 0 || pausado || grupos <= 1) return;
     const timer = setInterval(() => {
-      setActiveTab((current) => {
-        const activeTabs = tabs.map((t) => t.key);
-        const currentIndex = activeTabs.indexOf(current);
-        const nextIndex = (currentIndex + 1) % activeTabs.length;
-        return activeTabs[nextIndex] as "destacados" | "mas_vendidos" | "nuevos";
-      });
+      setGrupoActual((current) => (current + 1) % grupos);
     }, intervalo * 1000);
     return () => clearInterval(timer);
-  }, [intervalo, tabs.length]);
+  }, [intervalo, grupos, pausado, activeTab]);
 
   const renderProductCard = (prod: any, isPriority = false) => {
     const qty = getQty(prod.id);
@@ -391,13 +397,13 @@ function ProductosDestacadosBlock({
     const maxQty = Math.floor(prod.stock / Math.max(0.01, presUnits));
 
     return (
-      <div key={prod.id} className="card-product animate-fade-in-up group relative overflow-hidden rounded-2xl border border-gray-100 bg-white flex flex-col">
+      <div key={prod.id} className="card-product group relative overflow-hidden rounded-2xl border border-gray-100 bg-white flex flex-col">
         <Link href={`/productos/${productSlug(prod.nombre, prod.id)}`}>
           <div className="relative aspect-square bg-gray-50 overflow-hidden">
             {prod.imagen_url ? (
-              <Image src={prod.imagen_url} alt={prod.nombre} fill sizes="(max-width: 640px) 256px, (max-width: 1024px) 25vw, 20vw" {...(isPriority ? { priority: true } : { loading: "lazy" })} className="card-product-img object-contain p-4" />
+              <Image src={prod.imagen_url} alt={prod.nombre} fill sizes="(max-width: 640px) 50vw, 25vw" {...(isPriority ? { priority: true } : { loading: "lazy" })} className="card-product-img object-contain p-3 group-hover:scale-105 transition-transform duration-300" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center"><Package className="w-12 h-12 text-gray-300" /></div>
+              <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-gray-300" /></div>
             )}
             {sinStock && (
               <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
@@ -418,43 +424,43 @@ function ProductosDestacadosBlock({
               )}
             </div>
           </div>
-          <div className="p-4">
+          <div className="p-3">
             {prod.categorias && (
-              <span className="inline-block text-[11px] font-medium text-primary bg-primary/5 rounded-full px-2.5 py-0.5">{prod.categorias.nombre}</span>
+              <span className="inline-block text-[10px] font-medium text-primary bg-primary/5 rounded-full px-2 py-0.5">{prod.categorias.nombre}</span>
             )}
-            <p className="text-sm font-medium text-gray-800 line-clamp-2 mt-1.5 min-h-[2.5rem]">{prod.nombre}</p>
+            <p className="text-xs font-medium text-gray-800 line-clamp-2 mt-1 min-h-[2rem]">{prod.nombre}</p>
             {pres && pres.length > 1 && (
-              <div className="flex gap-1 mt-2 flex-wrap">
+              <div className="flex gap-1 mt-1.5 flex-wrap">
                 {[...pres].sort((a: any, b: any) => a.cantidad - b.cantidad).map((pr: any, idx: number) => (
                   <button key={pr.id} onClick={(e) => { e.preventDefault(); setSelectedPres((p) => ({ ...p, [prod.id]: idx })); }}
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition ${presIdx === idx ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"}`}
-                  >{pr.nombre || (pr.cantidad === 1 ? "Unidad" : `Caja x${pr.cantidad}`)}</button>
+                    className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium border transition ${presIdx === idx ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"}`}
+                  >{pr.nombre || (pr.cantidad === 1 ? "Unidad" : `x${pr.cantidad}`)}</button>
                 ))}
               </div>
             )}
-            <p className="text-xl font-bold text-gray-900 mt-2">{formatCurrency(price)}</p>
+            <p className="text-base font-bold text-gray-900 mt-1.5">{formatCurrency(price)}</p>
           </div>
         </Link>
-        <div className="px-4 pb-4 mt-auto">
+        <div className="px-3 pb-3 mt-auto">
           {sinStock ? (
-            <button disabled className="w-full bg-gray-100 text-gray-400 text-sm py-2.5 rounded-xl font-medium cursor-not-allowed">Sin stock</button>
+            <button disabled className="w-full bg-gray-100 text-gray-400 text-xs py-2 rounded-xl font-medium cursor-not-allowed">Sin stock</button>
           ) : maxQty > 0 ? (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
-                  <button onClick={() => setQty(prod.id, qty - 1)} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><Minus className="w-3 h-3" /></button>
-                  <span className="w-7 text-center text-sm font-medium tabular-nums">{qty}</span>
-                  <button onClick={() => setQty(prod.id, Math.min(qty + 1, maxQty))} disabled={qty >= maxQty} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-30"><Plus className="w-3 h-3" /></button>
+                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                  <button onClick={() => setQty(prod.id, qty - 1)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><Minus className="w-2.5 h-2.5" /></button>
+                  <span className="w-6 text-center text-xs font-medium tabular-nums">{qty}</span>
+                  <button onClick={() => setQty(prod.id, Math.min(qty + 1, maxQty))} disabled={qty >= maxQty} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-30"><Plus className="w-2.5 h-2.5" /></button>
                 </div>
-                <span className="text-sm font-bold text-gray-900">{formatCurrency(price * qty)}</span>
+                <span className="text-xs font-bold text-gray-900">{formatCurrency(price * qty)}</span>
               </div>
               <button onClick={() => { agregarAlCarrito(prod as Producto, qty); setQty(prod.id, 1); }}
-                className="btn-add-cart w-full bg-gray-900 hover:bg-primary text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors duration-200">
-                <ShoppingCart className="w-3.5 h-3.5" /> Agregar
+                className="btn-add-cart w-full bg-gray-900 hover:bg-primary text-white py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors duration-200">
+                <ShoppingCart className="w-3 h-3" /> Agregar
               </button>
             </div>
           ) : (
-            <p className="text-center text-xs text-orange-500 font-medium py-2">Quedan {prod.stock}</p>
+            <p className="text-center text-xs text-orange-500 font-medium py-1.5">Quedan {prod.stock}</p>
           )}
         </div>
       </div>
@@ -462,18 +468,25 @@ function ProductosDestacadosBlock({
   };
 
   return (
-    <section className="py-8 md:py-10 bg-gray-50/50">
+    <section
+      className="py-8 md:py-10 bg-gray-50/50"
+      onMouseEnter={() => setPausado(true)}
+      onMouseLeave={() => setPausado(false)}
+      onTouchStart={() => setPausado(true)}
+      onTouchEnd={() => setTimeout(() => setPausado(false), 3000)}
+    >
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h2 className="text-xl md:text-2xl font-bold text-gray-900">{titulo}</h2>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
           {!loading && tabs.length > 1 && (
-            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 self-start sm:self-auto">
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               {tabs.map(({ key, label, icon: Icon }) => (
                 <button key={key} onClick={() => setActiveTab(key)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     activeTab === key ? "bg-gray-900 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                   }`}>
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-3 h-3" />
                   <span className="hidden sm:inline">{label}</span>
                   <span className="sm:hidden">{label.split(" ")[0]}</span>
                 </button>
@@ -481,31 +494,57 @@ function ProductosDestacadosBlock({
             </div>
           )}
         </div>
-        <div className="w-12 h-0.5 bg-primary rounded-full mb-6 -mt-3" />
+        <div className="w-12 h-0.5 bg-primary rounded-full mb-4" />
 
+        {/* Grid 2x2 mobile / 1x4 desktop */}
         {loading ? (
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4" style={{ scrollbarWidth: "none" }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex-shrink-0 w-44">
-                <SkeletonCard />
-              </div>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : activeProds.length === 0 ? (
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
-          <div
-            className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {activeProds.slice(0, 16).map((prod, idx) => (
-              <div key={prod.id} className="flex-shrink-0 w-44">
-                {renderProductCard(prod, idx < 2)}
-              </div>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
           </div>
         )}
 
+        {/* Navegación entre grupos */}
+        {!loading && grupos > 1 && (
+          <div className="flex items-center justify-center gap-3 mt-4">
+            <button
+              onClick={() => setGrupoActual((g) => Math.max(0, g - 1))}
+              disabled={grupoActual === 0}
+              className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+
+            <div className="flex gap-1.5">
+              {Array.from({ length: grupos }).map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setGrupoActual(i)}
+                  className={`transition-all rounded-full ${
+                    i === grupoActual
+                      ? "w-5 h-2 bg-primary"
+                      : "w-2 h-2 bg-gray-200 hover:bg-gray-300"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <button
+              onClick={() => setGrupoActual((g) => Math.min(grupos - 1, g + 1))}
+              disabled={grupoActual === grupos - 1}
+              className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        )}
+
+        {/* Ver todos */}
         {!loading && activeProds.length > 0 && (
           <div className="flex justify-end mt-3">
             <Link href="/productos" className="text-sm font-semibold text-primary hover:underline flex items-center gap-1">
@@ -525,7 +564,7 @@ function AumentosRecientesBlock({ productos: initialData = [] }: { productos?: a
     const cat = p.categorias;
     if (!cat) return true;
     return filtrarCategorias([cat]).length > 0;
-  }).slice(0, 8);
+  }).slice(0, 4);
 
   if (filtered.length === 0) return null;
 
