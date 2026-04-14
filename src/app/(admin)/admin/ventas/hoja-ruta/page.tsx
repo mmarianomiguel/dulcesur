@@ -1362,6 +1362,14 @@ export default function HojaDeRutaPage() {
               <><Bell className="w-4 h-4 mr-1.5" /> Notificar clientes</>
             )}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open("/equipo", "_blank")}
+          >
+            <Package className="w-4 h-4 mr-1.5" />
+            Tablero de armado
+          </Button>
           <Button onClick={saveAndShareRuta} disabled={savingRuta || filteredVentas.length === 0} size="sm">
             {savingRuta ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Share2 className="w-4 h-4 mr-1.5" />}
             {hojaRutaId ? "Actualizar Ruta" : "Guardar y Compartir"}

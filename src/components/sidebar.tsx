@@ -31,6 +31,7 @@ import {
   Bell,
   BellRing,
   Loader2,
+  UsersRound,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -106,6 +107,7 @@ const navigation: NavItem[] = [
       { name: "Autoconsumo", href: "/admin/stock/autoconsumo" },
     ],
   },
+  { name: "Equipo", href: "/admin/equipo", icon: UsersRound },
   {
     name: "Reportes",
     href: "/admin/reportes",
