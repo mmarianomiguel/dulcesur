@@ -12,23 +12,23 @@ export default function EquipoAdminPage() {
   const [tab, setTab] = useState<Tab>("supervision");
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto bg-[#F4F4F6]">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[#12131A] flex items-center gap-2">
           <Users className="w-6 h-6" /> Equipo
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-[#6B7080] mt-1">
           Gestión y supervisión del equipo de armado
         </p>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+      <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 mb-6 w-fit">
         <button
           onClick={() => setTab("supervision")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             tab === "supervision"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
+              ? "bg-[#FFE0EC] text-[#99003D]"
+              : "text-[#6B7080] hover:text-[#12131A]"
           }`}
         >
           <BarChart3 className="w-4 h-4" /> Supervisión
@@ -37,8 +37,8 @@ export default function EquipoAdminPage() {
           onClick={() => setTab("miembros")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             tab === "miembros"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
+              ? "bg-[#FFE0EC] text-[#99003D]"
+              : "text-[#6B7080] hover:text-[#12131A]"
           }`}
         >
           <Users className="w-4 h-4" /> Miembros
@@ -47,8 +47,8 @@ export default function EquipoAdminPage() {
           onClick={() => setTab("historial")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             tab === "historial"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
+              ? "bg-[#FFE0EC] text-[#99003D]"
+              : "text-[#6B7080] hover:text-[#12131A]"
           }`}
         >
           <History className="w-4 h-4" /> Historial
