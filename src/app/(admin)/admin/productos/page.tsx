@@ -1700,6 +1700,10 @@ export default function ProductosPage() {
     showAdminToast("Stock actualizado", "success");
     setStockPopover(null);
     setProducts((prev) => prev.map((p) => p.id === productId ? { ...p, stock: stockNuevo } : p));
+    // If editing this product, update form stock too
+    if (editingProduct && editingProduct.id === productId) {
+      setForm((prev) => ({ ...prev, stock: stockNuevo }));
+    }
   };
 
   // Load rotation velocity (1.10)
@@ -4373,6 +4377,20 @@ export default function ProductosPage() {
                   <p className="text-sm text-muted-foreground mt-1">{isCombo ? "combos disponibles" : form.unidad_medida === "KG" ? "kilogramos" : "unidades"}</p>
                   {isCombo && (
                     <p className="text-xs text-muted-foreground mt-2">Calculado según el stock de los componentes</p>
+                  )}
+                  {!isCombo && editingProduct && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 gap-2"
+                      onClick={() => {
+                        setStockPopover({ productId: editingProduct.id, productName: editingProduct.nombre, currentStock: effectiveStock });
+                        setStockAdjust({ tipo: "sumar", cantidad: 1, motivo: "ingreso" });
+                      }}
+                    >
+                      <Settings className="w-4 h-4" />
+                      Ajustar stock
+                    </Button>
                   )}
                 </div>
 
