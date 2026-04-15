@@ -14,6 +14,12 @@ export interface PedidoArmado {
   armador_id: string | null;
   notas: string | null;
   orden_entrega: number | null;
+  inicio_armado_at: string | null;
+  fin_armado_at: string | null;
+  aprobado_at: string | null;
+  aprobado_por: string | null;
+  rechazos: number;
+  motivo_rechazo: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +56,13 @@ export interface PedidoConArmado {
     notas: string | null;
     orden_entrega: number | null;
     armador_nombre?: string;
+    aprobador_nombre?: string;
+    inicio_armado_at?: string | null;
+    fin_armado_at?: string | null;
+    aprobado_at?: string | null;
+    aprobado_por?: string | null;
+    rechazos?: number;
+    motivo_rechazo?: string | null;
   } | null;
 }
 

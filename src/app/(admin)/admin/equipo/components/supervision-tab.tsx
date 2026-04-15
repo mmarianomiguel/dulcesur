@@ -102,7 +102,7 @@ export function SupervisionTab() {
   const stats = useMemo(() => {
     const total = pedidos.length;
     const pendientes = pedidos.filter(
-      (p) => p.pedido_armado?.estado === "pendiente"
+      (p) => !p.pedido_armado || p.pedido_armado.estado === "pendiente"
     ).length;
     const enProceso = pedidos.filter(
       (p) =>
