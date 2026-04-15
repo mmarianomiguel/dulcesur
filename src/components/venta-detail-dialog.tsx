@@ -274,7 +274,7 @@ export function VentaDetailDialog({
 
         return base;
       })()
-    : data.total; // data.total already has NC deducted in DB
+    : ncDisplay > 0 ? itemsSubtotal - ncDisplay + envio : data.total;
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const canCobrar = editable && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr") && !p.metodo.includes("(a cobrar)"));
