@@ -1691,8 +1691,7 @@ export default function CajaPage() {
                   {(["ventas", "entregas"] as const).map((t) => {
                     const entregasMovs = movements.filter(m =>
                       m.tipo === "ingreso" &&
-                      m.referencia_tipo === "venta" &&
-                      (m.descripcion || "").toLowerCase().includes("cobro entrega")
+                      m.referencia_tipo === "venta"
                     );
                     const ventasEntregadas = ventas.filter(v =>
                       (v as any).entregado === true &&
