@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader2, Package, Clock, CheckCircle2, AlertTriangle, Calendar, Download } from "lucide-react";
+import { Loader2, Package, Clock, CheckCircle2, AlertTriangle, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { PedidoConArmado } from "@/types/equipo";
 
@@ -22,10 +22,10 @@ function calcDuration(start: string | null | undefined, end: string | null | und
 type Estado = "pendiente" | "armando" | "armado" | "listo";
 
 const estadoBadge: Record<Estado, string> = {
-  pendiente: "bg-amber-100 text-amber-700",
-  armando: "bg-violet-100 text-violet-700",
-  armado: "bg-blue-100 text-blue-700",
-  listo: "bg-[#f7dde7] text-[#c94070]",
+  pendiente: "bg-[#FFE0EC] text-[#99003D]",
+  armando: "bg-[#B3EFFF] text-[#006080]",
+  armado: "bg-[#B3EFFF] text-[#006080]",
+  listo: "bg-[#D4F5E2] text-[#1A7A45]",
 };
 
 const estadoLabel: Record<Estado, string> = {
@@ -35,10 +35,17 @@ const estadoLabel: Record<Estado, string> = {
   listo: "Listo",
 };
 
-function getYesterday(): string {
+function getToday(): string {
+  return new Date().toLocaleDateString("en-CA");
+}
+function getDaysAgo(days: number): string {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  d.setDate(d.getDate() - days);
+  return d.toLocaleDateString("en-CA");
+}
+
+function getYesterday(): string {
+  return getDaysAgo(1);
 }
 
 export function HistorialTab() {
@@ -135,23 +142,42 @@ export function HistorialTab() {
     <div className="space-y-6">
       {/* Date picker */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              max={new Date().toLocaleDateString("en-CA")}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c94070] focus:border-transparent"
-            />
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {[
+              { label: "Hoy", value: getToday() },
+              { label: "Ayer", value: getDaysAgo(1) },
+              { label: "Hace 2 días", value: getDaysAgo(2) },
+            ].map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => setFecha(opt.value)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  fecha === opt.value
+                    ? "bg-[#FFE0EC] text-[#99003D] border border-[#FF2D6B]"
+                    : "bg-white border border-gray-200 text-[#6B7080] hover:border-[#FF2D6B]"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#6B7080]">Otra fecha:</span>
+              <input
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+                max={getToday()}
+                className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B] focus:border-transparent"
+              />
+            </div>
           </div>
           <p className="text-sm text-gray-500 capitalize">{fechaDisplay}</p>
         </div>
         {pedidos.length > 0 && (
           <button
             onClick={exportExcel}
-            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 flex items-center gap-1.5 shrink-0"
+            className="text-xs px-3 py-1.5 rounded-lg bg-[#D4F5E2] text-[#1A7A45] font-medium hover:bg-green-100 flex items-center gap-1.5 shrink-0"
           >
             <Download className="w-3.5 h-3.5" />
             Exportar
@@ -172,28 +198,28 @@ export function HistorialTab() {
         <>
           {/* Summary stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <div className="w-9 h-9 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center mb-2">
+            <div className="bg-white rounded-2xl border border-gray-200 p-4">
+              <div className="w-9 h-9 rounded-xl bg-gray-100 text-[#6B7080] flex items-center justify-center mb-2">
                 <Package className="w-5 h-5" />
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
               <p className="text-xs text-gray-500">Total pedidos</p>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <div className="w-9 h-9 rounded-xl bg-[#fdf5f6] text-[#c94070] flex items-center justify-center mb-2">
+            <div className="bg-white rounded-2xl border border-gray-200 p-4">
+              <div className="w-9 h-9 rounded-xl bg-[#D4F5E2] text-[#1A7A45] flex items-center justify-center mb-2">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats.completados}</p>
               <p className="text-xs text-gray-500">Completados</p>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center mb-2">
+            <div className="bg-white rounded-2xl border border-gray-200 p-4">
+              <div className="w-9 h-9 rounded-xl bg-[#B3EFFF] text-[#006080] flex items-center justify-center mb-2">
                 <Clock className="w-5 h-5" />
               </div>
               <p className="text-2xl font-bold text-gray-900">{formatDuration(stats.promedioArmado)}</p>
               <p className="text-xs text-gray-500">Tiempo promedio</p>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-gray-200 p-4">
               <div className="w-9 h-9 rounded-xl bg-red-50 text-red-500 flex items-center justify-center mb-2">
                 <AlertTriangle className="w-5 h-5" />
               </div>
@@ -208,8 +234,8 @@ export function HistorialTab() {
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Rendimiento por armador</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {armadorMetrics.map((a) => (
-                  <div key={a.nombre} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#f7dde7] text-[#c94070] flex items-center justify-center font-bold text-sm shrink-0">
+                  <div key={a.nombre} className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center font-bold text-sm shrink-0">
                       {a.nombre.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -230,19 +256,19 @@ export function HistorialTab() {
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Detalle de pedidos</h3>
 
-            <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="hidden md:block bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-[#fdf5f6]">
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">#</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Armador</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">T. Espera</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">T. Armado</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">T. Control</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">T. Total</th>
-                    <th className="text-center px-4 py-3 font-medium text-gray-600">Rech.</th>
+                  <tr className="border-b bg-[#FFE0EC]">
+                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">#</th>
+                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">Cliente</th>
+                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">Estado</th>
+                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">Armador</th>
+                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Espera</th>
+                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Armado</th>
+                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Control</th>
+                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Total</th>
+                    <th className="text-center px-4 py-3 font-medium text-[#99003D]">Rech.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -254,7 +280,7 @@ export function HistorialTab() {
                     const tControl = calcDuration(pa?.fin_armado_at, pa?.aprobado_at);
                     const tTotal = calcDuration(p.created_at, pa?.aprobado_at);
                     return (
-                      <tr key={p.id} className="border-b last:border-b-0 hover:bg-gray-50/50">
+                      <tr key={p.id} className="border-b last:border-b-0 hover:bg-[#FFF5F8]">
                         <td className="px-4 py-3 font-mono text-gray-500">{p.numero}</td>
                         <td className="px-4 py-3 font-medium text-gray-900">{p.clientes?.nombre ?? "—"}</td>
                         <td className="px-4 py-3">
@@ -290,7 +316,7 @@ export function HistorialTab() {
                 const tArmado = calcDuration(pa?.inicio_armado_at, pa?.fin_armado_at);
                 const tTotal = calcDuration(p.created_at, pa?.aprobado_at);
                 return (
-                  <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+                  <div key={p.id} className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="font-medium text-gray-900">{p.clientes?.nombre ?? "Sin cliente"}</p>
