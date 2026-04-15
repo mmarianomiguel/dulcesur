@@ -340,6 +340,24 @@ export function SupervisionTab() {
 
   /* ── Actions ── */
 
+  const handleToggleUrgente = async (ventaId: string, currentUrgente: boolean) => {
+    setActionLoading(ventaId);
+    try {
+      const pa = pedidos.find(p => p.id === ventaId)?.pedido_armado;
+      await fetch(`/api/equipo/pedidos/${ventaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          estado: pa?.estado || "pendiente",
+          urgente: !currentUrgente,
+        }),
+      });
+      await fetchPedidos();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleApprove = async (ventaId: string) => {
     setActionLoading(ventaId);
     try {
@@ -588,6 +606,12 @@ export function SupervisionTab() {
                             {esEnvio ? "Envío" : "Retiro"}
                           </span>
                         </span>
+                        {/* Urgente badge */}
+                        {pa?.urgente && (
+                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-100 text-red-600 animate-pulse">
+                            🔥 Urgente
+                          </span>
+                        )}
                         {/* Estado badge */}
                         <span
                           className={`text-xs px-2 py-1 rounded-full font-medium ${estadoBadge[estado]}`}
@@ -660,6 +684,23 @@ export function SupervisionTab() {
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           Rechazar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Urgent toggle */}
+                    {estado !== "listo" && (
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => handleToggleUrgente(p.id, pa?.urgente ?? false)}
+                          disabled={actionLoading === p.id}
+                          className={`text-xs px-2.5 py-1.5 rounded-lg font-medium disabled:opacity-50 ${
+                            pa?.urgente
+                              ? "bg-red-50 text-red-600 hover:bg-red-100"
+                              : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                          }`}
+                        >
+                          {pa?.urgente ? "Quitar urgente" : "🔥 Urgente"}
                         </button>
                       </div>
                     )}

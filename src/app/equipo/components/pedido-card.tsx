@@ -151,6 +151,11 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
               <EntregaIcon className="w-3 h-3" />
               {entregaLabel}
             </span>
+            {armado?.urgente && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 animate-pulse">
+                🔥 URGENTE
+              </span>
+            )}
             {(armado?.rechazos ?? 0) > 0 && (
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
                 {armado!.rechazos} {armado!.rechazos === 1 ? "rechazo" : "rechazos"}

@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     const ventaIds = filtered.map((v: any) => v.id);
     const { data: armados } = await supabase
       .from("pedido_armado")
-      .select("id, venta_id, estado, armador_id, notas, orden_entrega, inicio_armado_at, fin_armado_at, aprobado_at, aprobado_por, rechazos, motivo_rechazo")
+      .select("id, venta_id, estado, armador_id, notas, orden_entrega, inicio_armado_at, fin_armado_at, aprobado_at, aprobado_por, rechazos, motivo_rechazo, urgente")
       .in("venta_id", ventaIds);
 
     // 3. Fetch equipo names (armadores + aprobadores)
@@ -76,8 +76,11 @@ export async function GET(req: NextRequest) {
       pedido_armado: armadoMap[v.id] || null,
     }));
 
-    // 5. Sort: by orden_entrega (nulls last), then created_at
+    // 5. Sort: urgent first, then by orden_entrega (nulls last), then created_at
     pedidos.sort((a: any, b: any) => {
+      const ua = a.pedido_armado?.urgente ? 0 : 1;
+      const ub = b.pedido_armado?.urgente ? 0 : 1;
+      if (ua !== ub) return ua - ub;
       const oa = a.pedido_armado?.orden_entrega ?? Infinity;
       const ob = b.pedido_armado?.orden_entrega ?? Infinity;
       if (oa !== ob) return oa - ob;

@@ -28,6 +28,7 @@ export async function PATCH(
     if (armador_id) updateData.armador_id = armador_id;
     if (notas !== undefined) updateData.notas = notas;
     if (orden_entrega !== undefined) updateData.orden_entrega = orden_entrega;
+    if (body.urgente !== undefined) updateData.urgente = body.urgente;
 
     // Timestamps per state transition
     const now = new Date().toISOString();

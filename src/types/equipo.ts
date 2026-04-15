@@ -20,6 +20,7 @@ export interface PedidoArmado {
   aprobado_por: string | null;
   rechazos: number;
   motivo_rechazo: string | null;
+  urgente: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +64,7 @@ export interface PedidoConArmado {
     aprobado_por?: string | null;
     rechazos?: number;
     motivo_rechazo?: string | null;
+    urgente?: boolean;
   } | null;
 }
 
