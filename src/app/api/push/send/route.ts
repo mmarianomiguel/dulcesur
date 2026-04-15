@@ -48,10 +48,12 @@ export async function POST(req: NextRequest) {
       url: "/admin/ventas/pedidos-online",
     });
 
-    // Get all subscriptions
+    // Get only admin/staff subscriptions (user_id linked, not tienda clients)
     const { data: subs } = await supabase
       .from("push_subscriptions")
-      .select("*");
+      .select("*")
+      .not("user_id", "is", null)
+      .neq("user_id", "unknown");
 
     if (!subs || subs.length === 0) {
       return NextResponse.json({ sent: 0 });
