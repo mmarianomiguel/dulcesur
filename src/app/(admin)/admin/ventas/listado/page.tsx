@@ -3106,7 +3106,7 @@ export default function ListadoVentasPage() {
                 open: true,
                 title: "Cambios sin guardar",
                 message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?",
-                onConfirm: () => setPoDetailOpen(false),
+                onConfirm: () => { setPoHasChanges(false); setPoDetailOpen(false); },
               });
               return;
             }
