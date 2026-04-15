@@ -4,9 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency } from "@/lib/formatters";
 import {
-  Package,
-  Clock,
-  Timer,
   CheckCircle2,
   AlertTriangle,
   XCircle,
@@ -66,10 +63,10 @@ function formatHora(dateStr: string): string {
 type Estado = "pendiente" | "armando" | "armado" | "listo";
 
 const estadoBadge: Record<Estado, string> = {
-  pendiente: "bg-amber-100 text-amber-700",
-  armando: "bg-violet-100 text-violet-700",
-  armado: "bg-blue-100 text-blue-700",
-  listo: "bg-[#f7dde7] text-[#c94070]",
+  pendiente: "bg-[#FFE0EC] text-[#99003D]",
+  armando: "bg-[#B3EFFF] text-[#006080]",
+  armado: "bg-[#B3EFFF] text-[#006080]",
+  listo: "bg-[#D4F5E2] text-[#1A7A45]",
 };
 
 const estadoLabel: Record<Estado, string> = {
@@ -80,10 +77,10 @@ const estadoLabel: Record<Estado, string> = {
 };
 
 const borderColor: Record<string, string> = {
-  pendiente: "#f59e0b",
-  armando: "#7c3aed",
-  armado: "#3b82f6",
-  listo: "#c94070",
+  pendiente: "#FAC775",
+  armando: "#00BFFF",
+  armado: "#00BFFF",
+  listo: "#FF2D6B",
 };
 
 const estadoTabs: Estado[] = ["pendiente", "armando", "armado", "listo"];
@@ -416,48 +413,44 @@ export function SupervisionTab() {
       {/* ── A) Stats row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
-          icon={<Package className="w-5 h-5" />}
           label="Total del día"
           value={stats.total}
-          color="bg-gray-100 text-gray-600"
+          valueColor="text-[#12131A]"
         />
         <StatCard
-          icon={<Clock className="w-5 h-5" />}
           label="Pendientes"
           value={stats.pendientes}
-          color="bg-amber-50 text-amber-600"
+          valueColor="text-[#99003D]"
         />
         <StatCard
-          icon={<Timer className="w-5 h-5" />}
           label="En proceso"
           value={stats.enProceso}
-          color="bg-violet-50 text-violet-600"
+          valueColor="text-[#006080]"
         />
         <StatCard
-          icon={<CheckCircle2 className="w-5 h-5" />}
           label="Listos"
           value={stats.listos}
-          color="bg-[#fdf5f6] text-[#c94070]"
+          valueColor="text-[#1A7A45]"
         />
       </div>
 
       {/* Progress bar */}
-      <div className="h-3 rounded-full bg-gray-100 overflow-hidden flex">
+      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
         {stats.listos > 0 && (
           <div
-            className="bg-[#c94070] transition-all"
+            className="bg-[#FF2D6B] transition-all"
             style={{ width: `${progressPct(stats.listos)}%` }}
           />
         )}
         {stats.enProceso > 0 && (
           <div
-            className="bg-violet-400 transition-all"
+            className="bg-[#00BFFF] transition-all"
             style={{ width: `${progressPct(stats.enProceso)}%` }}
           />
         )}
         {stats.pendientes > 0 && (
           <div
-            className="bg-amber-300 transition-all"
+            className="bg-[#FAC775] transition-all"
             style={{ width: `${progressPct(stats.pendientes)}%` }}
           />
         )}
@@ -469,8 +462,8 @@ export function SupervisionTab() {
           onClick={() => setEntregaFilter(entregaFilter === "envio" ? "todos" : "envio")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
             entregaFilter === "envio"
-              ? "bg-[#c94070] text-white shadow-sm"
-              : "bg-white text-gray-600 border border-gray-200 hover:border-[#f0dde5]"
+              ? "bg-[#FF2D6B] text-white"
+              : "bg-white border border-gray-200 text-[#6B7080] hover:border-[#FF2D6B] hover:text-[#FF2D6B]"
           }`}
         >
           <Truck className="w-4 h-4" />
@@ -489,8 +482,8 @@ export function SupervisionTab() {
           onClick={() => setEntregaFilter(entregaFilter === "retiro" ? "todos" : "retiro")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
             entregaFilter === "retiro"
-              ? "bg-[#c94070] text-white shadow-sm"
-              : "bg-white text-gray-600 border border-gray-200 hover:border-[#f0dde5]"
+              ? "bg-[#FF2D6B] text-white"
+              : "bg-white border border-gray-200 text-[#6B7080] hover:border-[#FF2D6B] hover:text-[#FF2D6B]"
           }`}
         >
           <ShoppingBag className="w-4 h-4" />
@@ -508,25 +501,25 @@ export function SupervisionTab() {
       </div>
 
       {/* ── C) Estado tabs ── */}
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="flex overflow-x-auto gap-2 pb-1">
         {estadoTabs.map((tab) => {
           const isActive = activeEstado === tab;
           const tabColors: Record<Estado, { active: string; inactive: string }> = {
             pendiente: {
-              active: "bg-amber-500 text-white",
-              inactive: "bg-amber-50 text-amber-700 border border-amber-200",
+              active: "bg-[#FFE0EC] text-[#99003D] border border-[#FF2D6B]",
+              inactive: "bg-white border border-gray-200 text-[#6B7080]",
             },
             armando: {
-              active: "bg-violet-600 text-white",
-              inactive: "bg-violet-50 text-violet-700 border border-violet-200",
+              active: "bg-[#B3EFFF] text-[#006080] border border-[#00BFFF]",
+              inactive: "bg-white border border-gray-200 text-[#6B7080]",
             },
             armado: {
-              active: "bg-blue-500 text-white",
-              inactive: "bg-blue-50 text-blue-700 border border-blue-200",
+              active: "bg-[#B3EFFF] text-[#006080] border border-[#00BFFF]",
+              inactive: "bg-white border border-gray-200 text-[#6B7080]",
             },
             listo: {
-              active: "bg-[#c94070] text-white",
-              inactive: "bg-[#fdf5f6] text-[#c94070] border border-[#f0dde5]",
+              active: "bg-[#D4F5E2] text-[#1A7A45] border border-[#1A7A45]",
+              inactive: "bg-white border border-gray-200 text-[#6B7080]",
             },
           };
 
@@ -534,12 +527,11 @@ export function SupervisionTab() {
             <button
               key={tab}
               onClick={() => setActiveEstado(isActive ? null : tab)}
-              className={`flex flex-col items-center py-2 rounded-xl text-xs font-medium transition-all ${
+              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 isActive ? tabColors[tab].active : tabColors[tab].inactive
               }`}
             >
-              <span className="text-lg font-bold leading-none mb-0.5">{estadoCounts[tab]}</span>
-              {estadoLabel[tab]}
+              {estadoLabel[tab]} ({estadoCounts[tab]})
             </button>
           );
         })}
@@ -568,7 +560,7 @@ export function SupervisionTab() {
               return (
                 <div
                   key={p.id}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+                  className="bg-white rounded-2xl border border-gray-200 overflow-hidden"
                   style={{ borderLeftWidth: 4, borderLeftColor: borderColor[estado] }}
                 >
                   {/* Card header */}
@@ -608,8 +600,8 @@ export function SupervisionTab() {
                         </span>
                         {/* Urgente badge */}
                         {pa?.urgente && (
-                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-100 text-red-600 animate-pulse">
-                            🔥 Urgente
+                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-[#FFF3CD] text-[#7A5200]">
+                            Urgente
                           </span>
                         )}
                         {/* Estado badge */}
@@ -618,6 +610,16 @@ export function SupervisionTab() {
                         >
                           {estadoLabel[estado]}
                         </span>
+                        {/* Urgent toggle */}
+                        {estado !== "listo" && (
+                          <button
+                            onClick={() => handleToggleUrgente(p.id, pa?.urgente ?? false)}
+                            disabled={actionLoading === p.id}
+                            className="text-xs px-2 py-1 rounded-full font-medium disabled:opacity-50 bg-[#FFF3CD] text-[#7A5200]"
+                          >
+                            {pa?.urgente ? "Quitar urgente" : "Urgente"}
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -626,7 +628,7 @@ export function SupervisionTab() {
                       <div className="flex items-center gap-3 text-xs">
                         {pa?.armador_nombre && (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full bg-[#f7dde7] text-[#c94070] flex items-center justify-center font-bold text-[10px] shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center font-bold text-[10px] shrink-0">
                               {pa.armador_nombre.charAt(0).toUpperCase()}
                             </div>
                             <span className="text-gray-600 font-medium">
@@ -656,8 +658,8 @@ export function SupervisionTab() {
 
                     {/* Row 3: time metrics grid */}
                     <div className="grid grid-cols-4 gap-2">
-                      <TimeMetric label="T. Espera" value={estado === "pendiente" ? undefined : formatDuration(tEspera)} liveValue={estado === "pendiente" ? <span className="text-amber-600">{formatLiveDuration(p.created_at, tick)}</span> : undefined} />
-                      <TimeMetric label="T. Armado" value={estado === "armando" && pa?.inicio_armado_at ? undefined : formatDuration(tArmado)} liveValue={estado === "armando" && pa?.inicio_armado_at ? <span className="text-violet-600 font-semibold animate-pulse">{formatLiveDuration(pa.inicio_armado_at, tick)}</span> : undefined} />
+                      <TimeMetric label="T. Espera" value={estado === "pendiente" ? undefined : formatDuration(tEspera)} liveValue={estado === "pendiente" ? <span className="text-[#99003D]">{formatLiveDuration(p.created_at, tick)}</span> : undefined} />
+                      <TimeMetric label="T. Armado" value={estado === "armando" && pa?.inicio_armado_at ? undefined : formatDuration(tArmado)} liveValue={estado === "armando" && pa?.inicio_armado_at ? <span className="text-[#006080] font-semibold animate-pulse">{formatLiveDuration(pa.inicio_armado_at, tick)}</span> : undefined} />
                       <TimeMetric label="T. Control" value={formatDuration(tControl)} />
                       <TimeMetric label="T. Total" value={formatDuration(tTotal)} bold />
                     </div>
@@ -668,7 +670,7 @@ export function SupervisionTab() {
                         <button
                           onClick={() => handleApprove(p.id)}
                           disabled={actionLoading === p.id}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-xl bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-xl bg-[#D4F5E2] text-[#1A7A45] font-medium hover:bg-green-100 disabled:opacity-50 transition-colors"
                         >
                           {actionLoading === p.id ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -688,22 +690,6 @@ export function SupervisionTab() {
                       </div>
                     )}
 
-                    {/* Urgent toggle */}
-                    {estado !== "listo" && (
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => handleToggleUrgente(p.id, pa?.urgente ?? false)}
-                          disabled={actionLoading === p.id}
-                          className={`text-xs px-2.5 py-1.5 rounded-lg font-medium disabled:opacity-50 ${
-                            pa?.urgente
-                              ? "bg-red-50 text-red-600 hover:bg-red-100"
-                              : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                          }`}
-                        >
-                          {pa?.urgente ? "Quitar urgente" : "🔥 Urgente"}
-                        </button>
-                      </div>
-                    )}
 
                     {/* "Listo" indicator */}
                     {estado === "listo" && (
@@ -790,9 +776,9 @@ export function SupervisionTab() {
             {armadorMetrics.map((a) => (
               <div
                 key={a.nombre}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3"
+                className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-full bg-[#f7dde7] text-[#c94070] flex items-center justify-center font-bold text-sm shrink-0">
+                <div className="w-10 h-10 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center font-bold text-sm shrink-0">
                   {a.nombre.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -832,7 +818,7 @@ export function SupervisionTab() {
               <button
                 onClick={saveOrden}
                 disabled={savingOrden}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[#c94070] text-white font-medium hover:bg-[#a83360] disabled:opacity-50 flex items-center gap-1.5"
+                className="text-xs px-3 py-1.5 rounded-lg bg-[#FF2D6B] text-white font-medium hover:bg-[#E0255E] disabled:opacity-50 flex items-center gap-1.5"
               >
                 {savingOrden && <Loader2 className="w-3 h-3 animate-spin" />}
                 Guardar orden
@@ -848,16 +834,16 @@ export function SupervisionTab() {
                 onDragOver={(e) => handleDragOver(e, p.id)}
                 onDragEnd={handleDragEnd}
                 onDrop={() => handleDrop(p.id)}
-                className={`bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing transition-all ${
+                className={`bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing transition-all ${
                   dragId === p.id ? "opacity-50 scale-95" : ""
                 } ${
                   dragOverId === p.id && dragId !== p.id
-                    ? "ring-2 ring-[#c94070]"
+                    ? "ring-2 ring-[#FF2D6B]"
                     : ""
                 }`}
               >
                 <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
-                <span className="w-6 h-6 rounded-full bg-[#f7dde7] text-[#c94070] flex items-center justify-center text-xs font-bold shrink-0">
+                <span className="w-6 h-6 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center text-xs font-bold shrink-0">
                   {idx + 1}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -895,7 +881,7 @@ export function SupervisionTab() {
                 value={rejectMotivo}
                 onChange={(e) => setRejectMotivo(e.target.value)}
                 rows={3}
-                className="w-full border border-[#f0dde5] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c94070] resize-none"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B] resize-none"
                 placeholder="Describí el motivo del rechazo..."
               />
             </div>
@@ -912,7 +898,7 @@ export function SupervisionTab() {
               <button
                 onClick={handleReject}
                 disabled={actionLoading !== null}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-medium text-sm flex items-center justify-center gap-1.5 hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl bg-[#FF2D6B] text-white font-medium text-sm flex items-center justify-center gap-1.5 hover:bg-[#E0255E] disabled:opacity-50"
               >
                 {actionLoading && (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -929,26 +915,15 @@ export function SupervisionTab() {
 
 /* ── Stat Card ── */
 
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode;
+function StatCard({ label, value, valueColor }: {
   label: string;
   value: number;
-  color: string;
+  valueColor: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-      <div
-        className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center mb-2`}
-      >
-        {icon}
-      </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500">{label}</p>
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <p className="text-xs text-[#6B7080] mb-1">{label}</p>
+      <p className={`text-2xl font-medium ${valueColor}`}>{value}</p>
     </div>
   );
 }
@@ -967,7 +942,7 @@ function TimeMetric({
   liveValue?: React.ReactNode;
 }) {
   return (
-    <div className="bg-gray-50 rounded-lg px-2 py-1.5 text-center">
+    <div className="bg-[#F4F4F6] rounded-lg px-2 py-1.5 text-center">
       <p className="text-[10px] text-gray-400 leading-tight">{label}</p>
       <div
         className={`text-xs mt-0.5 ${
