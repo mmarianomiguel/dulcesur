@@ -91,9 +91,9 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
 
   const borderColor: Record<string, string> = {
     pendiente: "#f59e0b",
-    armando: "#7c3aed",
-    armado: "#3b82f6",
-    listo: "#c94070",
+    armando: "#00BFFF",
+    armado: "#00BFFF",
+    listo: "#FF2D6B",
   };
 
   const displayItems = (isAdmin && estado === "armado")
@@ -128,9 +128,9 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
       <div
         className="bg-white rounded-2xl overflow-hidden"
         style={{
-          border: "0.5px solid #f0dde5",
+          border: "1px solid #E5E7EB",
           borderLeft: `4px solid ${borderColor[estado] || "#e5e7eb"}`,
-          boxShadow: "0 2px 8px rgba(201,64,112,0.06)",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
         }}
       >
         {/* Header */}
@@ -139,7 +139,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             <span className="font-bold text-gray-900 text-[15px] truncate">
               {clienteNombre}
             </span>
-            <span className="font-extrabold text-[#c94070] text-[15px] shrink-0">
+            <span className="font-extrabold text-[#FF2D6B] text-[15px] shrink-0">
               {formatCurrency(pedido.total)}
             </span>
           </div>
@@ -152,7 +152,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
               {entregaLabel}
             </span>
             {armado?.urgente && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 animate-pulse">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#FFF3CD] text-[#7A5200] animate-pulse">
                 🔥 URGENTE
               </span>
             )}
@@ -183,17 +183,17 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
           {/* Barra de progreso */}
           {estado === "armando" && esMiPedido && total > 0 && (
             <div className="mt-3">
-              <div className="h-1 bg-[#f0dde5] rounded-full overflow-hidden">
+              <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-[#c94070] rounded-full transition-all"
+                  className="h-full bg-[#FF2D6B] rounded-full transition-all"
                   style={{ width: `${pct}%` }}
                 />
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-[10px] text-[#c4a0ae] font-medium">
+                <span className="text-[10px] text-[#6B7080] font-medium">
                   {pct === 100 ? "Todo listo ✓" : `${marcados} de ${total} marcados`}
                 </span>
-                <span className="text-[10px] text-[#c4a0ae] font-medium">{pct}%</span>
+                <span className="text-[10px] text-[#6B7080] font-medium">{pct}%</span>
               </div>
             </div>
           )}
@@ -202,7 +202,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
         {/* Items list */}
         {showItems && (
           <>
-            <div style={{ height: "0.5px", background: "#f0dde5", margin: "0 16px" }} />
+            <div style={{ height: "0.5px", background: "#E5E7EB", margin: "0 16px" }} />
 
             {/* Nota del armador (solo admin) */}
             {isAdmin && notaArmador && (
@@ -216,7 +216,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             )}
 
             <div className="px-4 py-3">
-              <p className="text-[10px] font-bold text-[#c4a0ae] uppercase tracking-wider mb-2">
+              <p className="text-[10px] font-bold text-[#6B7080] uppercase tracking-wider mb-2">
                 Productos a armar
               </p>
 
@@ -232,7 +232,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
                       key={i}
                       className="py-2 border-b last:border-b-0"
                       style={{
-                        borderColor: "#fdf0f3",
+                        borderColor: "#F4F4F6",
                         ...(sinMarcarItem ? {
                           backgroundColor: "#fff8f0",
                           borderLeftWidth: 3,
@@ -252,7 +252,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
                               setChecked(next);
                             }}
                             className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
-                              isChecked ? "bg-[#c94070]" : "bg-[#fdf5f6] border-[1.5px] border-[#e8c0ce]"
+                              isChecked ? "bg-[#FF2D6B]" : "bg-[#F4F4F6] border-[1.5px] border-gray-300"
                             }`}
                           >
                             {isChecked && (
@@ -293,7 +293,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
                               if (next.has(i)) next.delete(i); else next.add(i);
                               setComboExpanded(next);
                             }}
-                            className="flex items-center gap-1 text-[10px] text-violet-600 font-semibold mt-2 ml-10"
+                            className="flex items-center gap-1 text-[10px] text-[#006080] font-semibold mt-2 ml-10"
                           >
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                               {isComboExp ? <polyline points="18 15 12 9 6 15"/> : <polyline points="6 9 12 15 18 9"/>}
@@ -301,10 +301,10 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
                             {isComboExp ? "Ocultar" : "Ver contenido"}
                           </button>
                           {isComboExp && (
-                            <div className="ml-10 mt-2 bg-violet-50 rounded-xl border border-violet-100 px-3 py-2">
+                            <div className="ml-10 mt-2 bg-[#B3EFFF] rounded-xl border border-[#00BFFF]/20 px-3 py-2">
                               {(item as any).combo_items.map((ci: any, ci_i: number) => (
-                                <div key={ci_i} className="flex items-center gap-2 py-1 text-[11px] text-violet-800">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-[#c94070] shrink-0" />
+                                <div key={ci_i} className="flex items-center gap-2 py-1 text-[11px] text-[#006080]">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-[#FF2D6B] shrink-0" />
                                   {ci.cantidad}× {ci.nombre}
                                 </div>
                               ))}
@@ -343,7 +343,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             <button
               onClick={() => setModalOpen(true)}
               disabled={saving}
-              className="h-12 rounded-2xl bg-violet-600 text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
+              className="h-12 rounded-2xl bg-[#00BFFF] text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
             >
               Marcar como armado
             </button>
@@ -354,7 +354,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             </div>
           )}
           {estado === "listo" && (
-            <div className="h-10 rounded-2xl bg-[#f7dde7] text-[#c94070] font-semibold text-[13px] flex items-center justify-center">
+            <div className="h-10 rounded-2xl bg-[#D4F5E2] text-[#1A7A45] font-semibold text-[13px] flex items-center justify-center">
               ✓ Listo
             </div>
           )}
@@ -362,7 +362,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             <button
               onClick={handleAprobar}
               disabled={saving}
-              className="h-12 rounded-2xl bg-[#c94070] text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-[#c94070]/20 disabled:opacity-50"
+              className="h-12 rounded-2xl bg-[#FF2D6B] text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-[#FF2D6B]/20 disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -381,12 +381,12 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
       {modalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end"
-          style={{ background: "rgba(30,10,16,0.6)" }}
+          style={{ background: "rgba(18,19,26,0.6)" }}
           onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false); }}
         >
           <div className="w-full bg-white rounded-t-3xl px-5 pt-5 pb-10">
             {/* Handle */}
-            <div className="w-10 h-1 bg-[#f0dde5] rounded-full mx-auto mb-5" />
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" />
 
             <p className="text-[16px] font-extrabold text-gray-900 mb-1">Marcar como armado</p>
             <p className="text-[12px] text-gray-400 mb-5">
@@ -396,7 +396,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             {/* Items sin marcar */}
             {sinMarcar.length > 0 && (
               <div className="mb-4">
-                <p className="text-[10px] font-bold text-[#c4a0ae] uppercase tracking-wider mb-2">
+                <p className="text-[10px] font-bold text-[#6B7080] uppercase tracking-wider mb-2">
                   Items sin marcar
                 </p>
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl px-3 py-3 flex gap-2">
@@ -419,30 +419,30 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             )}
 
             {/* Observaciones */}
-            <p className="text-[10px] font-bold text-[#c4a0ae] uppercase tracking-wider mb-2">
+            <p className="text-[10px] font-bold text-[#6B7080] uppercase tracking-wider mb-2">
               Observaciones del armado
             </p>
             <textarea
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               placeholder="Ej: lácteos se agregan al cargar, falta 1 unidad..."
-              className="w-full h-20 border border-[#f0dde5] rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none bg-[#fdf5f6] placeholder:text-[#e0b8c8] focus:outline-none focus:border-[#c94070]"
+              className="w-full h-20 border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none bg-[#F4F4F6] placeholder:text-gray-400 focus:outline-none focus:border-[#FF2D6B]"
             />
-            <p className="text-[10px] text-[#e0b8c8] mt-2 mb-5">
+            <p className="text-[10px] text-[#6B7080] mt-2 mb-5">
               Opcional · el admin lo verá al controlar
             </p>
 
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setModalOpen(false)}
-                className="h-14 rounded-2xl bg-[#fdf5f6] border border-[#f0dde5] text-gray-500 font-bold text-[14px]"
+                className="h-14 rounded-2xl bg-[#F4F4F6] border border-gray-200 text-gray-500 font-bold text-[14px]"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmarArmado}
                 disabled={saving}
-                className="h-14 rounded-2xl bg-[#c94070] text-white font-bold text-[14px] flex items-center justify-center gap-2 shadow-lg shadow-[#c94070]/20 active:scale-95 transition-all disabled:opacity-50"
+                className="h-14 rounded-2xl bg-[#FF2D6B] text-white font-bold text-[14px] flex items-center justify-center gap-2 shadow-lg shadow-[#FF2D6B]/20 active:scale-95 transition-all disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2 className="w-5 h-5 animate-spin" />

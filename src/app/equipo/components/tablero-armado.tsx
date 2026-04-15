@@ -25,9 +25,9 @@ const ESTADO_LABELS: Record<EstadoTab, string> = {
 
 const TAB_COLORS: Record<EstadoTab, { active: string; inactive: string }> = {
   pendiente: { active: "bg-amber-500 text-white", inactive: "bg-amber-100 text-amber-800" },
-  armando: { active: "bg-violet-600 text-white", inactive: "bg-violet-100 text-violet-800" },
-  armado: { active: "bg-blue-600 text-white", inactive: "bg-blue-100 text-blue-800" },
-  listo: { active: "bg-[#c94070] text-white", inactive: "bg-[#f7dde7] text-[#a03058]" },
+  armando: { active: "bg-[#00BFFF] text-white", inactive: "bg-[#B3EFFF] text-[#006080]" },
+  armado: { active: "bg-[#00BFFF] text-white", inactive: "bg-[#B3EFFF] text-[#006080]" },
+  listo: { active: "bg-[#FF2D6B] text-white", inactive: "bg-[#FFE0EC] text-[#99003D]" },
 };
 
 export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
@@ -157,8 +157,8 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#1e0a10]">
-        <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center mb-4 overflow-hidden">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#12131A]">
+        <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center mb-4 overflow-hidden">
           <img
             src="https://res.cloudinary.com/dss3lnovd/image/upload/w_200,h_80,c_fit,q_auto,f_auto/v1775498382/dulcesur/xxzbm0omlakbcgob46ln.png"
             alt="Dulce Sur"
@@ -173,18 +173,18 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#fdf5f6]">
+    <div className="min-h-screen bg-[#F4F4F6]">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2 rounded-full shadow-lg ${
-          toastType === "error" ? "bg-red-500" : toastType === "success" ? "bg-[#c94070]" : "bg-[#1e0a10]"
+          toastType === "error" ? "bg-red-500" : toastType === "success" ? "bg-[#FF2D6B]" : "bg-[#12131A]"
         }`}>
           {toast}
         </div>
       )}
 
       {/* Header */}
-      <div className="bg-[#1e0a10] px-4 pt-4 pb-5 sticky top-0 z-40">
+      <div className="bg-[#12131A] px-4 pt-4 pb-5 sticky top-0 z-40">
         <div className="flex items-center justify-between mb-3">
           <button
             onClick={onLogout}
@@ -223,7 +223,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
             onClick={() => setEntregaFilter("envio")}
             className={`flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all ${
               entregaFilter === "envio"
-                ? "bg-white text-[#c94070]"
+                ? "bg-white text-[#FF2D6B]"
                 : "bg-white/10 text-white/70"
             }`}
           >
@@ -233,7 +233,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
             onClick={() => setEntregaFilter("retiro")}
             className={`flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all ${
               entregaFilter === "retiro"
-                ? "bg-white text-[#c94070]"
+                ? "bg-white text-[#FF2D6B]"
                 : "bg-white/10 text-white/70"
             }`}
           >
@@ -243,7 +243,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
       </div>
 
       {/* Mobile: estado tabs */}
-      <div className="md:hidden border-b border-[#f0dde5] bg-white sticky top-[195px] z-30">
+      <div className="md:hidden border-b border-gray-200 bg-white sticky top-[195px] z-30">
         <div className="flex overflow-x-auto px-2 gap-1.5 py-2.5">
           {ESTADO_TABS.map((tab) => {
             const count = byEstado(tab).length;
@@ -267,8 +267,8 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
       <div className="md:hidden p-4 space-y-3">
         {byEstado(estadoTab).length === 0 ? (
           <div className="text-center py-12">
-            <div className="w-16 h-16 rounded-full bg-[#f7dde7] flex items-center justify-center mx-auto mb-4">
-              <Star className="w-7 h-7 text-[#c94070]" />
+            <div className="w-16 h-16 rounded-full bg-[#FFE0EC] flex items-center justify-center mx-auto mb-4">
+              <Star className="w-7 h-7 text-[#FF2D6B]" />
             </div>
             <p className="font-semibold text-gray-500 mb-1">Todo al día</p>
             <p className="text-sm text-gray-400">No hay pedidos en esta categoría</p>
@@ -303,8 +303,8 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
               ))}
               {byEstado(tab).length === 0 && (
                 <div className="text-center py-8">
-                  <div className="w-12 h-12 rounded-full bg-[#f7dde7] flex items-center justify-center mx-auto mb-3">
-                    <Star className="w-5 h-5 text-[#c94070]" />
+                  <div className="w-12 h-12 rounded-full bg-[#FFE0EC] flex items-center justify-center mx-auto mb-3">
+                    <Star className="w-5 h-5 text-[#FF2D6B]" />
                   </div>
                   <p className="text-xs text-gray-400">Sin pedidos</p>
                 </div>
