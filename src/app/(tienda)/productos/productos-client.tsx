@@ -1447,7 +1447,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
             </div>
           ) : view === "grid" ? (
             /* ─── Grid view ─── */
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {productos.map((producto, idx) => {
                 const qty = getQty(producto.id);
                 const pres = presentacionesMap[producto.id];
@@ -1497,39 +1497,39 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                   >
                     {/* Image */}
                     <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`} className="relative block">
-                      <div className="aspect-[4/3] bg-gradient-to-b from-gray-50 to-white overflow-hidden relative">
+                      <div className="aspect-square bg-gradient-to-b from-gray-50 to-white overflow-hidden relative">
                         {producto.imagen_url ? (
                           <Image
                             src={producto.imagen_url}
                             alt={producto.nombre}
                             fill
-                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                            className="object-contain p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                            className="object-contain p-4 group-hover:scale-105 transition-transform duration-500 ease-out"
                             {...(idx < 4 ? { priority: true } : { loading: "lazy" as const })}
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 to-gray-100">
-                            <div className="w-16 h-16 rounded-2xl bg-white/80 flex items-center justify-center shadow-sm">
-                              <Package className="h-8 w-8 text-gray-300" />
+                            <div className="w-20 h-20 rounded-2xl bg-white/80 flex items-center justify-center shadow-sm">
+                              <Package className="h-10 w-10 text-gray-300" />
                             </div>
-                            <span className="text-[10px] text-gray-300 font-medium">Sin imagen</span>
+                            <span className="text-xs text-gray-300 font-medium">Sin imagen</span>
                           </div>
                         )}
                       </div>
                       {/* Badge - one per product, priority: combo > discount > box > price change */}
                       {(() => {
                         if (producto.es_combo) return (
-                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary to-rose-400 text-white text-xs font-bold px-3 py-1.5 rounded-md flex items-center gap-1">
                             COMBO
                           </span>
                         );
                         if (onOffer && disc === 0) return (
-                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-md">
                             OFERTA
                           </span>
                         );
                         if (disc > 0) return (
-                          <span className="absolute top-2.5 left-2.5 bg-primary text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-md">
                             {disc}% OFF
                           </span>
                         );
@@ -1539,7 +1539,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             const boxLabel = presLabel(boxPres);
                             const boxDisc = getProductDiscount(producto, boxLabel);
                             if (boxDisc > 0) return (
-                              <span className="absolute top-2.5 left-2.5 bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                              <span className="absolute top-2.5 left-2.5 bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded-md">
                                 {boxDisc}% OFF x caja
                               </span>
                             );
@@ -1550,25 +1550,25 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                         if (pa && pa > 0 && pa !== producto.precio && dateStr &&
                           daysSinceAR(dateStr) <= 3) {
                           if (producto.precio > pa) return (
-                            <span className="absolute top-2.5 left-2.5 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            <span className="absolute top-2.5 left-2.5 bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-md">
                               Precio actualizado
                             </span>
                           );
                           return (
-                            <span className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            <span className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-md">
                               Precio rebajado
                             </span>
                           );
                         }
                         // Volume discount hint badge
                         if (volHint) return (
-                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-md">
                             {volHint.pct}% OFF x{volHint.minQty}+ {volHint.label}
                           </span>
                         );
                         // "New" badge
                         if (producto.created_at && daysSinceAR(producto.created_at) <= 7) return (
-                          <span className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-md">
                             NUEVO
                           </span>
                         );
@@ -1576,19 +1576,19 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                       })()}
                       {producto.stock <= 0 ? (
                         <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center">
-                          <span className="bg-white/90 text-gray-500 text-xs font-medium px-3 py-1.5 rounded-lg shadow-sm">Agotado</span>
+                          <span className="bg-white/90 text-gray-500 text-sm font-medium px-4 py-2 rounded-lg shadow-sm">Agotado</span>
                         </div>
                       ) : producto.stock > 0 && producto.stock <= 5 && (
-                        <span className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
+                        <span className="absolute bottom-2 right-2 bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">
                           {producto.stock < 1 ? `¡Quedan ${producto.stock}!` : producto.stock === 1 ? "¡Última unidad!" : `¡Últimas ${producto.stock}!`}
                         </span>
                       )}
                     </Link>
 
                     {/* Content */}
-                    <div className="flex flex-col flex-1 p-3.5 pt-2.5">
+                    <div className="flex flex-col flex-1 p-4 pt-3">
                       <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`} className="flex-1">
-                        <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-primary/90 transition-colors">
+                        <h3 className="text-base font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-primary/90 transition-colors">
                           {producto.nombre}
                         </h3>
                       </Link>
@@ -1596,15 +1596,15 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                       {/* Price */}
                       <div className="mb-3">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-lg font-bold text-gray-900">
+                          <span className="text-xl font-bold text-gray-900">
                             {disc > 0 ? formatCurrency(discountedPrice) : formatCurrency(activePrice)}
                           </span>
                           {(disc > 0 || onOffer) && (
-                            <span className="text-xs text-gray-400 line-through">{formatCurrency(onOffer && disc === 0 ? producto.precio : activePrice)}</span>
+                            <span className="text-sm text-gray-400 line-through">{formatCurrency(onOffer && disc === 0 ? producto.precio : activePrice)}</span>
                           )}
                         </div>
                         {onOffer && disc === 0 && (
-                          <p className="text-[10px] text-orange-600 font-medium">Precio especial</p>
+                          <p className="text-xs text-orange-600 font-medium">Precio especial</p>
                         )}
                         {(() => {
                           const pa = producto.precio_anterior;
@@ -1612,15 +1612,15 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
                           if (daysSinceAR(dateStr) > 3) return null;
                           if (producto.precio > pa) {
-                            return <p className="text-[10px] text-amber-600 font-medium">Precio actualizado</p>;
+                            return <p className="text-xs text-amber-600 font-medium">Precio actualizado</p>;
                           }
-                          return <p className="text-[10px] text-green-600 font-medium">Precio rebajado</p>;
+                          return <p className="text-xs text-green-600 font-medium">Precio rebajado</p>;
                         })()}
                         {volHint && disc === 0 && (
-                          <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ {volHint.label}</p>
+                          <p className="text-xs text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ {volHint.label}</p>
                         )}
                         {boxDiscountHint && (
-                          <p className="text-[10px] text-emerald-600 font-medium mt-0.5">📦 {boxDiscountHint.pct}% OFF por {boxDiscountHint.label}</p>
+                          <p className="text-xs text-emerald-600 font-medium mt-0.5">📦 {boxDiscountHint.pct}% OFF por {boxDiscountHint.label}</p>
                         )}
                         {/* Tags */}
                         {producto.tags && producto.tags.length > 0 && (
@@ -1633,7 +1633,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                                   e.stopPropagation();
                                   updateParams({ tag: tagFilter === tag ? null : tag });
                                 }}
-                                className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+                                className={`text-xs px-2 py-1 rounded-full border transition-colors ${
                                   tagFilter === tag
                                     ? "bg-primary/10 text-primary border-primary/30 font-semibold"
                                     : "bg-gray-50 text-gray-500 border-gray-200 hover:border-primary/30 hover:text-primary"
@@ -1668,7 +1668,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                                   const newMax = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad))));
                                   if (qty > newMax) setQuantities((prev) => ({ ...prev, [producto.id]: Math.max(1, newMax) }));
                                 }}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border ${
+                                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
                                   presDisabled
                                     ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                                     : isActive
@@ -1696,30 +1696,30 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
                               <button
                                 onClick={() => setQty(producto.id, qty - 1)}
-                                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+                                className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
                               >
-                                <Minus className="w-3 h-3" />
+                                <Minus className="w-4 h-4" />
                               </button>
-                              <span className="w-7 text-center text-xs font-semibold tabular-nums text-gray-800">{qty}</span>
+                              <span className="w-9 text-center text-sm font-semibold tabular-nums text-gray-800">{qty}</span>
                               <button
                                 onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))}
                                 disabled={qty >= maxForPres}
-                                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-30"
+                                className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-30"
                               >
-                                <Plus className="w-3 h-3" />
+                                <Plus className="w-4 h-4" />
                               </button>
                             </div>
-                            <span className="text-sm font-bold text-gray-900">{formatCurrency(discountedPrice * qty)}</span>
+                            <span className="text-base font-bold text-gray-900">{formatCurrency(discountedPrice * qty)}</span>
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="w-full bg-primary hover:bg-primary/90 active:scale-[0.98] text-white text-sm py-2.5 rounded-xl font-semibold transition-all shadow-sm shadow-primary/20"
+                            className="w-full bg-primary hover:bg-primary/90 active:scale-[0.98] text-white text-base py-3 rounded-xl font-semibold transition-all shadow-sm shadow-primary/20"
                           >
                             Agregar
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1.5 w-full bg-gray-50/80 text-gray-400 text-xs py-2.5 rounded-lg font-medium">
+                        <div className="flex items-center justify-center gap-1.5 w-full bg-gray-50/80 text-gray-400 text-sm py-3 rounded-lg font-medium">
                           Agotado
                         </div>
                       );
