@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   XCircle,
   Loader2,
+  GripVertical,
 } from "lucide-react";
 import type { PedidoConArmado } from "@/types/equipo";
 
@@ -59,6 +60,10 @@ export function SupervisionTab() {
   const [rejectTarget, setRejectTarget] = useState<string | null>(null);
   const [rejectMotivo, setRejectMotivo] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [ordenModified, setOrdenModified] = useState(false);
+  const [savingOrden, setSavingOrden] = useState(false);
 
   const fetchPedidos = useCallback(async () => {
     try {
@@ -145,6 +150,65 @@ export function SupervisionTab() {
     }
     return Array.from(map.values());
   }, [pedidos]);
+
+  /* ── Orden de entrega (drag & drop) ── */
+
+  const listosEnvio = useMemo(() => {
+    return pedidos
+      .filter(p => p.pedido_armado?.estado === "listo" &&
+        (p.metodo_entrega === "envio" || p.metodo_entrega === "envio_a_domicilio"))
+      .sort((a, b) => {
+        const oa = a.pedido_armado?.orden_entrega ?? Infinity;
+        const ob = b.pedido_armado?.orden_entrega ?? Infinity;
+        return oa - ob;
+      });
+  }, [pedidos]);
+
+  const [orderedListos, setOrderedListos] = useState<PedidoConArmado[]>([]);
+
+  useEffect(() => {
+    setOrderedListos(listosEnvio);
+    setOrdenModified(false);
+  }, [listosEnvio]);
+
+  const handleDragStart = (id: string) => setDragId(id);
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    setDragOverId(id);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) { handleDragEnd(); return; }
+    const fromIdx = orderedListos.findIndex(p => p.id === dragId);
+    const toIdx = orderedListos.findIndex(p => p.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) { handleDragEnd(); return; }
+    const reordered = [...orderedListos];
+    reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, orderedListos[fromIdx]);
+    setOrderedListos(reordered);
+    setOrdenModified(true);
+    handleDragEnd();
+  };
+
+  const saveOrden = async () => {
+    setSavingOrden(true);
+    try {
+      await Promise.all(
+        orderedListos.map((p, i) =>
+          fetch(`/api/equipo/pedidos/${p.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estado: "listo", orden_entrega: i + 1 }),
+          })
+        )
+      );
+      await fetchPedidos();
+    } finally {
+      setSavingOrden(false);
+      setOrdenModified(false);
+    }
+  };
 
   /* ── Actions ── */
 
@@ -288,6 +352,52 @@ export function SupervisionTab() {
                     )}
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── B2) Orden de entrega ── */}
+      {orderedListos.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700">Orden de entrega</h3>
+            {ordenModified && (
+              <button
+                onClick={saveOrden}
+                disabled={savingOrden}
+                className="text-xs px-3 py-1.5 rounded-lg bg-[#c94070] text-white font-medium hover:bg-[#a83360] disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {savingOrden && <Loader2 className="w-3 h-3 animate-spin" />}
+                Guardar orden
+              </button>
+            )}
+          </div>
+          <div className="space-y-2">
+            {orderedListos.map((p, idx) => (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={() => handleDragStart(p.id)}
+                onDragOver={(e) => handleDragOver(e, p.id)}
+                onDragEnd={handleDragEnd}
+                onDrop={() => handleDrop(p.id)}
+                className={`bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing transition-all ${
+                  dragId === p.id ? "opacity-50 scale-95" : ""
+                } ${dragOverId === p.id && dragId !== p.id ? "ring-2 ring-[#c94070]" : ""}`}
+              >
+                <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
+                <span className="w-6 h-6 rounded-full bg-[#f7dde7] text-[#c94070] flex items-center justify-center text-xs font-bold shrink-0">
+                  {idx + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">{p.clientes?.nombre ?? "—"}</p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {[p.clientes?.domicilio, p.clientes?.localidad].filter(Boolean).join(", ") || "Sin dirección"}
+                  </p>
+                </div>
+                <span className="text-xs text-gray-400 font-mono shrink-0">#{p.numero?.slice(-4)}</span>
               </div>
             ))}
           </div>
