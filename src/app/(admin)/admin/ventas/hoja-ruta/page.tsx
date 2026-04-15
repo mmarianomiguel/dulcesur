@@ -2340,20 +2340,16 @@ export default function HojaDeRutaPage() {
           </DialogHeader>
           {payVenta && (() => {
             const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
-            // v.total in DB already has NC deducted — NC is NOT separate anymore
+            // v.total in DB already has NC deducted. Reconstruct original for display.
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
-            // Real payments = pagadoPorVenta minus the NC portion (NC is tracked as a "payment" in pagadoPorVenta)
+            // Real payments = pagadoPorVenta minus the NC portion
             const totalPagadoReal = allVentas.reduce((s, vt) => {
               const pagado = pagadoPorVenta[vt.id] || 0;
               const nc = ncPorVenta[vt.id] || 0;
-              return s + Math.max(0, pagado - nc); // only actual cash/transfer payments
+              return s + Math.max(0, pagado - nc);
             }, 0);
-            const totalDebeGrupo = allVentas.reduce((s, vt) => {
-              const pagado = pagadoPorVenta[vt.id] || 0;
-              const nc = ncPorVenta[vt.id] || 0;
-              const pagadoReal = Math.max(0, pagado - nc);
-              return s + Math.max(0, vt.total - pagadoReal); // v.total already net of NC
-            }, 0);
+            // Sum of v.total = what client actually owes (NC already applied)
+            const totalNeto = allVentas.reduce((s, vt) => s + vt.total, 0);
 
             // Calcular subtotal SIN recargo para pasarle al CobroVentaSection.
             // vt.total puede incluir el recargo de transferencia (guardado en DB),
@@ -2378,8 +2374,8 @@ export default function HojaDeRutaPage() {
                 : vt.total);
             }, 0);
 
-            // subtotalSinRecargo uses v.total/v.subtotal which already have NC deducted
-            const preDebeGrupo = Math.max(0, subtotalSinRecargo - totalPagadoReal);
+            // preDebeGrupo = what client owes (v.total sum, already net of NC) minus real payments
+            const preDebeGrupo = Math.max(0, totalNeto - totalPagadoReal);
             return (
               <div className="space-y-4">
                 {/* Summary header */}
@@ -2388,20 +2384,23 @@ export default function HojaDeRutaPage() {
                   {allVentas.length === 1 ? (
                     <>
                       <div className="flex justify-between"><span className="text-gray-500">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(allVentas[0].total)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(allVentas[0].total + (ncPorVenta[allVentas[0].id] || 0))}</span></div>
+                      {(ncPorVenta[allVentas[0].id] || 0) > 0 && (
+                        <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(ncPorVenta[allVentas[0].id])}</span></div>
+                      )}
                     </>
                   ) : (
                     <>
                       {allVentas.map((v) => (
                         <div key={v.id} className="flex justify-between">
                           <span className="text-gray-500">#{v.numero}</span>
-                          <span className="font-medium">{formatCurrency(v.total)}</span>
+                          <span className="font-medium">{formatCurrency(v.total + (ncPorVenta[v.id] || 0))}</span>
                         </div>
                       ))}
-                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
+                      {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
+                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(totalNeto)}</span></div>
                     </>
                   )}
-                  {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito (aplicada)</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
                   {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-gray-500">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
                   <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500 font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(preDebeGrupo)}</span></div>
                 </div>
