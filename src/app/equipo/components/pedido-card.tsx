@@ -151,6 +151,11 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
               <EntregaIcon className="w-3 h-3" />
               {entregaLabel}
             </span>
+            {(armado?.rechazos ?? 0) > 0 && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
+                {armado!.rechazos} {armado!.rechazos === 1 ? "rechazo" : "rechazos"}
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-gray-400">
             #{pedido.numero} · {hora}
@@ -158,6 +163,15 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
           {armadorNombre && estado !== "pendiente" && (
             <div className="text-[11px] text-gray-400 mt-0.5">
               Armando: {armadorNombre}
+            </div>
+          )}
+          {armado?.motivo_rechazo && estado === "armando" && (
+            <div className="mt-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex gap-2">
+              <span className="text-red-500 text-sm shrink-0">!</span>
+              <div>
+                <p className="text-[11px] font-bold text-red-800 mb-0.5">Devuelto por el admin</p>
+                <p className="text-[11px] text-red-700">{armado.motivo_rechazo}</p>
+              </div>
             </div>
           )}
 

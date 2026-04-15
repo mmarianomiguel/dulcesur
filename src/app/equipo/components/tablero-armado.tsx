@@ -36,9 +36,9 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
   const [entregaFilter, setEntregaFilter] = useState<EntregaFilter>("envio");
   const [estadoTab, setEstadoTab] = useState<EstadoTab>("pendiente");
   const [toast, setToast] = useState<string | null>(null);
-  const [toastType, setToastType] = useState<"info" | "success">("info");
+  const [toastType, setToastType] = useState<"info" | "success" | "error">("info");
 
-  const showToast = (msg: string, type: "info" | "success" = "info") => {
+  const showToast = (msg: string, type: "info" | "success" | "error" = "info") => {
     setToast(msg);
     setToastType(type);
     setTimeout(() => setToast(null), 3000);
@@ -67,9 +67,17 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pedido_armado" },
-        () => {
+        (payload: any) => {
           fetchPedidos();
-          showToast("Tablero actualizado", "success");
+          const newData = payload.new as any;
+          if (newData?.motivo_rechazo && newData?.armador_id === session.id) {
+            showToast(
+              `Pedido devuelto: ${newData.motivo_rechazo}`,
+              "error"
+            );
+          } else {
+            showToast("Tablero actualizado", "success");
+          }
         }
       )
       .on(
@@ -144,7 +152,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2 rounded-full shadow-lg ${
-          toastType === "success" ? "bg-[#c94070]" : "bg-[#1e0a10]"
+          toastType === "error" ? "bg-red-500" : toastType === "success" ? "bg-[#c94070]" : "bg-[#1e0a10]"
         }`}>
           {toast}
         </div>
