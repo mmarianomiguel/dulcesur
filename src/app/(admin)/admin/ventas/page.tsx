@@ -1396,7 +1396,9 @@ export default function VentasPage() {
   const handleStockContinue = () => {
     skipFinalStockCheckRef.current = true;
     setStockExceedDialog({ open: false, issues: [], adjustSet: new Set() });
-    if (formaPago === "Efectivo") {
+    if (cobrarEnEntrega) {
+      handleCerrarComprobante();
+    } else if (formaPago === "Efectivo") {
       setCashReceived("");
       setCashDialogOpen(true);
     } else {
@@ -2046,8 +2048,8 @@ export default function VentasPage() {
           saldoAnterior,
           saldoNuevo,
           cobroSaldoMonto: montoCobroSaldo > 0 ? montoCobroSaldo : undefined,
-          cashReceived: formaPago === "Efectivo" ? cashReceivedNum : undefined,
-          cashChange: formaPago === "Efectivo" ? (cashReceivedNum - totalACobrar) : undefined,
+          cashReceived: formaPago === "Efectivo" && !cobrarEnEntrega ? cashReceivedNum : undefined,
+          cashChange: formaPago === "Efectivo" && !cobrarEnEntrega ? (cashReceivedNum - totalACobrar) : undefined,
           pagoEfectivo: formaPago === "Mixto" ? mixtoEfectivo : formaPago === "Efectivo" ? total : undefined,
           pagoTransferencia: formaPago === "Mixto" ? (mixtoTransferencia + transferSurcharge) : formaPago === "Transferencia" ? total : undefined,
           pagoCuentaCorriente: formaPago === "Mixto" ? mixtoCuentaCorriente : formaPago === "Cuenta Corriente" ? total : undefined,
