@@ -1304,13 +1304,16 @@ export default function HojaDeRutaPage() {
   })();
 
   // Helper: group totals
+  // pagadoPorVenta already includes NC amounts as "payments", so we must
+  // subtract NC from pagado to avoid double-counting when computing debe.
   const groupTotals = (g: ClientGroup) => {
     const bruto = g.ventas.reduce((s, v) => s + v.total, 0);
     const nc = g.ventas.reduce((s, v) => s + (ncPorVenta[v.id] || 0), 0);
-    const pagado = g.ventas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
+    const pagadoTotal = g.ventas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
+    const pagadoSinNC = pagadoTotal - nc; // Real payments only (without NC)
     const neto = bruto - nc;
-    const debe = Math.max(0, neto - pagado);
-    return { bruto, nc, pagado, neto, debe };
+    const debe = Math.max(0, neto - pagadoSinNC);
+    return { bruto, nc, pagado: pagadoSinNC, neto, debe };
   };
 
   // Stats (from filtered)
@@ -1905,7 +1908,7 @@ export default function HojaDeRutaPage() {
                       {group.ventas.map((v) => (
                         <div key={v.id} className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">{v.tipo_comprobante} #{v.numero}</span>
-                          <span className="font-medium">{formatCurrency(v.total - (ncPorVenta[v.id] || 0))}</span>
+                          <span className="font-medium">{formatCurrency(v.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -2126,7 +2129,7 @@ export default function HojaDeRutaPage() {
                             {group.ventas.map((v) => (
                               <div key={v.id} className="flex items-center justify-between text-xs">
                                 <span className="text-muted-foreground">{v.tipo_comprobante} #{v.numero} <span className="ml-1 opacity-60">{v.forma_pago}</span></span>
-                                <span className="font-medium">{formatCurrency(v.total - (ncPorVenta[v.id] || 0))}</span>
+                                <span className="font-medium">{formatCurrency(v.total)}</span>
                               </div>
                             ))}
                           </div>
@@ -2335,9 +2338,13 @@ export default function HojaDeRutaPage() {
           </DialogHeader>
           {payVenta && (() => {
             const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
-            const totalDebeGrupo = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
-            const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
+            const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
+            const totalDebeGrupo = allVentas.reduce((s, vt) => {
+              const nc = ncPorVenta[vt.id] || 0;
+              const pagadoSinNC = (pagadoPorVenta[vt.id] || 0) - nc;
+              return s + Math.max(0, vt.total - nc - pagadoSinNC);
+            }, 0);
 
             // Calcular subtotal SIN recargo para pasarle al CobroVentaSection.
             // vt.total puede incluir el recargo de transferencia (guardado en DB),
