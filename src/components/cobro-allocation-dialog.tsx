@@ -357,9 +357,9 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0" showCloseButton={false}>
+      <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" showCloseButton={false}>
         {/* Header */}
-        <div className="px-6 pt-5 pb-4 border-b bg-muted/30">
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b bg-muted/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
@@ -377,7 +377,7 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
           </div>
         </div>
 
-        <div className="px-6 py-4 space-y-5">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-4 sm:space-y-5">
           {/* Section 1: Comprobantes pendientes de pago */}
           {invoices.length > 0 && (
             <div>
@@ -405,7 +405,59 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
 
               <div className="border rounded-xl overflow-hidden">
                 <div className="max-h-52 overflow-y-auto">
-                  <table className="w-full text-[12px]">
+                  {/* Mobile cards */}
+                  <div className="sm:hidden divide-y">
+                    {allocations.map((a) => {
+                      const inv = invoices.find((i) => i.id === a.venta_id);
+                      const hasPago = a.monto_aplicado > 0;
+                      const fullPaid = hasPago && a.monto_aplicado >= a.pendiente;
+                      return (
+                        <div key={a.venta_id} className={`px-3 py-2.5 ${hasPago ? "bg-emerald-50/20" : ""}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-mono text-xs font-medium">{a.numero}</span>
+                            <span className="text-[11px] text-muted-foreground tabular-nums">
+                              {new Date(a.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-muted-foreground">Total: {formatCurrency(inv?.total || a.pendiente)}</span>
+                            <span className="font-medium text-orange-600 tabular-nums">Saldo: {formatCurrency(a.pendiente)}</span>
+                          </div>
+                          <div className="mt-1.5">
+                            {mode === "manual" ? (
+                              <div className="relative w-full">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={a.monto_aplicado ? a.monto_aplicado.toLocaleString("es-AR") : ""}
+                                  onChange={(e) => {
+                                    const v = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                                    handleManualChange(a.venta_id, parseFloat(v) || 0);
+                                  }}
+                                  placeholder="Monto a aplicar"
+                                  className={`w-full rounded-lg h-8 text-xs font-semibold text-right pr-3 pl-6 tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+                                    hasPago
+                                      ? "border border-emerald-300 bg-emerald-50/50 text-emerald-700"
+                                      : "border border-input bg-background text-muted-foreground placeholder:text-muted-foreground/40"
+                                  }`}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex justify-end">
+                                <span className={`text-xs font-bold tabular-nums ${fullPaid ? "text-emerald-600" : hasPago ? "text-blue-600" : "text-muted-foreground"}`}>
+                                  {hasPago ? `Pago: ${formatCurrency(a.monto_aplicado)}` : "—"}
+                                  {fullPaid && " \u2713"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Desktop table */}
+                  <table className="hidden sm:table w-full text-[12px]">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-muted/50 border-b">
                         <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Comprobante N°</th>
@@ -507,7 +559,80 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
             </div>
 
             <div className="border rounded-xl overflow-hidden">
-              <table className="w-full text-[12px]">
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y">
+                {paymentLines.map((line) => (
+                  <div key={line.id} className="px-3 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-1.5">
+                        {(["Efectivo", "Transferencia"] as const).map((fp) => (
+                          <button
+                            key={fp}
+                            type="button"
+                            onClick={() => {
+                              const updates: Partial<PaymentLine> = { formaPago: fp };
+                              if (fp === "Transferencia" && cuentas.length > 0) updates.cuentaBancariaId = cuentas[0].id;
+                              if (fp === "Efectivo") updates.cuentaBancariaId = "";
+                              updateLine(line.id, updates);
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                              line.formaPago === fp
+                                ? fp === "Efectivo"
+                                  ? "bg-green-50 border border-green-200 text-green-700"
+                                  : "bg-violet-50 border border-violet-200 text-violet-700"
+                                : "border border-transparent text-muted-foreground hover:bg-muted"
+                            }`}
+                          >
+                            {fp === "Efectivo" ? <Banknote className="w-3 h-3" /> : <ArrowLeftRight className="w-3 h-3" />}
+                            {fp}
+                          </button>
+                        ))}
+                      </div>
+                      {paymentLines.length > 1 && (
+                        <button type="button" onClick={() => removeLine(line.id)} className="p-1 rounded text-muted-foreground/40 hover:text-red-500 transition-colors">
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    {line.formaPago === "Transferencia" && cuentas.length > 0 && (
+                      <select
+                        value={line.cuentaBancariaId}
+                        onChange={(e) => updateLine(line.id, { cuentaBancariaId: e.target.value })}
+                        className="h-8 w-full rounded-lg border border-input bg-background text-xs px-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                      >
+                        <option value="">Seleccionar cuenta...</option>
+                        {cuentas.map((c) => (
+                          <option key={c.id} value={c.id}>{c.nombre}{c.alias ? ` — ${c.alias}` : ""}</option>
+                        ))}
+                      </select>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={line.montoInput}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                            const num = parseFloat(raw) || 0;
+                            updateLine(line.id, { monto: num, montoInput: num > 0 ? num.toLocaleString("es-AR") : raw === "" ? "" : "0" });
+                          }}
+                          placeholder="Monto recibido"
+                          className={`w-full rounded-lg h-9 text-sm font-semibold text-right pr-3 pl-6 tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+                            line.monto > 0
+                              ? "border border-emerald-300 bg-emerald-50/50 text-emerald-700"
+                              : "border border-input bg-background text-muted-foreground placeholder:text-muted-foreground/40"
+                          }`}
+                        />
+                      </div>
+                      <span className="text-xs font-bold tabular-nums shrink-0 min-w-[60px] text-right">{formatCurrency(line.monto)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <table className="hidden sm:table w-full text-[12px]">
                 <thead>
                   <tr className="bg-muted/50 border-b">
                     <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground">Forma de pago</th>
@@ -520,7 +645,6 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                 <tbody>
                   {paymentLines.map((line) => (
                     <tr key={line.id} className="border-b last:border-0 hover:bg-muted/30">
-                      {/* Payment method */}
                       <td className="py-2.5 px-3">
                         <div className="flex gap-1.5">
                           {(["Efectivo", "Transferencia"] as const).map((fp) => (
@@ -529,12 +653,8 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                               type="button"
                               onClick={() => {
                                 const updates: Partial<PaymentLine> = { formaPago: fp };
-                                if (fp === "Transferencia" && cuentas.length > 0) {
-                                  updates.cuentaBancariaId = cuentas[0].id;
-                                }
-                                if (fp === "Efectivo") {
-                                  updates.cuentaBancariaId = "";
-                                }
+                                if (fp === "Transferencia" && cuentas.length > 0) updates.cuentaBancariaId = cuentas[0].id;
+                                if (fp === "Efectivo") updates.cuentaBancariaId = "";
                                 updateLine(line.id, updates);
                               }}
                               className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
@@ -551,7 +671,6 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                           ))}
                         </div>
                       </td>
-                      {/* Account / detail — dropdown */}
                       <td className="py-2.5 px-3">
                         {line.formaPago === "Transferencia" && cuentas.length > 0 ? (
                           <select
@@ -561,9 +680,7 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                           >
                             <option value="">Seleccionar cuenta...</option>
                             {cuentas.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.nombre}{c.alias ? ` — ${c.alias}` : ""}
-                              </option>
+                              <option key={c.id} value={c.id}>{c.nombre}{c.alias ? ` — ${c.alias}` : ""}</option>
                             ))}
                           </select>
                         ) : line.formaPago === "Transferencia" && cuentas.length === 0 ? (
@@ -572,7 +689,6 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
-                      {/* Recibido — editable input */}
                       <td className="py-2.5 px-3 text-right">
                         <div className="relative ml-auto w-28">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>
@@ -583,10 +699,7 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                             onChange={(e) => {
                               const raw = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
                               const num = parseFloat(raw) || 0;
-                              updateLine(line.id, {
-                                monto: num,
-                                montoInput: num > 0 ? num.toLocaleString("es-AR") : raw === "" ? "" : "0",
-                              });
+                              updateLine(line.id, { monto: num, montoInput: num > 0 ? num.toLocaleString("es-AR") : raw === "" ? "" : "0" });
                             }}
                             placeholder="0"
                             className={`w-full rounded-lg h-7 text-xs font-semibold text-right pr-2.5 pl-5 tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
@@ -597,18 +710,10 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                           />
                         </div>
                       </td>
-                      {/* Importe */}
-                      <td className="py-2.5 px-3 text-right tabular-nums text-xs font-bold">
-                        {formatCurrency(line.monto)}
-                      </td>
-                      {/* Remove */}
+                      <td className="py-2.5 px-3 text-right tabular-nums text-xs font-bold">{formatCurrency(line.monto)}</td>
                       <td className="py-2.5 pr-3">
                         {paymentLines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeLine(line.id)}
-                            className="p-0.5 rounded text-muted-foreground/40 hover:text-red-500 transition-colors"
-                          >
+                          <button type="button" onClick={() => removeLine(line.id)} className="p-0.5 rounded text-muted-foreground/40 hover:text-red-500 transition-colors">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         )}
@@ -631,9 +736,9 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
           </div>
 
           {/* Bottom summary */}
-          <div className="bg-muted/50 rounded-xl border p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
+          <div className="bg-muted/50 rounded-xl border p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-4 sm:gap-6">
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Cobrado</p>
                   <p className="text-base font-bold text-emerald-600 tabular-nums">{formatCurrency(totalCobrado)}</p>
@@ -652,13 +757,13 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" className="h-10" onClick={() => onOpenChange(false)} disabled={saving}>
+                <Button variant="outline" className="h-10 flex-1 sm:flex-none" onClick={() => onOpenChange(false)} disabled={saving}>
                   Cancelar
                 </Button>
                 <Button
                   onClick={handleSubmit}
                   disabled={saving || totalCobrado <= 0}
-                  className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm"
+                  className="h-10 flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm"
                 >
                   <Check className="w-4 h-4" />
                   {saving ? "Registrando..." : "Guardar e Imprimir"}

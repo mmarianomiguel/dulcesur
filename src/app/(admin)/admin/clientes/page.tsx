@@ -2000,94 +2000,153 @@ export default function ClientesPage() {
                   <p className="text-sm">Sin compras en el período seleccionado</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-left py-2 px-3 font-medium">Fecha</th>
-                        <th className="text-left py-2 px-3 font-medium">Tipo</th>
-                        <th className="text-left py-2 px-3 font-medium">Comprobante</th>
-                        <th className="text-left py-2 px-3 font-medium">Forma pago</th>
-                        <th className="text-right py-2 px-3 font-medium">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {movimientos.map((m, i) => {
-                        const key = `compra-${m.id}-${i}`;
-                        const isExp = movExpanded === key;
-                        const hasItems = m.items && m.items.length > 0;
-                        return (
-                          <React.Fragment key={key}>
-                            <tr
-                              className={`border-b last:border-0 hover:bg-muted/50 ${hasItems ? "cursor-pointer" : ""}`}
-                              onClick={() => hasItems && setMovExpanded(isExp ? null : key)}
-                            >
-                              <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                              <td className="py-2 px-3">
-                                <Badge variant={m.badge as any} className="text-xs font-normal">{m.tipo}</Badge>
-                              </td>
-                              <td className="py-2 px-3 text-xs">
-                                <div className="flex items-center gap-1">
-                                  <span>{m.descripcion}</span>
-                                  {hasItems && (
-                                    <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isExp ? "rotate-180" : ""}`} />
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-2 px-3">
-                                <Badge variant="outline" className="text-xs font-normal">{m.forma_pago || "—"}</Badge>
-                              </td>
-                              <td className={`py-2 px-3 text-right font-semibold ${m.monto < 0 ? "text-emerald-600" : ""}`}>
+                <div>
+                  {/* Mobile cards */}
+                  <div className="sm:hidden divide-y">
+                    {movimientos.map((m, i) => {
+                      const key = `compra-${m.id}-${i}`;
+                      const isExp = movExpanded === key;
+                      const hasItems = m.items && m.items.length > 0;
+                      return (
+                        <div key={key}>
+                          <div
+                            className={`px-3 py-2.5 ${hasItems ? "cursor-pointer" : ""}`}
+                            onClick={() => hasItems && setMovExpanded(isExp ? null : key)}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-muted-foreground tabular-nums">
+                                  {new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}
+                                </span>
+                                <Badge variant={m.badge as any} className="text-[10px] font-normal">{m.tipo}</Badge>
+                                {hasItems && <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isExp ? "rotate-180" : ""}`} />}
+                              </div>
+                              <span className={`text-sm font-semibold tabular-nums ${m.monto < 0 ? "text-emerald-600" : ""}`}>
                                 {m.monto < 0 ? `-${formatCurrency(Math.abs(m.monto))}` : formatCurrency(m.monto)}
-                              </td>
-                            </tr>
-                            {isExp && hasItems && (
-                              <tr>
-                                <td colSpan={5} className="px-3 pb-3 pt-0">
-                                  <div className="bg-muted/30 rounded-lg p-3 mt-1">
-                                    <table className="w-full text-xs">
-                                      <thead>
-                                        <tr className="text-muted-foreground">
-                                          <th className="text-left py-1 font-medium">Producto</th>
-                                          <th className="text-center py-1 font-medium">Cant.</th>
-                                          <th className="text-right py-1 font-medium">Precio</th>
-                                          <th className="text-right py-1 font-medium">Subtotal</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {m.items.map((it: any, idx: number) => {
-                                          const isBox = it.presentacion && it.presentacion !== "Unidad" && (it.unidades_por_presentacion || 1) > 1;
-                                          const unitPrice = isBox ? it.precio_unitario / (it.unidades_por_presentacion || 1) : it.precio_unitario;
-                                          let displayName = (it.descripcion || "")
-                                            .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
-                                            .replace(/\s*\(Unidad\)$/, "")
-                                            .replace(/(\([^)]+\))\s*\1/gi, "$1")
-                                            .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
-                                            .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
-                                          return (
-                                            <tr key={idx} className="border-t border-muted">
-                                              <td className="py-1">{displayName}</td>
-                                              <td className="py-1 text-center">{(it.unidades_por_presentacion || 1) > 0 && (it.unidades_por_presentacion || 1) < 1 ? it.cantidad * (it.unidades_por_presentacion || 1) : it.cantidad}{isBox ? ` ${it.presentacion}` : ""}</td>
-                                              <td className="py-1 text-right">
-                                                {formatCurrency(unitPrice)}
-                                                {isBox && <span className="text-[10px] text-muted-foreground block">c/u</span>}
-                                              </td>
-                                              <td className="py-1 text-right font-medium">{formatCurrency(it.subtotal || it.precio_unitario * it.cantidad)}</td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground truncate mr-2">{m.descripcion}</span>
+                              <Badge variant="outline" className="text-[10px] font-normal shrink-0">{m.forma_pago || "—"}</Badge>
+                            </div>
+                          </div>
+                          {isExp && hasItems && (
+                            <div className="px-3 pb-3">
+                              <div className="bg-muted/30 rounded-lg p-3">
+                                <div className="space-y-2">
+                                  {m.items.map((it: any, idx: number) => {
+                                    const isBox = it.presentacion && it.presentacion !== "Unidad" && (it.unidades_por_presentacion || 1) > 1;
+                                    let displayName = (it.descripcion || "")
+                                      .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+                                      .replace(/\s*\(Unidad\)$/, "")
+                                      .replace(/(\([^)]+\))\s*\1/gi, "$1")
+                                      .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
+                                      .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
+                                    return (
+                                      <div key={idx} className="flex items-center justify-between text-xs border-b border-muted last:border-0 pb-1 last:pb-0">
+                                        <span className="truncate mr-2">{displayName}</span>
+                                        <span className="font-medium shrink-0 tabular-nums">{formatCurrency(it.subtotal || it.precio_unitario * it.cantidad)}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="text-left py-2 px-3 font-medium">Fecha</th>
+                          <th className="text-left py-2 px-3 font-medium">Tipo</th>
+                          <th className="text-left py-2 px-3 font-medium">Comprobante</th>
+                          <th className="text-left py-2 px-3 font-medium">Forma pago</th>
+                          <th className="text-right py-2 px-3 font-medium">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {movimientos.map((m, i) => {
+                          const key = `compra-${m.id}-${i}`;
+                          const isExp = movExpanded === key;
+                          const hasItems = m.items && m.items.length > 0;
+                          return (
+                            <React.Fragment key={key}>
+                              <tr
+                                className={`border-b last:border-0 hover:bg-muted/50 ${hasItems ? "cursor-pointer" : ""}`}
+                                onClick={() => hasItems && setMovExpanded(isExp ? null : key)}
+                              >
+                                <td className="py-2 px-3 text-muted-foreground">{new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                                <td className="py-2 px-3">
+                                  <Badge variant={m.badge as any} className="text-xs font-normal">{m.tipo}</Badge>
+                                </td>
+                                <td className="py-2 px-3 text-xs">
+                                  <div className="flex items-center gap-1">
+                                    <span>{m.descripcion}</span>
+                                    {hasItems && (
+                                      <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isExp ? "rotate-180" : ""}`} />
+                                    )}
                                   </div>
                                 </td>
+                                <td className="py-2 px-3">
+                                  <Badge variant="outline" className="text-xs font-normal">{m.forma_pago || "—"}</Badge>
+                                </td>
+                                <td className={`py-2 px-3 text-right font-semibold ${m.monto < 0 ? "text-emerald-600" : ""}`}>
+                                  {m.monto < 0 ? `-${formatCurrency(Math.abs(m.monto))}` : formatCurrency(m.monto)}
+                                </td>
                               </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div className="text-xs text-muted-foreground mt-2 text-right">{movimientos.length} compra(s)</div>
+                              {isExp && hasItems && (
+                                <tr>
+                                  <td colSpan={5} className="px-3 pb-3 pt-0">
+                                    <div className="bg-muted/30 rounded-lg p-3 mt-1">
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="text-muted-foreground">
+                                            <th className="text-left py-1 font-medium">Producto</th>
+                                            <th className="text-center py-1 font-medium">Cant.</th>
+                                            <th className="text-right py-1 font-medium">Precio</th>
+                                            <th className="text-right py-1 font-medium">Subtotal</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {m.items.map((it: any, idx: number) => {
+                                            const isBox = it.presentacion && it.presentacion !== "Unidad" && (it.unidades_por_presentacion || 1) > 1;
+                                            const unitPrice = isBox ? it.precio_unitario / (it.unidades_por_presentacion || 1) : it.precio_unitario;
+                                            let displayName = (it.descripcion || "")
+                                              .replace(/\s*[-–]\s*Unidad(\s*\(Unidad\))?$/, "")
+                                              .replace(/\s*\(Unidad\)$/, "")
+                                              .replace(/(\([^)]+\))\s*\1/gi, "$1")
+                                              .replace(/Caja\s*\(?x?0\.5\)?/gi, "Medio Cartón")
+                                              .replace(/(Medio\s*Cart[oó]n)\s*\(?\s*Medio\s*Cart[oó]n\s*\)?/gi, "$1");
+                                            return (
+                                              <tr key={idx} className="border-t border-muted">
+                                                <td className="py-1">{displayName}</td>
+                                                <td className="py-1 text-center">{(it.unidades_por_presentacion || 1) > 0 && (it.unidades_por_presentacion || 1) < 1 ? it.cantidad * (it.unidades_por_presentacion || 1) : it.cantidad}{isBox ? ` ${it.presentacion}` : ""}</td>
+                                                <td className="py-1 text-right">
+                                                  {formatCurrency(unitPrice)}
+                                                  {isBox && <span className="text-[10px] text-muted-foreground block">c/u</span>}
+                                                </td>
+                                                <td className="py-1 text-right font-medium">{formatCurrency(it.subtotal || it.precio_unitario * it.cantidad)}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-2 text-right px-3">{movimientos.length} compra(s)</div>
                 </div>
               )}
             </TabsContent>
@@ -2218,8 +2277,8 @@ export default function ClientesPage() {
                     ) : (
                       <div className="border rounded-xl overflow-hidden">
                         <div className="max-h-[450px] overflow-y-auto">
-                          {/* Sticky header */}
-                          <div className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b grid grid-cols-[55px_1fr_90px_90px_90px_100px_28px] gap-1 py-2 px-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                          {/* Sticky header — desktop only */}
+                          <div className="hidden sm:grid sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b grid-cols-[55px_1fr_90px_90px_90px_100px_28px] gap-1 py-2 px-3 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
                             <span>Fecha</span>
                             <span>Comprobante</span>
                             <span>Tipo</span>
@@ -2243,9 +2302,36 @@ export default function ClientesPage() {
 
                             return (
                               <div key={g.ventaId} className={isNewDate && gi > 0 ? "border-t-2 border-t-muted-foreground/10" : ""}>
-                                {/* Summary row */}
+                                {/* Mobile card */}
                                 <div
-                                  className={`grid grid-cols-[55px_1fr_90px_90px_90px_100px_28px] gap-1 py-2.5 px-3 items-center border-b hover:bg-muted/30 ${hasDetail ? "cursor-pointer" : ""}`}
+                                  className={`sm:hidden px-3 py-2.5 border-b hover:bg-muted/30 ${hasDetail ? "cursor-pointer" : ""}`}
+                                  onClick={() => hasDetail && toggleExpand(g.ventaId)}
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-muted-foreground text-[11px] tabular-nums shrink-0">
+                                        {isNewDate ? new Date(mainRow.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}
+                                      </span>
+                                      <span className="text-xs font-mono truncate">{mainRow.comprobante}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight ${badge.cls}`}>{badge.label}</span>
+                                      {hasDetail && <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <div className="flex gap-3">
+                                      {g.debeTotal > 0 && <span className="tabular-nums font-medium">Debe: {formatCurrency(Math.round(g.debeTotal))}</span>}
+                                      {g.haberTotal > 0 && <span className="tabular-nums font-medium text-emerald-600">Haber: {formatCurrency(Math.round(g.haberTotal))}</span>}
+                                    </div>
+                                    <span className={`tabular-nums font-bold ${sr > 0 ? "text-orange-600" : sr < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                                      {sr > 0 ? formatCurrency(sr) : sr < 0 ? `−${formatCurrency(Math.abs(sr))}` : "$0"}
+                                    </span>
+                                  </div>
+                                </div>
+                                {/* Desktop row */}
+                                <div
+                                  className={`hidden sm:grid grid-cols-[55px_1fr_90px_90px_90px_100px_28px] gap-1 py-2.5 px-3 items-center border-b hover:bg-muted/30 ${hasDetail ? "cursor-pointer" : ""}`}
                                   onClick={() => hasDetail && toggleExpand(g.ventaId)}
                                 >
                                   <span className="text-muted-foreground text-xs tabular-nums">

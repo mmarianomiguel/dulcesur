@@ -142,7 +142,7 @@ export default function CobranzasPage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
             <CreditCard className="w-5 h-5 text-primary" />
@@ -153,7 +153,7 @@ export default function CobranzasPage() {
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={exportCSV}>
-          <Download className="w-4 h-4 mr-2" />Exportar
+          <Download className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Exportar</span>
         </Button>
       </div>
 
@@ -197,39 +197,64 @@ export default function CobranzasPage() {
           ) : filtered.length === 0 ? (
             <p className="text-center text-muted-foreground py-12 text-sm">No hay clientes con saldo pendiente</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Cliente</th>
-                    <th className="text-left py-3 px-4 font-medium">CUIT</th>
-                    <th className="text-right py-3 px-4 font-medium">Saldo deudor</th>
-                    <th className="text-right py-3 px-4 font-medium w-48">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-medium">{c.nombre}</td>
-                      <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{c.cuit || "—"}</td>
-                      <td className="py-3 px-4 text-right font-semibold text-orange-500">{formatCurrency(c.saldo, true)}</td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openDetail(c)}>
-                            <Eye className="w-3.5 h-3.5 mr-1" />Resumen
-                          </Button>
-                          <Button size="sm" onClick={() => openCobro(c)}>
-                            <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar
-                          </Button>
-                        </div>
-                      </td>
+            <div>
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y">
+                {filtered.map((c) => (
+                  <div key={c.id} className="py-3 px-4 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{c.nombre}</p>
+                      {c.cuit && <p className="text-xs text-muted-foreground font-mono mt-0.5">{c.cuit}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-bold text-orange-500 text-sm">{formatCurrency(c.saldo, true)}</span>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => openDetail(c)} title="Resumen"><Eye className="w-4 h-4" /></Button>
+                      <Button size="icon" className="h-9 w-9" onClick={() => openCobro(c)} title="Cobrar"><DollarSign className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-end border-t pt-3 px-4">
+                  <span className="text-sm text-muted-foreground mr-4">Saldo total:</span>
+                  <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente, true)}</span>
+                </div>
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="text-left py-3 px-4 font-medium">Cliente</th>
+                      <th className="text-left py-3 px-4 font-medium">CUIT</th>
+                      <th className="text-right py-3 px-4 font-medium">Saldo deudor</th>
+                      <th className="text-right py-3 px-4 font-medium w-48">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex justify-end border-t pt-3 px-4">
-                <span className="text-sm text-muted-foreground mr-4">Saldo total:</span>
-                <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente, true)}</span>
+                  </thead>
+                  <tbody>
+                    {filtered.map((c) => (
+                      <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="py-3 px-4 font-medium">{c.nombre}</td>
+                        <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{c.cuit || "—"}</td>
+                        <td className="py-3 px-4 text-right font-semibold text-orange-500">{formatCurrency(c.saldo, true)}</td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => openDetail(c)}>
+                              <Eye className="w-3.5 h-3.5 mr-1" />Resumen
+                            </Button>
+                            <Button size="sm" onClick={() => openCobro(c)}>
+                              <DollarSign className="w-3.5 h-3.5 mr-1" />Cobrar
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex justify-end border-t pt-3 px-4">
+                  <span className="text-sm text-muted-foreground mr-4">Saldo total:</span>
+                  <span className="text-sm font-bold text-orange-500">{formatCurrency(totalPendiente, true)}</span>
+                </div>
               </div>
             </div>
           )}
@@ -238,20 +263,20 @@ export default function CobranzasPage() {
 
       {/* Resumen de Cuenta Dialog — Libro Diario */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Cuenta Corriente — {selectedClient?.nombre}</DialogTitle>
           </DialogHeader>
 
           {/* Date filters */}
-          <div className="flex gap-2 items-end mb-3">
-            <div className="space-y-1">
+          <div className="flex flex-wrap gap-2 items-end mb-3">
+            <div className="space-y-1 flex-1 min-w-[120px]">
               <Label className="text-xs">Desde</Label>
-              <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-36 h-8 text-xs" />
+              <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="h-8 text-xs" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 flex-1 min-w-[120px]">
               <Label className="text-xs">Hasta</Label>
-              <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-36 h-8 text-xs" />
+              <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="h-8 text-xs" />
             </div>
             <Button variant="outline" size="sm" onClick={() => selectedClient && openDetail(selectedClient, filterFrom, filterTo)}>Filtrar</Button>
           </div>
@@ -262,7 +287,7 @@ export default function CobranzasPage() {
             const totalHaber = movimientos.reduce((s, m) => s + (m.haber || 0), 0);
             const saldoFinal = movimientos.length > 0 ? movimientos[movimientos.length - 1].saldo : 0;
             return (
-              <div className="grid grid-cols-4 gap-2 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                 <div className="rounded-lg border p-2.5 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Compras</p>
                   <p className="text-sm font-bold">{formatCurrency(Math.round(totalDebe))}</p>
@@ -308,7 +333,7 @@ export default function CobranzasPage() {
             const saldoFinal = movimientos[movimientos.length - 1].saldo;
 
             return (
-              <div className="overflow-x-auto border rounded-xl overflow-hidden">
+              <div className="border rounded-xl overflow-hidden">
                 {(() => {
                   const getTipo = (r: { comprobante: string | null; forma_pago: string | null; debe: number; haber: number; descripcion?: string | null }) => {
                     const c = r.comprobante || "";
@@ -332,6 +357,62 @@ export default function CobranzasPage() {
                     pago: { label: "Pago", cls: "bg-green-50 text-green-700 border border-green-200" },
                   };
                   return (
+                    <>
+                {/* Mobile cards */}
+                <div className="sm:hidden divide-y max-h-[50vh] overflow-y-auto">
+                  {saldoInicial !== 0 && (
+                    <div className="px-3 py-2 bg-muted/20 flex justify-between text-xs">
+                      <span className="text-muted-foreground italic">Saldo al inicio del período</span>
+                      <span className={`font-bold tabular-nums ${saldoInicial > 0 ? "text-orange-600" : "text-emerald-600"}`}>
+                        {saldoInicial > 0 ? formatCurrency(saldoInicial) : `−${formatCurrency(Math.abs(saldoInicial))}`}
+                      </span>
+                    </div>
+                  )}
+                  {movimientos.map((m, i) => {
+                    const prevDate = i > 0 ? movimientos[i - 1].fecha : null;
+                    const isNewDate = m.fecha !== prevDate;
+                    const sr = Math.round(m.saldo);
+                    const tipo = getTipo(m);
+                    const badge = badgeMap[tipo] || badgeMap.pago;
+                    return (
+                      <div key={m.id} className={`px-3 py-2 ${isNewDate && i > 0 ? "border-t-2 border-t-muted" : ""}`}>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                              {isNewDate ? new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : ""}
+                            </span>
+                            <span className="text-xs font-mono truncate">{m.comprobante ? cleanComp(m.comprobante) : "—"}</span>
+                          </div>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${badge.cls}`}>{badge.label}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex gap-3">
+                            {m.debe > 0 && <span className="tabular-nums font-medium">{formatCurrency(Math.round(m.debe))}</span>}
+                            {m.haber > 0 && <span className="tabular-nums font-medium text-emerald-600">{formatCurrency(Math.round(m.haber))}</span>}
+                          </div>
+                          <span className={`tabular-nums font-bold ${sr > 0 ? "text-orange-600" : sr < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                            {sr > 0 ? formatCurrency(sr) : sr < 0 ? `−${formatCurrency(Math.abs(sr))}` : "$0"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Mobile footer */}
+                <div className="sm:hidden bg-muted/50 border-t px-3 py-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold uppercase tracking-wider text-muted-foreground">Totales</span>
+                    <div className="flex gap-3 items-center">
+                      <span className="tabular-nums font-bold">{formatCurrency(Math.round(totalDebe))}</span>
+                      <span className="tabular-nums font-bold text-emerald-600">{formatCurrency(Math.round(totalHaber))}</span>
+                      <span className={`tabular-nums text-sm font-extrabold ${saldoFinal > 0 ? "text-orange-600" : saldoFinal < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                        {saldoFinal > 0 ? formatCurrency(Math.round(saldoFinal)) : saldoFinal < 0 ? `−${formatCurrency(Math.round(Math.abs(saldoFinal)))}` : "$0"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {/* Desktop table */}
+                <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-muted/50 border-b">
@@ -393,6 +474,8 @@ export default function CobranzasPage() {
                     </tr>
                   </tfoot>
                 </table>
+                </div>
+                    </>
                   );
                 })()}
               </div>
