@@ -168,34 +168,18 @@ export async function POST(req: NextRequest) {
     }
 
     if (usuarios.length > 0) {
-      // Para usuarios (por rol): try push_subscriptions.user_id first
-      const { data: usuarioSubs } = await supabase
-        .from("push_subscriptions")
-        .select("*")
-        .in("user_id", usuarios.map((u) => u.id));
-      subs = [...subs, ...(usuarioSubs || [])];
-
-      // Fallback: resolve by email through usuarios → clientes_auth → push_subscriptions
-      if ((usuarioSubs || []).length === 0) {
-        const { data: usuariosData } = await supabase
-          .from("usuarios")
-          .select("email")
-          .in("id", usuarios.map((u) => u.id));
-        const emails = (usuariosData || []).map((u: any) => u.email).filter(Boolean);
-        if (emails.length > 0) {
-          const { data: authData } = await supabase
-            .from("clientes_auth")
-            .select("id")
-            .in("email", emails);
-          const authIds = (authData || []).map((a: any) => a.id).filter(Boolean);
-          if (authIds.length > 0) {
-            const { data: fallbackSubs } = await supabase
-              .from("push_subscriptions")
-              .select("*")
-              .in("cliente_id", authIds);
-            subs = [...subs, ...(fallbackSubs || [])];
-          }
-        }
+      // Resolve auth_ids from usuarios table, then find push_subscriptions by auth_id
+      const { data: usuariosWithAuth } = await supabase
+        .from("usuarios")
+        .select("auth_id")
+        .in("id", usuarios.map((u) => u.id));
+      const authIds = (usuariosWithAuth || []).map((u: any) => u.auth_id).filter(Boolean);
+      if (authIds.length > 0) {
+        const { data: usuarioSubs } = await supabase
+          .from("push_subscriptions")
+          .select("*")
+          .in("user_id", authIds);
+        subs = [...subs, ...(usuarioSubs || [])];
       }
     }
 
