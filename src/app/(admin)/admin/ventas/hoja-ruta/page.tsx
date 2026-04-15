@@ -566,7 +566,7 @@ export default function HojaDeRutaPage() {
       const pagos = historialPagos[v.id] || [];
       const cobradoSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
       const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
-      const debe = (v.total - ncMonto) - cobradoSinNC;
+      const debe = v.total - cobradoSinNC; // v.total already net of NC
       if (debe > 0) deudores.push({ nombre: v.clientes?.nombre || "Sin cliente", monto: debe });
 
       for (const p of pagos) {
@@ -743,7 +743,7 @@ export default function HojaDeRutaPage() {
         const pagosSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr"));
         const cobradoSinNC = pagosSinNC.reduce((a, p) => a + p.monto, 0);
         const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
-        const neto = v.total - ncMonto;
+        const neto = v.total; // v.total already net of NC
         const debe = Math.max(0, neto - cobradoSinNC);
 
         // Hora del primer pago
@@ -876,7 +876,7 @@ export default function HojaDeRutaPage() {
 
   const handleMarkDelivered = async (groupVentas: VentaRow[]) => {
     const ids = groupVentas.map((v) => v.id);
-    const totalPendiente = groupVentas.reduce((s, v) => s + Math.max(0, (v.total - (ncPorVenta[v.id] || 0)) - (pagadoPorVenta[v.id] || 0)), 0);
+    const totalPendiente = groupVentas.reduce((s, v) => s + Math.max(0, v.total - ((pagadoPorVenta[v.id] || 0) - (ncPorVenta[v.id] || 0))), 0);
     const clienteId = groupVentas[0]?.cliente_id;
     const clienteNombre = groupVentas[0]?.clientes?.nombre || "Sin cliente";
 
@@ -909,7 +909,7 @@ export default function HojaDeRutaPage() {
       for (const venta of groupVentas) {
         const ventaDeuda = Math.max(
           0,
-          (venta.total - (ncPorVenta[venta.id] || 0)) - (pagadoPorVenta[venta.id] || 0)
+          venta.total - ((pagadoPorVenta[venta.id] || 0) - (ncPorVenta[venta.id] || 0))
         );
         if (ventaDeuda <= 0) continue;
         // Check if CC entry already exists
@@ -1304,23 +1304,27 @@ export default function HojaDeRutaPage() {
   })();
 
   // Helper: group totals
-  // pagadoPorVenta already includes NC amounts as "payments", so we must
-  // subtract NC from pagado to avoid double-counting when computing debe.
+  // v.total in DB is already adjusted by NC (original - NC = v.total).
+  // ncPorVenta tracks the NC amount. pagadoPorVenta includes NC as a "payment".
+  // To avoid double-counting: reconstruct original bruto by adding NC back.
   const groupTotals = (g: ClientGroup) => {
-    const bruto = g.ventas.reduce((s, v) => s + v.total, 0);
     const nc = g.ventas.reduce((s, v) => s + (ncPorVenta[v.id] || 0), 0);
+    const bruto = g.ventas.reduce((s, v) => s + v.total + (ncPorVenta[v.id] || 0), 0); // original total before NC
+    const neto = bruto - nc; // = sum of v.total (what client actually owes)
     const pagadoTotal = g.ventas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
     const pagadoSinNC = pagadoTotal - nc; // Real payments only (without NC)
-    const neto = bruto - nc;
     const debe = Math.max(0, neto - pagadoSinNC);
     return { bruto, nc, pagado: pagadoSinNC, neto, debe };
   };
 
   // Stats (from filtered)
   const totalPedidos = clientGroups.length;
-  const valorTotal = filteredVentas.reduce((s, v) => s + v.total - (ncPorVenta[v.id] || 0), 0);
-  const totalYaPagado = filteredVentas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
-  const totalACobrar = Math.max(0, valorTotal - totalYaPagado);
+  const totalNC = filteredVentas.reduce((s, v) => s + (ncPorVenta[v.id] || 0), 0);
+  const valorTotal = filteredVentas.reduce((s, v) => s + v.total + (ncPorVenta[v.id] || 0), 0); // original totals
+  const valorNeto = valorTotal - totalNC; // after NC = sum of v.total
+  const totalYaPagadoRaw = filteredVentas.reduce((s, v) => s + (pagadoPorVenta[v.id] || 0), 0);
+  const totalYaPagado = totalYaPagadoRaw - totalNC; // real payments only
+  const totalACobrar = Math.max(0, valorNeto - totalYaPagado);
 
 
   const navTabs = [
@@ -1594,8 +1598,7 @@ export default function HojaDeRutaPage() {
                 const clientesDeudores = dayVentas.filter((v) => {
                   const pagos = historialPagos[v.id] || [];
                   const cobradoSinNC = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
-                  const ncAmount = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
-                  const debe = (v.total - ncAmount) - cobradoSinNC;
+                  const debe = v.total - cobradoSinNC; // v.total already net of NC
                   return debe > 0;
                 });
 
@@ -1663,9 +1666,8 @@ export default function HojaDeRutaPage() {
                               const pagos = historialPagos[venta.id] || [];
                               const cobradoReal = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
                               const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
-                              const totalNeto = venta.total - ncMonto;
                               const metodos = [...new Set(pagos.filter(p => !p.metodo.includes("Nota de Cr")).map((p) => p.metodo))].join(", ") || venta.forma_pago;
-                              const debe = totalNeto - cobradoReal;
+                              const debe = venta.total - cobradoReal; // v.total already net of NC
 
                               return (
                                 <tr key={venta.id} className="border-b last:border-b-0 hover:bg-muted/50 transition-colors">
@@ -1682,7 +1684,7 @@ export default function HojaDeRutaPage() {
                                     </Badge>
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-semibold text-foreground">
-                                    {formatCurrency(ncMonto > 0 ? venta.total - ncMonto : venta.total)}
+                                    {formatCurrency(venta.total)}
                                   </td>
                                   <td className={`py-2.5 px-3 text-right font-medium ${debe > 0 ? "text-orange-600" : "text-green-600"}`}>
                                     {cobradoReal > 0 ? formatCurrency(cobradoReal) : "$0"}
@@ -2279,7 +2281,7 @@ export default function HojaDeRutaPage() {
                         {groupVentas.map((v) => {
                           const d = Math.max(
                             0,
-                            (v.total - (ncPorVenta[v.id] || 0)) - (pagadoPorVenta[v.id] || 0)
+                            v.total - ((pagadoPorVenta[v.id] || 0) - (ncPorVenta[v.id] || 0))
                           );
                           return d > 0 ? (
                             <p key={v.id} className="text-xs text-amber-700">#{v.numero}: {fmtCur(d)}</p>
@@ -2338,12 +2340,12 @@ export default function HojaDeRutaPage() {
           </DialogHeader>
           {payVenta && (() => {
             const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
+            // v.total in DB already has NC deducted, so don't subtract NC again
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
             const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
             const totalDebeGrupo = allVentas.reduce((s, vt) => {
-              const nc = ncPorVenta[vt.id] || 0;
-              const pagadoSinNC = (pagadoPorVenta[vt.id] || 0) - nc;
-              return s + Math.max(0, vt.total - nc - pagadoSinNC);
+              const pagadoSinNC = (pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0);
+              return s + Math.max(0, vt.total - pagadoSinNC); // v.total already net of NC
             }, 0);
 
             // Calcular subtotal SIN recargo para pasarle al CobroVentaSection.
@@ -2369,7 +2371,8 @@ export default function HojaDeRutaPage() {
                 : vt.total);
             }, 0);
 
-            const preDebeGrupo = Math.max(0, subtotalSinRecargo - totalNCGrupo);
+            // subtotalSinRecargo already has NC deducted (via v.total/v.subtotal), don't subtract again
+            const preDebeGrupo = Math.max(0, subtotalSinRecargo - totalPagadoReal);
             return (
               <div className="space-y-4">
                 {/* Summary header */}
