@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Users, BarChart3 } from "lucide-react";
+import { Users, BarChart3, History } from "lucide-react";
 import { MiembrosTab } from "./components/miembros-tab";
 import { SupervisionTab } from "./components/supervision-tab";
+import { HistorialTab } from "./components/historial-tab";
 
-type Tab = "miembros" | "supervision";
+type Tab = "miembros" | "supervision" | "historial";
 
 export default function EquipoAdminPage() {
   const [tab, setTab] = useState<Tab>("supervision");
@@ -42,9 +43,19 @@ export default function EquipoAdminPage() {
         >
           <Users className="w-4 h-4" /> Miembros
         </button>
+        <button
+          onClick={() => setTab("historial")}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            tab === "historial"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <History className="w-4 h-4" /> Historial
+        </button>
       </div>
 
-      {tab === "supervision" ? <SupervisionTab /> : <MiembrosTab />}
+      {tab === "supervision" ? <SupervisionTab /> : tab === "historial" ? <HistorialTab /> : <MiembrosTab />}
     </div>
   );
 }
