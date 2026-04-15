@@ -81,7 +81,7 @@ export async function PATCH(
       // Notify admin that order is ready for review
       const { data: venta } = await supabase
         .from("ventas")
-        .select("numero, clientes ( nombre )")
+        .select("numero, metodo_entrega, clientes ( nombre )")
         .eq("id", ventaId)
         .single();
 
@@ -91,16 +91,19 @@ export async function PATCH(
 
       const clienteNombre = (venta as any)?.clientes?.nombre || "Cliente";
       const armadorNombre = armador?.nombre || "Equipo";
-      let mensaje = `${clienteNombre} — ${(venta as any)?.numero || ""} armado por ${armadorNombre}`;
+      const metodoEntrega = (venta as any)?.metodo_entrega;
+      const despacho = metodoEntrega === "retiro" ? "Retiro" : "Envio";
+      let mensaje = `${clienteNombre} (${despacho}) armado por ${armadorNombre}`;
       if (notas) mensaje += `\nNota: ${notas}`;
 
       await fetch(new URL("/api/notificaciones/enviar", req.url).toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          titulo: "Pedido listo para controlar",
+          titulo: "\u270f\ufe0f Pedido listo para controlar",
           mensaje,
           tipo: "sistema",
+          url: "/admin/equipo",
           segmentacion: { tipo: "rol", valor: "vendedor" },
         }),
       }).catch(() => {}); // Don't fail the main request if notification fails
