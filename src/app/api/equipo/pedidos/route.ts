@@ -26,12 +26,21 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: true });
 
     if (error) throw error;
-    if (!ventas || ventas.length === 0) {
+
+    // Filter: POS orders only show if envío (not retiro)
+    const filtered = (ventas || []).filter((v: any) => {
+      if (v.origen === "pos") {
+        return v.metodo_entrega === "envio" || v.metodo_entrega === "envio_a_domicilio";
+      }
+      return true; // tienda orders: show all (envío + retiro)
+    });
+
+    if (!filtered || filtered.length === 0) {
       return NextResponse.json({ pedidos: [] });
     }
 
     // 2. Fetch pedido_armado for these ventas
-    const ventaIds = ventas.map((v: any) => v.id);
+    const ventaIds = filtered.map((v: any) => v.id);
     const { data: armados } = await supabase
       .from("pedido_armado")
       .select("id, venta_id, estado, armador_id, notas, orden_entrega, inicio_armado_at, fin_armado_at, aprobado_at, aprobado_por, rechazos, motivo_rechazo")
@@ -62,7 +71,7 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    const pedidos = ventas.map((v: any) => ({
+    const pedidos = filtered.map((v: any) => ({
       ...v,
       pedido_armado: armadoMap[v.id] || null,
     }));

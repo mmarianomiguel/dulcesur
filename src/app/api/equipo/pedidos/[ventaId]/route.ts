@@ -101,7 +101,7 @@ export async function PATCH(
           titulo: "Pedido listo para controlar",
           mensaje,
           tipo: "sistema",
-          segmentacion: { tipo: "rol", valor: "admin" },
+          segmentacion: { tipo: "rol", valor: "vendedor" },
         }),
       }).catch(() => {}); // Don't fail the main request if notification fails
     }
