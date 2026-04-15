@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { norm } from "@/lib/utils";
 import { showAdminToast } from "@/components/admin-toast";
 import { todayARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   ArrowLeft,
@@ -28,6 +32,9 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  Plus,
+  Search,
+  ImageIcon,
 } from "lucide-react";
 import type { PedidoRow, PedidoItemRow, Proveedor } from "./types";
 import { pedidoDisplayNum } from "./types";
@@ -84,6 +91,15 @@ export default function DetallePedido({
   const [successMsg, setSuccessMsg] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Product search for adding items
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [productResults, setProductResults] = useState<
+    { id: string; codigo: string; nombre: string; stock: number; costo: number; imagen_url: string | null; precio_proveedor: number | null }[]
+  >([]);
+  const [searchingProducts, setSearchingProducts] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load items on mount
   useEffect(() => {
@@ -238,6 +254,77 @@ export default function DetallePedido({
     setDetailItems((prev) => prev.filter((_, i) => i !== index));
   };
 
+  /* ── product search for adding items ── */
+
+  const searchProducts = useCallback(
+    async (term: string) => {
+      if (term.length < 2) { setProductResults([]); return; }
+      setSearchingProducts(true);
+
+      const provId = detailPedido.proveedor_id;
+      let query = provId
+        ? supabase
+            .from("productos")
+            .select("id, codigo, nombre, stock, costo, imagen_url, producto_proveedores!inner(proveedor_id, precio_proveedor)")
+            .eq("activo", true)
+            .eq("producto_proveedores.proveedor_id", provId)
+            .limit(20)
+        : supabase
+            .from("productos")
+            .select("id, codigo, nombre, stock, costo, imagen_url, producto_proveedores(proveedor_id, precio_proveedor)")
+            .eq("activo", true)
+            .limit(20);
+
+      const { data } = await query;
+      if (data) {
+        const normalized = norm(term);
+        const filtered = (data as any[]).filter(
+          (p) => norm(p.nombre).includes(normalized) || norm(p.codigo || "").includes(normalized)
+        );
+        setProductResults(
+          filtered.map((p) => {
+            const pp = (p.producto_proveedores || []).find((pp: any) => pp.proveedor_id === provId);
+            return {
+              id: p.id, codigo: p.codigo || "", nombre: p.nombre,
+              stock: p.stock ?? 0, costo: p.costo || 0, imagen_url: p.imagen_url,
+              precio_proveedor: pp?.precio_proveedor || null,
+            };
+          })
+        );
+      }
+      setSearchingProducts(false);
+    },
+    [detailPedido.proveedor_id]
+  );
+
+  const handleProductSearchChange = (term: string) => {
+    setProductSearch(term);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => searchProducts(term), 300);
+  };
+
+  const addProductFromSearch = (product: (typeof productResults)[number]) => {
+    if (detailItems.some((i) => i.producto_id === product.id)) {
+      showAdminToast("El producto ya está en el pedido", "info");
+      return;
+    }
+    const precio = product.precio_proveedor || product.costo || 0;
+    const newItem: PedidoItemRow = {
+      id: crypto.randomUUID(),
+      pedido_id: detailPedido.id,
+      producto_id: product.id,
+      codigo: product.codigo,
+      descripcion: product.nombre,
+      cantidad: 1,
+      faltante: 1,
+      cantidad_recibida: 0,
+      precio_unitario: precio,
+      subtotal: precio,
+    };
+    setDetailItems((prev) => [...prev, newItem]);
+    showAdminToast(`${product.nombre} agregado`, "success");
+  };
+
   /* ── handle delete ── */
 
   const handleDelete = async () => {
@@ -298,6 +385,9 @@ export default function DetallePedido({
           {canEdit && editingDetail && (
             <>
               <Button size="sm" variant="outline" onClick={() => setEditingDetail(false)}>Cancelar</Button>
+              <Button size="sm" variant="outline" onClick={() => { setProductSearchOpen(true); setProductSearch(""); setProductResults([]); }}>
+                <Plus className="w-4 h-4 mr-1.5" />Agregar producto
+              </Button>
               <Button size="sm" onClick={saveEditedBorrador} disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
                 Guardar
@@ -521,6 +611,83 @@ export default function DetallePedido({
           </div>
         </CardContent>
       </Card>
+
+      {/* Product Search Dialog */}
+      <Dialog open={productSearchOpen} onOpenChange={setProductSearchOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Agregar producto al pedido</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o codigo..."
+                value={productSearch}
+                onChange={(e) => handleProductSearchChange(e.target.value)}
+                className="pl-9"
+                autoFocus
+              />
+            </div>
+
+            {searchingProducts && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            {!searchingProducts && productSearch.length >= 2 && productResults.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <Package className="w-8 h-8 mb-2 opacity-40" />
+                <p className="text-sm">No se encontraron productos</p>
+              </div>
+            )}
+
+            {!searchingProducts && productResults.length > 0 && (
+              <div className="max-h-[350px] overflow-y-auto divide-y">
+                {productResults.map((product) => {
+                  const alreadyAdded = detailItems.some((i) => i.producto_id === product.id);
+                  return (
+                    <button
+                      key={product.id}
+                      className={`w-full text-left px-3 py-3 hover:bg-muted transition-colors flex items-center gap-3 ${alreadyAdded ? "opacity-50" : ""}`}
+                      onClick={() => addProductFromSearch(product)}
+                      disabled={alreadyAdded}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                        {product.imagen_url ? (
+                          <img src={product.imagen_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <ImageIcon className="w-5 h-5 text-muted-foreground/50" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{product.nombre}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="font-mono">{product.codigo}</span>
+                          <span>&middot;</span>
+                          <span>Stock: {product.stock}</span>
+                          {product.precio_proveedor && (
+                            <>
+                              <span>&middot;</span>
+                              <span>{formatCurrency(product.precio_proveedor)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {alreadyAdded ? (
+                        <Badge variant="secondary" className="shrink-0 text-xs">Agregado</Badge>
+                      ) : (
+                        <Plus className="w-4 h-4 text-muted-foreground shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(false)}>
