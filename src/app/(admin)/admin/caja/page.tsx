@@ -1946,18 +1946,20 @@ export default function CajaPage() {
 
               {/* TAB ENTREGAS */}
               {ventasTab === "entregas" && (() => {
-                const entregasMovs = movements.filter(m =>
-                  m.tipo === "ingreso" &&
-                  m.referencia_tipo === "venta" &&
-                  (m.descripcion || "").toLowerCase().includes("cobro entrega")
-                );
-                const totalEfectivoEntregas = entregasMovs.filter(m => m.metodo_pago === "Efectivo").reduce((s, m) => s + m.monto, 0);
-                const totalTransfEntregas = entregasMovs.filter(m => m.metodo_pago === "Transferencia").reduce((s, m) => s + m.monto, 0);
                 const ventasEntregadas = ventas.filter(v =>
                   (v as any).entregado === true &&
                   (v as any).metodo_entrega &&
                   ["envio", "envio_a_domicilio", "envio a domicilio"].includes((v as any).metodo_entrega)
                 );
+                const ventaIdsEntrega = new Set(ventasEntregadas.map(v => v.id));
+                // Match caja entries for delivery ventas (by referencia_id, regardless of description)
+                const entregasMovs = movements.filter(m =>
+                  m.tipo === "ingreso" &&
+                  m.referencia_tipo === "venta" &&
+                  m.referencia_id && ventaIdsEntrega.has(m.referencia_id)
+                );
+                const totalEfectivoEntregas = entregasMovs.filter(m => m.metodo_pago === "Efectivo").reduce((s, m) => s + m.monto, 0);
+                const totalTransfEntregas = entregasMovs.filter(m => m.metodo_pago === "Transferencia").reduce((s, m) => s + m.monto, 0);
                 const ventaIdsConCobro = new Set(entregasMovs.map(m => m.referencia_id));
                 const sinCobrar = ventasEntregadas.filter(v => !ventaIdsConCobro.has(v.id));
                 return (
