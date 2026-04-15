@@ -473,7 +473,7 @@ export function SupervisionTab() {
       </div>
 
       {/* ── C) Estado tabs ── */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="grid grid-cols-4 gap-1.5">
         {estadoTabs.map((tab) => {
           const isActive = activeEstado === tab;
           const tabColors: Record<Estado, { active: string; inactive: string }> = {
@@ -499,18 +499,12 @@ export function SupervisionTab() {
             <button
               key={tab}
               onClick={() => setActiveEstado(isActive ? null : tab)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shrink-0 ${
+              className={`flex flex-col items-center py-2 rounded-xl text-xs font-medium transition-all ${
                 isActive ? tabColors[tab].active : tabColors[tab].inactive
               }`}
             >
+              <span className="text-lg font-bold leading-none mb-0.5">{estadoCounts[tab]}</span>
               {estadoLabel[tab]}
-              <span
-                className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                  isActive ? "bg-white/20" : "bg-black/5"
-                }`}
-              >
-                {estadoCounts[tab]}
-              </span>
             </button>
           );
         })}
