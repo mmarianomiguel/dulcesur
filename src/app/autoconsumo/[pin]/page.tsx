@@ -315,6 +315,7 @@ export default function AutoconsumoPage() {
   };
 
   const handleConfirm = async () => {
+    if (confirming) return;
     if (!miembro || !selectedId) return;
     const producto = productos.find((p) => p.id === selectedId);
     if (!producto) return;
@@ -324,6 +325,8 @@ export default function AutoconsumoPage() {
       return;
     }
 
+    setConfirming(true);
+
     const { data: fresh } = await supabase
       .from("productos")
       .select("stock")
@@ -332,10 +335,9 @@ export default function AutoconsumoPage() {
 
     if (!fresh || fresh.stock < cantidad) {
       showToast("Stock insuficiente", "error");
+      setConfirming(false);
       return;
     }
-
-    setConfirming(true);
 
     const now = new Date();
     const fecha = now.toLocaleDateString("en-CA", {
@@ -382,11 +384,11 @@ export default function AutoconsumoPage() {
 
     await supabase.from("stock_movimientos").insert({
       producto_id: producto.id,
-      tipo: "salida",
+      tipo: "autoconsumo",
       cantidad_antes: stockAntes,
       cantidad_despues: stockDespues,
-      cantidad,
-      referencia: `autoconsumo-${miembro.id}`,
+      cantidad: -cantidad,
+      referencia: `Autoconsumo - ${miembro.nombre}`,
       descripcion: `Autoconsumo: ${miembro.nombre} retiró ${cantidad}x ${producto.nombre}`,
       usuario: miembro.nombre,
     });

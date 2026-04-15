@@ -2039,6 +2039,7 @@ export default function ProductosPage() {
       fecha: string;
       usuario: string;
       valor: string;
+      stockInfo?: string;
       orden_id: string | null;
     };
     const items: HistItem[] = [];
@@ -2063,15 +2064,24 @@ export default function ProductosPage() {
     });
 
     historyItems.forEach((h) => {
-      const isVenta = h.tipo.toLowerCase().includes("venta");
-      const isCompra = h.tipo.toLowerCase().includes("compra");
+      const t = h.tipo.toLowerCase();
+      const isVenta = t.includes("venta");
+      const isCompra = t.includes("compra");
+      const isSalida = t === "salida" || t === "autoconsumo";
+      const mapped = isVenta ? "venta" : isCompra ? "compra" : isSalida ? "salida" : "ajuste";
+      // For salida/autoconsumo, cantidad is stored positive but it's a deduction
+      const displayCantidad = isSalida && h.cantidad > 0 ? -h.cantidad : h.cantidad;
+      const stockInfo = (h.cantidad_antes != null && h.cantidad_despues != null)
+        ? `${h.cantidad_antes} → ${h.cantidad_despues}`
+        : undefined;
       items.push({
         id: `stock-${h.id}`,
-        tipo: isVenta ? "venta" : isCompra ? "compra" : "ajuste",
+        tipo: mapped,
         descripcion: h.descripcion || h.referencia || h.tipo,
         fecha: h.created_at,
         usuario: h.usuario || "Sistema",
-        valor: `${h.cantidad > 0 ? "+" : ""}${h.cantidad} un.`,
+        valor: `${displayCantidad > 0 ? "+" : ""}${displayCantidad} un.`,
+        stockInfo,
         orden_id: h.orden_id || null,
       });
     });
@@ -4533,7 +4543,7 @@ export default function ProductosPage() {
                             ? "bg-amber-50 text-amber-700"
                             : item.tipo === "precio_bajada"
                             ? "bg-green-50 text-green-700"
-                            : item.tipo === "venta"
+                            : item.tipo === "venta" || item.tipo === "salida"
                             ? "bg-red-50 text-red-700"
                             : item.tipo === "compra"
                             ? "bg-green-50 text-green-700"
@@ -4544,7 +4554,7 @@ export default function ProductosPage() {
                           ? "↑$"
                           : item.tipo === "precio_bajada"
                           ? "↓$"
-                          : item.tipo === "venta"
+                          : item.tipo === "venta" || item.tipo === "salida"
                           ? "−"
                           : item.tipo === "compra"
                           ? "+"
@@ -4573,6 +4583,9 @@ export default function ProductosPage() {
                           })}
                           {" · "}
                           {item.usuario}
+                          {item.stockInfo && (
+                            <span className="text-muted-foreground/70"> · Stock: {item.stockInfo}</span>
+                          )}
                         </p>
                       </div>
                       <div
@@ -4581,7 +4594,7 @@ export default function ProductosPage() {
                             ? "text-amber-600"
                             : item.tipo === "compra"
                             ? "text-green-600"
-                            : item.tipo === "venta"
+                            : item.tipo === "venta" || item.tipo === "salida"
                             ? "text-red-600"
                             : "text-muted-foreground"
                         }`}
