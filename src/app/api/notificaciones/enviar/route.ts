@@ -171,14 +171,48 @@ export async function POST(req: NextRequest) {
       // Resolve auth_ids from usuarios table, then find push_subscriptions by auth_id
       const { data: usuariosWithAuth } = await supabase
         .from("usuarios")
-        .select("auth_id")
+        .select("id, auth_id")
         .in("id", usuarios.map((u) => u.id));
       const authIds = (usuariosWithAuth || []).map((u: any) => u.auth_id).filter(Boolean);
-      if (authIds.length > 0) {
+
+      // Check admin notification configs (DND + per-category preferences)
+      const usuarioIds = (usuariosWithAuth || []).map((u: any) => u.id);
+      const { data: adminConfigs } = await supabase
+        .from("admin_notif_config")
+        .select("*")
+        .in("usuario_id", usuarioIds);
+
+      // Map auth_id → config
+      const authToAdminConfig: Record<string, any> = {};
+      for (const u of usuariosWithAuth || []) {
+        const cfg = (adminConfigs || []).find((c: any) => c.usuario_id === u.id);
+        if (cfg) authToAdminConfig[u.auth_id] = cfg;
+      }
+
+      // Check DND for each user
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const filteredAuthIds = authIds.filter((authId: string) => {
+        const cfg = authToAdminConfig[authId];
+        if (!cfg) return true; // No config = allow all
+        // Check DND
+        if (cfg.dnd_enabled) {
+          const { dnd_hora_inicio: start, dnd_hora_fin: end } = cfg;
+          const inDnd = start <= end
+            ? hhmm >= start && hhmm < end
+            : hhmm >= start || hhmm < end;
+          if (inDnd) return false;
+        }
+        // Check category preference for "pedido armado" notifications
+        if (tipo === "sistema" && cfg.push_pedidos_armados === false) return false;
+        return true;
+      });
+
+      if (filteredAuthIds.length > 0) {
         const { data: usuarioSubs } = await supabase
           .from("push_subscriptions")
           .select("*")
-          .in("user_id", authIds);
+          .in("user_id", filteredAuthIds);
         subs = [...subs, ...(usuarioSubs || [])];
       }
     }

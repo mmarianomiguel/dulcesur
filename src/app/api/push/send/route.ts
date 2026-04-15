@@ -18,6 +18,19 @@ function ascii(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+// Check if current time is within DND window
+function isDndActive(config: { dnd_enabled: boolean; dnd_hora_inicio: string; dnd_hora_fin: string }): boolean {
+  if (!config.dnd_enabled) return false;
+  const now = new Date();
+  const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const { dnd_hora_inicio: start, dnd_hora_fin: end } = config;
+  // Handle overnight ranges (e.g., 22:00 - 08:00)
+  if (start <= end) {
+    return hhmm >= start && hhmm < end;
+  }
+  return hhmm >= start || hhmm < end;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -27,6 +40,8 @@ export async function POST(req: NextRequest) {
       total,
       forma_pago,
       metodo_entrega,
+      // Optional: specify which config key to check (default: push_pedidos_nuevos)
+      config_key = "push_pedidos_nuevos",
     } = body;
 
     const isEnvio = metodo_entrega === "envio";
@@ -59,12 +74,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ sent: 0 });
     }
 
+    // Get admin notification configs to filter by preference and DND
+    const userIds = subs.map((s) => s.user_id);
+    const { data: usuarios } = await supabase
+      .from("usuarios")
+      .select("id, auth_id")
+      .in("auth_id", userIds);
+
+    const usuarioIds = (usuarios || []).map((u) => u.id);
+    const { data: configs } = await supabase
+      .from("admin_notif_config")
+      .select("*")
+      .in("usuario_id", usuarioIds);
+
+    // Build auth_id → config map
+    const authToConfig: Record<string, any> = {};
+    for (const u of usuarios || []) {
+      const cfg = (configs || []).find((c: any) => c.usuario_id === u.id);
+      authToConfig[u.auth_id] = cfg || null;
+    }
+
     let sent = 0;
     const expired: string[] = [];
 
     await Promise.allSettled(
       subs.map(async (sub) => {
         try {
+          const cfg = authToConfig[sub.user_id];
+
+          // Check if this notification type is enabled (default: enabled)
+          if (cfg && cfg[config_key] === false) return;
+
+          // Check DND
+          if (cfg && isDndActive(cfg)) return;
+
           await webpush.sendNotification(
             {
               endpoint: sub.endpoint,

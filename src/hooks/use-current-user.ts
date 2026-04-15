@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 interface CurrentUser {
+  id: string;
   authId: string;
   nombre: string;
   email: string | null;
@@ -21,13 +22,14 @@ async function fetchUser(): Promise<CurrentUser | null> {
 
     const { data: usuario } = await supabase
       .from("usuarios")
-      .select("nombre, email, es_admin, rol_id")
+      .select("id, nombre, email, es_admin, rol_id")
       .eq("auth_id", user.id)
       .single();
 
     if (!usuario) return null;
 
     return {
+      id: usuario.id,
       authId: user.id,
       nombre: usuario.nombre || user.email || "Admin",
       email: usuario.email || user.email || null,
