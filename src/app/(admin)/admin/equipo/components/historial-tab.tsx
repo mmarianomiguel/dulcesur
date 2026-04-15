@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader2, Package, Clock, CheckCircle2, AlertTriangle, Calendar } from "lucide-react";
+import { Loader2, Package, Clock, CheckCircle2, AlertTriangle, Calendar, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import type { PedidoConArmado } from "@/types/equipo";
 
 function formatDuration(ms: number | null): string {
@@ -104,21 +105,58 @@ export function HistorialTab() {
     year: "numeric",
   });
 
+  const exportExcel = () => {
+    const rows = pedidos.map((p) => {
+      const pa = p.pedido_armado;
+      const tEspera = calcDuration(p.created_at, pa?.inicio_armado_at);
+      const tArmado = calcDuration(pa?.inicio_armado_at, pa?.fin_armado_at);
+      const tControl = calcDuration(pa?.fin_armado_at, pa?.aprobado_at);
+      const tTotal = calcDuration(p.created_at, pa?.aprobado_at);
+      return {
+        "Número": p.numero,
+        "Cliente": p.clientes?.nombre ?? "—",
+        "Estado": pa?.estado ?? "pendiente",
+        "Armador": pa?.armador_nombre ?? "—",
+        "Despacho": p.metodo_entrega === "retiro" ? "Retiro" : "Envío",
+        "T. Espera": formatDuration(tEspera),
+        "T. Armado": formatDuration(tArmado),
+        "T. Control": formatDuration(tControl),
+        "T. Total": formatDuration(tTotal),
+        "Rechazos": pa?.rechazos ?? 0,
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Historial");
+    XLSX.writeFile(wb, `equipo-historial-${fecha}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Date picker */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-gray-400" />
-          <input
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            max={new Date().toLocaleDateString("en-CA")}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c94070] focus:border-transparent"
-          />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              max={new Date().toLocaleDateString("en-CA")}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c94070] focus:border-transparent"
+            />
+          </div>
+          <p className="text-sm text-gray-500 capitalize">{fechaDisplay}</p>
         </div>
-        <p className="text-sm text-gray-500 capitalize">{fechaDisplay}</p>
+        {pedidos.length > 0 && (
+          <button
+            onClick={exportExcel}
+            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 flex items-center gap-1.5 shrink-0"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Exportar
+          </button>
+        )}
       </div>
 
       {loading ? (
