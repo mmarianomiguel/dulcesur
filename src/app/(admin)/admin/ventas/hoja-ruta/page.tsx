@@ -951,7 +951,7 @@ export default function HojaDeRutaPage() {
 
         // Calcular monto pendiente en efectivo
         const formaPago = ptSiguiente?.metodo_pago || ventaSiguiente.forma_pago || "";
-        const montoPendiente = Math.max(0, ventaSiguiente.total - (pagadoPorVenta[ventaSiguiente.id] || 0));
+        const montoPendiente = Math.max(0, ventaSiguiente.total - Math.max(0, (pagadoPorVenta[ventaSiguiente.id] || 0) - (ncPorVenta[ventaSiguiente.id] || 0)));
         const montoEfectivo = formaPago.toLowerCase() === "mixto"
           ? (ptSiguiente?.monto_efectivo || 0)
           : formaPago.toLowerCase() === "efectivo" ? montoPendiente : 0;
@@ -2494,14 +2494,12 @@ export default function HojaDeRutaPage() {
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (${result.metodo}) — ${clienteNombre}`, metodo_pago: result.metodo, monto: paid, referencia_id: venta.id, referencia_tipo: "venta" });
                       }
                       // Update venta
-                      const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: (pagadoPorVenta[venta.id] || 0) + paid };
+                      // pagadoPorVenta includes NC as "payment" — use only real payments for monto_pagado
+                      const realPagadoPrev = Math.max(0, (pagadoPorVenta[venta.id] || 0) - (ncPorVenta[venta.id] || 0));
+                      const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: realPagadoPrev + paid };
                       if (cuentaNombre) ventaUpd.cuenta_transferencia_alias = cuentaNombre;
-                      // Only update total on FIRST cobro — adjusts for payment method change
-                      // (e.g., checkout had transfer surcharge but paying cash now).
-                      // On subsequent cobros, total must NOT change (it would corrupt the order total).
-                      if ((pagadoPorVenta[venta.id] || 0) === 0) {
-                        ventaUpd.total = result.monto + (result.surcharge || 0);
-                      }
+                      // Do NOT override venta.total — it was set correctly at creation.
+                      // Overriding with result.monto (group total) corrupts individual venta totals.
                       await supabase.from("ventas").update(ventaUpd).eq("id", venta.id);
                     }
 
@@ -2517,7 +2515,8 @@ export default function HojaDeRutaPage() {
                       // Per-venta CC entries (saldo snapshots)
                       let ccUsed = 0;
                       for (const { venta, debtLeft } of perVenta) {
-                        const ccForVenta = result.metodo === "Cuenta Corriente" ? (venta.total - (pagadoPorVenta[venta.id] || 0)) : debtLeft;
+                        const realPagadoCC = Math.max(0, (pagadoPorVenta[venta.id] || 0) - (ncPorVenta[venta.id] || 0));
+                        const ccForVenta = result.metodo === "Cuenta Corriente" ? (venta.total - realPagadoCC) : debtLeft;
                         if (ccForVenta <= 0) continue;
                         ccUsed += ccForVenta;
                         await supabase.from("cuenta_corriente").insert({ cliente_id: payVenta.cliente_id, fecha: hoy, comprobante: `Cobro entrega #${venta.numero}`, descripcion: result.metodo === "Cuenta Corriente" ? "A cuenta corriente" : "Saldo pendiente a cuenta corriente", debe: ccForVenta, haber: 0, saldo: runningSaldo - (ccAmount - ccUsed), forma_pago: result.metodo === "Cuenta Corriente" ? "Cuenta Corriente" : "Mixto", venta_id: venta.id });
