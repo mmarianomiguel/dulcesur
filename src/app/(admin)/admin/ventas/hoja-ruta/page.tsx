@@ -1048,7 +1048,11 @@ export default function HojaDeRutaPage() {
   const openPayDialog = async (v: VentaRow, groupVentas?: VentaRow[]) => {
     const allVentas = groupVentas || [v];
     setPayGroupVentas(allVentas);
-    const totalDebe = allVentas.reduce((s, vt) => s + Math.max(0, vt.total - (pagadoPorVenta[vt.id] || 0)), 0);
+    // v.total already has NC deducted; pagadoPorVenta includes NC as "payment" — subtract NC from pagado
+    const totalDebe = allVentas.reduce((s, vt) => {
+      const pagadoReal = Math.max(0, (pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0));
+      return s + Math.max(0, vt.total - pagadoReal);
+    }, 0);
     setPayVenta(v);
     const metodoOriginal = v.forma_pago === "Transferencia" ? "Transferencia" : v.forma_pago === "Mixto" ? "Mixto" : "Efectivo";
     setPayMetodo(metodoOriginal);
@@ -2457,7 +2461,8 @@ export default function HojaDeRutaPage() {
                     const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
                     for (const v of allVentas) {
                       // Use totalCollected as deuda cap when surcharge applies (so the surcharge fits)
-                      const storedTotal = v.total - (pagadoPorVenta[v.id] || 0);
+                      const pagadoReal = Math.max(0, (pagadoPorVenta[v.id] || 0) - (ncPorVenta[v.id] || 0));
+                      const storedTotal = v.total - pagadoReal;
                       const surchargeForVenta = result.surcharge > 0 && allVentas.length === 1
                         ? (result.surcharge || 0) : 0;
                       const deuda = Math.max(0, storedTotal + surchargeForVenta);
