@@ -2340,12 +2340,19 @@ export default function HojaDeRutaPage() {
           </DialogHeader>
           {payVenta && (() => {
             const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
-            // v.total in DB already has NC deducted, so don't subtract NC again
+            // v.total in DB already has NC deducted — NC is NOT separate anymore
             const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
-            const totalPagadoReal = allVentas.reduce((s, vt) => s + ((pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0)), 0);
+            // Real payments = pagadoPorVenta minus the NC portion (NC is tracked as a "payment" in pagadoPorVenta)
+            const totalPagadoReal = allVentas.reduce((s, vt) => {
+              const pagado = pagadoPorVenta[vt.id] || 0;
+              const nc = ncPorVenta[vt.id] || 0;
+              return s + Math.max(0, pagado - nc); // only actual cash/transfer payments
+            }, 0);
             const totalDebeGrupo = allVentas.reduce((s, vt) => {
-              const pagadoSinNC = (pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0);
-              return s + Math.max(0, vt.total - pagadoSinNC); // v.total already net of NC
+              const pagado = pagadoPorVenta[vt.id] || 0;
+              const nc = ncPorVenta[vt.id] || 0;
+              const pagadoReal = Math.max(0, pagado - nc);
+              return s + Math.max(0, vt.total - pagadoReal); // v.total already net of NC
             }, 0);
 
             // Calcular subtotal SIN recargo para pasarle al CobroVentaSection.
@@ -2371,7 +2378,7 @@ export default function HojaDeRutaPage() {
                 : vt.total);
             }, 0);
 
-            // subtotalSinRecargo already has NC deducted (via v.total/v.subtotal), don't subtract again
+            // subtotalSinRecargo uses v.total/v.subtotal which already have NC deducted
             const preDebeGrupo = Math.max(0, subtotalSinRecargo - totalPagadoReal);
             return (
               <div className="space-y-4">
@@ -2394,7 +2401,7 @@ export default function HojaDeRutaPage() {
                       <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(allVentas.reduce((s, v) => s + v.total, 0))}</span></div>
                     </>
                   )}
-                  {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
+                  {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito (aplicada)</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
                   {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-gray-500">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
                   <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500 font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(preDebeGrupo)}</span></div>
                 </div>
