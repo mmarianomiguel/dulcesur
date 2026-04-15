@@ -13,6 +13,8 @@ export function MiembrosTab() {
   const [form, setForm] = useState({ nombre: "", pin: "", rol: "armador" as Equipo["rol"] });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPin, setShowPin] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Equipo | null>(null);
 
   const fetchMiembros = useCallback(async () => {
     const { data } = await supabase
@@ -29,6 +31,7 @@ export function MiembrosTab() {
     setEditingId(null);
     setForm({ nombre: "", pin: "", rol: "armador" });
     setError(null);
+    setShowPin(false);
     setModalOpen(true);
   };
 
@@ -36,6 +39,7 @@ export function MiembrosTab() {
     setEditingId(m.id);
     setForm({ nombre: m.nombre, pin: m.pin, rol: m.rol });
     setError(null);
+    setShowPin(false);
     setModalOpen(true);
   };
 
@@ -76,9 +80,14 @@ export function MiembrosTab() {
     await fetchMiembros();
   };
 
-  const handleDelete = async (m: Equipo) => {
-    if (!confirm(`¿Eliminar a ${m.nombre}? Esta acción no se puede deshacer.`)) return;
-    await supabase.from("equipo").delete().eq("id", m.id);
+  const handleDelete = (m: Equipo) => {
+    setDeleteTarget(m);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    await supabase.from("equipo").delete().eq("id", deleteTarget.id);
+    setDeleteTarget(null);
     await fetchMiembros();
   };
 
@@ -93,7 +102,7 @@ export function MiembrosTab() {
 
   const rolColor = (rol: string) => {
     switch (rol) {
-      case "armador": return "bg-amber-100 text-amber-700";
+      case "armador": return "bg-[#FFE0EC] text-[#99003D]";
       case "repartidor": return "bg-blue-100 text-blue-700";
       case "admin": return "bg-violet-100 text-violet-700";
       default: return "bg-gray-100 text-gray-700";
@@ -105,7 +114,7 @@ export function MiembrosTab() {
       <div className="flex justify-end mb-4">
         <button
           onClick={openAdd}
-          className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800"
+          className="flex items-center gap-1.5 bg-[#FF2D6B] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#E0255E]"
         >
           <Plus className="w-4 h-4" /> Agregar
         </button>
@@ -119,17 +128,17 @@ export function MiembrosTab() {
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-gray-50">
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Rol</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">PIN</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Acciones</th>
+              <tr className="border-b bg-[#FFE0EC]">
+                <th className="text-left px-4 py-3 font-medium text-[#99003D]">Nombre</th>
+                <th className="text-left px-4 py-3 font-medium text-[#99003D]">Rol</th>
+                <th className="text-left px-4 py-3 font-medium text-[#99003D]">PIN</th>
+                <th className="text-center px-4 py-3 font-medium text-[#99003D]">Estado</th>
+                <th className="text-right px-4 py-3 font-medium text-[#99003D]">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {miembros.map((m) => (
-                <tr key={m.id} className={`border-b last:border-b-0 ${!m.activo ? "opacity-50" : ""}`}>
+                <tr key={m.id} className={`border-b last:border-b-0 hover:bg-[#FFF5F8] ${!m.activo ? "opacity-50" : ""}`}>
                   <td className="px-4 py-3 font-medium text-gray-900">{m.nombre}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${rolColor(m.rol)}`}>
@@ -138,7 +147,7 @@ export function MiembrosTab() {
                   </td>
                   <td className="px-4 py-3 font-mono text-gray-500">****</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${m.activo ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${m.activo ? "bg-[#D4F5E2] text-[#1A7A45]" : "bg-gray-100 text-[#6B7080]"}`}>
                       {m.activo ? "Activo" : "Inactivo"}
                     </span>
                   </td>
@@ -181,24 +190,34 @@ export function MiembrosTab() {
                 <input
                   value={form.nombre}
                   onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B]"
                   placeholder="Nombre del empleado"
                 />
               </div>
 
               <div>
                 <label className="text-sm font-medium text-gray-600 block mb-1">PIN (4 dígitos)</label>
-                <input
-                  value={form.pin}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/\D/g, "").slice(0, 4);
-                    setForm({ ...form, pin: v });
-                  }}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="1234"
-                  maxLength={4}
-                  inputMode="numeric"
-                />
+                <div className="relative">
+                  <input
+                    type={showPin ? "text" : "password"}
+                    value={form.pin}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setForm({ ...form, pin: v });
+                    }}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF2D6B]"
+                    placeholder="1234"
+                    maxLength={4}
+                    inputMode="numeric"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin(!showPin)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7080] hover:text-[#12131A]"
+                  >
+                    {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -206,7 +225,7 @@ export function MiembrosTab() {
                 <select
                   value={form.rol}
                   onChange={(e) => setForm({ ...form, rol: e.target.value as Equipo["rol"] })}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B]"
                 >
                   <option value="armador">Armador</option>
                   <option value="repartidor">Repartidor</option>
@@ -228,10 +247,36 @@ export function MiembrosTab() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white font-medium text-sm flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 rounded-xl bg-[#FF2D6B] text-white font-medium text-sm flex items-center justify-center gap-1.5 hover:bg-[#E0255E]"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 {editingId ? "Guardar" : "Agregar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4">
+            <h3 className="font-bold text-[#12131A] text-lg">Eliminar miembro</h3>
+            <p className="text-sm text-[#6B7080]">
+              ¿Eliminar a <span className="font-medium text-[#12131A]">{deleteTarget.nombre}</span>? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-[#6B7080] font-medium text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-medium text-sm hover:bg-red-700"
+              >
+                Eliminar
               </button>
             </div>
           </div>
