@@ -101,9 +101,19 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
        ...items.map((item, i) => ({ item, i, isChecked: checked[i] })).filter(x => !x.isChecked)]
     : items.map((item, i) => ({ item, i, isChecked: checked[i] }));
 
+  const [confirmSoltar, setConfirmSoltar] = useState(false);
+
   const handleTomar = async () => {
     setSaving(true);
     await onUpdateEstado(pedido.id, "armando");
+    setSaving(false);
+  };
+
+  const handleSoltar = async () => {
+    setSaving(true);
+    await onUpdateEstado(pedido.id, "pendiente");
+    setConfirmSoltar(false);
+    setChecked(items.map(() => false));
     setSaving(false);
   };
 
@@ -340,13 +350,22 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             </button>
           )}
           {isArmador && estado === "armando" && esMiPedido && (
-            <button
-              onClick={() => setModalOpen(true)}
-              disabled={saving}
-              className="h-12 rounded-2xl bg-[#00BFFF] text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
-            >
-              Marcar como armado
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmSoltar(true)}
+                disabled={saving}
+                className="h-12 flex-1 rounded-2xl bg-[#F4F4F6] border border-gray-200 text-gray-500 font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                Soltar
+              </button>
+              <button
+                onClick={() => setModalOpen(true)}
+                disabled={saving}
+                className="h-12 flex-[2] rounded-2xl bg-[#00BFFF] text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                Marcar como armado
+              </button>
+            </div>
           )}
           {isArmador && estado === "armado" && (
             <div className="h-12 rounded-2xl bg-gray-100 text-gray-400 font-semibold text-[13px] flex items-center justify-center">
@@ -376,6 +395,37 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
           )}
         </div>
       </div>
+
+      {/* Modal confirmar soltar pedido */}
+      {confirmSoltar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(18,19,26,0.6)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirmSoltar(false); }}
+        >
+          <div className="w-[90%] max-w-sm bg-white rounded-3xl px-5 py-6 space-y-4">
+            <p className="text-[16px] font-extrabold text-gray-900">Soltar pedido</p>
+            <p className="text-[13px] text-gray-500">
+              El pedido de <strong>{clienteNombre}</strong> volverá a la lista de pendientes y otro armador podrá tomarlo.
+            </p>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setConfirmSoltar(false)}
+                className="h-12 rounded-2xl bg-[#F4F4F6] border border-gray-200 text-gray-500 font-bold text-[13px]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSoltar}
+                disabled={saving}
+                className="h-12 rounded-2xl bg-red-500 text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Soltar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de observaciones */}
       {modalOpen && (

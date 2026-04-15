@@ -33,6 +33,15 @@ export async function PATCH(
     // Timestamps per state transition
     const now = new Date().toISOString();
 
+    // Release order back to pending (armador drops it)
+    if (estado === "pendiente") {
+      updateData.armador_id = null;
+      updateData.inicio_armado_at = null;
+      updateData.fin_armado_at = null;
+      updateData.notas = null;
+      updateData.motivo_rechazo = null;
+    }
+
     if (estado === "armando") {
       const { data: existing } = await supabase
         .from("pedido_armado")

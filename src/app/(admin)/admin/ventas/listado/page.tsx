@@ -2071,6 +2071,23 @@ export default function ListadoVentasPage() {
         ventaUpdate.observacion = `ANULADA (Cancelación desde ${isHistorial ? "Historial" : "Pedidos Online"})`;
       }
       await supabase.from("ventas").update(ventaUpdate).eq("id", ventaLinked.id);
+
+      // Sync pedido_armado so supervision tab reflects the change
+      if (nuevoEstado === "armado") {
+        const now = new Date().toISOString();
+        await supabase
+          .from("pedido_armado")
+          .upsert(
+            {
+              venta_id: ventaLinked.id,
+              estado: "listo",
+              fin_armado_at: now,
+              aprobado_at: now,
+              updated_at: now,
+            },
+            { onConflict: "venta_id" }
+          );
+      }
     }
 
     // Return stock when cancelling (only if wasn't already cancelled)
