@@ -400,9 +400,9 @@ export default function NotaCreditoPage() {
 
     if (!venta) { setSaving(false); return; }
 
-    // Insert items
+    // Insert items (only those with qty > 0)
     await supabase.from("venta_items").insert(
-      items.map((i) => ({
+      validItems.map((i) => ({
         venta_id: venta.id,
         producto_id: i.producto_id,
         codigo: i.code,
@@ -418,8 +418,8 @@ export default function NotaCreditoPage() {
       }))
     );
 
-    // Re-add stock
-    for (const item of items) {
+    // Re-add stock (only items being returned)
+    for (const item of validItems) {
       if (!item.producto_id) continue;
       const prod = products.find((p) => p.id === item.producto_id);
       if (!prod) continue;
