@@ -118,6 +118,7 @@ export interface EditableItem {
   precio_unitario: number;
   subtotal: number;
   unidades_por_presentacion: number;
+  stock?: number;
 }
 
 export interface ProductSearchResult {
@@ -317,6 +318,7 @@ export function VentaDetailDialog({
         precio_unitario: presPrecio,
         subtotal: presPrecio,
         unidades_por_presentacion: presUpp,
+        stock: product.stock,
       }]);
     }
     setAddProductOpen(false);
@@ -695,9 +697,17 @@ export function VentaDetailDialog({
                                 .replace(/\s*(Unidad)$/i, "")
                                 .replace(/(([^)]+))\s*\1/gi, "$1")
                               }</span>
-                              {item.presentacion && item.presentacion !== "Unidad" && (
-                                <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary">{item.presentacion}</span>
-                              )}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {item.presentacion && item.presentacion !== "Unidad" && (
+                                  <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary">{item.presentacion}</span>
+                                )}
+                                {item.stock !== undefined && (
+                                  <span className={`text-[10px] font-medium ${item.stock <= 0 ? "text-red-500" : item.stock < item.cantidad ? "text-amber-600" : "text-muted-foreground"}`}>
+                                    Stock: {item.stock}
+                                    {item.stock > 0 && item.stock < item.cantidad && " (insuficiente)"}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-3 py-2 text-center">

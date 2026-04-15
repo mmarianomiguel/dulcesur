@@ -2086,9 +2086,9 @@ export default function ProductosPage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 shrink-0">
             <Package className="w-5 h-5 text-primary" />
           </div>
           <div>
@@ -2108,17 +2108,36 @@ export default function ProductosPage() {
             className="hidden"
             onChange={handleImport}
           />
-          <Button variant="outline" size="sm" onClick={handleExport}>
+          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={handleExport}>
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => importRef.current?.click()} disabled={importing}>
+          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => importRef.current?.click()} disabled={importing}>
             {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
             {importing ? importProgress : "Importar Excel"}
           </Button>
-          <Button onClick={openNew}>
+          {/* Mobile: compact menu for import/export */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="sm:hidden">
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExport}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Exportar Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => importRef.current?.click()} disabled={importing}>
+                <Upload className="w-4 h-4 mr-2" />
+                {importing ? importProgress : "Importar Excel"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={openNew} size="sm">
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo artículo
+            <span className="hidden sm:inline">Nuevo artículo</span>
+            <span className="sm:hidden">Nuevo</span>
           </Button>
         </div>
       </div>
@@ -2421,19 +2440,21 @@ export default function ProductosPage() {
             <div className="flex flex-wrap gap-2">
               <Button
                 variant={soloDestacado ? "default" : "outline"}
-                className="gap-2"
+                size="sm"
+                className="gap-1.5"
                 onClick={() => { setSoloDestacado(!soloDestacado); setPage(1); }}
                 title={`${products.filter((p: any) => p.destacado).length} productos destacados (se muestran hasta 8 en la tienda)`}
               >
                 <Star className="w-4 h-4" />
-                Destacados
+                <span className="hidden sm:inline">Destacados</span>
                 <span className={`text-xs font-normal ${soloDestacado ? "text-white/80" : "text-muted-foreground"}`}>
                   {products.filter((p: any) => p.destacado).length}/8
                 </span>
               </Button>
               <Button
                 variant={comboFilter === "si" ? "default" : "outline"}
-                className="gap-2"
+                size="sm"
+                className="gap-1.5"
                 onClick={() => { setComboFilter(comboFilter === "si" ? "all" : "si"); setPage(1); }}
               >
                 <Layers className="w-4 h-4" />
@@ -2442,18 +2463,19 @@ export default function ProductosPage() {
               <Button
                 variant={showVelCol ? "default" : "outline"}
                 size="sm"
-                className="gap-2"
+                className="gap-1.5"
                 onClick={() => {
                   if (!showVelCol && Object.keys(velMap).length === 0) loadVelDiaria();
                   setShowVelCol(!showVelCol);
                 }}
               >
                 <TrendingUp className="w-4 h-4" />
-                Rotación
+                <span className="hidden sm:inline">Rotación</span>
               </Button>
               <Button
                 variant="outline"
-                className="gap-2"
+                size="sm"
+                className="gap-1.5"
                 onClick={() => setShowFilters(!showFilters)}
               >
                 <Filter className="w-4 h-4" />
@@ -2470,10 +2492,11 @@ export default function ProductosPage() {
                 return (
                   <DropdownMenu>
                     <DropdownMenuTrigger>
-                      <Button variant="outline" className="gap-2">
+                      <Button variant="outline" size="sm" className="gap-1.5">
                         <Store className="w-4 h-4" />
-                        Tienda online
-                        {totalOcultos > 0 && <Badge variant="secondary" className="text-[10px] ml-1">{totalOcultos} ocultos</Badge>}
+                        <span className="hidden sm:inline">Tienda online</span>
+                        <span className="sm:hidden">Tienda</span>
+                        {totalOcultos > 0 && <Badge variant="secondary" className="text-[10px] ml-1">{totalOcultos}</Badge>}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-72">
@@ -2745,7 +2768,7 @@ export default function ProductosPage() {
 
       {/* Selection toolbar */}
       {!loading && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <button
               onClick={allFilteredSelected ? deselectAll : selectAllFiltered}
@@ -2756,22 +2779,22 @@ export default function ProductosPage() {
             {selected.size > 0 && (
               <>
                 <span className="text-border">|</span>
-                <button onClick={deselectAll} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Limpiar selección</button>
+                <button onClick={deselectAll} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Limpiar</button>
               </>
             )}
           </div>
           {selected.size > 0 && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-2.5 py-1 rounded-full text-xs font-medium">
-                {selected.size} seleccionado{selected.size > 1 ? "s" : ""}
+                {selected.size} sel.
               </span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => { setMassEditOpen(true); setMassAmount(""); }}
               >
-                <Edit className="w-4 h-4 mr-2" />
-                Editar precios ({selected.size})
+                <Edit className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Editar precios ({selected.size})</span>
               </Button>
               <Button
                 variant="outline"
@@ -2781,12 +2804,12 @@ export default function ProductosPage() {
                   window.location.href = `/admin/productos/lista-precios?ids=${ids}`;
                 }}
               >
-                <Printer className="w-4 h-4 mr-2" />
-                Imprimir carteles ({selected.size})
+                <Printer className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Imprimir carteles ({selected.size})</span>
               </Button>
               <Button variant="destructive" size="sm" onClick={handleMassDelete} disabled={deleting}>
-                {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                Eliminar ({selected.size})
+                {deleting ? <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 sm:mr-2" />}
+                <span className="hidden sm:inline">Eliminar ({selected.size})</span>
               </Button>
             </div>
           )}
@@ -3264,9 +3287,9 @@ export default function ProductosPage() {
             </div>
             </>
           )}
-          <div className="flex items-center justify-between pt-4 border-t mt-4">
-            <p className="text-sm text-muted-foreground">
-              Mostrando {Math.min((safeCurrentPage - 1) * pageSize + 1, filtered.length)}-{Math.min(safeCurrentPage * pageSize, filtered.length)} de {filtered.length} articulos
+          <div className="flex items-center justify-between pt-4 border-t mt-4 gap-2">
+            <p className="text-xs sm:text-sm text-muted-foreground shrink-0">
+              {Math.min((safeCurrentPage - 1) * pageSize + 1, filtered.length)}-{Math.min(safeCurrentPage * pageSize, filtered.length)} de {filtered.length}
             </p>
             <div className="flex items-center gap-2">
               <Button

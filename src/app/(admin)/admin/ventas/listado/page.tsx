@@ -561,6 +561,24 @@ export default function ListadoVentasPage() {
       isOnline: v.origen === "tienda" || v.tipo_comprobante === "Pedido Web",
     };
 
+    // Fetch stock for each product to show in edit mode
+    const prodIds = pedidoItems.map((i) => i.producto_id).filter(Boolean);
+    if (prodIds.length > 0) {
+      const { data: stockData } = await supabase
+        .from("productos")
+        .select("id, stock")
+        .in("id", prodIds);
+      if (stockData) {
+        const stockMap: Record<string, number> = {};
+        for (const s of stockData) stockMap[s.id] = s.stock;
+        for (const item of pedidoItems) {
+          if (item.producto_id && stockMap[item.producto_id] !== undefined) {
+            (item as any).stock = stockMap[item.producto_id];
+          }
+        }
+      }
+    }
+
     setPoSelectedPedido(pseudoPedido);
     setCobroPreview(null);
     setPoEditItems(pedidoItems.map((i) => ({ ...i })));
@@ -1554,6 +1572,24 @@ export default function ListadoVentasPage() {
     const ptEfectivo = ptData?.monto_efectivo || (ventaData as any)?.monto_efectivo || 0;
     const ptTransferencia = ptData?.monto_transferencia || (ventaData as any)?.monto_transferencia || 0;
     const ptMontoPagado = (ventaData as any)?.monto_pagado ?? 0;
+    // Fetch stock for each product to show in edit mode
+    const editProdIds = items.map((i) => i.producto_id).filter(Boolean);
+    if (editProdIds.length > 0) {
+      const { data: stockData2 } = await supabase
+        .from("productos")
+        .select("id, stock")
+        .in("id", editProdIds);
+      if (stockData2) {
+        const stockMap2: Record<string, number> = {};
+        for (const s of stockData2) stockMap2[s.id] = s.stock;
+        for (const item of items) {
+          if (item.producto_id && stockMap2[item.producto_id] !== undefined) {
+            (item as any).stock = stockMap2[item.producto_id];
+          }
+        }
+      }
+    }
+
     setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos", _ventaId: ventaId, monto_efectivo: ptEfectivo, monto_transferencia: ptTransferencia, _monto_pagado: ptMontoPagado } as any);
     setCobroPreview(null);
     setPoEditItems(items.map((i) => ({ ...i })));
@@ -3179,6 +3215,7 @@ export default function ListadoVentasPage() {
             precio_unitario: i.precio_unitario,
             subtotal: i.subtotal,
             unidades_por_presentacion: i.unidades_por_presentacion || 1,
+            stock: (i as any).stock,
           }))}
           onEditItemsChange={(newItems) => {
             setPoEditItems(newItems.map(i => ({
