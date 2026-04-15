@@ -29,6 +29,45 @@ export async function PATCH(
     if (notas !== undefined) updateData.notas = notas;
     if (orden_entrega !== undefined) updateData.orden_entrega = orden_entrega;
 
+    // Timestamps per state transition
+    const now = new Date().toISOString();
+
+    if (estado === "armando") {
+      const { data: existing } = await supabase
+        .from("pedido_armado")
+        .select("inicio_armado_at")
+        .eq("venta_id", ventaId)
+        .single();
+      if (!existing?.inicio_armado_at) {
+        updateData.inicio_armado_at = now;
+      }
+      updateData.fin_armado_at = null;
+      updateData.motivo_rechazo = null;
+    }
+
+    if (estado === "armado") {
+      updateData.fin_armado_at = now;
+    }
+
+    if (estado === "listo") {
+      updateData.aprobado_at = now;
+      if (body.aprobado_por) updateData.aprobado_por = body.aprobado_por;
+    }
+
+    // Rejection flow: reset to armando, increment rechazos
+    if (estado === "rechazado") {
+      const { data: current } = await supabase
+        .from("pedido_armado")
+        .select("rechazos")
+        .eq("venta_id", ventaId)
+        .single();
+
+      updateData.estado = "armando";
+      updateData.rechazos = (current?.rechazos || 0) + 1;
+      updateData.fin_armado_at = null;
+      if (body.motivo_rechazo) updateData.motivo_rechazo = body.motivo_rechazo;
+    }
+
     const { data: armado, error } = await supabase
       .from("pedido_armado")
       .upsert(updateData, { onConflict: "venta_id" })
@@ -92,6 +131,12 @@ export async function PATCH(
           .update({ orden_entrega: nextOrden })
           .eq("venta_id", ventaId);
       }
+
+      // Sync venta estado to "armado"
+      await supabase
+        .from("ventas")
+        .update({ estado: "armado" })
+        .eq("id", ventaId);
 
       // For pickup orders, notify the client
       const cliente = (ventaCheck as any)?.clientes;

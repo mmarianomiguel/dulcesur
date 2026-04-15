@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       .from("ventas")
       .select(`
         id, numero, total, forma_pago, metodo_entrega, origen, created_at,
-        clientes ( id, nombre, telefono, domicilio, localidad, auth_id ),
+        clientes ( id, nombre, telefono, domicilio, localidad ),
         venta_items ( descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion )
       `)
       .eq("fecha", fecha)
@@ -34,21 +34,21 @@ export async function GET(req: NextRequest) {
     const ventaIds = ventas.map((v: any) => v.id);
     const { data: armados } = await supabase
       .from("pedido_armado")
-      .select("id, venta_id, estado, armador_id, notas, orden_entrega")
+      .select("id, venta_id, estado, armador_id, notas, orden_entrega, inicio_armado_at, fin_armado_at, aprobado_at, aprobado_por, rechazos, motivo_rechazo")
       .in("venta_id", ventaIds);
 
-    // 3. Fetch armador names
-    const armadorIds = (armados || [])
-      .map((a: any) => a.armador_id)
-      .filter(Boolean);
-    const armadorMap: Record<string, string> = {};
-    if (armadorIds.length > 0) {
-      const { data: armadores } = await supabase
+    // 3. Fetch equipo names (armadores + aprobadores)
+    const armadorIds = (armados || []).map((a: any) => a.armador_id).filter(Boolean);
+    const aprobadorIds = (armados || []).map((a: any) => a.aprobado_por).filter(Boolean);
+    const allEquipoIds = [...new Set([...armadorIds, ...aprobadorIds])];
+    const equipoMap: Record<string, string> = {};
+    if (allEquipoIds.length > 0) {
+      const { data: equipo } = await supabase
         .from("equipo")
         .select("id, nombre")
-        .in("id", armadorIds);
-      for (const a of armadores || []) {
-        armadorMap[a.id] = a.nombre;
+        .in("id", allEquipoIds);
+      for (const e of equipo || []) {
+        equipoMap[e.id] = e.nombre;
       }
     }
 
@@ -57,7 +57,8 @@ export async function GET(req: NextRequest) {
     for (const a of armados || []) {
       armadoMap[a.venta_id] = {
         ...a,
-        armador_nombre: a.armador_id ? armadorMap[a.armador_id] || null : null,
+        armador_nombre: a.armador_id ? equipoMap[a.armador_id] || null : null,
+        aprobador_nombre: a.aprobado_por ? equipoMap[a.aprobado_por] || null : null,
       };
     }
 
