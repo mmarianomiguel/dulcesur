@@ -7,6 +7,7 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, AlertTriangle } from "luci
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
 import { formatCurrency } from "@/lib/formatters";
+import { useCarritoSync } from "@/hooks/use-carrito-sync";
 
 interface CartItem {
   id: string;
@@ -27,6 +28,7 @@ export default function CarritoPage() {
   const [loaded, setLoaded] = useState(false);
   // Map of product id -> available stock in units
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
+  const { syncToRemote } = useCarritoSync();
 
   useEffect(() => {
     const raw = localStorage.getItem("carrito");
@@ -125,6 +127,7 @@ export default function CarritoPage() {
     setItems(updated);
     localStorage.setItem("carrito", JSON.stringify(updated));
     window.dispatchEvent(new Event("cart-updated"));
+    syncToRemote(); // llamada directa para garantizar sincronización
   };
 
   const updateQty = (id: string, delta: number) => {

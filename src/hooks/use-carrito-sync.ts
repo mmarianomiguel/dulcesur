@@ -19,6 +19,7 @@ export function useCarritoSync() {
           .delete()
           .eq("cliente_auth_id", id);
         localStorage.setItem("carrito_vaciado", "1");
+        localStorage.setItem("carrito_modificado_at", new Date().toISOString());
         return;
       }
 
@@ -30,11 +31,13 @@ export function useCarritoSync() {
           { cliente_auth_id: id, items: carrito, updated_at: new Date().toISOString() },
           { onConflict: "cliente_auth_id" }
         );
+      localStorage.setItem("carrito_modificado_at", new Date().toISOString());
     } catch {}
   }, []);
 
   // Restaurar carrito desde BD si localStorage está vacío
   // NO restaurar si el cliente vació el carrito intencionalmente
+  // NO restaurar si el local es más reciente que el remoto
   const restoreFromRemote = useCallback(async () => {
     try {
       const stored = localStorage.getItem("cliente_auth");
@@ -50,11 +53,18 @@ export function useCarritoSync() {
 
       const { data } = await supabase
         .from("carritos_guardados")
-        .select("items")
+        .select("items, updated_at")
         .eq("cliente_auth_id", id)
         .single();
 
       if (data?.items && Array.isArray(data.items) && data.items.length > 0) {
+        // Si el local fue modificado más recientemente que el remoto, no restaurar
+        const localModificadoAt = localStorage.getItem("carrito_modificado_at");
+        const remoteUpdatedAt = data.updated_at;
+        if (localModificadoAt && remoteUpdatedAt) {
+          if (new Date(localModificadoAt) >= new Date(remoteUpdatedAt)) return;
+        }
+
         localStorage.setItem("carrito", JSON.stringify(data.items));
         window.dispatchEvent(new Event("cart-updated"));
       }
@@ -69,6 +79,7 @@ export function useCarritoSync() {
       const { id } = JSON.parse(stored);
       await supabase.from("carritos_guardados").delete().eq("cliente_auth_id", id);
       localStorage.removeItem("carrito_vaciado");
+      localStorage.removeItem("carrito_modificado_at");
     } catch {}
   }, []);
 
