@@ -40,6 +40,8 @@ export interface PedidoConArmado {
     cantidad: number;
     precio_unitario: number;
     subtotal: number;
+    presentacion?: string | null;
+    unidades_por_presentacion?: number | null;
   }[];
   pedido_armado: {
     id: string;

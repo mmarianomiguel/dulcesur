@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       .select(`
         id, numero, total, forma_pago, metodo_entrega, origen, created_at,
         clientes ( id, nombre, telefono, domicilio, localidad, auth_id ),
-        venta_items ( descripcion, cantidad, precio_unitario, subtotal )
+        venta_items ( descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion )
       `)
       .eq("fecha", fecha)
       .neq("estado", "anulada")
