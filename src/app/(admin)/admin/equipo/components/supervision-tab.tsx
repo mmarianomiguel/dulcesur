@@ -38,6 +38,17 @@ function calcDuration(
   return new Date(end).getTime() - new Date(start).getTime();
 }
 
+function formatLiveDuration(startStr: string | null | undefined, _tick: number): string {
+  if (!startStr) return "\u2014";
+  const ms = Date.now() - new Date(startStr).getTime();
+  if (ms <= 0) return "0m";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const remainMins = mins % 60;
+  return `${hrs}h ${remainMins}m`;
+}
+
 function formatHora(dateStr: string): string {
   try {
     return new Date(dateStr).toLocaleTimeString("es-AR", {
@@ -107,6 +118,12 @@ export function SupervisionTab() {
   const [activeEstado, setActiveEstado] = useState<Estado | null>(null);
   const [entregaFilter, setEntregaFilter] = useState<MetodoEntregaFilter>("todos");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -602,10 +619,21 @@ export function SupervisionTab() {
                       </div>
                     )}
 
+                    {/* Armador notes */}
+                    {pa?.notas && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex gap-2">
+                        <span className="text-amber-500 text-sm shrink-0">&#9888;</span>
+                        <div>
+                          <p className="text-[11px] font-bold text-amber-800 mb-0.5">Nota del armador</p>
+                          <p className="text-[11px] text-amber-700">{pa.notas}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Row 3: time metrics grid */}
                     <div className="grid grid-cols-4 gap-2">
-                      <TimeMetric label="T. Espera" value={formatDuration(tEspera)} />
-                      <TimeMetric label="T. Armado" value={formatDuration(tArmado)} />
+                      <TimeMetric label="T. Espera" value={estado === "pendiente" ? undefined : formatDuration(tEspera)} liveValue={estado === "pendiente" ? <span className="text-amber-600">{formatLiveDuration(p.created_at, tick)}</span> : undefined} />
+                      <TimeMetric label="T. Armado" value={estado === "armando" && pa?.inicio_armado_at ? undefined : formatDuration(tArmado)} liveValue={estado === "armando" && pa?.inicio_armado_at ? <span className="text-violet-600 font-semibold animate-pulse">{formatLiveDuration(pa.inicio_armado_at, tick)}</span> : undefined} />
                       <TimeMetric label="T. Control" value={formatDuration(tControl)} />
                       <TimeMetric label="T. Total" value={formatDuration(tTotal)} bold />
                     </div>
@@ -890,21 +918,23 @@ function TimeMetric({
   label,
   value,
   bold = false,
+  liveValue,
 }: {
   label: string;
-  value: string;
+  value?: string;
   bold?: boolean;
+  liveValue?: React.ReactNode;
 }) {
   return (
     <div className="bg-gray-50 rounded-lg px-2 py-1.5 text-center">
       <p className="text-[10px] text-gray-400 leading-tight">{label}</p>
-      <p
+      <div
         className={`text-xs mt-0.5 ${
           bold ? "font-semibold text-gray-800" : "text-gray-600"
         }`}
       >
-        {value}
-      </p>
+        {liveValue ?? value}
+      </div>
     </div>
   );
 }
