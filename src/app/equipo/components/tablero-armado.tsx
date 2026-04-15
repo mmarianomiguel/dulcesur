@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Loader2, LogOut, Truck, ShoppingBag, Star } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { formatDateARG } from "@/lib/formatters";
+import { formatDateARG, todayARG } from "@/lib/formatters";
 import type { PedidoConArmado, EquipoSession } from "@/types/equipo";
 import { PedidoCard } from "./pedido-card";
 
@@ -44,6 +44,20 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const playBeep = useCallback((frequency = 800, duration = 200) => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = frequency;
+      gain.gain.value = 0.3;
+      osc.start();
+      osc.stop(ctx.currentTime + duration / 1000);
+    } catch {}
+  }, []);
+
   const fetchPedidos = useCallback(async () => {
     try {
       const res = await fetch("/api/equipo/pedidos");
@@ -75,6 +89,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
               `Pedido devuelto: ${newData.motivo_rechazo}`,
               "error"
             );
+            playBeep(400, 300);
           } else {
             showToast("Tablero actualizado", "success");
           }
@@ -86,6 +101,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
         () => {
           fetchPedidos();
           showToast("Nuevo pedido recibido", "success");
+          playBeep(900, 150);
         }
       )
       .subscribe();
@@ -94,6 +110,15 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
       supabase.removeChannel(channel);
     };
   }, [fetchPedidos]);
+
+  useEffect(() => {
+    const pendingCount = pedidos.filter(
+      (p) => !p.pedido_armado || p.pedido_armado.estado === "pendiente"
+    ).length;
+    document.title = pendingCount > 0
+      ? `(${pendingCount}) Tablero — Dulce Sur`
+      : "Tablero — Dulce Sur";
+  }, [pedidos]);
 
   const handleUpdateEstado = async (ventaId: string, estado: string, notas?: string) => {
     await fetch(`/api/equipo/pedidos/${ventaId}`, {
@@ -128,7 +153,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
   const listoCount = pedidos.filter((p) => p.pedido_armado?.estado === "listo").length;
   const armandoCount = pedidos.filter((p) => p.pedido_armado?.estado === "armando").length;
 
-  const today = formatDateARG(new Date().toISOString());
+  const today = formatDateARG(todayARG());
 
   if (loading) {
     return (
