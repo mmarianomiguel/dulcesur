@@ -2122,7 +2122,7 @@ export default function ProductosPage() {
           </Button>
           {/* Mobile: compact menu for import/export */}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger>
               <Button variant="outline" size="sm" className="sm:hidden">
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
