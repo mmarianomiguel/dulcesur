@@ -274,15 +274,7 @@ export function VentaDetailDialog({
 
         return base;
       })()
-    : (() => {
-        // Recalcular total: derivar recargo implícito del total almacenado
-        const baseNeta = itemsSubtotal - ncDisplay;
-        const recargoImplicito = data.total - itemsSubtotal;
-        const pctDerivado = recargoImplicito > 0 && itemsSubtotal > 0 ? recargoImplicito / itemsSubtotal : 0;
-        const pct = recPct > 0 ? recPct / 100 : pctDerivado;
-        const recargo = pct > 0 && baseNeta > 0 ? Math.round(baseNeta * pct) : 0;
-        return baseNeta + recargo + envio;
-      })();
+    : data.total; // data.total already has NC deducted in DB
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
   const canCobrar = editable && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr") && !p.metodo.includes("(a cobrar)"));

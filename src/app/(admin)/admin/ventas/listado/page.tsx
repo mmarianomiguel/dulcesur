@@ -2819,17 +2819,14 @@ export default function ListadoVentasPage() {
                                 </>
                               );
                             }
-                            // Total con NC recalculado con recargo implícito
+                            // Total con NC: v.total in DB already has NC deducted
+                            // Reconstruct original total for strikethrough display
                             if (ncAmt > 0 && !cancelled) {
-                              const ventaSubtotal = (order as any).subtotal || order.total;
-                              const recargoImplicito = order.total - ventaSubtotal;
-                              const pctEfectivo = recargoImplicito > 0 && ventaSubtotal > 0 ? recargoImplicito / ventaSubtotal : 0;
-                              const baseNeta = ventaSubtotal - ncAmt;
-                              const totalConNC = baseNeta + (baseNeta > 0 ? Math.round(baseNeta * pctEfectivo) : 0);
+                              const totalOriginal = order.total + ncAmt; // restore pre-NC total
                               return (
                                 <>
-                                  <p className="text-sm text-muted-foreground line-through">{formatCurrency(order.total)}</p>
-                                  <p className="text-lg font-bold text-primary">{formatCurrency(totalConNC)}</p>
+                                  <p className="text-sm text-muted-foreground line-through">{formatCurrency(totalOriginal)}</p>
+                                  <p className="text-lg font-bold text-primary">{formatCurrency(order.total)}</p>
                                   <p className="text-[10px] text-red-500 flex items-center justify-end gap-1">
                                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400" />
                                     NC -{formatCurrency(ncAmt)}
