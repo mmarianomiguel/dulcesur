@@ -27,13 +27,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
     }
 
-    // Si es una suscripción de cliente, eliminar suscripciones anteriores
+    // Eliminar suscripciones anteriores del mismo usuario/cliente
     // para evitar duplicados (iOS genera endpoints nuevos cada vez)
     if (cliente_id) {
       await supabase
         .from("push_subscriptions")
         .delete()
         .eq("cliente_id", String(cliente_id))
+        .neq("endpoint", subscription.endpoint);
+    }
+    if (user_id && user_id !== "unknown") {
+      await supabase
+        .from("push_subscriptions")
+        .delete()
+        .eq("user_id", user_id)
         .neq("endpoint", subscription.endpoint);
     }
 
