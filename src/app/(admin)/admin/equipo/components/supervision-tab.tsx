@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatCurrency } from "@/lib/formatters";
 import {
   Package,
   Clock,
@@ -11,6 +12,10 @@ import {
   XCircle,
   Loader2,
   GripVertical,
+  Truck,
+  ShoppingBag,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { PedidoConArmado } from "@/types/equipo";
 
@@ -33,6 +38,18 @@ function calcDuration(
   return new Date(end).getTime() - new Date(start).getTime();
 }
 
+function formatHora(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleTimeString("es-AR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Argentina/Buenos_Aires",
+    });
+  } catch {
+    return "\u2014";
+  }
+}
+
 /* ── Estado helpers ── */
 
 type Estado = "pendiente" | "armando" | "armado" | "listo";
@@ -51,6 +68,27 @@ const estadoLabel: Record<Estado, string> = {
   listo: "Listo",
 };
 
+const borderColor: Record<string, string> = {
+  pendiente: "#f59e0b",
+  armando: "#7c3aed",
+  armado: "#3b82f6",
+  listo: "#c94070",
+};
+
+const estadoTabs: Estado[] = ["pendiente", "armando", "armado", "listo"];
+
+/* ── Entrega helpers ── */
+
+type MetodoEntregaFilter = "todos" | "envio" | "retiro";
+
+function isEnvio(metodo: string | null): boolean {
+  return metodo === "envio" || metodo === "envio_a_domicilio";
+}
+
+function isRetiro(metodo: string | null): boolean {
+  return metodo === "retiro";
+}
+
 /* ── Component ── */
 
 export function SupervisionTab() {
@@ -64,6 +102,20 @@ export function SupervisionTab() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [ordenModified, setOrdenModified] = useState(false);
   const [savingOrden, setSavingOrden] = useState(false);
+
+  /* New state: filters */
+  const [activeEstado, setActiveEstado] = useState<Estado | null>(null);
+  const [entregaFilter, setEntregaFilter] = useState<MetodoEntregaFilter>("todos");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const fetchPedidos = useCallback(async () => {
     try {
@@ -120,6 +172,53 @@ export function SupervisionTab() {
     return { total, pendientes, enProceso, listos };
   }, [pedidos]);
 
+  /* ── Envío/Retiro counts ── */
+
+  const entregaCounts = useMemo(() => {
+    const envio = pedidos.filter((p) => isEnvio(p.metodo_entrega)).length;
+    const retiro = pedidos.filter((p) => isRetiro(p.metodo_entrega)).length;
+    return { envio, retiro };
+  }, [pedidos]);
+
+  /* ── Estado counts ── */
+
+  const estadoCounts = useMemo(() => {
+    const counts: Record<Estado, number> = {
+      pendiente: 0,
+      armando: 0,
+      armado: 0,
+      listo: 0,
+    };
+    for (const p of pedidos) {
+      const e = (p.pedido_armado?.estado ?? "pendiente") as Estado;
+      counts[e]++;
+    }
+    return counts;
+  }, [pedidos]);
+
+  /* ── Filtered pedidos ── */
+
+  const filteredPedidos = useMemo(() => {
+    let result = pedidos;
+
+    // Entrega filter
+    if (entregaFilter === "envio") {
+      result = result.filter((p) => isEnvio(p.metodo_entrega));
+    } else if (entregaFilter === "retiro") {
+      result = result.filter((p) => isRetiro(p.metodo_entrega));
+    }
+
+    // Estado filter
+    if (activeEstado) {
+      result = result.filter((p) => {
+        const e = p.pedido_armado?.estado ?? "pendiente";
+        return e === activeEstado;
+      });
+    }
+
+    return result;
+  }, [pedidos, entregaFilter, activeEstado]);
+
   /* ── Per-armador metrics ── */
 
   const armadorMetrics = useMemo(() => {
@@ -155,8 +254,11 @@ export function SupervisionTab() {
 
   const listosEnvio = useMemo(() => {
     return pedidos
-      .filter(p => p.pedido_armado?.estado === "listo" &&
-        (p.metodo_entrega === "envio" || p.metodo_entrega === "envio_a_domicilio"))
+      .filter(
+        (p) =>
+          p.pedido_armado?.estado === "listo" &&
+          (p.metodo_entrega === "envio" || p.metodo_entrega === "envio_a_domicilio")
+      )
       .sort((a, b) => {
         const oa = a.pedido_armado?.orden_entrega ?? Infinity;
         const ob = b.pedido_armado?.orden_entrega ?? Infinity;
@@ -176,13 +278,22 @@ export function SupervisionTab() {
     e.preventDefault();
     setDragOverId(id);
   };
-  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+  const handleDragEnd = () => {
+    setDragId(null);
+    setDragOverId(null);
+  };
 
   const handleDrop = (targetId: string) => {
-    if (!dragId || dragId === targetId) { handleDragEnd(); return; }
-    const fromIdx = orderedListos.findIndex(p => p.id === dragId);
-    const toIdx = orderedListos.findIndex(p => p.id === targetId);
-    if (fromIdx === -1 || toIdx === -1) { handleDragEnd(); return; }
+    if (!dragId || dragId === targetId) {
+      handleDragEnd();
+      return;
+    }
+    const fromIdx = orderedListos.findIndex((p) => p.id === dragId);
+    const toIdx = orderedListos.findIndex((p) => p.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) {
+      handleDragEnd();
+      return;
+    }
     const reordered = [...orderedListos];
     reordered.splice(fromIdx, 1);
     reordered.splice(toIdx, 0, orderedListos[fromIdx]);
@@ -267,7 +378,7 @@ export function SupervisionTab() {
 
   return (
     <div className="space-y-6">
-      {/* ── A) Progress Overview ── */}
+      {/* ── A) Stats row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           icon={<Package className="w-5 h-5" />}
@@ -317,12 +428,301 @@ export function SupervisionTab() {
         )}
       </div>
 
-      {/* ── B) Per-Armador Metrics ── */}
+      {/* ── B) Envío / Retiro toggle ── */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setEntregaFilter(entregaFilter === "envio" ? "todos" : "envio")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            entregaFilter === "envio"
+              ? "bg-[#c94070] text-white shadow-sm"
+              : "bg-white text-gray-600 border border-gray-200 hover:border-[#f0dde5]"
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          Envío
+          <span
+            className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+              entregaFilter === "envio"
+                ? "bg-white/20 text-white"
+                : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {entregaCounts.envio}
+          </span>
+        </button>
+        <button
+          onClick={() => setEntregaFilter(entregaFilter === "retiro" ? "todos" : "retiro")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            entregaFilter === "retiro"
+              ? "bg-[#c94070] text-white shadow-sm"
+              : "bg-white text-gray-600 border border-gray-200 hover:border-[#f0dde5]"
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          Retiro
+          <span
+            className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+              entregaFilter === "retiro"
+                ? "bg-white/20 text-white"
+                : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {entregaCounts.retiro}
+          </span>
+        </button>
+      </div>
+
+      {/* ── C) Estado tabs ── */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {estadoTabs.map((tab) => {
+          const isActive = activeEstado === tab;
+          const tabColors: Record<Estado, { active: string; inactive: string }> = {
+            pendiente: {
+              active: "bg-amber-500 text-white",
+              inactive: "bg-amber-50 text-amber-700 border border-amber-200",
+            },
+            armando: {
+              active: "bg-violet-600 text-white",
+              inactive: "bg-violet-50 text-violet-700 border border-violet-200",
+            },
+            armado: {
+              active: "bg-blue-500 text-white",
+              inactive: "bg-blue-50 text-blue-700 border border-blue-200",
+            },
+            listo: {
+              active: "bg-[#c94070] text-white",
+              inactive: "bg-[#fdf5f6] text-[#c94070] border border-[#f0dde5]",
+            },
+          };
+
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveEstado(isActive ? null : tab)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shrink-0 ${
+                isActive ? tabColors[tab].active : tabColors[tab].inactive
+              }`}
+            >
+              {estadoLabel[tab]}
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                  isActive ? "bg-white/20" : "bg-black/5"
+                }`}
+              >
+                {estadoCounts[tab]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── D) Pedido cards ── */}
+      <div>
+        {filteredPedidos.length === 0 ? (
+          <div className="text-center py-12 text-gray-400 text-sm">
+            {pedidos.length === 0
+              ? "No hay pedidos de armado hoy."
+              : "No hay pedidos con estos filtros."}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredPedidos.map((p) => {
+              const pa = p.pedido_armado;
+              const estado = (pa?.estado ?? "pendiente") as Estado;
+              const tEspera = calcDuration(p.created_at, pa?.inicio_armado_at);
+              const tArmado = calcDuration(pa?.inicio_armado_at, pa?.fin_armado_at);
+              const tControl = calcDuration(pa?.fin_armado_at, pa?.aprobado_at);
+              const tTotal = calcDuration(p.created_at, pa?.aprobado_at);
+              const isExpanded = expandedIds.has(p.id);
+              const esEnvio = isEnvio(p.metodo_entrega);
+
+              return (
+                <div
+                  key={p.id}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+                  style={{ borderLeftWidth: 4, borderLeftColor: borderColor[estado] }}
+                >
+                  {/* Card header */}
+                  <div className="p-4 space-y-3">
+                    {/* Row 1: client, order #, hora, estado */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-900 truncate">
+                          {p.clientes?.nombre ?? "Sin cliente"}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-400 font-mono">
+                            #{p.numero?.slice(-4)}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {formatHora(p.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Envío/Retiro badge */}
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1 ${
+                            esEnvio
+                              ? "bg-sky-50 text-sky-600"
+                              : "bg-orange-50 text-orange-600"
+                          }`}
+                        >
+                          {esEnvio ? (
+                            <Truck className="w-3 h-3" />
+                          ) : (
+                            <ShoppingBag className="w-3 h-3" />
+                          )}
+                          <span className="hidden sm:inline">
+                            {esEnvio ? "Envío" : "Retiro"}
+                          </span>
+                        </span>
+                        {/* Estado badge */}
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-medium ${estadoBadge[estado]}`}
+                        >
+                          {estadoLabel[estado]}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Row 2: armador + rechazos */}
+                    {(pa?.armador_nombre || (pa?.rechazos ?? 0) > 0) && (
+                      <div className="flex items-center gap-3 text-xs">
+                        {pa?.armador_nombre && (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 rounded-full bg-[#f7dde7] text-[#c94070] flex items-center justify-center font-bold text-[10px] shrink-0">
+                              {pa.armador_nombre.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-gray-600 font-medium">
+                              {pa.armador_nombre}
+                            </span>
+                          </div>
+                        )}
+                        {(pa?.rechazos ?? 0) > 0 && (
+                          <span className="text-red-500 font-medium flex items-center gap-0.5">
+                            <AlertTriangle className="w-3 h-3" />
+                            {pa?.rechazos} rechazo{(pa?.rechazos ?? 0) !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Row 3: time metrics grid */}
+                    <div className="grid grid-cols-4 gap-2">
+                      <TimeMetric label="T. Espera" value={formatDuration(tEspera)} />
+                      <TimeMetric label="T. Armado" value={formatDuration(tArmado)} />
+                      <TimeMetric label="T. Control" value={formatDuration(tControl)} />
+                      <TimeMetric label="T. Total" value={formatDuration(tTotal)} bold />
+                    </div>
+
+                    {/* Row 4: Actions for "armado" estado */}
+                    {estado === "armado" && (
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => handleApprove(p.id)}
+                          disabled={actionLoading === p.id}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-xl bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                        >
+                          {actionLoading === p.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          )}
+                          Aprobar
+                        </button>
+                        <button
+                          onClick={() => openRejectModal(p.id)}
+                          disabled={actionLoading === p.id}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-xl bg-red-50 text-red-600 font-medium hover:bg-red-100 disabled:opacity-50 transition-colors"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Rechazar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* "Listo" indicator */}
+                    {estado === "listo" && (
+                      <div className="flex items-center gap-1.5 text-xs text-[#c94070] font-medium pt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Completado
+                      </div>
+                    )}
+
+                    {/* Expand/collapse items button */}
+                    {p.venta_items && p.venta_items.length > 0 && (
+                      <button
+                        onClick={() => toggleExpand(p.id)}
+                        className="w-full flex items-center justify-center gap-1 text-xs text-gray-400 hover:text-gray-600 py-1 transition-colors"
+                      >
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp className="w-3.5 h-3.5" />
+                            Ocultar productos ({p.venta_items.length})
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                            Ver productos ({p.venta_items.length})
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Expanded items list */}
+                  {isExpanded && p.venta_items && p.venta_items.length > 0 && (
+                    <div className="border-t border-gray-100 bg-[#fdf5f6]/50">
+                      <div className="divide-y divide-gray-100">
+                        {p.venta_items.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="px-4 py-2.5 flex items-start justify-between gap-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-gray-800 truncate">
+                                {item.descripcion}
+                              </p>
+                              {item.presentacion && (
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                  {item.presentacion}
+                                  {item.unidades_por_presentacion
+                                    ? ` (x${item.unidades_por_presentacion})`
+                                    : ""}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-medium text-gray-700">
+                                x{item.cantidad}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {formatCurrency(item.subtotal)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="px-4 py-2.5 border-t border-gray-200 flex justify-between items-center">
+                        <span className="text-xs font-medium text-gray-500">Total</span>
+                        <span className="text-sm font-bold text-gray-900">
+                          {formatCurrency(p.total)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── E) Armadores metrics ── */}
       {armadorMetrics.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            Armadores
-          </h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Armadores</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {armadorMetrics.map((a) => (
               <div
@@ -358,11 +758,13 @@ export function SupervisionTab() {
         </div>
       )}
 
-      {/* ── B2) Orden de entrega ── */}
+      {/* ── F) Orden de entrega (drag & drop) ── */}
       {orderedListos.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-700">Orden de entrega</h3>
+            <h3 className="text-sm font-semibold text-gray-700">
+              Orden de entrega
+            </h3>
             {ordenModified && (
               <button
                 onClick={saveOrden}
@@ -385,278 +787,36 @@ export function SupervisionTab() {
                 onDrop={() => handleDrop(p.id)}
                 className={`bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing transition-all ${
                   dragId === p.id ? "opacity-50 scale-95" : ""
-                } ${dragOverId === p.id && dragId !== p.id ? "ring-2 ring-[#c94070]" : ""}`}
+                } ${
+                  dragOverId === p.id && dragId !== p.id
+                    ? "ring-2 ring-[#c94070]"
+                    : ""
+                }`}
               >
                 <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
                 <span className="w-6 h-6 rounded-full bg-[#f7dde7] text-[#c94070] flex items-center justify-center text-xs font-bold shrink-0">
                   {idx + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{p.clientes?.nombre ?? "—"}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {p.clientes?.nombre ?? "\u2014"}
+                  </p>
                   <p className="text-xs text-gray-400 truncate">
-                    {[p.clientes?.domicilio, p.clientes?.localidad].filter(Boolean).join(", ") || "Sin dirección"}
+                    {[p.clientes?.domicilio, p.clientes?.localidad]
+                      .filter(Boolean)
+                      .join(", ") || "Sin dirección"}
                   </p>
                 </div>
-                <span className="text-xs text-gray-400 font-mono shrink-0">#{p.numero?.slice(-4)}</span>
+                <span className="text-xs text-gray-400 font-mono shrink-0">
+                  #{p.numero?.slice(-4)}
+                </span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── C) Pedidos Detail ── */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Pedidos</h3>
-
-        {pedidos.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 text-sm">
-            No hay pedidos de armado hoy.
-          </div>
-        ) : (
-          <>
-            {/* Desktop table */}
-            <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-[#fdf5f6]">
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">
-                      #
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">
-                      Cliente
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">
-                      Estado
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">
-                      Armador
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">
-                      T. Espera
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">
-                      T. Armado
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">
-                      T. Control
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">
-                      T. Total
-                    </th>
-                    <th className="text-center px-4 py-3 font-medium text-gray-600">
-                      Rech.
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pedidos.map((p) => {
-                    const pa = p.pedido_armado;
-                    const estado = pa?.estado ?? "pendiente";
-                    const tEspera = calcDuration(
-                      p.created_at,
-                      pa?.inicio_armado_at
-                    );
-                    const tArmado = calcDuration(
-                      pa?.inicio_armado_at,
-                      pa?.fin_armado_at
-                    );
-                    const tControl = calcDuration(
-                      pa?.fin_armado_at,
-                      pa?.aprobado_at
-                    );
-                    const tTotal = calcDuration(p.created_at, pa?.aprobado_at);
-
-                    return (
-                      <tr
-                        key={p.id}
-                        className="border-b last:border-b-0 hover:bg-gray-50/50"
-                      >
-                        <td className="px-4 py-3 font-mono text-gray-500">
-                          {p.numero}
-                        </td>
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {p.clientes?.nombre ?? "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-xs px-2 py-1 rounded-full font-medium ${estadoBadge[estado]}`}
-                          >
-                            {estadoLabel[estado]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {pa?.armador_nombre ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-500">
-                          {formatDuration(tEspera)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-500">
-                          {formatDuration(tArmado)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-500">
-                          {formatDuration(tControl)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium text-gray-700">
-                          {formatDuration(tTotal)}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {(pa?.rechazos ?? 0) > 0 ? (
-                            <span className="text-xs font-medium text-red-500 flex items-center justify-center gap-0.5">
-                              <AlertTriangle className="w-3 h-3" />
-                              {pa?.rechazos}
-                            </span>
-                          ) : (
-                            <span className="text-gray-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {estado === "armado" && (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleApprove(p.id)}
-                                disabled={actionLoading === p.id}
-                                className="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 disabled:opacity-50"
-                              >
-                                {actionLoading === p.id ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                              <button
-                                onClick={() => openRejectModal(p.id)}
-                                disabled={actionLoading === p.id}
-                                className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 font-medium hover:bg-red-100 disabled:opacity-50"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile cards */}
-            <div className="md:hidden space-y-3">
-              {pedidos.map((p) => {
-                const pa = p.pedido_armado;
-                const estado = pa?.estado ?? "pendiente";
-                const tEspera = calcDuration(
-                  p.created_at,
-                  pa?.inicio_armado_at
-                );
-                const tArmado = calcDuration(
-                  pa?.inicio_armado_at,
-                  pa?.fin_armado_at
-                );
-                const tControl = calcDuration(
-                  pa?.fin_armado_at,
-                  pa?.aprobado_at
-                );
-                const tTotal = calcDuration(p.created_at, pa?.aprobado_at);
-
-                return (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {p.clientes?.nombre ?? "Sin cliente"}
-                        </p>
-                        <p className="text-xs text-gray-400 font-mono">
-                          #{p.numero}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-medium ${estadoBadge[estado]}`}
-                      >
-                        {estadoLabel[estado]}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-gray-400">Armador</span>
-                        <p className="text-gray-700 font-medium">
-                          {pa?.armador_nombre ?? "—"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">Rechazos</span>
-                        <p
-                          className={`font-medium ${(pa?.rechazos ?? 0) > 0 ? "text-red-500" : "text-gray-300"}`}
-                        >
-                          {(pa?.rechazos ?? 0) > 0 ? pa?.rechazos : "—"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">T. Espera</span>
-                        <p className="text-gray-600">
-                          {formatDuration(tEspera)}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">T. Armado</span>
-                        <p className="text-gray-600">
-                          {formatDuration(tArmado)}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">T. Control</span>
-                        <p className="text-gray-600">
-                          {formatDuration(tControl)}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">T. Total</span>
-                        <p className="text-gray-700 font-medium">
-                          {formatDuration(tTotal)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {estado === "armado" && (
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => handleApprove(p.id)}
-                          disabled={actionLoading === p.id}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2 rounded-xl bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 disabled:opacity-50"
-                        >
-                          {actionLoading === p.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          )}
-                          Aprobar
-                        </button>
-                        <button
-                          onClick={() => openRejectModal(p.id)}
-                          disabled={actionLoading === p.id}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2 rounded-xl bg-red-50 text-red-600 font-medium hover:bg-red-100 disabled:opacity-50"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          Rechazar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ── D) Reject Modal ── */}
+      {/* ── G) Reject Modal ── */}
       {rejectModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4">
@@ -719,11 +879,38 @@ function StatCard({
 }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-      <div className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center mb-2`}>
+      <div
+        className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center mb-2`}
+      >
         {icon}
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
+    </div>
+  );
+}
+
+/* ── Time Metric ── */
+
+function TimeMetric({
+  label,
+  value,
+  bold = false,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+}) {
+  return (
+    <div className="bg-gray-50 rounded-lg px-2 py-1.5 text-center">
+      <p className="text-[10px] text-gray-400 leading-tight">{label}</p>
+      <p
+        className={`text-xs mt-0.5 ${
+          bold ? "font-semibold text-gray-800" : "text-gray-600"
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
