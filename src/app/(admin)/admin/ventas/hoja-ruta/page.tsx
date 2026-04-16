@@ -713,26 +713,25 @@ export default function HojaDeRutaPage() {
       pdf.text(fmtCur(dayTotal), w - margin - 2, y, { align: "right" });
       y += 5;
 
-      // Columnas ajustadas para A4 (w=210, margin=15, útil=180mm)
-      // Approach: right-align numeric cols from the right edge, leave rest for text
+      // Columnas para A4 (w=210, margin=15, útil=180mm)
       const COL = {
-        num:     margin,          // 15mm  — N° (7 chars)
-        cliente: margin + 16,     // 31mm  — Cliente (max ~20 chars)
-        pago:    margin + 52,     // 67mm  — Pago/Cuenta (max ~30 chars)
-        total:   w - margin - 50, // 145mm — Total (right-aligned)
-        cobrado: w - margin - 30, // 165mm — Cobrado (right-aligned)
-        debe:    w - margin - 13, // 182mm — Debe (right-aligned)
-        hora:    w - margin,      // 195mm — Hora (right-aligned)
+        num:     margin,          // 15mm
+        cliente: margin + 16,     // 31mm
+        pago:    margin + 50,     // 65mm  — solo método, sin monto
+        total:   w - margin - 55, // 140mm — right-aligned
+        cobrado: w - margin - 33, // 162mm — right-aligned
+        debe:    w - margin - 14, // 181mm — right-aligned
+        hora:    w - margin,      // 195mm — right-aligned
       };
       pdf.setFontSize(7.5);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(100);
       pdf.text("N", COL.num, y);
       pdf.text("Cliente", COL.cliente, y);
-      pdf.text("Pago / Cuenta", COL.pago, y);
-      pdf.text("Total", COL.total + 2, y, { align: "right" });
-      pdf.text("Cobrado", COL.cobrado + 2, y, { align: "right" });
-      pdf.text("Debe", COL.debe + 2, y, { align: "right" });
+      pdf.text("Pago", COL.pago, y);
+      pdf.text("Total", COL.total, y, { align: "right" });
+      pdf.text("Cobrado", COL.cobrado, y, { align: "right" });
+      pdf.text("Debe", COL.debe, y, { align: "right" });
       pdf.text("Hora", COL.hora, y, { align: "right" });
       y += 3.5;
       pdf.setTextColor(0);
@@ -762,9 +761,9 @@ export default function HojaDeRutaPage() {
         } else {
           for (const p of pagosSinNC) {
             const colorMetodo: [number, number, number] = p.metodo === "Transferencia" ? [37, 99, 235] : [22, 101, 52];
-            pagoLines.push({ text: `${p.metodo} ${fmtCur(p.monto)}`.substring(0, 32), color: colorMetodo, indent: 0 });
+            pagoLines.push({ text: p.metodo, color: colorMetodo, indent: 0 });
             if (p.metodo === "Transferencia" && (p as any).cuenta_bancaria) {
-              const cuentaLabel = `> ${String((p as any).cuenta_bancaria).substring(0, 24)}`;
+              const cuentaLabel = `> ${String((p as any).cuenta_bancaria).substring(0, 22)}`;
               pagoLines.push({ text: cuentaLabel, color: [59, 130, 246], indent: 2 });
             }
           }
