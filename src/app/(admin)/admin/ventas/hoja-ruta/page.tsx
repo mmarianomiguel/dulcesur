@@ -676,7 +676,7 @@ export default function HojaDeRutaPage() {
       y += 5;
       pdf.setFontSize(9);
       for (const [cuenta, monto] of Object.entries(historialBreakdown.transferencias).sort((a, b) => b[1] - a[1])) {
-        pdf.text(`→ ${cuenta}`, margin + 10, y);
+        pdf.text(`> ${cuenta}`, margin + 10, y);
         pdf.text(fmtCur(monto), w - margin, y, { align: "right" });
         y += 4;
       }
@@ -714,14 +714,15 @@ export default function HojaDeRutaPage() {
       y += 5;
 
       // Columnas ajustadas para A4 (w=210, margin=15, útil=180mm)
+      // Approach: right-align numeric cols from the right edge, leave rest for text
       const COL = {
-        num:     margin,        // N°       — hasta col+18
-        cliente: margin + 18,   // Cliente  — hasta col+44 (26mm)
-        pago:    margin + 64,   // Pago     — hasta col+100 (36mm) — más espacio para banco
-        total:   margin + 130,  // Total    — align right
-        cobrado: margin + 152,  // Cobrado  — align right
-        debe:    margin + 168,  // Debe     — align right
-        hora:    w - margin,    // Hora     — align right
+        num:     margin,          // 15mm  — N° (7 chars)
+        cliente: margin + 16,     // 31mm  — Cliente (max ~20 chars)
+        pago:    margin + 52,     // 67mm  — Pago/Cuenta (max ~30 chars)
+        total:   w - margin - 50, // 145mm — Total (right-aligned)
+        cobrado: w - margin - 30, // 165mm — Cobrado (right-aligned)
+        debe:    w - margin - 13, // 182mm — Debe (right-aligned)
+        hora:    w - margin,      // 195mm — Hora (right-aligned)
       };
       pdf.setFontSize(7.5);
       pdf.setFont("helvetica", "bold");
@@ -729,9 +730,9 @@ export default function HojaDeRutaPage() {
       pdf.text("N", COL.num, y);
       pdf.text("Cliente", COL.cliente, y);
       pdf.text("Pago / Cuenta", COL.pago, y);
-      pdf.text("Total", COL.total, y, { align: "right" });
-      pdf.text("Cobrado", COL.cobrado, y, { align: "right" });
-      pdf.text("Debe", COL.debe, y, { align: "right" });
+      pdf.text("Total", COL.total + 2, y, { align: "right" });
+      pdf.text("Cobrado", COL.cobrado + 2, y, { align: "right" });
+      pdf.text("Debe", COL.debe + 2, y, { align: "right" });
       pdf.text("Hora", COL.hora, y, { align: "right" });
       y += 3.5;
       pdf.setTextColor(0);
@@ -761,10 +762,9 @@ export default function HojaDeRutaPage() {
         } else {
           for (const p of pagosSinNC) {
             const colorMetodo: [number, number, number] = p.metodo === "Transferencia" ? [37, 99, 235] : [22, 101, 52];
-            pagoLines.push({ text: `${p.metodo} ${fmtCur(p.monto)}`, color: colorMetodo, indent: 0 });
+            pagoLines.push({ text: `${p.metodo} ${fmtCur(p.monto)}`.substring(0, 32), color: colorMetodo, indent: 0 });
             if (p.metodo === "Transferencia" && (p as any).cuenta_bancaria) {
-              // Usar ">" en lugar de "→" para evitar problemas de encoding en jsPDF
-              const cuentaLabel = `> ${String((p as any).cuenta_bancaria).substring(0, 28)}`;
+              const cuentaLabel = `> ${String((p as any).cuenta_bancaria).substring(0, 24)}`;
               pagoLines.push({ text: cuentaLabel, color: [59, 130, 246], indent: 2 });
             }
           }
@@ -788,7 +788,7 @@ export default function HojaDeRutaPage() {
         pdf.setFontSize(7.5);
         pdf.setFont("helvetica", "bold");
         pdf.setTextColor(0);
-        pdf.text((v.clientes?.nombre || "Sin cliente").substring(0, 22), COL.cliente, y);
+        pdf.text((v.clientes?.nombre || "Sin cliente").substring(0, 18), COL.cliente, y);
         pdf.setFont("helvetica", "normal");
 
         // Líneas de pago
