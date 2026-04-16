@@ -1512,24 +1512,24 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             <div className="w-16 h-16 rounded-2xl bg-white/80 flex items-center justify-center shadow-sm">
                               <Package className="h-8 w-8 text-gray-300" />
                             </div>
-                            <span className="text-[10px] text-gray-300 font-medium">Sin imagen</span>
+                            <span className="text-[11px] text-gray-300 font-medium">Sin imagen</span>
                           </div>
                         )}
                       </div>
                       {/* Badge - one per product, priority: combo > discount > box > price change */}
                       {(() => {
                         if (producto.es_combo) return (
-                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                          <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-primary to-rose-400 text-white text-[11px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
                             COMBO
                           </span>
                         );
                         if (onOffer && disc === 0) return (
-                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                             OFERTA
                           </span>
                         );
                         if (disc > 0) return (
-                          <span className="absolute top-2.5 left-2.5 bg-primary text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-primary text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                             {disc}% OFF
                           </span>
                         );
@@ -1539,7 +1539,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             const boxLabel = presLabel(boxPres);
                             const boxDisc = getProductDiscount(producto, boxLabel);
                             if (boxDisc > 0) return (
-                              <span className="absolute top-2.5 left-2.5 bg-green-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                              <span className="absolute top-2.5 left-2.5 bg-green-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                                 {boxDisc}% OFF x caja
                               </span>
                             );
@@ -1550,25 +1550,25 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                         if (pa && pa > 0 && pa !== producto.precio && dateStr &&
                           daysSinceAR(dateStr) <= 3) {
                           if (producto.precio > pa) return (
-                            <span className="absolute top-2.5 left-2.5 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            <span className="absolute top-2.5 left-2.5 bg-amber-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                               Precio actualizado
                             </span>
                           );
                           return (
-                            <span className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                            <span className="absolute top-2.5 left-2.5 bg-emerald-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                               Precio rebajado
                             </span>
                           );
                         }
                         // Volume discount hint badge
                         if (volHint) return (
-                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-orange-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                             {volHint.pct}% OFF x{volHint.minQty}+ {volHint.label}
                           </span>
                         );
                         // "New" badge
                         if (producto.created_at && daysSinceAR(producto.created_at) <= 7) return (
-                          <span className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                          <span className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                             NUEVO
                           </span>
                         );
@@ -1579,7 +1579,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           <span className="bg-white/90 text-gray-500 text-xs font-medium px-3 py-1.5 rounded-lg shadow-sm">Agotado</span>
                         </div>
                       ) : producto.stock > 0 && producto.stock <= 5 && (
-                        <span className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
+                        <span className="absolute bottom-2 right-2 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
                           {producto.stock < 1 ? `¡Quedan ${producto.stock}!` : producto.stock === 1 ? "¡Última unidad!" : `¡Últimas ${producto.stock}!`}
                         </span>
                       )}
@@ -1588,7 +1588,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                     {/* Content */}
                     <div className="flex flex-col flex-1 p-3.5 pt-2.5">
                       <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`} className="flex-1">
-                        <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-primary/90 transition-colors">
+                        <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-primary/90 transition-colors">
                           {producto.nombre}
                         </h3>
                       </Link>
@@ -1604,7 +1604,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           )}
                         </div>
                         {onOffer && disc === 0 && (
-                          <p className="text-[10px] text-orange-600 font-medium">Precio especial</p>
+                          <p className="text-[11px] text-orange-600 font-medium">Precio especial</p>
                         )}
                         {(() => {
                           const pa = producto.precio_anterior;
@@ -1612,15 +1612,15 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           if (!pa || pa <= 0 || pa === producto.precio || !dateStr) return null;
                           if (daysSinceAR(dateStr) > 3) return null;
                           if (producto.precio > pa) {
-                            return <p className="text-[10px] text-amber-600 font-medium">Precio actualizado</p>;
+                            return <p className="text-[11px] text-amber-600 font-medium">Precio actualizado</p>;
                           }
-                          return <p className="text-[10px] text-green-600 font-medium">Precio rebajado</p>;
+                          return <p className="text-[11px] text-green-600 font-medium">Precio rebajado</p>;
                         })()}
                         {volHint && disc === 0 && (
-                          <p className="text-[10px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ {volHint.label}</p>
+                          <p className="text-[11px] text-orange-600 font-medium mt-0.5">🏷️ {volHint.pct}% OFF x {volHint.minQty}+ {volHint.label}</p>
                         )}
                         {boxDiscountHint && (
-                          <p className="text-[10px] text-emerald-600 font-medium mt-0.5">📦 {boxDiscountHint.pct}% OFF por {boxDiscountHint.label}</p>
+                          <p className="text-[11px] text-emerald-600 font-medium mt-0.5">📦 {boxDiscountHint.pct}% OFF por {boxDiscountHint.label}</p>
                         )}
                         {/* Tags */}
                         {producto.tags && producto.tags.length > 0 && (
@@ -1633,7 +1633,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                                   e.stopPropagation();
                                   updateParams({ tag: tagFilter === tag ? null : tag });
                                 }}
-                                className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+                                className={`text-[11px] px-1.5 py-0.5 rounded-full border transition-colors ${
                                   tagFilter === tag
                                     ? "bg-primary/10 text-primary border-primary/30 font-semibold"
                                     : "bg-gray-50 text-gray-500 border-gray-200 hover:border-primary/30 hover:text-primary"
@@ -1668,7 +1668,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                                   const newMax = Math.max(0, Math.floor(availableStock / Math.max(0.01, Number(pr.cantidad))));
                                   if (qty > newMax) setQuantities((prev) => ({ ...prev, [producto.id]: Math.max(1, newMax) }));
                                 }}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border ${
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border ${
                                   presDisabled
                                     ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                                     : isActive
