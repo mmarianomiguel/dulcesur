@@ -1764,27 +1764,27 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                     className="group bg-white rounded-2xl border border-gray-100/80 overflow-hidden hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all duration-200"
                   >
                     {/* Fila principal: imagen + info */}
-                    <div className="flex items-center gap-3 p-3">
+                    <div className="flex items-center gap-4 p-3.5">
                       <Link
                         href={`/productos/${productSlug(producto.nombre, producto.id)}`}
-                        className="relative shrink-0 w-16 h-16 bg-gray-50 rounded-xl overflow-hidden"
+                        className="relative shrink-0 w-24 h-24 bg-gray-50 rounded-xl overflow-hidden"
                       >
                         {producto.imagen_url ? (
                           <Image
                             src={producto.imagen_url}
                             alt={producto.nombre}
                             fill
-                            sizes="64px"
-                            className="object-contain p-1.5"
+                            sizes="96px"
+                            className="object-contain p-2"
                             {...(idx < 4 ? { priority: true } : { loading: "lazy" as const })}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <Package className="h-6 w-6 text-gray-200" />
+                            <Package className="h-8 w-8 text-gray-200" />
                           </div>
                         )}
                         {disc > 0 && (
-                          <span className="absolute top-1 left-1 bg-primary text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                          <span className="absolute top-1 left-1 bg-primary text-white text-xs font-bold px-2 py-0.5 rounded-md">
                             -{disc}%
                           </span>
                         )}
@@ -1792,20 +1792,20 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
                       <div className="flex-1 min-w-0">
                         {producto.categorias?.nombre && (
-                          <p className="text-[10px] text-primary font-medium mb-0.5">{producto.categorias.nombre}</p>
+                          <p className="text-xs text-primary font-medium mb-0.5">{producto.categorias.nombre}</p>
                         )}
                         <Link href={`/productos/${productSlug(producto.nombre, producto.id)}`}>
-                          <h3 className="font-semibold text-gray-800 text-sm leading-snug line-clamp-2 group-hover:text-primary/90 transition-colors">
+                          <h3 className="font-semibold text-gray-800 text-base leading-snug line-clamp-2 group-hover:text-primary/90 transition-colors">
                             {producto.nombre}
                           </h3>
                         </Link>
                         <div className="flex items-baseline gap-2 mt-1">
-                          <span className="text-base font-bold text-gray-900">{formatCurrency(discountedPrice)}</span>
+                          <span className="text-lg font-bold text-gray-900">{formatCurrency(discountedPrice)}</span>
                           {disc > 0 && (
-                            <span className="text-xs text-gray-400 line-through">{formatCurrency(activePrice)}</span>
+                            <span className="text-sm text-gray-400 line-through">{formatCurrency(activePrice)}</span>
                           )}
                           {boxDiscountHint && disc === 0 && !activePres && (
-                            <span className="text-[10px] text-green-600 font-semibold">-{boxDiscountHint}% x caja</span>
+                            <span className="text-xs text-green-600 font-semibold">-{boxDiscountHint}% x caja</span>
                           )}
                         </div>
                       </div>
