@@ -2436,15 +2436,13 @@ export default function HojaDeRutaPage() {
                       return;
                     }
 
-                    // Idempotency guard: prevent double cobro
-                    const ventaIdsToCheck = allVentas.map(v => v.id);
-                    const { count: existingCobros } = await supabase
-                      .from("caja_movimientos")
-                      .select("id", { count: "exact", head: true })
-                      .in("referencia_id", ventaIdsToCheck)
-                      .eq("referencia_tipo", "venta");
-                    if (existingCobros && existingCobros > 0) {
-                      alert("Estas ventas ya tienen cobro registrado. No se puede duplicar el pago.");
+                    // Idempotency guard: block only if ALL ventas are fully paid
+                    const todasPagadas = allVentas.every(v => {
+                      const pagadoReal = Math.max(0, (pagadoPorVenta[v.id] || 0) - (ncPorVenta[v.id] || 0));
+                      return pagadoReal >= v.total;
+                    });
+                    if (todasPagadas) {
+                      alert("Estas ventas ya están completamente cobradas.");
                       setPayDialogOpen(false);
                       fetchVentas();
                       return;
