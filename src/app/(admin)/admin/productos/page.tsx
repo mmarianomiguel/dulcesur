@@ -1680,10 +1680,8 @@ export default function ProductosPage() {
   }
 
   // Quick stock adjust handler (1.2)
-  const handleQuickStockAdjust = async () => {
-    if (!stockPopover) return;
-    const { productId, currentStock } = stockPopover;
-    const { tipo, cantidad, motivo } = stockAdjust;
+  const handleStockAdjust = async (productId: string, currentStock: number, adjust?: { tipo: string; cantidad: number; motivo: string }) => {
+    const { tipo, cantidad, motivo } = adjust || stockAdjust;
     let stockNuevo: number;
     if (tipo === "ajuste") stockNuevo = cantidad;
     else if (tipo === "sumar") stockNuevo = currentStock + cantidad;
@@ -1699,11 +1697,15 @@ export default function ProductosPage() {
     ]);
     showAdminToast("Stock actualizado", "success");
     setStockPopover(null);
+    setStockAdjust({ tipo: "sumar", cantidad: 1, motivo: "ingreso" });
     setProducts((prev) => prev.map((p) => p.id === productId ? { ...p, stock: stockNuevo } : p));
-    // If editing this product, update form stock too
     if (editingProduct && editingProduct.id === productId) {
       setForm((prev) => ({ ...prev, stock: stockNuevo }));
     }
+  };
+  const handleQuickStockAdjust = async () => {
+    if (!stockPopover) return;
+    await handleStockAdjust(stockPopover.productId, stockPopover.currentStock);
   };
 
   // Load rotation velocity (1.10)
@@ -4388,21 +4390,52 @@ export default function ProductosPage() {
                   {isCombo && (
                     <p className="text-xs text-muted-foreground mt-2">Calculado según el stock de los componentes</p>
                   )}
-                  {!isCombo && editingProduct && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 gap-2"
-                      onClick={() => {
-                        setStockPopover({ productId: editingProduct.id, productName: editingProduct.nombre, currentStock: effectiveStock });
-                        setStockAdjust({ tipo: "sumar", cantidad: 1, motivo: "ingreso" });
-                      }}
-                    >
-                      <Settings className="w-4 h-4" />
-                      Ajustar stock
-                    </Button>
-                  )}
                 </div>
+
+                {/* Inline stock adjustment */}
+                {!isCombo && editingProduct && (
+                  <div className="border rounded-xl p-4 space-y-3">
+                    <p className="text-xs text-muted-foreground font-medium">Ajustar stock</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(["sumar", "restar", "ajuste"] as const).map((tipo) => (
+                        <button key={tipo} onClick={() => setStockAdjust((prev) => ({ ...prev, tipo }))}
+                          className={`py-1.5 rounded-lg text-xs font-medium border transition-all ${stockAdjust.tipo === tipo ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted border-border"}`}>
+                          {tipo === "sumar" ? "+ Agregar" : tipo === "restar" ? "− Quitar" : "= Fijar"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">{stockAdjust.tipo === "ajuste" ? "Stock final" : "Cantidad"}</Label>
+                        <Input type="number" min={stockAdjust.tipo === "restar" ? 1 : 0} max={stockAdjust.tipo === "restar" ? effectiveStock : undefined}
+                          value={stockAdjust.cantidad} onChange={(e) => setStockAdjust((prev) => ({ ...prev, cantidad: Math.max(0, Number(e.target.value)) }))}
+                          className="h-9 text-center text-lg font-semibold" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Motivo</Label>
+                        <select value={stockAdjust.motivo} onChange={(e) => setStockAdjust((prev) => ({ ...prev, motivo: e.target.value as any }))}
+                          className="w-full h-9 text-sm border rounded-md px-2 bg-background">
+                          <option value="ingreso">Ingreso</option>
+                          <option value="ajuste">Ajuste inventario</option>
+                          <option value="merma">Merma / pérdida</option>
+                          <option value="venta_manual">Venta manual</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-muted/50 rounded-lg px-3 py-2 text-xs text-center text-muted-foreground">
+                        {stockAdjust.tipo === "ajuste"
+                          ? `${effectiveStock} → ${stockAdjust.cantidad}`
+                          : stockAdjust.tipo === "sumar"
+                          ? `${effectiveStock} + ${stockAdjust.cantidad} = ${effectiveStock + stockAdjust.cantidad}`
+                          : `${effectiveStock} − ${stockAdjust.cantidad} = ${Math.max(0, effectiveStock - stockAdjust.cantidad)}`}
+                      </div>
+                      <Button size="sm" className="h-8 text-xs px-4" onClick={() => handleStockAdjust(editingProduct.id, effectiveStock)}>
+                        Aplicar
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {isCombo && comboItems.length > 0 && (
                   <div className="border rounded-xl p-4 space-y-2">
