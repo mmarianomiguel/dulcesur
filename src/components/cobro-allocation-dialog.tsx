@@ -106,15 +106,6 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
         .order("created_at", { ascending: true });
 
       let pending: PendingInvoice[] = (ventas || [])
-        .filter((v: any) => {
-          // POS sales paid with Efectivo/Transferencia are fully paid — skip them
-          // Only web orders (origen=tienda) or CC/Mixto/Pendiente can have real pending debt
-          if (
-            (v.forma_pago === "Efectivo" || v.forma_pago === "Transferencia") &&
-            v.origen !== "tienda"
-          ) return false;
-          return true;
-        })
         .map((v: any) => ({
           id: v.id,
           numero: v.numero,

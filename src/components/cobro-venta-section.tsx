@@ -198,10 +198,6 @@ export function CobroVentaSection({
       }
 
       let pending = (ventas || [])
-        .filter((v: any) => {
-          if ((v.forma_pago === "Efectivo" || v.forma_pago === "Transferencia") && v.origen !== "tienda") return false;
-          return true;
-        })
         .map((v: any) => ({
           id: v.id, numero: v.numero, fecha: v.fecha,
           pendiente: v.total - (v.monto_pagado || 0) - (ncMap[v.id] || 0),
