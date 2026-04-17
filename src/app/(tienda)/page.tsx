@@ -302,6 +302,26 @@ export default async function TiendaHomePage() {
     });
   }
 
+  // Presentaciones para "Nuevos ingresos" y "Aumentos Recientes"
+  const extraIds = [
+    ...new Set([
+      ...nuevosIngresos.map((p: any) => p.id),
+      ...aumentos.map((p: any) => p.id),
+    ]),
+  ].filter((id) => !presMap[id] && !topPresMap[id]);
+
+  if (extraIds.length > 0) {
+    const { data: extraPresData } = await supabase
+      .from("presentaciones")
+      .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
+      .in("producto_id", extraIds)
+      .order("cantidad");
+    (extraPresData || []).forEach((p: any) => {
+      if (!topPresMap[p.producto_id]) topPresMap[p.producto_id] = [];
+      topPresMap[p.producto_id].push(p);
+    });
+  }
+
   return (
     <HomeClient
       initialBloques={blocks}

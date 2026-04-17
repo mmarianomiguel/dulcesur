@@ -400,21 +400,21 @@ function ProductosDestacadosBlock({
       setTimeout(() => {
         setGrupoActual((g) => g + 1);
         setAnimating(false);
-      }, 200);
+      }, 220);
     } else if (currentTabIndex < tabKeys.length - 1) {
       setSlideDir("left");
       setAnimating(true);
       setTimeout(() => {
         setActiveTab(tabKeys[currentTabIndex + 1] as any);
         setAnimating(false);
-      }, 200);
+      }, 220);
     } else {
       setSlideDir("left");
       setAnimating(true);
       setTimeout(() => {
         setActiveTab(tabKeys[0] as any);
         setAnimating(false);
-      }, 200);
+      }, 220);
     }
   };
 
@@ -429,14 +429,14 @@ function ProductosDestacadosBlock({
       setTimeout(() => {
         setGrupoActual((g) => g - 1);
         setAnimating(false);
-      }, 200);
+      }, 220);
     } else if (currentTabIndex > 0) {
       setSlideDir("right");
       setAnimating(true);
       setTimeout(() => {
         setActiveTab(tabKeys[currentTabIndex - 1] as any);
         setAnimating(false);
-      }, 200);
+      }, 220);
     }
   };
 
@@ -592,10 +592,11 @@ function ProductosDestacadosBlock({
                 className="grid grid-cols-2 gap-3"
                 style={{
                   transform: animating
-                    ? `translateX(${slideDir === "left" ? "-8%" : "8%"})`
+                    ? `translateX(${slideDir === "left" ? "-18%" : "18%"})`
                     : "translateX(0)",
-                  opacity: animating ? 0.6 : 1,
-                  transition: "transform 0.2s ease-out, opacity 0.2s ease-out",
+                  opacity: animating ? 0.35 : 1,
+                  transition: "transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
+                  willChange: "transform, opacity",
                 }}
                 onTouchStart={(e) => {
                   setPausado(true);
@@ -675,7 +676,7 @@ function ProductosDestacadosBlock({
   );
 }
 
-function AumentosRecientesBlock({ productos: initialData = [] }: { productos?: any[] }) {
+function AumentosRecientesBlock({ productos: initialData = [], presMap = {} }: { productos?: any[]; presMap?: Record<string, any[]> }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
 
   const filtered = initialData.filter((p: any) => {
@@ -748,6 +749,20 @@ function AumentosRecientesBlock({ productos: initialData = [] }: { productos?: a
                         ↑ {formatCurrency(diff)}
                       </span>
                     </div>
+                    {(() => {
+                      const pres = presMap[prod.id];
+                      const caja = pres?.find((p: any) => p.cantidad > 1);
+                      if (!caja) return null;
+                      const cajaPrice = caja.precio_oferta && caja.precio_oferta > 0 ? caja.precio_oferta : caja.precio;
+                      return (
+                        <div className="mt-1.5 flex items-center gap-1">
+                          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full font-medium">
+                            {caja.nombre || `Caja x${caja.cantidad}`}
+                          </span>
+                          <span className="text-[11px] font-semibold text-gray-700">{formatCurrency(cajaPrice)}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </Link>
@@ -1360,7 +1375,7 @@ export default function TiendaPage({
     <div className="min-h-screen bg-white">
       {orderedBloques.map((bloque) => renderBlock(bloque))}
       <InstallPrompt clienteId={clienteAuthId} />
-      <AumentosRecientesBlock productos={initialAumentos} />
+      <AumentosRecientesBlock productos={initialAumentos} presMap={presMap} />
       {afterAumentosBloques.map((bloque) => renderBlock(bloque))}
       {remaining.map((bloque) => renderBlock(bloque))}
     </div>
