@@ -282,14 +282,15 @@ export default function TiendaNavbar() {
           </button>
 
           {/* Logo */}
-          <Link href="/" className="flex-shrink-0">
+          <Link href="/" className="flex-shrink-0 block" style={{ width: 120, height: 40 }}>
             <img
               src={logoSrc}
               alt={config?.nombre || "Tienda"}
-              className="h-10 w-auto"
+              className="h-10 w-auto max-w-[120px] object-contain"
               width={120}
               height={40}
               fetchPriority="high"
+              style={{ aspectRatio: "3/1" }}
               onError={() => {
                 if (logoSrc !== FALLBACK_LOGO) setLogoSrc(FALLBACK_LOGO);
               }}

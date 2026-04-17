@@ -26,8 +26,10 @@ export default function cloudinaryLoader({
   quality?: number;
 }): string {
   if (!src || !src.includes("res.cloudinary.com")) return src;
-  const q = quality ?? 75;
+  // q_auto:eco deja a Cloudinary elegir la calidad óptima según el contenido
+  // (generalmente ~60–70) logrando mayor ahorro que un q fijo de 75.
+  const qParam = quality ? `q_${quality}` : "q_auto:eco";
   const w = snapWidth(width);
-  // f_auto sirve WebP en navegadores que lo soportan, JPEG en los que no
-  return src.replace("/upload/", `/upload/w_${w},q_${q},f_auto/`);
+  // f_auto sirve WebP/AVIF según navegador, JPEG en los que no
+  return src.replace("/upload/", `/upload/w_${w},${qParam},f_auto,dpr_auto/`);
 }

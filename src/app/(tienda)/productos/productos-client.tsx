@@ -1209,6 +1209,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
           <select
             value={sort}
             onChange={(e) => updateParams({ sort: e.target.value })}
+            aria-label="Ordenar productos"
             className="text-sm bg-white border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none cursor-pointer pr-8 font-medium text-gray-700"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
@@ -1696,6 +1697,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             <div className="flex items-center bg-gray-100 rounded-lg overflow-hidden">
                               <button
                                 onClick={() => setQty(producto.id, qty - 1)}
+                                aria-label={`Disminuir cantidad de ${producto.nombre}`}
                                 className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
                               >
                                 <Minus className="w-3 h-3" />
@@ -1704,6 +1706,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                               <button
                                 onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))}
                                 disabled={qty >= maxForPres}
+                                aria-label={`Aumentar cantidad de ${producto.nombre}`}
                                 className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-30"
                               >
                                 <Plus className="w-3 h-3" />
@@ -1858,6 +1861,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           <div className="flex items-center bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
                             <button
                               onClick={() => setQty(producto.id, qty - 1)}
+                              aria-label={`Disminuir cantidad de ${producto.nombre}`}
                               className="w-10 h-10 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors text-lg"
                             >
                               <Minus className="w-4 h-4" />
@@ -1866,6 +1870,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             <button
                               onClick={() => setQty(producto.id, Math.min(qty + 1, maxForPres))}
                               disabled={qty >= maxForPres}
+                              aria-label={`Aumentar cantidad de ${producto.nombre}`}
                               className="w-10 h-10 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors disabled:opacity-30"
                             >
                               <Plus className="w-4 h-4" />
