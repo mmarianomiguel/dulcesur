@@ -115,6 +115,7 @@ interface VentaRow {
   metodo_entrega: string | null;
   monto_pagado: number;
   remito_origen_id: string | null;
+  impreso_at: string | null;
   clientes: ClienteInfo | null;
 }
 
@@ -180,6 +181,7 @@ interface Pedido {
   _comboIds?: Set<string>;
   _monto_pagado?: number;
   _remito_origen_id?: string | null;
+  _impreso_at?: string | null;
   isOnline?: boolean;
   forma_pago?: string;
 }
@@ -250,7 +252,6 @@ export default function ListadoVentasPage() {
   const [anulando, setAnulando] = useState(false);
 
   // Printed tracking
-  const [printedPedidos, setPrintedPedidos] = useState<Set<string>>(new Set());
 
   // Print
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([]);
@@ -410,10 +411,6 @@ export default function ListadoVentasPage() {
       const stored = localStorage.getItem("receipt_config");
       if (stored) setReceiptConfig((prev) => ({ ...prev, ...JSON.parse(stored) }));
     } catch (err) { console.error("Error loading receipt config:", err); }
-    try {
-      const printed = localStorage.getItem("printed_pedidos");
-      if (printed) setPrintedPedidos(new Set(JSON.parse(printed)));
-    } catch {}
 
     // Parallel Supabase queries for independent reference data
     Promise.all([
@@ -1071,19 +1068,27 @@ export default function ListadoVentasPage() {
 
   // ─── Print ───
   const preparePrint = async (v: VentaRow) => {
-    const { data } = await supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at");
+    // Batch independent queries in parallel: items, cliente saldo, caja_movimientos, pedidos_tienda
+    const [
+      { data },
+      { data: cd },
+      { data: movs },
+      { data: ptPrint },
+    ] = await Promise.all([
+      supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
+      v.cliente_id
+        ? supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single()
+        : Promise.resolve({ data: null }),
+      supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", v.id).eq("referencia_tipo", "venta"),
+      v.forma_pago === "Mixto" && v.numero
+        ? supabase.from("pedidos_tienda").select("monto_efectivo, monto_transferencia").eq("numero", v.numero).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
     const items = (data as VentaItemRow[]) || [];
-    // Always use current client saldo for reprints (reflects latest cobranzas)
-    let saldo = 0;
-    let saldoAnteriorCC = 0;
-    if (v.cliente_id) {
-      const { data: cd } = await supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single();
-      saldo = cd?.saldo || 0;
-      // saldoAnteriorCC not applicable for reprints — just show current state
-      saldoAnteriorCC = 0;
-    }
+    const saldo = cd?.saldo || 0;
+    const saldoAnteriorCC = 0;
 
-    // Load combo data for combo products
+    // Load combo data for combo products (must wait for items)
     const productIds = items.map((i) => i.producto_id).filter(Boolean) as string[];
     const comboItemsMap: Record<string, { nombre: string; cantidad: number }[]> = {};
     const comboIds = new Set<string>();
@@ -1092,16 +1097,21 @@ export default function ListadoVentasPage() {
       for (const p of prods || []) {
         if ((p as any).es_combo) comboIds.add(p.id);
       }
-      await Promise.all([...comboIds].map(async (comboId) => {
-        const { data: ciData } = await supabase
-          .from("combo_items")
-          .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
-          .eq("combo_id", comboId);
-        comboItemsMap[comboId] = (ciData || []).map((ci: any) => ({
-          nombre: ci.productos?.nombre || "",
-          cantidad: ci.cantidad,
-        }));
-      }));
+      if (comboIds.size > 0) {
+        const comboResults = await Promise.all([...comboIds].map((comboId) =>
+          supabase
+            .from("combo_items")
+            .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .eq("combo_id", comboId)
+            .then(({ data: ciData }) => ({ comboId, ciData }))
+        ));
+        for (const { comboId, ciData } of comboResults) {
+          comboItemsMap[comboId] = (ciData || []).map((ci: any) => ({
+            nombre: ci.productos?.nombre || "",
+            cantidad: ci.cantidad,
+          }));
+        }
+      }
     }
 
     const lineItems: ReceiptLineItem[] = items.map((item) => ({
@@ -1121,8 +1131,7 @@ export default function ListadoVentasPage() {
       comboItems: comboItemsMap[item.producto_id || ""] || [],
     }));
 
-    // Load payment breakdown from caja_movimientos
-    const { data: movs } = await supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").eq("referencia_id", v.id).eq("referencia_tipo", "venta");
+    // Payment breakdown from caja_movimientos (pre-fetched)
     let pagoEf = 0, pagoTr = 0, pagoCC = 0;
     for (const m of movs || []) {
       if (m.tipo === "ingreso") {
@@ -1137,12 +1146,6 @@ export default function ListadoVentasPage() {
       else if (v.forma_pago === "Transferencia") pagoTr = v.total;
       else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
       else if (v.forma_pago === "Mixto") {
-        // Leer desde pedidos_tienda que es lo que se actualiza al editar
-        const { data: ptPrint } = await supabase
-          .from("pedidos_tienda")
-          .select("monto_efectivo, monto_transferencia")
-          .eq("numero", v.numero)
-          .maybeSingle();
         pagoEf = ptPrint?.monto_efectivo || (v as any).monto_efectivo || 0;
         pagoTr = ptPrint?.monto_transferencia || (v as any).monto_transferencia || 0;
       }
@@ -1211,14 +1214,14 @@ export default function ListadoVentasPage() {
     // NOTE: Payment split (pagoEf/pagoTr/pagoCC) is reconstructed from caja_movimientos
     // and may not sum exactly to v.total if movimientos were manually edited. This is an
     // accepted assumption for receipt reprints — no sum validation is performed.
-    // Mark as printed
+    // Mark as printed — persisted in DB so it syncs across devices/users
     try {
-      const printed = new Set(printedPedidos);
-      printed.add(v.numero);
-      const arr = [...printed].slice(-200);
-      localStorage.setItem("printed_pedidos", JSON.stringify(arr));
-      setPrintedPedidos(new Set(arr));
-    } catch {}
+      const nowIso = new Date().toISOString();
+      await supabase.from("ventas").update({ impreso_at: nowIso }).eq("id", v.id);
+      setVentas((prev) => prev.map((row) => row.id === v.id ? { ...row, impreso_at: nowIso } : row));
+    } catch (err) {
+      console.error("Error marking venta as impresa:", err);
+    }
   };
 
   const exportExcel = async () => {
@@ -2469,6 +2472,7 @@ export default function ListadoVentasPage() {
         _entregado: v.entregado,
         _tipo_comprobante: v.tipo_comprobante,
         _remito_origen_id: v.remito_origen_id,
+        _impreso_at: v.impreso_at,
         _descuento_porcentaje: v.descuento_porcentaje,
         _recargo_porcentaje: v.recargo_porcentaje,
         _vendedor: v.vendedor_id ? (vendedores.find((vd) => vd.id === v.vendedor_id)?.nombre || "") : "",
@@ -2973,7 +2977,7 @@ export default function ListadoVentasPage() {
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(order)} title="Ver detalle">
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className={`h-8 w-8 p-0 ${printedPedidos.has(order.numero) ? "text-emerald-600" : ""}`} onClick={async () => {
+                      <Button variant="ghost" size="sm" className={`h-8 w-8 p-0 ${order._impreso_at ? "text-emerald-600" : ""}`} onClick={async () => {
                         try {
                           let v = ventas.find((vr) => vr.id === order._ventaId);
                           if (!v && order._ventaId) {
@@ -2994,11 +2998,13 @@ export default function ListadoVentasPage() {
                         } catch (err) {
                           showAdminToast("Error al preparar impresión", "error");
                         }
-                      }} title={printedPedidos.has(order.numero) ? "Ya impreso — reimprimir" : "Imprimir"}>
-                        {printedPedidos.has(order.numero) ? <PrinterCheck className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
+                      }} title={order._impreso_at ? "Ya impreso — reimprimir" : "Imprimir"}>
+                        {order._impreso_at ? <PrinterCheck className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
                       </Button>
                       {/* Cobrar button — for online orders or POS with envío, not yet paid */}
                       {order.estado !== "entregado" && order.estado !== "cancelado" && order.estado !== "cerrada" && !isNC && (
+                        ((order as any)._monto_pagado ?? 0) < (order.total || 0) * 0.99
+                      ) && (
                         order.isOnline || order._source === "pedidos" || order._tipo_comprobante === "Pedido Web" || (order.metodo_entrega || "").toLowerCase().includes("envio") || (order.metodo_entrega || "").toLowerCase().includes("envío") ||
                         order.forma_pago === "Pendiente" || order.metodo_pago === "Pendiente"
                       ) && (
@@ -3157,15 +3163,7 @@ export default function ListadoVentasPage() {
         <VentaDetailDialog
           open={poDetailOpen}
           onOpenChange={(open) => {
-            if (!open && poHasChanges) {
-              setConfirmDialog({
-                open: true,
-                title: "Cambios sin guardar",
-                message: "Tenés cambios sin guardar. ¿Cerrar de todas formas?",
-                onConfirm: () => { setPoHasChanges(false); setPoDetailOpen(false); },
-              });
-              return;
-            }
+            if (!open) setPoHasChanges(false);
             setPoDetailOpen(open);
           }}
           data={{
