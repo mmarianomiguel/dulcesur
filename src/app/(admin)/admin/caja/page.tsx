@@ -526,7 +526,13 @@ export default function CajaPage() {
   const fetchVentas = useCallback(async () => {
     if (!turno) return [];
     const fechaApertura = turno.fecha_apertura || today;
-    let query = supabase.from("ventas").select("*, clientes(nombre)").order("created_at", { ascending: false });
+    // Server-side filter NC + anuladas to reduce payload
+    let query = supabase
+      .from("ventas")
+      .select("*, clientes(nombre)")
+      .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+      .neq("estado", "anulada")
+      .order("created_at", { ascending: false });
     if (fechaApertura === today) {
       query = query.eq("fecha", today);
     } else {
@@ -539,9 +545,6 @@ export default function CajaPage() {
       ? new Date(`${turno.fecha_cierre}T${turno.hora_cierre}-03:00`)
       : null;
     return all.filter((v: Venta) => {
-      // Exclude credit notes and annulled sales
-      if ((v as any).tipo_comprobante?.toLowerCase().startsWith("nota de crédito")) return false;
-      if (v.estado === "anulada") return false;
       const d = new Date(v.created_at);
       const isWebOrder = (v as any).origen === "tienda";
       if (isWebOrder) {
@@ -618,26 +621,24 @@ export default function CajaPage() {
 
   // Sellers map for display
   const [sellersMap, setSellersMap] = useState<Record<string, string>>({});
-  useEffect(() => {
-    supabase.from("proveedores").select("id, nombre").order("nombre").then(({ data, error }) => {
-      if (error) console.error("Error cargando proveedores:", error);
-      setProveedores(data || []);
-    });
-    supabase.from("usuarios").select("id, nombre").eq("activo", true).then(({ data, error }) => {
-      if (error) console.error("Error cargando usuarios:", error);
-      const map: Record<string, string> = {};
-      (data || []).forEach((u: any) => { map[u.id] = u.nombre; });
-      setSellersMap(map);
-    });
-  }, []);
-
   // Sale detail for viewing
   const [ventaDetailOpen, setVentaDetailOpen] = useState(false);
   const [cajaCuentasBancarias, setCajaCuentasBancarias] = useState<{ id: string; nombre: string; alias: string }[]>([]);
   useEffect(() => {
-    supabase.from("cuentas_bancarias").select("id, nombre, alias").eq("activo", true).order("nombre").then(({ data, error }) => {
-      if (error) console.error("Error cargando cuentas bancarias:", error);
-      setCajaCuentasBancarias(data || []);
+    // Batch reference fetches: proveedores + usuarios + cuentas bancarias in one parallel call
+    Promise.all([
+      supabase.from("proveedores").select("id, nombre").order("nombre"),
+      supabase.from("usuarios").select("id, nombre").eq("activo", true),
+      supabase.from("cuentas_bancarias").select("id, nombre, alias").eq("activo", true).order("nombre"),
+    ]).then(([provRes, userRes, cbRes]) => {
+      if (provRes.error) console.error("Error cargando proveedores:", provRes.error);
+      setProveedores(provRes.data || []);
+      if (userRes.error) console.error("Error cargando usuarios:", userRes.error);
+      const map: Record<string, string> = {};
+      (userRes.data || []).forEach((u: any) => { map[u.id] = u.nombre; });
+      setSellersMap(map);
+      if (cbRes.error) console.error("Error cargando cuentas bancarias:", cbRes.error);
+      setCajaCuentasBancarias(cbRes.data || []);
     });
   }, []);
   const [ventaDetail, setVentaDetail] = useState<Venta | null>(null);
