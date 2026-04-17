@@ -565,7 +565,9 @@ export default function CajaPage() {
   const fetchCCEntries = useCallback(async () => {
     if (!turno) return [];
     const fechaApertura = turno.fecha_apertura || today;
-    let query = supabase.from("cuenta_corriente").select("debe, cliente_id, comprobante, descripcion, forma_pago, venta_id").gt("debe", 0);
+    // Fetch both debe (debts) and haber (credits from NC) so the CC card
+    // reflects the net effect per client for the day.
+    let query = supabase.from("cuenta_corriente").select("debe, haber, cliente_id, comprobante, descripcion, forma_pago, venta_id");
     if (fechaApertura === today) {
       query = query.eq("fecha", today);
     } else {
@@ -576,7 +578,7 @@ export default function CajaPage() {
   }, [today, turno]);
   const { data: ccEntries, refetch: refetchCC } = useAsyncData({
     fetcher: fetchCCEntries,
-    initialData: [] as { debe: number; cliente_id: string; comprobante: string; descripcion: string; forma_pago: string; venta_id: string }[],
+    initialData: [] as { debe: number; haber: number; cliente_id: string; comprobante: string; descripcion: string; forma_pago: string; venta_id: string }[],
     deps: [turno],
   });
 
@@ -1160,10 +1162,10 @@ export default function CajaPage() {
       }
     };
 
-    // Build CC entries map by venta_id for quick lookup
+    // Build CC entries map by venta_id for quick lookup — debe minus haber
     const ccByVenta: Record<string, number> = {};
     for (const e of (ccEntries || [])) {
-      if (e.venta_id) ccByVenta[e.venta_id] = (ccByVenta[e.venta_id] || 0) + (e.debe || 0);
+      if (e.venta_id) ccByVenta[e.venta_id] = (ccByVenta[e.venta_id] || 0) + (e.debe || 0) - ((e as any).haber || 0);
     }
 
     // Build NC map by remito_origen_id (NC reduces effective venta total)
@@ -1559,10 +1561,10 @@ export default function CajaPage() {
               for (const e of (ccEntries || [])) {
                 const venta = ventas.find(v => v.id === e.venta_id);
                 const nombre = (venta as any)?.clientes?.nombre || "Sin cliente";
-                ccByCliente[nombre] = (ccByCliente[nombre] || 0) + (e.debe || 0);
+                ccByCliente[nombre] = (ccByCliente[nombre] || 0) + (e.debe || 0) - ((e as any).haber || 0);
               }
               for (const [nombre, monto] of Object.entries(ccByCliente)) {
-                deudoresHoy.push({ nombre, monto });
+                if (monto > 0) deudoresHoy.push({ nombre, monto });
               }
               deudoresHoy.sort((a, b) => b.monto - a.monto);
               return (
@@ -1699,7 +1701,12 @@ export default function CajaPage() {
                       ["envio", "envio_a_domicilio", "envio a domicilio"].includes((v as any).metodo_entrega)
                     );
                     const ventaIdsConCobro = new Set(entregasMovs.map(m => m.referencia_id));
-                    const sinCobrar = ventasEntregadas.filter(v => !ventaIdsConCobro.has(v.id));
+                    const sinCobrar = ventasEntregadas.filter(v => {
+                      if (ventaIdsConCobro.has(v.id)) return false;
+                      if (((v as any).monto_pagado || 0) >= (v.total || 0) * 0.99) return false;
+                      if (v.forma_pago === "Cuenta Corriente") return false;
+                      return true;
+                    });
                     return (
                       <button
                         key={t}
@@ -1961,7 +1968,14 @@ export default function CajaPage() {
                 const totalEfectivoEntregas = entregasMovs.filter(m => m.metodo_pago === "Efectivo").reduce((s, m) => s + m.monto, 0);
                 const totalTransfEntregas = entregasMovs.filter(m => m.metodo_pago === "Transferencia").reduce((s, m) => s + m.monto, 0);
                 const ventaIdsConCobro = new Set(entregasMovs.map(m => m.referencia_id));
-                const sinCobrar = ventasEntregadas.filter(v => !ventaIdsConCobro.has(v.id));
+                const sinCobrar = ventasEntregadas.filter(v => {
+                  if (ventaIdsConCobro.has(v.id)) return false;
+                  // Consider paid if monto_pagado covers total (payment in a previous turno)
+                  if (((v as any).monto_pagado || 0) >= (v.total || 0) * 0.99) return false;
+                  // Consider paid if it went to CC (not real money but recorded)
+                  if (v.forma_pago === "Cuenta Corriente") return false;
+                  return true;
+                });
                 return (
                   <>
                     {entregasMovs.length === 0 && sinCobrar.length === 0 ? (
