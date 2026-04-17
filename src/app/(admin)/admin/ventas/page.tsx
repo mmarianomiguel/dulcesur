@@ -2897,19 +2897,19 @@ export default function VentasPage() {
               {selectedClient && selectedClient.saldo > 0 && (
                 <>
                   <Separator />
-                  <label className="flex items-center gap-2 cursor-pointer py-1">
+                  <label className="flex items-center gap-3 cursor-pointer py-2">
                     <input
                       type="checkbox"
                       checked={cobrarSaldo}
                       onChange={(e) => setCobrarSaldo(e.target.checked)}
-                      className="w-4 h-4 rounded border-orange-300 text-orange-600 accent-orange-600"
+                      className="w-6 h-6 rounded border-orange-300 text-orange-600 accent-orange-600"
                     />
-                    <span className="text-xs font-medium text-orange-700">
+                    <span className="text-lg font-semibold text-orange-700">
                       Cobrar saldo pendiente ({formatCurrency(selectedClient.saldo)})
                     </span>
                   </label>
                   {cobrarSaldo && (
-                    <div className="space-y-0.5 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-xs">
+                    <div className="space-y-2 rounded-lg bg-orange-50 border border-orange-200 px-4 py-3 text-base">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Total pedido</span>
                         <span>{formatCurrency(total)}</span>
@@ -2919,7 +2919,7 @@ export default function VentasPage() {
                         <span className="text-orange-600">+{formatCurrency(selectedClient.saldo)}</span>
                       </div>
                       <Separator />
-                      <div className="flex justify-between font-bold">
+                      <div className="flex justify-between font-bold text-lg">
                         <span>Total a cobrar</span>
                         <span className="text-emerald-600">{formatCurrency(total + selectedClient.saldo)}</span>
                       </div>
