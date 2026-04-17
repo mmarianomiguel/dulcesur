@@ -442,6 +442,7 @@ export default function HojaDeRutaPage() {
         "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", true)
+      .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
       .gte("fecha", historialDateFrom)
       .lt("fecha", endDate)
       .neq("estado", "anulada")
