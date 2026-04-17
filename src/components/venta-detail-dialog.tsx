@@ -118,6 +118,7 @@ export interface EditableItem {
   precio_unitario: number;
   subtotal: number;
   unidades_por_presentacion: number;
+  descuento?: number;
   stock?: number;
 }
 
@@ -237,12 +238,13 @@ export function VentaDetailDialog({
   const EstIcon = estInfo.icon;
   const pago = data.forma_pago || data.metodo_pago || "—";
   const displayItems = editable && editItems ? editItems : items;
-  const hasDiscount = items.some((i) => (i.descuento || 0) > 0);
+  const hasDiscount = items.some((i) => (i.descuento || 0) > 0)
+    || (editable && editItems ? editItems.some((i) => (i.descuento || 0) > 0) : false);
   const descPct = data.descuento_porcentaje || 0;
   const recPct = data.recargo_porcentaje || 0;
   const envio = data.costo_envio || 0;
   const itemsSubtotal = editable && editItems
-    ? editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0)
+    ? editItems.reduce((s, i) => s + i.precio_unitario * i.cantidad * (1 - (i.descuento || 0) / 100), 0)
     : (data.subtotal || items.reduce((s, i) => s + i.subtotal, 0));
   const ncTotal = (ncs || []).reduce((s, nc) => s + nc.total, 0);
   const ncFromPagos = (pagos || []).filter(p => p.metodo.includes("Nota de Cr")).reduce((s, p) => s + p.monto, 0);
@@ -289,10 +291,21 @@ export function VentaDetailDialog({
   const nextStates = onEstadoChange ? (estadoFlow[estado] || []) : [];
 
   // Edit helpers
+  const calcItemSubtotal = (precio: number, qty: number, desc?: number) =>
+    precio * qty * (1 - (desc || 0) / 100);
+
   const updateItemQty = (index: number, qty: number) => {
     if (!editItems || !onEditItemsChange || qty <= 0) return;
     onEditItemsChange(editItems.map((item, i) =>
-      i === index ? { ...item, cantidad: qty, subtotal: qty * item.precio_unitario } : item
+      i === index ? { ...item, cantidad: qty, subtotal: calcItemSubtotal(item.precio_unitario, qty, item.descuento) } : item
+    ));
+  };
+
+  const updateItemDescuento = (index: number, desc: number) => {
+    if (!editItems || !onEditItemsChange) return;
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(desc) ? desc : 0));
+    onEditItemsChange(editItems.map((item, i) =>
+      i === index ? { ...item, descuento: clamped, subtotal: calcItemSubtotal(item.precio_unitario, item.cantidad, clamped) } : item
     ));
   };
 
@@ -318,6 +331,7 @@ export function VentaDetailDialog({
         precio_unitario: presPrecio,
         subtotal: presPrecio,
         unidades_por_presentacion: presUpp,
+        descuento: 0,
         stock: product.stock,
       }]);
     }
@@ -675,7 +689,7 @@ export function VentaDetailDialog({
                     )}
                     <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-20">Cant.</th>
                     <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Precio</th>
-                    {hasDiscount && !isEditable && <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-16">Desc.</th>}
+                    {(hasDiscount || isEditable) && <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-20">Desc.</th>}
                     <th className="text-right px-3 py-2 font-medium text-xs text-muted-foreground w-24">Subtotal</th>
                     {isEditable && <th className="w-10"></th>}
                   </tr>
@@ -747,7 +761,21 @@ export function VentaDetailDialog({
                             </div>
                           </td>
                           <td className="px-3 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
-                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.precio_unitario * item.cantidad)}</td>
+                          <td className="px-2 py-2 text-right">
+                            <div className="flex items-center justify-end gap-0.5">
+                              <Input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={item.descuento || 0}
+                                onChange={(e) => updateItemDescuento(idx, Number(e.target.value))}
+                                className="h-7 w-12 text-right text-xs px-1"
+                              />
+                              <span className="text-[10px] text-muted-foreground">%</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency(calcItemSubtotal(item.precio_unitario, item.cantidad, item.descuento))}</td>
                           <td className="px-2 py-2">
                             <button onClick={() => removeItem(idx)} className="text-muted-foreground hover:text-destructive disabled:opacity-30" disabled={editItems.length <= 1} title="Quitar producto">
                               <Trash2 className="w-3.5 h-3.5" />

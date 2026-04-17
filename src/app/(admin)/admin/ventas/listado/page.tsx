@@ -1798,7 +1798,7 @@ export default function ListadoVentasPage() {
           })
       );
 
-      const nuevoSubtotal = poEditItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0);
+      const nuevoSubtotal = poEditItems.reduce((sum, i) => sum + i.precio_unitario * i.cantidad * (1 - (i.descuento || 0) / 100), 0);
       const isHistorial = poSelectedPedido._source === "historial";
       const descPct = (poSelectedPedido as any)._descuento_porcentaje || 0;
       const recPct = (poSelectedPedido as any)._recargo_porcentaje || 0;
@@ -1871,7 +1871,8 @@ export default function ListadoVentasPage() {
               presentacion: item.presentacion,
               cantidad: item.cantidad,
               precio_unitario: item.precio_unitario,
-              subtotal: item.precio_unitario * item.cantidad,
+              descuento: item.descuento || 0,
+              subtotal: item.precio_unitario * item.cantidad * (1 - (item.descuento || 0) / 100),
             }))
           );
           if (insErr) errores.push(`Error insertando items en tienda: ${insErr.message}`);
@@ -1976,7 +1977,8 @@ export default function ListadoVentasPage() {
                 : item.nombre,
               cantidad: item.cantidad,
               precio_unitario: item.precio_unitario,
-              subtotal: item.precio_unitario * item.cantidad,
+              descuento: item.descuento || 0,
+              subtotal: item.precio_unitario * item.cantidad * (1 - (item.descuento || 0) / 100),
               unidad_medida: "Un",
               presentacion: item.presentacion,
               unidades_por_presentacion: item.unidades_por_presentacion || 1,
@@ -3216,15 +3218,19 @@ export default function ListadoVentasPage() {
             precio_unitario: i.precio_unitario,
             subtotal: i.subtotal,
             unidades_por_presentacion: i.unidades_por_presentacion || 1,
+            descuento: i.descuento || 0,
             stock: (i as any).stock,
           }))}
           onEditItemsChange={(newItems) => {
-            setPoEditItems(newItems.map(i => ({
-              ...i,
-              codigo: "",
-              descuento: 0,
-              costo_unitario: 0,
-            })));
+            setPoEditItems(prev => newItems.map(ni => {
+              const existing = prev.find(p => p.producto_id === ni.producto_id && (p.presentacion || "Unidad") === (ni.presentacion || "Unidad"));
+              return {
+                ...ni,
+                codigo: existing?.codigo || "",
+                descuento: ni.descuento ?? existing?.descuento ?? 0,
+                costo_unitario: existing?.costo_unitario || 0,
+              };
+            }));
             setPoHasChanges(true);
           }}
           onSave={poHandleSave}
@@ -3559,7 +3565,7 @@ export default function ListadoVentasPage() {
 
                       if (ventaId) {
                         // Compute pre-surcharge base from items (not stored total which may include surcharge)
-                        const rawBase = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0) + (order.costo_envio || 0);
+                        const rawBase = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad * (1 - (i.descuento || 0) / 100), 0) + (order.costo_envio || 0);
                         const orderBase = rawBase > 0 ? rawBase : order.total;
 
                         if (metodo === "Cuenta Corriente" && clienteIdOrder) {
