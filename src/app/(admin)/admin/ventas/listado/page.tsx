@@ -286,7 +286,7 @@ export default function ListadoVentasPage() {
   const [cobroPreview, setCobroPreview] = useState<CobroPreview | null>(null);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
-  const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number }[]>([]);
+  const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [detailCobroSaldo, setDetailCobroSaldo] = useState<{ metodo: string; monto: number; fecha?: string }[]>([]);
   const [detailNCs, setDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
   const [editandoPago, setEditandoPago] = useState(false);
@@ -318,8 +318,25 @@ export default function ListadoVentasPage() {
     if (filterOrigen === "pos") query = query.or("origen.eq.pos,origen.is.null");
     else if (filterOrigen === "tienda") query = query.eq("origen", "tienda");
     if (filterType !== "all") query = query.eq("tipo_comprobante", filterType);
-    if (filterPayment !== "all") query = query.eq("forma_pago", filterPayment);
-    if (filterBanco !== "all") query = query.eq("cuenta_transferencia_alias", filterBanco);
+    if (filterPayment !== "all") {
+      // Include Mixto when the user filters by a specific method: Mixto orders
+      // may contain Efectivo/Transferencia/CC components. The exact split is
+      // visible in the detail dialog.
+      if (filterPayment === "Transferencia") {
+        query = query.or("forma_pago.eq.Transferencia,and(forma_pago.eq.Mixto,monto_transferencia.gt.0)");
+      } else if (filterPayment === "Efectivo") {
+        query = query.or("forma_pago.eq.Efectivo,and(forma_pago.eq.Mixto,monto_efectivo.gt.0)");
+      } else if (filterPayment === "Cuenta Corriente") {
+        query = query.in("forma_pago", ["Cuenta Corriente", "Mixto"]);
+      } else {
+        query = query.eq("forma_pago", filterPayment);
+      }
+    }
+    if (filterBanco !== "all") {
+      // Match either exact alias ("dulcesur10") or the "Nombre — alias" format
+      // ("Banco Credicoop — pameli.bz") saved by the inline cobro editor.
+      query = query.or(`cuenta_transferencia_alias.eq.${filterBanco},cuenta_transferencia_alias.ilike.%${filterBanco}%`);
+    }
 
     if (quickPeriod === "today") {
       query = query.eq("fecha", todayARG());
@@ -1065,20 +1082,21 @@ export default function ListadoVentasPage() {
     // Refresh payment breakdown
     if (ventaId) {
       const [{ data: movs }, { data: ccMovs }, { data: ncVentas }] = await Promise.all([
-        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+        supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion, cuenta_bancaria").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
         supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId),
         supabase.from("ventas").select("id, total").eq("remito_origen_id", ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       ]);
-      const newPagos: { metodo: string; monto: number }[] = [];
+      const newPagos: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
       for (const m of movs || []) {
         let label = m.metodo_pago;
         if (m.metodo_pago === "Transferencia" && m.descripcion) {
           const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
           if (match) label = `Transferencia (${match[1]}%)`;
         }
-        const existing = newPagos.find((p) => p.metodo === label);
+        const cuenta = (m as any).cuenta_bancaria || null;
+        const existing = newPagos.find((p) => p.metodo === label && (p.cuenta_bancaria || null) === cuenta);
         if (existing) existing.monto += m.monto;
-        else newPagos.push({ metodo: label, monto: m.monto });
+        else newPagos.push({ metodo: label, monto: m.monto, cuenta_bancaria: cuenta });
       }
       const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
       if (ccTotal > 0) newPagos.push({ metodo: "Cuenta Corriente", monto: ccTotal });
@@ -1462,7 +1480,7 @@ export default function ListadoVentasPage() {
         ? supabase.from("venta_items").select("*").eq("venta_id", ventaId).order("created_at")
         : Promise.resolve({ data: null, error: null }),
       ventaId
-        ? supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso")
+        ? supabase.from("caja_movimientos").select("metodo_pago, monto, tipo, descripcion, cuenta_bancaria").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso")
         : Promise.resolve({ data: [], error: null }),
       ventaId
         ? supabase.from("cuenta_corriente").select("debe").eq("venta_id", ventaId)
@@ -1504,16 +1522,17 @@ export default function ListadoVentasPage() {
     }
 
     // Build pagos from caja_movimientos + cuenta_corriente + NC refunds
-    const pagos: { metodo: string; monto: number }[] = [];
+    const pagos: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
     for (const m of movs || []) {
       let label = m.metodo_pago;
       if (m.metodo_pago === "Transferencia" && m.descripcion) {
         const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
         if (match) label = `Transferencia (${match[1]}%)`;
       }
-      const existing = pagos.find((p) => p.metodo === label);
+      const cuenta = (m as any).cuenta_bancaria || null;
+      const existing = pagos.find((p) => p.metodo === label && (p.cuenta_bancaria || null) === cuenta);
       if (existing) existing.monto += m.monto;
-      else pagos.push({ metodo: label, monto: m.monto });
+      else pagos.push({ metodo: label, monto: m.monto, cuenta_bancaria: cuenta });
     }
     // Add payments made via cobros (hoja de ruta saldo allocation) — not in caja_movimientos for this venta
     const cobroTotalAmt = (cobroItemsData || []).reduce((s: number, ci: any) => s + (ci.monto_aplicado || 0), 0);
@@ -2560,15 +2579,24 @@ export default function ListadoVentasPage() {
       if (poFilterEstado !== "todos") {
         if (poFilterEstado === "entregado" ? (o.estado !== "entregado" && o.estado !== "cerrada") : o.estado !== poFilterEstado) return false;
       }
-      // Payment filter
+      // Payment filter — includes Mixto orders that have the selected method
       if (filterPayment !== "all") {
         const pago = (o.forma_pago || o.metodo_pago || "").toLowerCase();
-        if (filterPayment.toLowerCase() !== pago) return false;
+        const target = filterPayment.toLowerCase();
+        const isMixto = pago === "mixto";
+        const montoEf = (o as any).monto_efectivo || 0;
+        const montoTr = (o as any).monto_transferencia || 0;
+        let matches = false;
+        if (target === "transferencia") matches = pago === "transferencia" || (isMixto && montoTr > 0);
+        else if (target === "efectivo") matches = pago === "efectivo" || (isMixto && montoEf > 0);
+        else if (target === "cuenta corriente") matches = pago === "cuenta corriente" || isMixto;
+        else matches = pago === target;
+        if (!matches) return false;
       }
-      // Banco filter
+      // Banco filter — matches both "alias" and "Nombre — alias" formats
       if (filterBanco !== "all") {
-        const alias = (o as any).cuenta_transferencia_alias || "";
-        if (alias !== filterBanco) return false;
+        const alias = String((o as any).cuenta_transferencia_alias || "");
+        if (!alias.includes(filterBanco)) return false;
       }
       // Search filter
       if (searchClient) {
@@ -3222,7 +3250,7 @@ export default function ListadoVentasPage() {
             unidades_por_presentacion: i.unidades_por_presentacion,
             descuento: (i as any).descuento,
           }))}
-          pagos={detailPagos.map(p => ({ metodo: p.metodo, monto: p.monto }))}
+          pagos={detailPagos.map(p => ({ metodo: p.metodo, monto: p.monto, cuenta_bancaria: p.cuenta_bancaria }))}
           ncs={detailNCs}
           editable={poSelectedPedido.estado === "pendiente" || poSelectedPedido.estado === "armado"}
           editItems={poEditItems.map(i => ({
