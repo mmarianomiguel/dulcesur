@@ -1747,7 +1747,8 @@ export default function ProductosPage() {
   };
 
   const openHistory = (product: ProductoWithRelations) => {
-    setQuickViewProduct(product);
+    void openEdit(product);
+    setEditTab("historial");
   };
 
   const toggleSelect = (id: string) => {
