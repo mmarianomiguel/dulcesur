@@ -240,6 +240,7 @@ export default function ProductosPage() {
   const [massOperation, setMassOperation] = useState<"increase"|"decrease">("increase");
   const [massAmount, setMassAmount] = useState("");
   const [fijarCostoMode, setFijarCostoMode] = useState<"mantener_precio"|"mantener_margen">("mantener_precio");
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
   const [roundInModal, setRoundInModal] = useState(false);
   const [roundInModalMultiple, setRoundInModalMultiple] = useState<5|10>(10);
   const [roundInModalMode, setRoundInModalMode] = useState<"nearest"|"up"|"down">("nearest");
@@ -1768,6 +1769,10 @@ export default function ProductosPage() {
     return Math.round(price / mult) * mult;
   };
 
+  useEffect(() => {
+    setPriceOverrides({});
+  }, [massTarget, massAmount, fijarCostoMode, massType, massOperation]);
+
   const massEditPreview = useMemo(() => {
     const amount = parseFloat(massAmount);
     if (isNaN(amount) || amount < 0) return [];
@@ -1854,14 +1859,15 @@ export default function ProductosPage() {
   const applyMassEdit = async () => {
     setMassEditSaving(true);
     try {
-      const getFinalPrecio = (exactPrecio: number) => {
+      const getFinalPrecio = (exactPrecio: number, itemId?: string) => {
+        if (itemId && priceOverrides[itemId] !== undefined) return priceOverrides[itemId];
         const base = Math.round(exactPrecio);
         return roundInModal ? calcRound(base, roundInModalMultiple, roundInModalMode) : base;
       };
 
       for (const item of massEditPreview) {
         const prod = products.find((p) => p.id === item.id);
-        const finalPrecio = getFinalPrecio(item.newPrecio);
+        const finalPrecio = getFinalPrecio(item.newPrecio, item.id);
         const updateData: Record<string, unknown> = {};
         if (finalPrecio !== (prod?.precio ?? 0)) {
           updateData.precio = finalPrecio;
@@ -1904,14 +1910,14 @@ export default function ProductosPage() {
       const historyInserts = massEditPreview
         .filter((item) => {
           const prod = products.find((p) => p.id === item.id);
-          return prod && (getFinalPrecio(item.newPrecio) !== prod.precio || item.newCosto !== prod.costo);
+          return prod && (getFinalPrecio(item.newPrecio, item.id) !== prod.precio || item.newCosto !== prod.costo);
         })
         .map((item) => {
           const prod = products.find((p) => p.id === item.id)!;
           return {
             producto_id: item.id,
             precio_anterior: prod.precio,
-            precio_nuevo: getFinalPrecio(item.newPrecio),
+            precio_nuevo: getFinalPrecio(item.newPrecio, item.id),
             costo_anterior: prod.costo,
             costo_nuevo: item.newCosto,
             usuario: "Admin",
@@ -1926,7 +1932,7 @@ export default function ProductosPage() {
         prev.map((p) => {
           const preview = massEditPreview.find((i) => i.id === p.id);
           if (preview) {
-            const fp = getFinalPrecio(preview.newPrecio);
+            const fp = getFinalPrecio(preview.newPrecio, preview.id);
             return (massTarget === "costo" || massTarget === "fijar_costo")
               ? { ...p, costo: preview.newCosto, precio: fp, precio_anterior: p.precio }
               : { ...p, precio: fp, precio_anterior: p.precio };
@@ -1937,6 +1943,7 @@ export default function ProductosPage() {
 
       setMassEditOpen(false);
       setMassAmount("");
+      setPriceOverrides({});
       showAdminToast(`Se actualizaron ${massEditPreview.length} producto${massEditPreview.length !== 1 ? "s" : ""}`, "success");
     } catch (err) {
       console.error("Error applying mass edit:", err);
@@ -5129,6 +5136,7 @@ export default function ProductosPage() {
                 setSelected(new Set([p.id]));
                 setMassEditOpen(true);
                 setMassAmount("");
+                setPriceOverrides({});
                 setContextMenu(null);
               }}
             >
@@ -5462,10 +5470,13 @@ export default function ProductosPage() {
                     </thead>
                     <tbody>
                       {massEditPreview.map((item) => {
-                        const finalPrecio = (() => {
+                        const computedPrecio = (() => {
                           const base = Math.round(item.newPrecio);
                           return roundInModal ? calcRound(base, roundInModalMultiple, roundInModalMode) : base;
                         })();
+                        const override = priceOverrides[item.id];
+                        const finalPrecio = override !== undefined ? override : computedPrecio;
+                        const isOverridden = override !== undefined && override !== computedPrecio;
                         const diff = finalPrecio - item.currentPrecio;
                         const newMargen = item.newCosto > 0 ? ((finalPrecio - item.newCosto) / item.newCosto) * 100 : 0;
                         return (
@@ -5479,7 +5490,36 @@ export default function ProductosPage() {
                               {formatCurrency(item.newCosto, true)}
                             </td>
                             <td className="py-1 px-1.5 text-right tabular-nums font-medium whitespace-nowrap">
-                              {formatCurrency(finalPrecio)}
+                              <div className="inline-flex items-center gap-1 justify-end">
+                                <span className="text-muted-foreground text-[10px]">$</span>
+                                <input
+                                  type="number"
+                                  step="1"
+                                  value={finalPrecio}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (v === "") {
+                                      setPriceOverrides((prev) => { const n = { ...prev }; delete n[item.id]; return n; });
+                                    } else {
+                                      const n = Math.max(0, Math.round(Number(v)));
+                                      setPriceOverrides((prev) => ({ ...prev, [item.id]: n }));
+                                    }
+                                  }}
+                                  className={`w-20 text-right tabular-nums bg-transparent border rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary ${
+                                    isOverridden ? "border-primary/60 bg-primary/5" : "border-transparent hover:border-input"
+                                  }`}
+                                />
+                                {isOverridden && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPriceOverrides((prev) => { const n = { ...prev }; delete n[item.id]; return n; })}
+                                    className="text-muted-foreground hover:text-foreground text-[10px]"
+                                    title="Restaurar valor calculado"
+                                  >
+                                    &#x21bb;
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td className="py-1 px-1.5 text-right tabular-nums text-muted-foreground">
                               {newMargen > 0 ? `${newMargen.toFixed(1)}%` : "\u2014"}
