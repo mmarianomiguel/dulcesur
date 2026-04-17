@@ -2078,7 +2078,13 @@ export default function ProductosPage() {
       const isVenta = t.includes("venta");
       const isCompra = t.includes("compra");
       const isSalida = t === "salida" || t === "autoconsumo";
-      const mapped = isVenta ? "venta" : isCompra ? "compra" : isSalida ? "salida" : "ajuste";
+      const isIntercambio = t === "intercambio";
+      // Intercambio: show as compra when positive (entra), venta when negative (sale)
+      const mapped = isVenta ? "venta"
+        : isCompra ? "compra"
+        : isSalida ? "salida"
+        : isIntercambio ? (h.cantidad > 0 ? "compra" : "venta")
+        : "ajuste";
       // For salida/autoconsumo, cantidad is stored positive but it's a deduction
       const displayCantidad = isSalida && h.cantidad > 0 ? -h.cantidad : h.cantidad;
       const stockInfo = (h.cantidad_antes != null && h.cantidad_despues != null)
