@@ -69,7 +69,10 @@ import type { ReceiptConfig, ReceiptSale, ReceiptLineItem } from "@/components/r
 import { useWhiteLabel } from "@/hooks/use-white-label";
 import { VentasHoyWidget } from "@/components/ventas-hoy-widget";
 import { formatCurrency, todayARG } from "@/lib/formatters";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+
+// Lazy load recharts (~250KB) — solo se carga cuando el usuario scrollea a los gráficos
+const MonthlyBarChart = lazy(() => import("./dashboard-charts").then(m => ({ default: m.MonthlyBarChart })));
+const PaymentPieChart = lazy(() => import("./dashboard-charts").then(m => ({ default: m.PaymentPieChart })));
 
 // Lazy load PrintPreviewDialog (heavy, rarely used on initial load)
 const PrintPreviewDialog = lazy(() => import("@/components/print-preview-dialog").then(m => ({ default: m.PrintPreviewDialog })));
@@ -1248,7 +1251,7 @@ export default function DashboardPage() {
                 <div className="h-[250px] flex items-center justify-center">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                 </div>
-              ) : (<div className="h-[250px]" style={{ minWidth: 0 }}><ResponsiveContainer width="100%" height="100%" minWidth={0}><BarChart data={monthlyData} barGap={4}><CartesianGrid strokeDasharray="3 3" stroke="oklch(0.9 0.005 260)" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v > 1000000 ? `${(v / 1000000).toFixed(0)}M` : v > 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /><Bar dataKey="ventas" name="Ventas" fill="oklch(0.55 0.2 264)" radius={[6, 6, 0, 0]} /><Bar dataKey="egresos" name="Egresos" fill="oklch(0.65 0.18 160)" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>)}</CardContent>
+              ) : (<div className="h-[250px]" style={{ minWidth: 0 }}><Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>}><MonthlyBarChart data={monthlyData} /></Suspense></div>)}</CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle className="text-[15px]">Formas de Pago</CardTitle></CardHeader>
@@ -1259,7 +1262,7 @@ export default function DashboardPage() {
                 </div>
               ) : paymentBreakdown.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Sin ventas en este periodo</p> : (
                   <>
-                    <div className="h-[180px]" style={{ minWidth: 0 }}><ResponsiveContainer width="100%" height="100%" minWidth={0}><PieChart><Pie data={paymentBreakdown} innerRadius={50} outerRadius={75} dataKey="value" stroke="none">{paymentBreakdown.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: "0.75rem", fontSize: "13px" }} /></PieChart></ResponsiveContainer></div>
+                    <div className="h-[180px]" style={{ minWidth: 0 }}><Suspense fallback={<div className="h-full flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>}><PaymentPieChart data={paymentBreakdown} /></Suspense></div>
                     <div className="space-y-2 mt-2">{paymentBreakdown.map((m, i) => (<div key={m.name} className="flex items-center justify-between text-[13px]"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} /><span className="text-muted-foreground">{m.name}</span></div><span className="font-medium">{formatCurrency(m.value)}</span></div>))}</div>
                   </>
                 )}

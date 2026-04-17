@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2, Package, Clock, CheckCircle2, AlertTriangle, Download } from "lucide-react";
-import * as XLSX from "xlsx";
 import type { PedidoConArmado } from "@/types/equipo";
 
 function formatDuration(ms: number | null): string {
@@ -112,7 +111,8 @@ export function HistorialTab() {
     year: "numeric",
   });
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
     const rows = pedidos.map((p) => {
       const pa = p.pedido_armado;
       const tEspera = calcDuration(p.created_at, pa?.inicio_armado_at);
