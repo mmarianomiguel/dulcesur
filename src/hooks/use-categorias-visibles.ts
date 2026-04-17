@@ -15,22 +15,21 @@ interface CategoriaConRestriccion {
  * Categories with `restringida = true` are hidden unless the client has them in `categorias_permitidas`.
  */
 export function useCategoriasPermitidas() {
-  const [permitidas, setPermitidas] = useState<string[] | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  // Default: asumir usuario anónimo (permitidas=[]) y loaded=true para evitar CLS
+  // por cambio de layout cuando sections se filtran/ocultan tras montar.
+  // useEffect luego actualiza si hay sesión con categorías permitidas adicionales.
+  const [permitidas, setPermitidas] = useState<string[] | null>([]);
+  const [loaded, setLoaded] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
         const raw = localStorage.getItem("cliente_auth");
         if (!raw) {
-          setPermitidas([]);
-          setLoaded(true);
           return;
         }
         const auth = JSON.parse(raw);
         if (!auth?.id) {
-          setPermitidas([]);
-          setLoaded(true);
           return;
         }
         // Get cliente_id from clientes_auth
@@ -40,11 +39,7 @@ export function useCategoriasPermitidas() {
           .eq("id", auth.id)
           .single();
 
-        if (!authData?.cliente_id) {
-          setPermitidas([]);
-          setLoaded(true);
-          return;
-        }
+        if (!authData?.cliente_id) return;
 
         const { data: cliente } = await supabase
           .from("clientes")
@@ -52,11 +47,10 @@ export function useCategoriasPermitidas() {
           .eq("id", authData.cliente_id)
           .single();
 
-        setPermitidas(cliente?.categorias_permitidas || []);
-      } catch {
-        setPermitidas([]);
-      }
-      setLoaded(true);
+        if (cliente?.categorias_permitidas?.length) {
+          setPermitidas(cliente.categorias_permitidas);
+        }
+      } catch {}
     })();
   }, []);
 

@@ -633,7 +633,7 @@ function ProductosDestacadosBlock({
                   setTimeout(() => setPausado(false), 3000);
                 }}
               >
-                {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 2))}
+                {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 4))}
               </div>
             </div>
 

@@ -223,40 +223,48 @@ export default async function TiendaHomePage() {
       .limit(maxNuevos);
   })();
 
-  // Grupo 1: queries críticas en paralelo (categorías, productos, aumentos)
-  const [categorias, productos, { data: aumentosRaw }, { data: masVendidosData }, { data: ultimasUnidadesData }, { data: nuevosRaw }] = await Promise.all([
-    catPromise,
-    prodPromise,
-    aumentosPromise,
-    masVendidosPromise,
-    ultimasUnidadesPromise,
-    nuevosPromise,
-  ]);
-
-  const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
-
-  // Nuevos ingresos
-  const nuevosIngresos = (nuevosRaw || []).slice(0, maxNuevos);
-
-  // Grupo 2: presentaciones + top vendidos en paralelo (no bloquean las categorías)
-  const presPromise = productos.length > 0
-    ? supabase
-        .from("presentaciones")
-        .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
-        .in("producto_id", productos.map((p) => p.id))
-        .order("cantidad")
-    : Promise.resolve({ data: [] });
-
+  // topVentasResult no depende de nada → se arranca junto al grupo crítico
   const topVentasResult = supabase
     .from("venta_items")
     .select("producto_id, cantidad")
     .gte("created_at", hace30.toISOString())
     .limit(1000);
 
-  const [{ data: presData }, { data: topVentaItems }] = await Promise.all([
+  // presentaciones depende de `productos` → se encadena con prodPromise para
+  // arrancar apenas estén los IDs, sin esperar al resto del grupo crítico.
+  const presPromise: Promise<{ data: any[] | null }> = prodPromise.then((prods) =>
+    prods.length > 0
+      ? (supabase
+          .from("presentaciones")
+          .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
+          .in("producto_id", prods.map((p: any) => p.id))
+          .order("cantidad") as unknown as Promise<{ data: any[] | null }>)
+      : Promise.resolve({ data: [] as any[] })
+  );
+
+  // Un único Promise.all: todas las queries arrancan en paralelo.
+  const [
+    categorias,
+    productos,
+    { data: aumentosRaw },
+    { data: masVendidosData },
+    { data: ultimasUnidadesData },
+    { data: nuevosRaw },
+    { data: presData },
+    { data: topVentaItems },
+  ] = await Promise.all([
+    catPromise,
+    prodPromise,
+    aumentosPromise,
+    masVendidosPromise,
+    ultimasUnidadesPromise,
+    nuevosPromise,
     presPromise,
     topVentasResult,
   ]);
+
+  const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+  const nuevosIngresos = (nuevosRaw || []).slice(0, maxNuevos);
 
   // Presentaciones productos destacados
   const presMap: Record<string, any[]> = {};
