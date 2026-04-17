@@ -1608,7 +1608,7 @@ export default function VentasPage() {
         recargo_porcentaje: recargo,
         total,
         estado: formaPago === "Pendiente" || cobrarEnEntrega ? "pendiente" : "cerrada",
-        entregado: formaPago === "Pendiente" || cobrarEnEntrega ? false : undefined,
+        entregado: formaPago === "Pendiente" || cobrarEnEntrega ? false : deliveryMethod === "delivery" ? false : true,
         observacion: despacho,
         metodo_entrega: formaPago === "Pendiente" ? "envio" : (deliveryMethod === "delivery" ? "envio" : "retiro"),
         lista_precio_id: listaPrecioId || null,

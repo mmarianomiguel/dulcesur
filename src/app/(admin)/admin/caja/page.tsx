@@ -1985,7 +1985,8 @@ export default function CajaPage() {
                                 .map((m) => {
                                   const desc = m.descripcion || "";
                                   const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
-                                  const nombre = nombreMatch?.[1]?.trim() || "—";
+                                  const ventaCliente = ventasEntregadas.find(v => v.id === m.referencia_id) as any;
+                                  const nombre = nombreMatch?.[1]?.trim() || ventaCliente?.clientes?.nombre || "—";
                                   const cuenta = (m as any).cuenta_bancaria || "";
                                   return (
                                     <tr key={m.id} className="border-b last:border-0 hover:bg-muted/30">
