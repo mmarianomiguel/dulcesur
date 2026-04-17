@@ -334,7 +334,20 @@ function ProductosDestacadosBlock({
   const titulo = config.titulo_seccion || "Productos";
   const maxItems = 24;
 
-  const tabDefecto = (config.tab_defecto as "destacados" | "mas_vendidos" | "nuevos") ?? "destacados";
+  const rawTabsConfig = (config.tabs as Array<{ key: string; activo: boolean }> | undefined);
+  const defaultTabsConfig = [
+    { key: "destacados", activo: true },
+    { key: "mas_vendidos", activo: true },
+    { key: "nuevos", activo: true },
+  ];
+  const tabsConfig = Array.isArray(rawTabsConfig) && rawTabsConfig.length > 0
+    ? rawTabsConfig.filter((t) => t && ["destacados", "mas_vendidos", "nuevos"].includes(t.key))
+    : defaultTabsConfig;
+  const activeTabsConfig = tabsConfig.filter((t) => t.activo);
+  const rawTabDefecto = (config.tab_defecto as "destacados" | "mas_vendidos" | "nuevos") ?? "destacados";
+  const tabDefecto = (activeTabsConfig.some((t) => t.key === rawTabDefecto)
+    ? rawTabDefecto
+    : (activeTabsConfig[0]?.key ?? "destacados")) as "destacados" | "mas_vendidos" | "nuevos";
   const intervalo = (config.carrusel_intervalo as number) ?? 0;
   const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">(tabDefecto);
   const [grupoActual, setGrupoActual] = useState(0);
@@ -375,11 +388,19 @@ function ProductosDestacadosBlock({
     Math.floor(grupoActual / 2) * GRUPO_SIZE_DESKTOP + GRUPO_SIZE_DESKTOP
   );
 
-  const tabs = [
-    { key: "destacados" as const, label: "Destacados", icon: Star, count: destacados.length },
-    { key: "mas_vendidos" as const, label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
-    { key: "nuevos" as const, label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
-  ].filter((t) => t.count > 0);
+  type TabKey = "destacados" | "mas_vendidos" | "nuevos";
+  type TabEntry = { key: TabKey; label: string; icon: typeof Star; count: number };
+  const allTabsMeta: Record<TabKey, { label: string; icon: typeof Star; count: number }> = {
+    destacados: { label: "Destacados", icon: Star, count: destacados.length },
+    mas_vendidos: { label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
+    nuevos: { label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
+  };
+  const tabs: TabEntry[] = activeTabsConfig.flatMap((t) => {
+    const key = t.key as TabKey;
+    const meta = allTabsMeta[key];
+    if (!meta || meta.count <= 0) return [];
+    return [{ key, ...meta }];
+  });
 
   // Resetear grupo al cambiar tab (sin animación cuando viene del selector)
   useEffect(() => {

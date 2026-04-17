@@ -129,13 +129,19 @@ const BLOCK_TYPES: BlockTypeDef[] = [
   {
     tipo: "productos_destacados",
     label: "Productos Destacados",
-    description: "Grilla de productos destacados",
+    description: "Grilla con tabs: Destacados, Más vendidos y Nuevos ingresos",
     icon: ShoppingBag,
     defaultTitulo: "Productos Destacados",
     defaultConfig: {
       titulo_seccion: "Productos Destacados",
       max_items: 8,
       orden: "manual",
+      tab_defecto: "destacados",
+      tabs: [
+        { key: "destacados", activo: true },
+        { key: "mas_vendidos", activo: true },
+        { key: "nuevos", activo: true },
+      ],
     },
   },
   {
@@ -206,31 +212,30 @@ const BLOCK_TYPES: BlockTypeDef[] = [
       titulo: "Últimas Unidades",
     },
   },
+];
+
+// Tipos legacy: se renderizan si existen en DB pero no pueden crearse nuevos desde el editor.
+// "mas_vendidos" y "nuevos_ingresos" ahora viven como tabs dentro de "productos_destacados".
+const LEGACY_BLOCK_TYPES: BlockTypeDef[] = [
   {
     tipo: "mas_vendidos",
-    label: "Más Vendidos",
-    description: "Top productos por ventas recientes",
+    label: "Más Vendidos (legacy)",
+    description: "Bloque legacy. Ahora es un tab dentro de Productos Destacados.",
     icon: Star,
     defaultTitulo: "Más Vendidos",
-    defaultConfig: {
-      dias_atras: 30,
-      max_items: 8,
-      titulo: "Los Más Vendidos",
-    },
+    defaultConfig: { dias_atras: 30, max_items: 8, titulo: "Los Más Vendidos" },
   },
   {
     tipo: "nuevos_ingresos",
-    label: "Nuevos Ingresos",
-    description: "Productos repuestos o ingresados recientemente",
+    label: "Nuevos Ingresos (legacy)",
+    description: "Bloque legacy. Ahora es un tab dentro de Productos Destacados.",
     icon: Zap,
     defaultTitulo: "Nuevos Ingresos",
-    defaultConfig: {
-      dias_atras: 7,
-      max_items: 16,
-      titulo: "Nuevos Ingresos",
-    },
+    defaultConfig: { dias_atras: 7, max_items: 16, titulo: "Nuevos Ingresos" },
   },
 ];
+
+const ALL_BLOCK_TYPES: BlockTypeDef[] = [...BLOCK_TYPES, ...LEGACY_BLOCK_TYPES];
 
 const ICON_OPTIONS = [
   "Truck", "Shield", "RefreshCw", "Headphones", "Star", "ShoppingBag", "Settings", "Check",
@@ -242,7 +247,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 };
 
 function getBlockDef(tipo: string) {
-  return BLOCK_TYPES.find((b) => b.tipo === tipo);
+  return ALL_BLOCK_TYPES.find((b) => b.tipo === tipo);
 }
 
 function getBlockIcon(tipo: string): LucideIcon {
@@ -494,17 +499,51 @@ function PreviewCategoriasDestacadas({ config, onConfigChange }: { config: Recor
 function PreviewProductosDestacados({ config, onConfigChange }: { config: Record<string, unknown>; onConfigChange?: (key: string, value: unknown) => void }) {
   const titulo = (config.titulo_seccion as string) || "Productos Destacados";
   const max = (config.max_items as number) || 8;
+  const TAB_META: Record<string, { label: string; shortLabel: string; Icon: LucideIcon }> = {
+    destacados: { label: "Destacados", shortLabel: "Dest.", Icon: Star },
+    mas_vendidos: { label: "Más vendidos", shortLabel: "Top", Icon: TrendingUp },
+    nuevos: { label: "Nuevos ingresos", shortLabel: "Nuevos", Icon: Zap },
+  };
+  const rawTabs = (config.tabs as Array<{ key: string; activo: boolean }> | undefined);
+  const defaultTabs = [
+    { key: "destacados", activo: true },
+    { key: "mas_vendidos", activo: true },
+    { key: "nuevos", activo: true },
+  ];
+  const tabsSource = Array.isArray(rawTabs) && rawTabs.length > 0 ? rawTabs : defaultTabs;
+  const visibleTabs = tabsSource.filter((t) => t && t.activo && TAB_META[t.key]);
+  const defaultTab = (config.tab_defecto as string) ?? visibleTabs[0]?.key ?? "destacados";
+  const activeKey = visibleTabs.some((t) => t.key === defaultTab) ? defaultTab : (visibleTabs[0]?.key ?? "destacados");
   return (
-    <section className="py-16 bg-gray-50/50">
+    <section className="py-8 md:py-10 bg-gray-50/50">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="text-center mb-10">
+        <div className="flex items-center justify-between mb-4">
           {onConfigChange ? (
-            <EditableText tag="h2" className="text-2xl md:text-3xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
+            <EditableText tag="h2" className="text-xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
           ) : (
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">{titulo}</h2>
+            <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
           )}
-          <div className="w-16 h-1 bg-pink-600 rounded-full mx-auto mt-2" />
+          {visibleTabs.length > 1 && (
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+              {visibleTabs.map((t) => {
+                const meta = TAB_META[t.key];
+                const Icon = meta.Icon;
+                const isActive = t.key === activeKey;
+                return (
+                  <div
+                    key={t.key}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${isActive ? "bg-gray-900 text-white" : "text-gray-500"}`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    <span className="hidden sm:inline">{meta.label}</span>
+                    <span className="sm:hidden">{meta.shortLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
+        <div className="w-12 h-0.5 bg-primary rounded-full mb-4" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
           {Array.from({ length: Math.min(max, 8) }).map((_, i) => (
             <div
@@ -1598,20 +1637,105 @@ function BlockConfigForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label>Tab por defecto</Label>
-            <Select
-              value={(c.tab_defecto as string) ?? "destacados"}
-              onValueChange={(v) => onConfigChange("tab_defecto", v ?? "destacados")}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="destacados">Destacados</SelectItem>
-                <SelectItem value="mas_vendidos">Más vendidos</SelectItem>
-                <SelectItem value="nuevos">Nuevos ingresos</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {(() => {
+            const TAB_META: Record<string, { label: string }> = {
+              destacados: { label: "Destacados" },
+              mas_vendidos: { label: "Más vendidos" },
+              nuevos: { label: "Nuevos ingresos" },
+            };
+            const rawTabs = (c.tabs as Array<{ key: string; activo: boolean }> | undefined);
+            const defaultTabs = [
+              { key: "destacados", activo: true },
+              { key: "mas_vendidos", activo: true },
+              { key: "nuevos", activo: true },
+            ];
+            const currentTabs = Array.isArray(rawTabs) && rawTabs.length > 0
+              ? defaultTabs.map((d) => rawTabs.find((t) => t.key === d.key) ?? d)
+                  .concat(rawTabs.filter((t) => !defaultTabs.some((d) => d.key === t.key)))
+              : defaultTabs;
+            // Preservar orden custom si existe
+            const orderedTabs = Array.isArray(rawTabs) && rawTabs.length > 0
+              ? rawTabs.filter((t) => t && typeof t.key === "string" && TAB_META[t.key])
+              : defaultTabs;
+            const updateTabs = (next: Array<{ key: string; activo: boolean }>) => {
+              onConfigChange("tabs", next);
+            };
+            const moveTab = (idx: number, dir: -1 | 1) => {
+              const next = [...orderedTabs];
+              const target = idx + dir;
+              if (target < 0 || target >= next.length) return;
+              [next[idx], next[target]] = [next[target], next[idx]];
+              updateTabs(next);
+            };
+            const toggleTab = (idx: number) => {
+              const next = orderedTabs.map((t, i) => i === idx ? { ...t, activo: !t.activo } : t);
+              updateTabs(next);
+            };
+            const activeKeys = orderedTabs.filter((t) => t.activo).map((t) => t.key);
+            const defaultTab = (c.tab_defecto as string) ?? activeKeys[0] ?? "destacados";
+            void currentTabs;
+            return (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Tabs visibles (orden y activación)</Label>
+                  <div className="space-y-1 rounded-lg border border-gray-200 p-2 bg-gray-50/50">
+                    {orderedTabs.map((t, idx) => (
+                      <div key={t.key} className="flex items-center gap-2 px-2 py-1.5 bg-white rounded border border-gray-100">
+                        <div className="flex flex-col">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => moveTab(idx, -1)}
+                            className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label="Subir"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === orderedTabs.length - 1}
+                            onClick={() => moveTab(idx, 1)}
+                            className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label="Bajar"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <span className={`flex-1 text-sm font-medium ${t.activo ? "text-gray-900" : "text-gray-400 line-through"}`}>
+                          {TAB_META[t.key]?.label ?? t.key}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleTab(idx)}
+                          className={`p-1.5 rounded-md transition ${t.activo ? "text-primary hover:bg-primary/10" : "text-gray-400 hover:bg-gray-100"}`}
+                          aria-label={t.activo ? "Ocultar tab" : "Mostrar tab"}
+                          title={t.activo ? "Ocultar tab" : "Mostrar tab"}
+                        >
+                          {t.activo ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500">El primer tab visible es el que se muestra por defecto cuando abre la tienda.</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Tab por defecto</Label>
+                  <Select
+                    value={activeKeys.includes(defaultTab) ? defaultTab : (activeKeys[0] ?? "destacados")}
+                    onValueChange={(v) => onConfigChange("tab_defecto", v ?? "destacados")}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {orderedTabs.filter((t) => t.activo).map((t) => (
+                        <SelectItem key={t.key} value={t.key}>{TAB_META[t.key]?.label ?? t.key}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            );
+          })()}
 
           <div className="space-y-1.5">
             <Label>Rotación automática</Label>
