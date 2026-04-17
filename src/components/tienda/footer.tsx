@@ -82,11 +82,44 @@ function FooterLogo({ url, alt }: { url: string; alt: string }) {
   );
 }
 
-export default function TiendaFooter() {
-  const [config, setConfig] = useState<FooterConfig>(DEFAULT_CONFIG);
-  const [tiendaNombre, setTiendaNombre] = useState("DulceSur");
+interface TiendaFooterProps {
+  initial?: {
+    tiendaNombre?: string;
+    logo_url?: string;
+    descripcion?: string;
+    instagram_url?: string;
+    facebook_url?: string;
+    whatsapp_url?: string;
+    direccion?: string;
+    telefono?: string;
+    email?: string;
+    badges?: string[];
+  };
+}
+
+export default function TiendaFooter({ initial }: TiendaFooterProps = {}) {
+  const initialConfig: FooterConfig = {
+    ...DEFAULT_CONFIG,
+    ...(initial
+      ? {
+          logo_url: initial.logo_url || "",
+          descripcion: initial.descripcion || DEFAULT_CONFIG.descripcion,
+          instagram_url: initial.instagram_url || "",
+          facebook_url: initial.facebook_url || "",
+          whatsapp_url: initial.whatsapp_url || "",
+          direccion: initial.direccion || "",
+          telefono: initial.telefono || "",
+          email: initial.email || "",
+          badges: initial.badges && initial.badges.length > 0 ? initial.badges : DEFAULT_CONFIG.badges,
+        }
+      : {}),
+  };
+  const [config, setConfig] = useState<FooterConfig>(initialConfig);
+  const [tiendaNombre, setTiendaNombre] = useState(initial?.tiendaNombre || "DulceSur");
 
   useEffect(() => {
+    // Si ya viene hidratado desde SSR, no refetch (evita CLS y trabajo extra)
+    if (initial && (initial.logo_url || initial.descripcion || initial.direccion)) return;
     Promise.all([
       supabase.from("tienda_config").select("nombre_tienda, logo_url, descripcion, footer_config").limit(1).single(),
       supabase.from("empresa").select("white_label").limit(1).single(),
@@ -96,7 +129,6 @@ export default function TiendaFooter() {
         const fc = (data as any).footer_config || {};
         const wlLogo = (emp as any)?.white_label?.logo_url;
         const rawLogo = fc.logo_url || data.logo_url || wlLogo || "";
-        // Optimizar logo de Cloudinary: reduce de ~17 KiB a ~1 KiB
         const optimizedLogo = rawLogo.includes("cloudinary.com")
           ? rawLogo.replace("/upload/", "/upload/w_200,h_80,c_fit,q_auto,f_auto/")
           : rawLogo;
@@ -108,7 +140,7 @@ export default function TiendaFooter() {
         });
       }
     });
-  }, []);
+  }, [initial]);
 
   return (
     <footer className="min-h-[400px]">

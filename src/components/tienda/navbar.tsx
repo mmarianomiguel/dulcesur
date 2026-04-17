@@ -30,8 +30,21 @@ interface Categoria {
 
 const FALLBACK_LOGO = "https://res.cloudinary.com/dss3lnovd/image/upload/w_200,q_auto,f_auto/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png";
 
-export default function TiendaNavbar() {
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
+interface TiendaNavbarProps {
+  initial?: {
+    logoSrc?: string;
+    nombre?: string;
+    telefono?: string;
+    umbral_envio_gratis?: number;
+    horario_atencion_inicio?: string;
+    horario_atencion_fin?: string;
+    dias_atencion?: string[];
+    categorias?: Categoria[];
+  };
+}
+
+export default function TiendaNavbar({ initial }: TiendaNavbarProps = {}) {
+  const [categorias, setCategorias] = useState<Categoria[]>(initial?.categorias || []);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [mobileQuery, setMobileQuery] = useState("");
@@ -47,20 +60,28 @@ export default function TiendaNavbar() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const [logoSrc, setLogoSrc] = useState<string>(FALLBACK_LOGO);
+  const [logoSrc, setLogoSrc] = useState<string>(initial?.logoSrc || FALLBACK_LOGO);
   const [clienteId, setClienteId] = useState<string | null>(null);
   const [clienteNombre, setClienteNombre] = useState<string | null>(null);
   const [clienteSaldo, setClienteSaldo] = useState<number | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [mobilLogoSrc, setMobilLogoSrc] = useState<string>(FALLBACK_LOGO);
+  const [mobilLogoSrc, setMobilLogoSrc] = useState<string>(initial?.logoSrc || FALLBACK_LOGO);
 
   const [config, setConfig] = useState<{
     logo_url?: string; nombre?: string; telefono?: string;
     umbral_envio_gratis?: number; horario_atencion_inicio?: string;
     horario_atencion_fin?: string; dias_atencion?: string[];
-  } | null>(null);
+  } | null>(initial ? {
+    logo_url: initial.logoSrc,
+    nombre: initial.nombre,
+    telefono: initial.telefono,
+    umbral_envio_gratis: initial.umbral_envio_gratis,
+    horario_atencion_inicio: initial.horario_atencion_inicio,
+    horario_atencion_fin: initial.horario_atencion_fin,
+    dias_atencion: initial.dias_atencion,
+  } : null);
 
   useEffect(() => {
     const readCliente = () => {
@@ -81,6 +102,8 @@ export default function TiendaNavbar() {
   }, []);
 
   useEffect(() => {
+    // Si ya se hidrató desde SSR, evita refetch — previene CLS y trabajo extra.
+    if (initial && initial.categorias && initial.categorias.length > 0) return;
     Promise.all([
       supabase.from("categorias").select("id, nombre, restringida").order("nombre"),
       supabase.from("empresa").select("nombre, telefono, white_label").limit(1).single(),
@@ -100,7 +123,7 @@ export default function TiendaNavbar() {
         setMobilLogoSrc(optimizedLogo);
       }
     });
-  }, []);
+  }, [initial]);
 
   // Cargar subcategorías y marcas para el mega-menú
   useEffect(() => {
