@@ -18,29 +18,18 @@ export function VentasHoyWidget() {
       timeZone: "America/Argentina/Buenos_Aires",
     });
 
-    // Traer ventas normales y NCs del día en paralelo
-    const [{ data }, { data: ncsData }] = await Promise.all([
-      supabase
-        .from("ventas")
-        .select("id, total, estado, entregado, created_at")
-        .eq("fecha", hoy)
-        .neq("estado", "anulada")
-        .not("tipo_comprobante", "ilike", "Nota de Crédito%"),
-      supabase
-        .from("ventas")
-        .select("remito_origen_id, total")
-        .eq("fecha", hoy)
-        .neq("estado", "anulada")
-        .ilike("tipo_comprobante", "Nota de Crédito%"),
-    ]);
+    // Solo ventas normales — `ventas.total` ya está ajustado por NC
+    // (la emisión de NC recalcula el total de la venta original),
+    // así que NO hay que restar NC de nuevo.
+    const { data } = await supabase
+      .from("ventas")
+      .select("id, total, estado, entregado, created_at")
+      .eq("fecha", hoy)
+      .neq("estado", "anulada")
+      .not("tipo_comprobante", "ilike", "Nota de Crédito%");
 
     const ventas = data || [];
-    const ncs = ncsData || [];
-
-    // Total neto = total bruto - NCs
-    const totalBruto = ventas.reduce((s, v) => s + v.total, 0);
-    const totalNC = ncs.reduce((s, nc) => s + nc.total, 0);
-    const total = totalBruto - totalNC;
+    const total = ventas.reduce((s, v) => s + v.total, 0);
 
     const pendientes = ventas.filter((v) => !v.entregado).length;
     const ultima = ventas.sort(

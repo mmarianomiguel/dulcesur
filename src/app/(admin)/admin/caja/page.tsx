@@ -586,18 +586,18 @@ export default function CajaPage() {
   const fetchNCEntries = useCallback(async () => {
     if (!turno) return [];
     const fechaApertura = turno.fecha_apertura || today;
-    let query = supabase.from("ventas").select("remito_origen_id, total").ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada").not("remito_origen_id", "is", null);
+    let query = supabase.from("ventas").select("id, remito_origen_id, total").ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada").not("remito_origen_id", "is", null);
     if (fechaApertura === today) {
       query = query.eq("fecha", today);
     } else {
       query = query.gte("fecha", fechaApertura).lte("fecha", today);
     }
     const { data } = await query;
-    return (data || []) as { remito_origen_id: string; total: number }[];
+    return (data || []) as { id: string; remito_origen_id: string; total: number }[];
   }, [today, turno]);
   const { data: ncEntries } = useAsyncData({
     fetcher: fetchNCEntries,
-    initialData: [] as { remito_origen_id: string; total: number }[],
+    initialData: [] as { id: string; remito_origen_id: string; total: number }[],
     deps: [turno],
   });
 
@@ -1162,10 +1162,19 @@ export default function CajaPage() {
       }
     };
 
-    // Build CC entries map by venta_id for quick lookup — debe minus haber
+    // Build CC entries map by venta_id for quick lookup — debe minus haber.
+    // NC haber entries store venta_id = NC's own id; we re-key them to the
+    // original venta (remito_origen_id) so the net cc debt is attributed
+    // correctly and the total ventas card doesn't overcount.
+    const ncIdToOrigen: Record<string, string> = {};
+    for (const nc of (ncEntries || [])) {
+      if (nc.id && nc.remito_origen_id) ncIdToOrigen[nc.id] = nc.remito_origen_id;
+    }
     const ccByVenta: Record<string, number> = {};
     for (const e of (ccEntries || [])) {
-      if (e.venta_id) ccByVenta[e.venta_id] = (ccByVenta[e.venta_id] || 0) + (e.debe || 0) - ((e as any).haber || 0);
+      if (!e.venta_id) continue;
+      const key = ncIdToOrigen[e.venta_id] || e.venta_id;
+      ccByVenta[key] = (ccByVenta[key] || 0) + (e.debe || 0) - ((e as any).haber || 0);
     }
 
     // Build NC map by remito_origen_id (NC reduces effective venta total)
@@ -1559,7 +1568,10 @@ export default function CajaPage() {
               const deudoresHoy: { nombre: string; monto: number }[] = [];
               const ccByCliente: Record<string, number> = {};
               for (const e of (ccEntries || [])) {
-                const venta = ventas.find(v => v.id === e.venta_id);
+                // Re-key NC haber entries to the original venta so the client
+                // name resolves correctly instead of "Sin cliente".
+                const effectiveId = ncIdToOrigen[e.venta_id] || e.venta_id;
+                const venta = ventas.find(v => v.id === effectiveId);
                 const nombre = (venta as any)?.clientes?.nombre || "Sin cliente";
                 ccByCliente[nombre] = (ccByCliente[nombre] || 0) + (e.debe || 0) - ((e as any).haber || 0);
               }
