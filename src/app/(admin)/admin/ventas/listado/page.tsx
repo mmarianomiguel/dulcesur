@@ -885,15 +885,16 @@ export default function ListadoVentasPage() {
       const { data: freshVenta } = await supabase.from("ventas").select("estado").eq("id", v.id).single();
       if (freshVenta?.estado === "anulada") throw new Error("Esta venta ya fue anulada por otro usuario.");
 
-      // 7. Mark venta as anulada + reset monto_pagado
-      const { error: anularErr } = await supabase.from("ventas").update({
+      // 7. Mark venta as anulada + reset monto_pagado (compare-and-swap: only if not already anulada)
+      const { data: anularRows, error: anularErr } = await supabase.from("ventas").update({
         estado: "anulada",
         monto_pagado: 0,
         observacion: v.observacion
           ? `${v.observacion} | ANULADA${motivoTexto}`
           : `ANULADA${motivoTexto}`,
-      }).eq("id", v.id);
+      }).eq("id", v.id).neq("estado", "anulada").select("id");
       if (anularErr) throw new Error(`Error marcando como anulada: ${anularErr.message}`);
+      if (!anularRows || anularRows.length === 0) throw new Error("Esta venta ya fue anulada por otro usuario.");
 
       // 8. Sync to pedidos_tienda so client sees "cancelado"
       await supabase.from("pedidos_tienda").update({ estado: "cancelado" }).eq("numero", v.numero);
