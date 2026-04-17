@@ -998,6 +998,34 @@ export default function ListadoVentasPage() {
     ventaUpd.total = result.monto + (result.surcharge || 0);
     await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
 
+    // Sync local state so card/dialog reflect the cobro without a page reload
+    const numero = poSelectedPedido.numero;
+    const newMontoPagado = pagado + realPaid;
+    const newCuenta = result.cuentaBancaria || (poSelectedPedido as any).cuenta_transferencia_alias || null;
+    setPoSelectedPedido(prev => prev ? ({
+      ...prev,
+      forma_pago: result.metodo,
+      metodo_pago: result.metodo,
+      _monto_pagado: newMontoPagado,
+      cuenta_transferencia_alias: newCuenta,
+      total: ventaUpd.total,
+    } as any) : prev);
+    setVentas(prev => prev.map(v => v.id === ventaId ? ({
+      ...v,
+      forma_pago: result.metodo,
+      monto_pagado: newMontoPagado,
+      cuenta_transferencia_alias: newCuenta,
+      total: ventaUpd.total,
+    } as any) : v));
+    setPoPedidos(prev => prev.map(p => p.numero === numero ? ({
+      ...p,
+      metodo_pago: result.metodo,
+      forma_pago: result.metodo,
+      _monto_pagado: newMontoPagado,
+      cuenta_transferencia_alias: newCuenta,
+      total: ventaUpd.total,
+    } as any) : p));
+
     // FIFO allocation: update monto_pagado on old invoices
     if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
       for (const alloc of result.saldoAllocations) {
@@ -2598,10 +2626,14 @@ export default function ListadoVentasPage() {
             <p className="text-sm text-muted-foreground">
               {filteredOrders.length} resultados{poPendientes > 0 ? ` · ${poPendientes} pendiente${poPendientes > 1 ? "s" : ""} online` : ""}
               {hiddenFutureOrders > 0 && (
-                <span className="ml-2 inline-flex items-center gap-1 text-amber-600 font-medium">
+                <button
+                  type="button"
+                  onClick={() => setQuickPeriod("week")}
+                  className="ml-2 inline-flex items-center gap-1 text-amber-600 font-medium hover:text-amber-700 hover:underline cursor-pointer"
+                >
                   <Calendar className="w-3 h-3" />
-                  {hiddenFutureOrders} con entrega futura oculto{hiddenFutureOrders > 1 ? "s" : ""} — usá "Esta semana" para verlo{hiddenFutureOrders > 1 ? "s" : ""}
-                </span>
+                  {hiddenFutureOrders} con entrega futura oculto{hiddenFutureOrders > 1 ? "s" : ""} — tocá para ver{hiddenFutureOrders > 1 ? "los" : "lo"}
+                </button>
               )}
             </p>
           </div>
@@ -2906,22 +2938,7 @@ export default function ListadoVentasPage() {
 
                       {/* Delivery & payment info */}
                       <div className="flex flex-wrap items-center gap-2 text-xs">
-                        {entrega && !orderDelivered && !orderCancelled && (
-                          <button onClick={async (e) => {
-                            e.stopPropagation();
-                            const newMethod = order.metodo_entrega === "envio" ? "retiro" : "envio";
-                            const ventaId = (order as any)._ventaId || (order as any).venta_id;
-                            if (ventaId) await supabase.from("ventas").update({ metodo_entrega: newMethod }).eq("id", ventaId);
-                            if (order.numero) await supabase.from("pedidos_tienda").update({ metodo_entrega: newMethod === "envio" ? "envio" : "retiro_local" }).eq("numero", order.numero);
-                            setPoSelectedPedido({ ...poSelectedPedido!, metodo_entrega: newMethod } as any);
-                            showAdminToast(`Cambiado a ${newMethod === "envio" ? "Envío" : "Retiro"}`, "success");
-                          }} title="Click para cambiar">
-                            <Badge variant="outline" className={`font-normal cursor-pointer ${order.metodo_entrega === "envio" ? "border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100" : "border-gray-300 hover:bg-muted"}`}>
-                              {order.metodo_entrega === "envio" ? <><Truck className="w-3 h-3 mr-1" />{entrega}</> : <><Store className="w-3 h-3 mr-1" />{entrega}</>}
-                            </Badge>
-                          </button>
-                        )}
-                        {entrega && (orderDelivered || orderCancelled) && (
+                        {entrega && (
                           <Badge variant="outline" className={`font-normal ${order.metodo_entrega === "envio" ? "border-blue-300 text-blue-700 bg-blue-50" : "border-gray-300"}`}>
                             {order.metodo_entrega === "envio" ? <><Truck className="w-3 h-3 mr-1" />{entrega}</> : <><Store className="w-3 h-3 mr-1" />{entrega}</>}
                           </Badge>
@@ -3262,6 +3279,39 @@ export default function ListadoVentasPage() {
             }
           }}
           onConfirmAction={(title, message, action) => setConfirmDialog({ open: true, title, message, onConfirm: action })}
+          onMetodoEntregaChange={async (nuevoMetodo) => {
+            if (!poSelectedPedido) return;
+            const ventaId = (poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id;
+            try {
+              if (ventaId) await supabase.from("ventas").update({ metodo_entrega: nuevoMetodo }).eq("id", ventaId);
+              if (poSelectedPedido.numero) {
+                const ptMetodo = nuevoMetodo === "envio" ? "envio" : "retiro_local";
+                await supabase.from("pedidos_tienda").update({ metodo_entrega: ptMetodo }).eq("numero", poSelectedPedido.numero);
+              }
+              setPoSelectedPedido({ ...poSelectedPedido, metodo_entrega: nuevoMetodo } as any);
+              setPoPedidos(prev => prev.map(p => p.numero === poSelectedPedido.numero ? { ...p, metodo_entrega: nuevoMetodo } : p));
+              setVentas(prev => prev.map(v => v.numero === poSelectedPedido.numero ? { ...v, metodo_entrega: nuevoMetodo } : v));
+              showAdminToast(`Cambiado a ${nuevoMetodo === "envio" ? "Envío" : "Retiro"}`, "success");
+            } catch {
+              showAdminToast("Error al cambiar método de entrega", "error");
+            }
+          }}
+          onFechaEntregaChange={async (nuevaFecha) => {
+            if (!poSelectedPedido?.numero) return;
+            const ventaId = (poSelectedPedido as any)._ventaId || (poSelectedPedido as any).venta_id;
+            try {
+              await supabase.from("pedidos_tienda").update({ fecha_entrega: nuevaFecha }).eq("numero", poSelectedPedido.numero);
+              // Also sync ventas.fecha so the pedido appears in the hoja de ruta of the new date.
+              // Only safe when not delivered/cancelled (UI already enforces this).
+              if (ventaId) await supabase.from("ventas").update({ fecha: nuevaFecha }).eq("id", ventaId);
+              setPoSelectedPedido({ ...poSelectedPedido, fecha_entrega: nuevaFecha } as any);
+              setPoPedidos(prev => prev.map(p => p.numero === poSelectedPedido.numero ? { ...p, fecha_entrega: nuevaFecha } : p));
+              setVentas(prev => prev.map(v => v.numero === poSelectedPedido.numero ? { ...v, fecha: nuevaFecha } : v));
+              showAdminToast("Fecha de entrega actualizada", "success");
+            } catch {
+              showAdminToast("Error al actualizar fecha", "error");
+            }
+          }}
           onSearchProducts={async (query) => {
             const { data } = await supabase
               .from("productos")

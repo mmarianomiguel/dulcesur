@@ -40,6 +40,7 @@ import {
   ArrowRight,
   XCircle,
   Search,
+  Pencil,
 } from "lucide-react";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
@@ -186,6 +187,9 @@ interface VentaDetailDialogProps {
   onSearchProducts?: (query: string) => Promise<ProductSearchResult[]>;
   // ─── Confirm dialog callback (optional) ───
   onConfirmAction?: (title: string, message: string, action: () => void) => void;
+  // ─── Edit entrega/fecha (optional) ───
+  onMetodoEntregaChange?: (nuevoMetodo: string) => Promise<void> | void;
+  onFechaEntregaChange?: (nuevaFecha: string) => Promise<void> | void;
   // ─── Cobro inline (optional) ───
   cobroConfig?: {
     ventaId: string;
@@ -200,7 +204,8 @@ interface VentaDetailDialogProps {
 export function VentaDetailDialog({
   open, onOpenChange, data, items, pagos, onPrint, footerExtra,
   editable, editItems, onEditItemsChange, onSave, saving, hasChanges,
-  onEstadoChange, ncs, onSearchProducts, onConfirmAction, cobroConfig,
+  onEstadoChange, ncs, onSearchProducts, onConfirmAction,
+  onMetodoEntregaChange, onFechaEntregaChange, cobroConfig,
 }: VentaDetailDialogProps) {
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
@@ -415,15 +420,36 @@ export function VentaDetailDialog({
               </h3>
               <div className="bg-muted/30 rounded-lg p-3 space-y-1.5 text-sm">
                 {data.metodo_entrega ? (
-                  <p className="flex items-center gap-1.5 font-medium">
-                    {data.metodo_entrega === "envio" ? (
-                      <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
-                    ) : data.metodo_entrega === "retiro" ? (
-                      <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
-                    ) : (
-                      <>{data.metodo_entrega}</>
-                    )}
-                  </p>
+                  onMetodoEntregaChange && !data.entregado && data.estado !== "cancelado" && data.estado !== "anulada" ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const nuevo = (data.metodo_entrega === "envio" || data.metodo_entrega === "delivery") ? "retiro" : "envio";
+                        await onMetodoEntregaChange(nuevo);
+                      }}
+                      className="flex items-center gap-1.5 font-medium px-2 py-1 -mx-2 rounded hover:bg-background transition-colors cursor-pointer w-fit"
+                      title="Click para cambiar método de entrega"
+                    >
+                      {(data.metodo_entrega === "envio" || data.metodo_entrega === "delivery") ? (
+                        <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
+                      ) : data.metodo_entrega === "retiro" || data.metodo_entrega === "retiro_local" || data.metodo_entrega === "pickup" ? (
+                        <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
+                      ) : (
+                        <>{data.metodo_entrega}</>
+                      )}
+                      <Pencil className="w-3 h-3 text-muted-foreground opacity-60" />
+                    </button>
+                  ) : (
+                    <p className="flex items-center gap-1.5 font-medium">
+                      {(data.metodo_entrega === "envio" || data.metodo_entrega === "delivery") ? (
+                        <><Truck className="w-3.5 h-3.5 text-blue-500" /> Envio a domicilio</>
+                      ) : data.metodo_entrega === "retiro" || data.metodo_entrega === "retiro_local" || data.metodo_entrega === "pickup" ? (
+                        <><Store className="w-3.5 h-3.5 text-green-500" /> Retiro en local</>
+                      ) : (
+                        <>{data.metodo_entrega}</>
+                      )}
+                    </p>
+                  )
                 ) : (
                   <p className="flex items-center gap-1.5">
                     {data.entregado ? (
@@ -437,10 +463,28 @@ export function VentaDetailDialog({
                   <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><MapPin className="w-3 h-3 mt-0.5 shrink-0" />{data.direccion_texto}</p>
                 )}
                 {data.fecha_entrega && (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(data.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
-                  </p>
+                  onFechaEntregaChange && !data.entregado && data.estado !== "cancelado" && data.estado !== "anulada" ? (
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer w-fit relative">
+                      <Calendar className="w-3 h-3" />
+                      <span>{new Date(data.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}</span>
+                      <Pencil className="w-2.5 h-2.5 opacity-60" />
+                      <input
+                        type="date"
+                        value={data.fecha_entrega}
+                        onChange={async (e) => {
+                          const nueva = e.target.value;
+                          if (!nueva || nueva === data.fecha_entrega) return;
+                          await onFechaEntregaChange(nueva);
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </label>
+                  ) : (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(data.fecha_entrega + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
+                    </p>
+                  )
                 )}
                 {/* Payment breakdown — show for entregado/read-only, hide when cobro section handles it */}
                 {!(cobroConfig && canCobrar && !hasCobro) && pagos && pagos.length > 0 ? (
