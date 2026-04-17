@@ -47,27 +47,29 @@ export default function ResumenMensualPage() {
     const start = `${y}-${String(m).padStart(2, "0")}-01`;
     const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
 
-    // Ventas (excluyendo NC)
-    const { data: ventas } = await supabase.from("ventas").select("id, total, forma_pago, cliente_id, tipo_comprobante, estado, clientes(nombre)")
-      .gte("fecha", start).lt("fecha", end)
-      .not("tipo_comprobante", "ilike", "Nota de Crédito%")
-      .not("tipo_comprobante", "ilike", "Nota de Débito%")
-      .neq("estado", "anulada");
+    // Ventas + NCs + Compras en paralelo (las 3 queries son independientes)
+    const [
+      { data: ventas },
+      { data: ncs },
+      { data: compras },
+    ] = await Promise.all([
+      supabase.from("ventas").select("id, total, forma_pago, cliente_id, tipo_comprobante, estado, clientes(nombre)")
+        .gte("fecha", start).lt("fecha", end)
+        .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+        .not("tipo_comprobante", "ilike", "Nota de Débito%")
+        .neq("estado", "anulada"),
+      supabase.from("ventas").select("total")
+        .gte("fecha", start).lt("fecha", end)
+        .ilike("tipo_comprobante", "Nota de Crédito%")
+        .neq("estado", "anulada"),
+      supabase.from("compras").select("total")
+        .gte("fecha", start).lt("fecha", end),
+    ]);
     // Exclude pending web orders from totals
     const vList = (ventas || []).filter((v: any) => !(v.estado === "pendiente" && v.tipo_comprobante === "Pedido Web"));
     setTotalVentas(vList.reduce((a: number, v: any) => a + v.total, 0));
     setCantVentas(vList.length);
-
-    // Notas de credito
-    const { data: ncs } = await supabase.from("ventas").select("total")
-      .gte("fecha", start).lt("fecha", end)
-      .ilike("tipo_comprobante", "Nota de Crédito%")
-      .neq("estado", "anulada");
     setTotalNC((ncs || []).reduce((a: number, n: any) => a + n.total, 0));
-
-    // Compras
-    const { data: compras } = await supabase.from("compras").select("total")
-      .gte("fecha", start).lt("fecha", end);
     setTotalCompras((compras || []).reduce((a: number, c: any) => a + c.total, 0));
 
     // Helper: get units per presentation with fallback
@@ -82,26 +84,34 @@ export default function ResumenMensualPage() {
       return u;
     };
 
-    // Ganancia from venta_items
+    // Ganancia + Top productos — una sola query de venta_items (antes eran 2)
     if (vList.length > 0) {
       const ids = vList.map((v: any) => v.id);
       const { data: items } = await supabase.from("venta_items")
-        .select("cantidad, precio_unitario, descuento, costo_unitario")
+        .select("descripcion, cantidad, subtotal, precio_unitario, descuento, costo_unitario")
         .in("venta_id", ids);
 
       let sinCosto = 0;
+      const prodMap: Record<string, { nombre: string; cantidad: number; total: number }> = {};
       const g = (items || []).reduce((a: number, item: any) => {
         const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
         if (!costoReal) sinCosto++;
         const descPct = Number(item.descuento) || 0;
         const precioVenta = item.precio_unitario * (1 - descPct / 100);
+        // Agrupar para top productos
+        const key = item.descripcion;
+        if (!prodMap[key]) prodMap[key] = { nombre: key, cantidad: 0, total: 0 };
+        prodMap[key].cantidad += Number(item.cantidad);
+        prodMap[key].total += Number(item.subtotal);
         return a + (precioVenta - costoReal) * item.cantidad;
       }, 0);
       setGanancia(g);
       setItemsSinCosto(sinCosto);
+      setTopProductos(Object.values(prodMap).sort((a, b) => b.total - a.total).slice(0, 10));
     } else {
       setGanancia(0);
       setItemsSinCosto(0);
+      setTopProductos([]);
     }
 
     // Top 10 clientes (exclude anonymous/consumidor final sales where cliente_id is null)
@@ -114,24 +124,6 @@ export default function ResumenMensualPage() {
       clientMap[name].qty += 1;
     });
     setTopClientes(Object.values(clientMap).sort((a, b) => b.total - a.total).slice(0, 10));
-
-    // Top 10 productos
-    if (vList.length > 0) {
-      const ids = vList.map((v: any) => v.id);
-      const { data: allItems } = await supabase.from("venta_items")
-        .select("descripcion, cantidad, subtotal")
-        .in("venta_id", ids);
-      const prodMap: Record<string, { nombre: string; cantidad: number; total: number }> = {};
-      (allItems || []).forEach((item: any) => {
-        const key = item.descripcion;
-        if (!prodMap[key]) prodMap[key] = { nombre: key, cantidad: 0, total: 0 };
-        prodMap[key].cantidad += Number(item.cantidad);
-        prodMap[key].total += Number(item.subtotal);
-      });
-      setTopProductos(Object.values(prodMap).sort((a, b) => b.total - a.total).slice(0, 10));
-    } else {
-      setTopProductos([]);
-    }
 
     // Ventas por forma de pago — desglosar Mixto en sus componentes
     const mixtoVentaIds = vList.filter((v: any) => v.forma_pago === "Mixto").map((v: any) => v.id);

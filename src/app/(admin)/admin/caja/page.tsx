@@ -1568,10 +1568,14 @@ export default function CajaPage() {
             {(ventasDesglose["Cuenta Corriente"]?.total || 0) > 0 && (() => {
               const deudoresHoy: { nombre: string; monto: number }[] = [];
               const ccByCliente: Record<string, number> = {};
+              // Re-key NC haber entries to the original venta so the client
+              // name resolves correctly instead of "Sin cliente".
+              const ncIdToOrigenLocal: Record<string, string> = {};
+              for (const nc of (ncEntries || [])) {
+                if (nc.id && nc.remito_origen_id) ncIdToOrigenLocal[nc.id] = nc.remito_origen_id;
+              }
               for (const e of (ccEntries || [])) {
-                // Re-key NC haber entries to the original venta so the client
-                // name resolves correctly instead of "Sin cliente".
-                const effectiveId = ncIdToOrigen[e.venta_id] || e.venta_id;
+                const effectiveId = ncIdToOrigenLocal[e.venta_id] || e.venta_id;
                 const venta = ventas.find(v => v.id === effectiveId);
                 const nombre = (venta as any)?.clientes?.nombre || "Sin cliente";
                 ccByCliente[nombre] = (ccByCliente[nombre] || 0) + (e.debe || 0) - ((e as any).haber || 0);

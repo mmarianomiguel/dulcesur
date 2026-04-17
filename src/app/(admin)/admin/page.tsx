@@ -410,11 +410,17 @@ export default function DashboardPage() {
   };
 
   const fixAllSaldos = async () => {
-    for (const c of saldoMismatches) {
-      await supabase.from("clientes").update({ saldo: c.calculado }).eq("id", c.id);
-    }
+    // Paralelizar en vez de serial: supabase no permite UPDATE múltiple con
+    // valores distintos en una sola query, pero sí podemos lanzar todas las
+    // requests en paralelo.
+    const count = saldoMismatches.length;
+    await Promise.all(
+      saldoMismatches.map((c) =>
+        supabase.from("clientes").update({ saldo: c.calculado }).eq("id", c.id)
+      )
+    );
     setSaldoMismatches([]);
-    showAdminToast(`${saldoMismatches.length} saldos corregidos`, "success");
+    showAdminToast(`${count} saldos corregidos`, "success");
   };
 
   const fetchCharts = useCallback(async (start: string, end: string) => {
@@ -797,8 +803,10 @@ export default function DashboardPage() {
       await supabase.from("ventas").update(ventaUpdate).eq("id", venta.id);
     }
 
-    await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id);
-    await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero);
+    await Promise.all([
+      supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", venta.id),
+      supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", venta.numero),
+    ]);
     setPedidosOnline((prev) => prev.filter((p) => p.id !== venta.id));
     } catch (err) {
       console.error("Error confirming delivery:", err);
@@ -810,8 +818,10 @@ export default function DashboardPage() {
 
   const handleMarkArmado = async (venta: PedidoVenta) => {
     setActionLoading(venta.id);
-    const { error: e1 } = await supabase.from("pedidos_tienda").update({ estado: "armado" }).eq("numero", venta.numero);
-    const { error: e2 } = await supabase.from("ventas").update({ estado: "armado" }).eq("id", venta.id);
+    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+      supabase.from("pedidos_tienda").update({ estado: "armado" }).eq("numero", venta.numero),
+      supabase.from("ventas").update({ estado: "armado" }).eq("id", venta.id),
+    ]);
     if (e1 || e2) {
       showAdminToast("Error al marcar como armado", "error");
     } else {
@@ -849,12 +859,16 @@ export default function DashboardPage() {
       for (const p of prods || []) {
         if ((p as any).es_combo) comboIds.add(p.id);
       }
-      for (const comboId of comboIds) {
-        const { data: ciData } = await supabase
+      if (comboIds.size > 0) {
+        // Batch: one query with .in(...) instead of N serial queries
+        const { data: allCiData } = await supabase
           .from("combo_items")
-          .select("cantidad, productos!combo_items_producto_id_fkey(nombre)")
-          .eq("combo_id", comboId);
-        comboItemsMap[comboId] = (ciData || []).map((ci: any) => ({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad }));
+          .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+          .in("combo_id", [...comboIds]);
+        for (const ci of (allCiData || []) as any[]) {
+          if (!comboItemsMap[ci.combo_id]) comboItemsMap[ci.combo_id] = [];
+          comboItemsMap[ci.combo_id].push({ nombre: ci.productos?.nombre || "", cantidad: ci.cantidad });
+        }
       }
     }
 
