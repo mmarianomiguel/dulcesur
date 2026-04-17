@@ -117,6 +117,12 @@ export default function NotaCreditoPage() {
   const [origenId, setOrigenId] = useState("");
   const [clientVentas, setClientVentas] = useState<Venta[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
+  const [origenAvailable, setOrigenAvailable] = useState<LineItem[]>([]);
+  const [origenPickerOpen, setOrigenPickerOpen] = useState(false);
+  const [origenPickerSearch, setOrigenPickerSearch] = useState("");
+  const [origenPickerQtys, setOrigenPickerQtys] = useState<Record<string, number>>({});
+  const [origenSelectOpen, setOrigenSelectOpen] = useState(false);
+  const [origenSelectSearch, setOrigenSelectSearch] = useState("");
   const [observacion, setObservacion] = useState("");
   const [metodoDev, setMetodoDev] = useState<MetodoDev>("Efectivo");
   const [saving, setSaving] = useState(false);
@@ -245,18 +251,19 @@ export default function NotaCreditoPage() {
           producto_id: item.producto_id,
           code: item.codigo || "-",
           description: item.descripcion,
-          qty: 0,
+          qty: 1,
           maxQty: remaining,
           unit: item.unidad_medida || "UN",
           price: item.precio_unitario,
-          subtotal: 0,
+          subtotal: item.precio_unitario,
           presentacion: item.presentacion || "Unidad",
           unidades_por_presentacion: item.unidades_por_presentacion || 1,
           alreadyReturned: false,
           costo_unitario: (item as any).costo_unitario || 0,
         });
       }
-      setItems(loaded);
+      setOrigenAvailable(loaded);
+      setItems([]);
 
       // Suggest payment method from origin sale
       const origenVenta = clientVentas.find((v) => v.id === origenId);
@@ -285,9 +292,15 @@ export default function NotaCreditoPage() {
 
   const selectedClient = clients.find((c) => c.id === clientId);
 
-  const filteredClients = clients.filter(
-    (c) => norm(c.nombre).includes(norm(clientSearch))
-  );
+  const filteredClients = clients.filter((c) => {
+    const q = norm(clientSearch);
+    if (!q) return true;
+    return (
+      norm(c.nombre).includes(q) ||
+      norm(c.cuit || "").includes(q) ||
+      norm(c.telefono || "").includes(q)
+    );
+  });
 
   const filteredProducts = products.filter(
     (p) =>
@@ -764,7 +777,7 @@ export default function NotaCreditoPage() {
                           {selectedClient ? selectedClient.nombre : "Buscar cliente..."}
                         </Button>
                         {clientId && (
-                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setClientId(""); setClientSearch(""); setOrigenId(""); setItems([]); }}>
+                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setClientId(""); setClientSearch(""); setOrigenId(""); setItems([]); setOrigenAvailable([]); }}>
                             <X className="w-4 h-4" />
                           </Button>
                         )}
@@ -774,36 +787,104 @@ export default function NotaCreditoPage() {
                           <DialogHeader><DialogTitle>Seleccionar Cliente</DialogTitle></DialogHeader>
                           <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input placeholder="Buscar por nombre..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} className="pl-9" autoFocus />
+                            <Input placeholder="Buscar por nombre, CUIT o teléfono..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} className="pl-9" autoFocus />
                           </div>
-                          <div className="max-h-[300px] overflow-y-auto space-y-0.5">
+                          <div className="max-h-[400px] overflow-y-auto space-y-1">
                             {filteredClients.slice(0, 30).map((c) => (
-                              <button key={c.id} className="w-full text-left px-3 py-2.5 hover:bg-muted rounded-md text-sm transition-colors"
+                              <button key={c.id} className="w-full text-left px-3 py-2.5 hover:bg-muted rounded-md border transition-colors"
                                 onClick={() => { setClientId(c.id); setClientSearch(""); setClientOpen(false); }}>
-                                <span className="font-medium">{c.nombre}</span>
-                                {c.telefono && <span className="text-xs text-muted-foreground ml-2">{c.telefono}</span>}
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-sm truncate">{c.nombre}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+                                      {c.telefono && <span>{c.telefono}</span>}
+                                      {c.cuit && <><span>·</span><span>CUIT: {c.cuit}</span></>}
+                                    </div>
+                                  </div>
+                                  {c.saldo !== undefined && c.saldo !== 0 && (
+                                    <span className={`text-xs font-semibold shrink-0 ${c.saldo > 0 ? "text-red-500" : "text-emerald-600"}`}>
+                                      {formatCurrency(c.saldo)}
+                                    </span>
+                                  )}
+                                </div>
                               </button>
                             ))}
-                            {filteredClients.length === 0 && <p className="px-3 py-4 text-sm text-muted-foreground text-center">Sin resultados</p>}
+                            {filteredClients.length === 0 && <p className="px-3 py-6 text-sm text-muted-foreground text-center">Sin resultados</p>}
                           </div>
                         </DialogContent>
                       </Dialog>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">Comprobante de origen (opcional)</Label>
-                      <Select value={origenId || "none"} onValueChange={(v) => { setOrigenId(v === "none" ? "" : (v || "")); setItems([]); }}>
-                        <SelectTrigger className="w-full truncate">
-                          {origenId && origenId !== "none" ? (() => { const v = clientVentas.find((cv) => cv.id === origenId); return v ? `${v.tipo_comprobante} ${v.numero} — ${formatCurrency(v.total)}` : "Sin referencia"; })() : "Sin referencia"}
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sin referencia</SelectItem>
-                          {clientVentas.map((v) => (
-                            <SelectItem key={v.id} value={v.id}>
-                              {v.tipo_comprobante} {v.numero} — {formatCurrency(v.total)} ({v.forma_pago})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 justify-start text-sm font-normal truncate"
+                          onClick={() => clientId && setOrigenSelectOpen(true)}
+                          disabled={!clientId}
+                        >
+                          <Search className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
+                          {origenId && origenId !== "none" ? (() => {
+                            const v = clientVentas.find((cv) => cv.id === origenId);
+                            if (!v) return "Sin referencia";
+                            const fecha = v.fecha ? new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
+                            return <span className="truncate">{fecha && `${fecha} · `}{v.tipo_comprobante} {v.numero} — {formatCurrency(v.total)}</span>;
+                          })() : (clientId ? "Sin referencia" : "Primero elegí un cliente")}
+                        </Button>
+                        {origenId && (
+                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setOrigenId(""); setItems([]); setOrigenAvailable([]); }}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                      <Dialog open={origenSelectOpen} onOpenChange={(o) => { setOrigenSelectOpen(o); if (!o) setOrigenSelectSearch(""); }}>
+                        <DialogContent className="max-w-xl">
+                          <DialogHeader><DialogTitle>Seleccionar comprobante de origen</DialogTitle></DialogHeader>
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input placeholder="Buscar por número, tipo o forma de pago..." value={origenSelectSearch} onChange={(e) => setOrigenSelectSearch(e.target.value)} className="pl-9" autoFocus />
+                          </div>
+                          <div className="max-h-[400px] overflow-y-auto space-y-1">
+                            <button
+                              className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm italic text-muted-foreground border border-dashed"
+                              onClick={() => { setOrigenId(""); setItems([]); setOrigenAvailable([]); setOrigenSelectOpen(false); }}
+                            >
+                              Sin referencia (NC manual)
+                            </button>
+                            {(() => {
+                              const q = norm(origenSelectSearch);
+                              const list = q ? clientVentas.filter((v) =>
+                                norm(v.numero || "").includes(q) ||
+                                norm(v.tipo_comprobante || "").includes(q) ||
+                                norm(v.forma_pago || "").includes(q)
+                              ) : clientVentas;
+                              if (list.length === 0) return <p className="px-3 py-6 text-sm text-muted-foreground text-center">Sin resultados</p>;
+                              return list.map((v) => {
+                                const fecha = v.fecha ? new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+                                return (
+                                  <button
+                                    key={v.id}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-muted rounded-md border transition-colors"
+                                    onClick={() => { setOrigenId(v.id); setItems([]); setOrigenAvailable([]); setOrigenSelectOpen(false); }}
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="font-medium text-sm truncate">{v.tipo_comprobante} {v.numero}</div>
+                                        <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+                                          <span>{fecha}</span>
+                                          <span>·</span>
+                                          <span>{v.forma_pago}</span>
+                                        </div>
+                                      </div>
+                                      <span className="font-semibold text-sm shrink-0">{formatCurrency(v.total)}</span>
+                                    </div>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </div>
                   {selectedClient && (
@@ -824,10 +905,15 @@ export default function NotaCreditoPage() {
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">Items a devolver</CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button variant="outline" size="sm" onClick={() => setFreeText(true)}>
                         <FileText className="w-4 h-4 mr-2" />Texto libre
                       </Button>
+                      {origenId && origenId !== "none" && origenAvailable.length > 0 && (
+                        <Button variant="outline" size="sm" onClick={() => setOrigenPickerOpen(true)}>
+                          <Plus className="w-4 h-4 mr-2" />Del comprobante ({origenAvailable.length})
+                        </Button>
+                      )}
                       {(!origenId || origenId === "none") && (
                         <Button size="sm" onClick={() => setSearchOpen(true)}>
                           <Plus className="w-4 h-4 mr-2" />Agregar producto
@@ -1118,6 +1204,100 @@ export default function NotaCreditoPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Origen items picker */}
+      <Dialog open={origenPickerOpen} onOpenChange={(o) => { setOrigenPickerOpen(o); if (!o) { setOrigenPickerSearch(""); setOrigenPickerQtys({}); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Agregar items del comprobante</DialogTitle></DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Buscar por nombre o código..." value={origenPickerSearch} onChange={(e) => setOrigenPickerSearch(e.target.value)} className="pl-9" autoFocus />
+          </div>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {origenAvailable.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Todos los items ya fueron agregados</p>
+            ) : (() => {
+              const q = norm(origenPickerSearch);
+              const filtered = q ? origenAvailable.filter((it) => norm(it.description).includes(q) || norm(it.code || "").includes(q)) : origenAvailable;
+              if (filtered.length === 0) return <p className="text-sm text-muted-foreground text-center py-8">Sin resultados</p>;
+              return filtered.map((it) => {
+                const currentQty = origenPickerQtys[it.id] ?? 1;
+                return (
+                  <div key={it.id} className="w-full rounded-xl border p-3 flex items-center gap-3 hover:border-primary/30">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{it.description}</div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                        <span className="font-mono">{it.code}</span>
+                        <span>·</span>
+                        <span>Máx: <strong>{it.maxQty}</strong></span>
+                        <span>·</span>
+                        <span className="font-semibold text-foreground">{formatCurrency(it.price)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.max(1, (prev[it.id] ?? 1) - 1) }))}
+                      >−</Button>
+                      <Input
+                        type="number"
+                        value={currentQty}
+                        onChange={(e) => {
+                          const v = Number(e.target.value) || 1;
+                          setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.min(Math.max(1, v), it.maxQty) }));
+                        }}
+                        className="w-14 h-8 text-center"
+                        min={1}
+                        max={it.maxQty}
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.min(it.maxQty, (prev[it.id] ?? 1) + 1) }))}
+                      >+</Button>
+                      <Button
+                        size="sm"
+                        className="h-8 ml-1"
+                        onClick={() => {
+                          const qty = Math.min(Math.max(1, currentQty), it.maxQty);
+                          setItems((prev) => [...prev, { ...it, id: crypto.randomUUID(), qty, subtotal: it.price * qty }]);
+                          setOrigenAvailable((prev) => prev.filter((x) => x.id !== it.id));
+                          setOrigenPickerQtys((prev) => { const { [it.id]: _, ...rest } = prev; return rest; });
+                        }}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <div className="flex justify-between gap-2 pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const newItems = origenAvailable.map((it) => {
+                  const qty = Math.min(Math.max(1, origenPickerQtys[it.id] ?? 1), it.maxQty);
+                  return { ...it, id: crypto.randomUUID(), qty, subtotal: it.price * qty };
+                });
+                setItems((prev) => [...prev, ...newItems]);
+                setOrigenAvailable([]);
+                setOrigenPickerQtys({});
+                setOrigenPickerOpen(false);
+              }}
+              disabled={origenAvailable.length === 0}
+            >
+              Agregar todos
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setOrigenPickerOpen(false)}>Cerrar</Button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -332,11 +332,10 @@ export default function ListadoVentasPage() {
         query = query.eq("forma_pago", filterPayment);
       }
     }
-    if (filterBanco !== "all") {
-      // Match either exact alias ("dulcesur10") or the "Nombre — alias" format
-      // ("Banco Credicoop — pameli.bz") saved by the inline cobro editor.
-      query = query.or(`cuenta_transferencia_alias.eq.${filterBanco},cuenta_transferencia_alias.ilike.%${filterBanco}%`);
-    }
+    // Note: filterBanco is NOT applied server-side because chaining multiple
+    // .or() calls in supabase-js drops all but the last (one "or=" URL param
+    // wins). The banco match happens client-side via .includes() so both
+    // "alias" and "Nombre — alias" formats are supported.
 
     if (quickPeriod === "today") {
       query = query.eq("fecha", todayARG());
@@ -2528,6 +2527,9 @@ export default function ListadoVentasPage() {
         forma_pago: v.forma_pago,
         cuenta_transferencia_alias: (v as any).cuenta_transferencia_alias || null,
         cuenta_transferencia_id: (v as any).cuenta_transferencia_id || null,
+        monto_efectivo: (v as any).monto_efectivo || 0,
+        monto_transferencia: (v as any).monto_transferencia || 0,
+        monto_pagado: v.monto_pagado || 0,
       } as Pedido;
     });
 
@@ -2586,10 +2588,15 @@ export default function ListadoVentasPage() {
         const isMixto = pago === "mixto";
         const montoEf = (o as any).monto_efectivo || 0;
         const montoTr = (o as any).monto_transferencia || 0;
+        const montoPagado = (o as any).monto_pagado ?? (o as any)._monto_pagado ?? 0;
+        const totalOrden = o.total || 0;
+        // For CC: a Mixto counts only if there's an unpaid residue (went to CC)
+        const mixtoTuvoCC = isMixto && montoPagado < totalOrden * 0.99;
         let matches = false;
         if (target === "transferencia") matches = pago === "transferencia" || (isMixto && montoTr > 0);
         else if (target === "efectivo") matches = pago === "efectivo" || (isMixto && montoEf > 0);
-        else if (target === "cuenta corriente") matches = pago === "cuenta corriente" || isMixto;
+        else if (target === "cuenta corriente") matches = pago === "cuenta corriente" || mixtoTuvoCC;
+        else if (target === "mixto") matches = isMixto;
         else matches = pago === target;
         if (!matches) return false;
       }
