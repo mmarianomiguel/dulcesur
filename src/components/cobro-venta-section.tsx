@@ -180,6 +180,9 @@ export function CobroVentaSection({
         .eq("cliente_id", clienteId)
         .neq("estado", "anulada")
         .neq("id", ventaId)
+        // Excluir Notas de Crédito: no son deudas pendientes, son créditos al cliente.
+        // Sus montos ya se restan de la venta original via ncMap más abajo.
+        .not("tipo_comprobante", "ilike", "Nota de Crédito%")
         .order("fecha", { ascending: true })
         .order("created_at", { ascending: true });
 
