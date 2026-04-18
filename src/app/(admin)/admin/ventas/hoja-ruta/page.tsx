@@ -2,7 +2,7 @@
 
 import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ import {
 import Link from "next/link";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { CobroVentaSection } from "@/components/cobro-venta-section";
-import type { CobroVentaResult } from "@/components/cobro-venta-section";
+import type { CobroVentaResult, CobroPreview } from "@/components/cobro-venta-section";
 import {
   Truck,
   Package,
@@ -1011,6 +1011,7 @@ export default function HojaDeRutaPage() {
   // Payment dialog state
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [payVenta, setPayVenta] = useState<VentaRow | null>(null);
+  const [payPreview, setPayPreview] = useState<CobroPreview | null>(null);
   const [payDefaultEfectivo, setPayDefaultEfectivo] = useState<number | undefined>();
   const [payDefaultTransferencia, setPayDefaultTransferencia] = useState<number | undefined>();
   const [payMetodo, setPayMetodo] = useState<"Efectivo" | "Transferencia" | "Mixto" | "Cuenta Corriente">("Efectivo");
@@ -1020,6 +1021,12 @@ export default function HojaDeRutaPage() {
   const [payCuentaBancariaId, setPayCuentaBancariaId] = useState("");
   const [paySaving, setPaySaving] = useState(false);
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([]);
+  // Memoizado: evita crear nuevo array en cada render (dispararía el useEffect de CobroVentaSection
+  // y resetearía el método que el repartidor eligió manualmente).
+  const cuentasBancariasMapped = useMemo(
+    () => cuentasBancarias.map(c => ({ id: c.id, nombre: c.nombre, alias: (c as any).alias || "" })),
+    [cuentasBancarias]
+  );
   const [porcentajeTransferencia, setPorcentajeTransferencia] = useState(2);
 
   // Load bank accounts and transfer surcharge from DB
@@ -2405,7 +2412,7 @@ export default function HojaDeRutaPage() {
       </Dialog>
 
       {/* Payment Dialog */}
-      <Dialog open={payDialogOpen} onOpenChange={(v) => { if (!v) setPayDialogOpen(false); }}>
+      <Dialog open={payDialogOpen} onOpenChange={(v) => { if (!v) { setPayDialogOpen(false); setPayPreview(null); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader className="pr-8">
             <DialogTitle>Registrar Pago</DialogTitle>
@@ -2423,58 +2430,64 @@ export default function HojaDeRutaPage() {
             // Sum of v.total = what client actually owes (NC already applied)
             const totalNeto = allVentas.reduce((s, vt) => s + vt.total, 0);
 
-            // Calcular subtotal SIN recargo para pasarle al CobroVentaSection.
-            // vt.total puede incluir el recargo de transferencia (guardado en DB),
-            // así que hay que revertirlo para que el componente no lo duplique.
-            // Si hay items disponibles, usar la suma de sus subtotales (más preciso).
-            // Si no, revertir matemáticamente dividiendo por (1 + recargo/100).
-            const subtotalSinRecargo = allVentas.reduce((s, vt) => {
-              // Preferir vt.subtotal (campo guardado en DB, siempre correcto)
-              if ((vt as any).subtotal > 0) {
-                return s + (vt as any).subtotal;
-              }
-              // Fallback: sumar subtotales de items si están cargados
+            // Base PRE-surcharge de transferencia (misma fórmula que listado/venta-detail-dialog).
+            // Se reconstruye desde subtotal + descuento + recargo genérico + envío - NC.
+            // CobroVentaSection aplica el recargo de transferencia internamente según el método elegido.
+            const rawSubtotalOf = (vt: VentaRow) => {
+              if (vt.subtotal > 0) return vt.subtotal;
               const items = vt.venta_items;
-              if (items && items.length > 0) {
-                return s + items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
-              }
-              // Último fallback: revertir recargo matemáticamente
-              const fp = (vt.forma_pago || "").toLowerCase();
-              const tieneRecargo = fp === "transferencia" && porcentajeTransferencia > 0;
-              return s + (tieneRecargo
-                ? Math.round((vt.total / (1 + porcentajeTransferencia / 100)) * 100) / 100
-                : vt.total);
-            }, 0);
+              return items && items.length > 0 ? items.reduce((a, it) => a + (it.subtotal || 0), 0) : 0;
+            };
+            const basePerVenta = (vt: VentaRow) => {
+              const rawSubtotal = rawSubtotalOf(vt);
+              const descPct = vt.descuento_porcentaje || 0;
+              const recPct = vt.recargo_porcentaje || 0;
+              const baseConDescRecargo = (recPct > 0 || descPct > 0)
+                ? Math.round(rawSubtotal * (1 - descPct / 100) * (1 + recPct / 100))
+                : rawSubtotal;
+              // Envío ya está incluido dentro de vt.subtotal para ventas de pedidos_tienda
+              const nc = ncPorVenta[vt.id] || 0;
+              return Math.max(0, baseConDescRecargo - nc);
+            };
+            const basePreSurcharge = allVentas.reduce((s, vt) => s + basePerVenta(vt), 0);
+            const subtotalSinRecargo = allVentas.reduce((s, vt) => s + rawSubtotalOf(vt), 0);
 
-            // preDebeGrupo = what client owes (v.total sum, already net of NC) minus real payments
-            const preDebeGrupo = Math.max(0, totalNeto - totalPagadoReal);
+            // preDebeGrupo = base pre-surcharge menos pagos reales. El surcharge lo suma CobroVentaSection si corresponde.
+            const preDebeGrupo = Math.max(0, basePreSurcharge - totalPagadoReal);
             return (
               <div className="space-y-4">
-                {/* Summary header */}
+                {/* Summary header — dinámico según método/montos elegidos en CobroVentaSection */}
                 <div className="text-sm space-y-1 bg-gray-50 rounded-lg p-3">
                   <div className="flex justify-between"><span className="text-gray-500">Cliente</span><span className="font-medium">{payVenta.clientes?.nombre || "—"}</span></div>
                   {allVentas.length === 1 ? (
-                    <>
-                      <div className="flex justify-between"><span className="text-gray-500">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-bold">{formatCurrency(allVentas[0].total + (ncPorVenta[allVentas[0].id] || 0))}</span></div>
-                      {(ncPorVenta[allVentas[0].id] || 0) > 0 && (
-                        <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(ncPorVenta[allVentas[0].id])}</span></div>
-                      )}
-                    </>
+                    <div className="flex justify-between"><span className="text-gray-500">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
                   ) : (
+                    allVentas.map((v) => (
+                      <div key={v.id} className="flex justify-between">
+                        <span className="text-gray-500">#{v.numero}</span>
+                        <span className="font-medium">{formatCurrency(basePerVenta(v) + (ncPorVenta[v.id] || 0))}</span>
+                      </div>
+                    ))
+                  )}
+                  {(allVentas.length === 1 && (ncPorVenta[allVentas[0].id] || 0) > 0) && (
+                    <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(ncPorVenta[allVentas[0].id])}</span></div>
+                  )}
+                  {allVentas.length > 1 && totalNCGrupo > 0 && (
+                    <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>
+                  )}
+                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Pedido (subtotal)</span><span className="font-medium">{formatCurrency(preDebeGrupo)}</span></div>
+                  {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-gray-500">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
+                  {payPreview && payPreview.metodo === "Mixto" && (
                     <>
-                      {allVentas.map((v) => (
-                        <div key={v.id} className="flex justify-between">
-                          <span className="text-gray-500">#{v.numero}</span>
-                          <span className="font-medium">{formatCurrency(v.total + (ncPorVenta[v.id] || 0))}</span>
-                        </div>
-                      ))}
-                      {totalNCGrupo > 0 && <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(totalNCGrupo)}</span></div>}
-                      <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500">Total combinado</span><span className="font-bold">{formatCurrency(totalNeto)}</span></div>
+                      {payPreview.efectivo > 0 && <div className="flex justify-between pl-2"><span className="text-gray-500">· Efectivo</span><span>{formatCurrency(payPreview.efectivo)}</span></div>}
+                      {payPreview.transferencia > 0 && <div className="flex justify-between pl-2"><span className="text-gray-500">· Transferencia</span><span>{formatCurrency(payPreview.transferencia)}</span></div>}
+                      {payPreview.cuentaCorriente > 0 && <div className="flex justify-between pl-2"><span className="text-gray-500">· Cta Cte</span><span>{formatCurrency(payPreview.cuentaCorriente)}</span></div>}
                     </>
                   )}
-                  {totalPagadoReal > 0 && <div className="flex justify-between"><span className="text-gray-500">Ya pagado</span><span className="text-emerald-600">{formatCurrency(totalPagadoReal)}</span></div>}
-                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-500 font-medium">Debe</span><span className="text-orange-600 font-bold">{formatCurrency(preDebeGrupo)}</span></div>
+                  {payPreview && payPreview.surcharge > 0 && (
+                    <div className="flex justify-between"><span className="text-violet-700">Recargo transferencia ({porcentajeTransferencia}%)</span><span className="text-violet-700 font-medium">+{formatCurrency(payPreview.surcharge)}</span></div>
+                  )}
+                  <div className="flex justify-between border-t pt-1 mt-1"><span className="text-gray-700 font-semibold">Total a cobrar</span><span className="text-orange-600 font-bold">{formatCurrency(payPreview ? payPreview.total : preDebeGrupo)}</span></div>
                 </div>
 
                 {/* CobroVentaSection — same as listado detail */}
@@ -2487,11 +2500,12 @@ export default function HojaDeRutaPage() {
                   subtotalItems={subtotalSinRecargo}
                   costoEnvio={0}
                   recargoTransferencia={porcentajeTransferencia}
-                  cuentasBancarias={cuentasBancarias.map(c => ({ id: c.id, nombre: c.nombre, alias: (c as any).alias || "" }))}
+                  cuentasBancarias={cuentasBancariasMapped}
                   defaultMetodo={payVenta.forma_pago}
                   defaultEfectivo={payDefaultEfectivo}
                   defaultTransferencia={payDefaultTransferencia}
                   defaultCuentaAlias={(payVenta as any).cuenta_transferencia_alias}
+                  onPreviewChange={setPayPreview}
                   onConfirmar={async (result: CobroVentaResult) => {
                     const hoy = getArgentinaToday();
                     const hora = nowTimeARG();
@@ -2524,21 +2538,25 @@ export default function HojaDeRutaPage() {
                     const realCashCollected = (result.efectivo || 0) + (result.transferencia || 0) + (result.surcharge || 0);
                     const totalCollected = realCashCollected;
                     let remaining = totalCollected;
-                    const perVenta: { venta: VentaRow; paid: number; debtLeft: number }[] = [];
+                    const perVenta: { venta: VentaRow; paid: number; debtLeft: number; newTotal: number }[] = [];
+                    // Deuda por venta = base pre-surcharge + porción proporcional del surcharge del método elegido ahora.
+                    // NO usamos v.total porque puede reflejar el surcharge del método ORIGINAL (guardado en creación).
+                    const totalBaseGrupo = allVentas.reduce((s, v) => s + basePerVenta(v), 0) || 1;
                     for (const v of allVentas) {
-                      // Use totalCollected as deuda cap when surcharge applies (so the surcharge fits)
                       const pagadoReal = Math.max(0, (pagadoPorVenta[v.id] || 0) - (ncPorVenta[v.id] || 0));
-                      const storedTotal = v.total - pagadoReal;
-                      const surchargeForVenta = result.surcharge > 0 && allVentas.length === 1
-                        ? (result.surcharge || 0) : 0;
-                      const deuda = Math.max(0, storedTotal + surchargeForVenta);
+                      const baseV = basePerVenta(v);
+                      const surchargeShare = allVentas.length === 1
+                        ? (result.surcharge || 0)
+                        : Math.round(((result.surcharge || 0) * baseV / totalBaseGrupo) * 100) / 100;
+                      const deudaTotal = baseV + surchargeShare;
+                      const deuda = Math.max(0, deudaTotal - pagadoReal);
                       const pays = Math.min(remaining, deuda);
-                      perVenta.push({ venta: v, paid: pays, debtLeft: deuda - pays });
+                      perVenta.push({ venta: v, paid: pays, debtLeft: deuda - pays, newTotal: deudaTotal });
                       remaining = Math.round((remaining - pays) * 100) / 100;
                     }
 
                     // Register caja entries per venta
-                    for (const { venta, paid } of perVenta) {
+                    for (const { venta, paid, newTotal } of perVenta) {
                       if (paid <= 0 && result.metodo !== "Cuenta Corriente") continue;
                       if (result.metodo === "Mixto") {
                         // Use original amounts (not proportional ratio) — cap at paid
@@ -2562,10 +2580,16 @@ export default function HojaDeRutaPage() {
                       // Update venta
                       // pagadoPorVenta includes NC as "payment" — use only real payments for monto_pagado
                       const realPagadoPrev = Math.max(0, (pagadoPorVenta[venta.id] || 0) - (ncPorVenta[venta.id] || 0));
-                      const ventaUpd: Record<string, any> = { forma_pago: result.metodo, monto_pagado: realPagadoPrev + paid };
+                      // Actualizar v.total al total realmente cobrado (base + surcharge del método elegido).
+                      // Si cambió el método respecto al original, el surcharge cambia y hay que reflejarlo
+                      // para mantener la invariante: v.total = monto_pagado (cuando se paga completo en caja)
+                      //                           o v.total = monto_pagado + debt-to-CC (cuando hay CC).
+                      const ventaUpd: Record<string, any> = {
+                        forma_pago: result.metodo,
+                        monto_pagado: realPagadoPrev + paid,
+                        total: realPagadoPrev + newTotal,
+                      };
                       if (cuentaNombre) ventaUpd.cuenta_transferencia_alias = cuentaNombre;
-                      // Do NOT override venta.total — it was set correctly at creation.
-                      // Overriding with result.monto (group total) corrupts individual venta totals.
                       await supabase.from("ventas").update(ventaUpd).eq("id", venta.id);
                     }
 

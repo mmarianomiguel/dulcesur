@@ -69,6 +69,10 @@ export interface CobroPreview {
   metodo: string;
   surcharge: number;
   total: number;
+  base: number;
+  efectivo: number;
+  transferencia: number;
+  cuentaCorriente: number;
 }
 
 interface Props {
@@ -269,8 +273,16 @@ export function CobroVentaSection({
 
   // Notify parent of preview changes (for reactive display)
   useEffect(() => {
-    onPreviewChange?.({ metodo, surcharge, total: montoVenta + surcharge });
-  }, [metodo, surcharge, montoVenta, onPreviewChange]);
+    onPreviewChange?.({
+      metodo,
+      surcharge,
+      total: montoVenta + surcharge,
+      base: montoVenta,
+      efectivo: effectiveEf,
+      transferencia: effectiveTr,
+      cuentaCorriente: effectiveCC,
+    });
+  }, [metodo, surcharge, montoVenta, effectiveEf, effectiveTr, effectiveCC, onPreviewChange]);
 
   // Show transfer UI?
   const showTransferUI = metodo === "Transferencia" || (metodo === "Mixto" && mixtoToggleTransferencia);
