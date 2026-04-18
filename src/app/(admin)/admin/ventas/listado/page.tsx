@@ -2979,7 +2979,7 @@ export default function ListadoVentasPage() {
                           </Badge>
                         )}
                         {order.metodo_entrega === "envio" && order.direccion_texto && (
-                          <span className="text-muted-foreground flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[300px]">{order.direccion_texto}</span></span>
+                          <span className="text-muted-foreground flex items-center gap-1 min-w-0"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[160px] sm:max-w-[300px]">{order.direccion_texto}</span></span>
                         )}
                         {pago && (
                           <Badge variant="outline" className="font-normal">

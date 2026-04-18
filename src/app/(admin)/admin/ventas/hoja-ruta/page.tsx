@@ -1483,7 +1483,7 @@ export default function HojaDeRutaPage() {
           </div>
 
           {/* Historial stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
@@ -1650,8 +1650,8 @@ export default function HojaDeRutaPage() {
                         </div>
                       )}
 
-                      {/* Day orders table */}
-                      <div className="overflow-x-auto">
+                      {/* Day orders table — desktop */}
+                      <div className="overflow-x-auto hidden lg:block">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b text-left text-muted-foreground">
@@ -1731,6 +1731,74 @@ export default function HojaDeRutaPage() {
                             })}
                           </tbody>
                         </table>
+                      </div>
+
+                      {/* Day orders — mobile cards */}
+                      <div className="lg:hidden space-y-2">
+                        {dayVentas.map((venta) => {
+                          const pagos = historialPagos[venta.id] || [];
+                          const cobradoReal = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                          const ncMonto = pagos.filter(p => p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);
+                          const debe = venta.total - cobradoReal;
+                          const firstPago = pagos.find(p => !p.metodo.includes("Nota de Cr") && (p as any).fecha_hora);
+                          const horaStr = firstPago && (firstPago as any).fecha_hora
+                            ? (() => { const d = new Date((firstPago as any).fecha_hora); return isNaN(d.getTime()) ? "" : d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" }); })()
+                            : "";
+                          return (
+                            <div key={venta.id} className="rounded-lg border p-3 bg-card">
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-xs font-semibold">{venta.numero}</span>
+                                    <Badge variant={venta.metodo_entrega === "envio" ? "default" : "secondary"} className={`text-[10px] ${venta.metodo_entrega === "envio" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : "bg-muted text-muted-foreground hover:bg-muted"}`}>
+                                      {venta.metodo_entrega === "envio" ? "Envio" : "Retiro"}
+                                    </Badge>
+                                    {horaStr && <span className="text-[10px] text-muted-foreground">{horaStr}</span>}
+                                  </div>
+                                  <p className="text-sm font-medium mt-0.5 truncate">{venta.clientes?.nombre ?? "Sin cliente"}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => handleViewDetail(venta)} title="Ver detalle">
+                                  <Eye className="w-4 h-4 text-muted-foreground" />
+                                </Button>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground text-xs">Total</span>
+                                <span className="font-semibold">{formatCurrency(venta.total)}</span>
+                              </div>
+                              {cobradoReal > 0 && (
+                                <div className="flex items-center justify-between text-xs mt-0.5">
+                                  <span className="text-muted-foreground">Cobrado</span>
+                                  <span className={debe > 0 ? "text-orange-600 font-medium" : "text-green-600 font-medium"}>{formatCurrency(cobradoReal)}</span>
+                                </div>
+                              )}
+                              {debe > 0 && (
+                                <div className="flex items-center justify-between text-xs mt-0.5">
+                                  <span className="text-muted-foreground">Debe</span>
+                                  <span className="text-orange-500 font-medium">{formatCurrency(debe)}</span>
+                                </div>
+                              )}
+                              {ncMonto > 0 && (
+                                <div className="flex items-center justify-between text-xs mt-0.5">
+                                  <span className="text-muted-foreground">NC</span>
+                                  <span className="text-amber-600">−{formatCurrency(ncMonto)}</span>
+                                </div>
+                              )}
+                              {pagos.filter(p => !p.metodo.includes("Nota de Cr")).length > 0 && (
+                                <div className="mt-2 pt-2 border-t space-y-0.5">
+                                  {pagos.filter(p => !p.metodo.includes("Nota de Cr")).map((p, pi) => (
+                                    <div key={pi} className="flex items-center justify-between text-[11px]">
+                                      <span className="text-muted-foreground truncate">
+                                        {p.metodo}
+                                        {(p as any).cuenta_bancaria && <span className="text-blue-600 ml-1">→ {(p as any).cuenta_bancaria}</span>}
+                                      </span>
+                                      <span className="font-medium ml-2 shrink-0">{formatCurrency(p.monto)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </CardContent>
                   </Card>
