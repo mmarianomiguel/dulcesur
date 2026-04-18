@@ -2148,10 +2148,8 @@ export default function ProductosPage() {
           </Button>
           {/* Mobile: compact menu for import/export */}
           <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Button variant="outline" size="sm" className="sm:hidden">
-                <MoreHorizontal className="w-4 h-4" />
-              </Button>
+            <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="sm:hidden" />}>
+              <MoreHorizontal className="w-4 h-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleExport}>
@@ -2521,13 +2519,11 @@ export default function ProductosPage() {
                 }).length;
                 return (
                   <DropdownMenu>
-                    <DropdownMenuTrigger>
-                      <Button variant="outline" size="sm" className="gap-1.5">
-                        <Store className="w-4 h-4" />
-                        <span className="hidden sm:inline">Tienda online</span>
-                        <span className="sm:hidden">Tienda</span>
-                        {totalOcultos > 0 && <Badge variant="secondary" className="text-[10px] ml-1">{totalOcultos}</Badge>}
-                      </Button>
+                    <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1.5" />}>
+                      <Store className="w-4 h-4" />
+                      <span className="hidden sm:inline">Tienda online</span>
+                      <span className="sm:hidden">Tienda</span>
+                      {totalOcultos > 0 && <Badge variant="secondary" className="text-[10px] ml-1">{totalOcultos}</Badge>}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-72">
                       <div className="px-3 py-2 border-b">
@@ -3134,10 +3130,8 @@ export default function ProductosPage() {
                       )}
                       <td className="py-3 px-4 text-right">
                         <DropdownMenu>
-                          <DropdownMenuTrigger>
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
+                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" />}>
+                            <MoreHorizontal className="w-4 h-4" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => openEdit(product)}>
