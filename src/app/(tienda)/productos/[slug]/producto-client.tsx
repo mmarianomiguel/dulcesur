@@ -972,7 +972,7 @@ export default function ProductoClient({
                       {/* Qty + Add */}
                       {(() => {
                         const selPres = pres && pres[presIdx];
-                        const unitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
+                        const unitsPerPres = selPres ? Number(selPres.cantidad) || 1 : 1;
                         // Use reactive state for total units in cart (updates on cart-updated event)
                         const totalUnitsInCart = cartUnitsByProduct[rel.id] || 0;
                         const availableUnits = Math.max(0, rel.stock - totalUnitsInCart);
@@ -1001,7 +1001,7 @@ export default function ProductoClient({
                               onClick={() => {
                                 if (outOfStock) return;
                                 const finalPrice = relDiscount > 0 ? relDiscountedPrice : price;
-                                const relUnitsPerPres = selPres && selPres.cantidad > 1 ? selPres.cantidad : 1;
+                                const relUnitsPerPres = selPres ? Number(selPres.cantidad) || 1 : 1;
                                 addToCart(rel, finalPrice, getRelLabel(rel), Math.min(qty, maxQty), relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined, relUnitsPerPres, rel.stock);
                                 setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
                               }}

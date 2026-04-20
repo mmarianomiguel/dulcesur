@@ -810,8 +810,9 @@ export default function CheckoutPage() {
       // Insert venta items
       if (venta) {
         const ventaItemRows = items.map((item) => {
-          const isMedio = item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
-          const presUnitsVal = item.unidades_por_presentacion || (isMedio ? 0.5 : 1);
+          const isMedio = item.id.toLowerCase().includes("medio") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+          // Force 0.5 for "medio" presentations even if cart stored a stale value
+          const presUnitsVal = isMedio ? 0.5 : (item.unidades_por_presentacion || 1);
           const prodId = item.id.split("_")[0];
           // Frozen cost: presentation-specific > base cost × units (combos already have summed cost in costoMap)
           const isCombo = (stockData || []).some((p: any) => p.id === prodId && p.es_combo);
@@ -861,7 +862,8 @@ export default function CheckoutPage() {
         const stockItems: { producto_id: string; cantidad: number; descripcion: string }[] = [];
         for (const item of items) {
           const prodId = item.id.split("_")[0];
-          const presUnits = item.unidades_por_presentacion || 1;
+          const isMedio = item.id.toLowerCase().includes("medio") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"));
+          const presUnits = isMedio ? 0.5 : (item.unidades_por_presentacion || 1);
           const comboComponents = comboComponentsMap[prodId];
           if (comboComponents && comboComponents.length > 0) {
             // Combo: decrement each component
