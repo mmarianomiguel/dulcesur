@@ -3658,29 +3658,41 @@ export default function ListadoVentasPage() {
                         // Compute pre-surcharge base from items (not stored total which may include surcharge)
                         const rawBase = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad * (1 - (i.descuento || 0) / 100), 0) + (order.costo_envio || 0);
                         const orderBase = rawBase > 0 ? rawBase : order.total;
+                        // If pedido already has the surcharge applied, do NOT add it again
+                        const pedidoRecargo = Number((order as any).recargo_transferencia) || 0;
+                        const alreadyHasRecargo = pedidoRecargo > 0;
+
+                        let finalTotal = orderBase;
 
                         if (metodo === "Cuenta Corriente" && clienteIdOrder) {
                           // CC: add to saldo (NO caja entry — CC is not cash in register)
                           const { data: nuevoSaldoData } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteIdOrder, p_change: orderBase });
                           const newSaldo = nuevoSaldoData ?? 0;
                           await supabase.from("cuenta_corriente").insert({ cliente_id: clienteIdOrder, fecha: hoy, comprobante: `Cobro #${order.numero}`, descripcion: "A cuenta corriente", debe: orderBase, haber: 0, saldo: newSaldo, forma_pago: "Cuenta Corriente", venta_id: ventaId });
+                          finalTotal = orderBase;
                         } else if (metodo === "Mixto") {
-                          // Mixto: use stored efectivo/transferencia split
+                          // Mixto: use stored efectivo/transferencia split — amounts already include surcharge if pedidoRecargo > 0
                           const me = (order as any).monto_efectivo || 0;
                           const mt = (order as any).monto_transferencia || 0;
-                          const surchargeAmt = mt > 0 && recargoTransferencia > 0 ? Math.round(mt * recargoTransferencia / 100) : 0;
+                          const surchargeAmt = alreadyHasRecargo ? 0 : (mt > 0 && recargoTransferencia > 0 ? Math.round(mt * recargoTransferencia / 100) : 0);
+                          const mtFinal = mt + surchargeAmt;
                           if (me > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: me, referencia_id: ventaId, referencia_tipo: "venta" });
-                          if (mt > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Transferencia${surchargeAmt > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: mt + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta", cuenta_bancaria: cuentaAlias });
-                          if (surchargeAmt > 0) await supabase.from("ventas").update({ total: me + mt + surchargeAmt }).eq("id", ventaId);
+                          if (mt > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: mtFinal, referencia_id: ventaId, referencia_tipo: "venta", cuenta_bancaria: cuentaAlias });
+                          finalTotal = me + mtFinal;
+                        } else if (metodo === "Transferencia") {
+                          // Transferencia pura — si el pedido ya trae recargo, usar total directo
+                          const surchargeAmt = alreadyHasRecargo ? 0 : (recargoTransferencia > 0 ? Math.round(orderBase * recargoTransferencia / 100) : 0);
+                          const base = alreadyHasRecargo ? (order.total || orderBase) : orderBase;
+                          const monto = base + surchargeAmt;
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Transferencia)`, metodo_pago: "Transferencia", monto, referencia_id: ventaId, referencia_tipo: "venta", cuenta_bancaria: cuentaAlias });
+                          finalTotal = monto;
                         } else {
-                          // Efectivo or Transferencia
-                          const surchargeAmt = metodo === "Transferencia" && recargoTransferencia > 0 ? Math.round(orderBase * recargoTransferencia / 100) : 0;
-                          const movExtra = metodo === "Transferencia" ? { cuenta_bancaria: cuentaAlias } : {};
-                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}${surchargeAmt > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: metodo, monto: orderBase + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta", ...movExtra });
-                          if (surchargeAmt > 0) await supabase.from("ventas").update({ total: orderBase + surchargeAmt }).eq("id", ventaId);
+                          // Efectivo
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}`, metodo_pago: "Efectivo", monto: orderBase, referencia_id: ventaId, referencia_tipo: "venta" });
+                          finalTotal = orderBase;
                         }
-                        const finalTotal = metodo === "Transferencia" ? orderBase + Math.round(orderBase * recargoTransferencia / 100) : metodo === "Mixto" ? ((order as any).monto_efectivo || 0) + ((order as any).monto_transferencia || 0) + Math.round(((order as any).monto_transferencia || 0) * recargoTransferencia / 100) : orderBase;
-                        const ventaUpd: Record<string, unknown> = { forma_pago: metodo, monto_pagado: finalTotal, entregado: true, estado: "entregado" };
+
+                        const ventaUpd: Record<string, unknown> = { forma_pago: metodo, monto_pagado: finalTotal, total: finalTotal, entregado: true, estado: "entregado" };
                         if (cuentaAlias && (metodo === "Transferencia" || metodo === "Mixto")) ventaUpd.cuenta_transferencia_alias = cuentaAlias;
                         await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
                         await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
