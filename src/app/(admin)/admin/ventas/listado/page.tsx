@@ -3646,6 +3646,14 @@ export default function ListadoVentasPage() {
                         : fp.toLowerCase().includes("mixto") ? "Mixto"
                         : "Efectivo";
 
+                      const cuentaAlias = (order as any).cuenta_transferencia_alias || null;
+                      // Guard: Transferencia/Mixto require a bank account. If missing, force full cobro dialog.
+                      if ((metodo === "Transferencia" || metodo === "Mixto") && !cuentaAlias) {
+                        showAdminToast("Falta seleccionar la cuenta bancaria — usá 'Registrar cobro'", "error");
+                        poOpenDetail(order);
+                        return;
+                      }
+
                       if (ventaId) {
                         // Compute pre-surcharge base from items (not stored total which may include surcharge)
                         const rawBase = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad * (1 - (i.descuento || 0) / 100), 0) + (order.costo_envio || 0);
@@ -3662,16 +3670,19 @@ export default function ListadoVentasPage() {
                           const mt = (order as any).monto_transferencia || 0;
                           const surchargeAmt = mt > 0 && recargoTransferencia > 0 ? Math.round(mt * recargoTransferencia / 100) : 0;
                           if (me > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: me, referencia_id: ventaId, referencia_tipo: "venta" });
-                          if (mt > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Transferencia${surchargeAmt > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: mt + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta" });
+                          if (mt > 0) await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero} (Transferencia${surchargeAmt > 0 ? ` +${recargoTransferencia}%` : ""})`, metodo_pago: "Transferencia", monto: mt + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta", cuenta_bancaria: cuentaAlias });
                           if (surchargeAmt > 0) await supabase.from("ventas").update({ total: me + mt + surchargeAmt }).eq("id", ventaId);
                         } else {
                           // Efectivo or Transferencia
                           const surchargeAmt = metodo === "Transferencia" && recargoTransferencia > 0 ? Math.round(orderBase * recargoTransferencia / 100) : 0;
-                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}${surchargeAmt > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: metodo, monto: orderBase + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta" });
+                          const movExtra = metodo === "Transferencia" ? { cuenta_bancaria: cuentaAlias } : {};
+                          await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${order.numero}${surchargeAmt > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: metodo, monto: orderBase + surchargeAmt, referencia_id: ventaId, referencia_tipo: "venta", ...movExtra });
                           if (surchargeAmt > 0) await supabase.from("ventas").update({ total: orderBase + surchargeAmt }).eq("id", ventaId);
                         }
                         const finalTotal = metodo === "Transferencia" ? orderBase + Math.round(orderBase * recargoTransferencia / 100) : metodo === "Mixto" ? ((order as any).monto_efectivo || 0) + ((order as any).monto_transferencia || 0) + Math.round(((order as any).monto_transferencia || 0) * recargoTransferencia / 100) : orderBase;
-                        await supabase.from("ventas").update({ forma_pago: metodo, monto_pagado: finalTotal, entregado: true, estado: "entregado" }).eq("id", ventaId);
+                        const ventaUpd: Record<string, unknown> = { forma_pago: metodo, monto_pagado: finalTotal, entregado: true, estado: "entregado" };
+                        if (cuentaAlias && (metodo === "Transferencia" || metodo === "Mixto")) ventaUpd.cuenta_transferencia_alias = cuentaAlias;
+                        await supabase.from("ventas").update(ventaUpd).eq("id", ventaId);
                         await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", order.numero);
                       }
                       await poHandleEstadoChange(order, "entregado");
