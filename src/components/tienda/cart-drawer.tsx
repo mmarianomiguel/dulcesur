@@ -53,20 +53,38 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [minimoEnvio, setMinimoEnvio] = useState(50000);
 
   useEffect(() => {
+    const CART_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+    function refreshTimestamp() {
+      localStorage.setItem("carrito_ts", String(Date.now()));
+    }
     function syncFromStorage() {
       try {
         const stored = localStorage.getItem("carrito");
+        const ts = Number(localStorage.getItem("carrito_ts") || 0);
+        const expired = stored && (!ts || Date.now() - ts > CART_TTL_MS);
+        if (expired) {
+          localStorage.removeItem("carrito");
+          localStorage.removeItem("carrito_ts");
+          setItems([]);
+          return;
+        }
         if (stored) {
           const parsed = JSON.parse(stored);
-          setItems(Array.isArray(parsed) ? parsed : []);
+          const arr = Array.isArray(parsed) ? parsed : [];
+          setItems(arr);
+          if (arr.length > 0 && !ts) refreshTimestamp(); // first-time stamp for pre-existing carts
         } else setItems([]);
       } catch {}
     }
+    function onCartUpdated() {
+      refreshTimestamp();
+      syncFromStorage();
+    }
     syncFromStorage();
-    window.addEventListener("cart-updated", syncFromStorage);
+    window.addEventListener("cart-updated", onCartUpdated);
     window.addEventListener("storage", syncFromStorage);
     return () => {
-      window.removeEventListener("cart-updated", syncFromStorage);
+      window.removeEventListener("cart-updated", onCartUpdated);
       window.removeEventListener("storage", syncFromStorage);
     };
   }, []);
