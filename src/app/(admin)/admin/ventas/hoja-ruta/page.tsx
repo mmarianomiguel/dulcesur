@@ -1112,6 +1112,175 @@ export default function HojaDeRutaPage() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
+  // Quick order mode (click-to-number)
+  const [quickOrderMode, setQuickOrderMode] = useState(false);
+  const [quickSequence, setQuickSequence] = useState<string[]>([]);
+  const [applyingPrevious, setApplyingPrevious] = useState(false);
+  const [optimizingRoute, setOptimizingRoute] = useState(false);
+  const [orderToast, setOrderToast] = useState<string | null>(null);
+
+  const showOrderToast = (msg: string) => {
+    setOrderToast(msg);
+    setTimeout(() => setOrderToast(null), 3000);
+  };
+
+  const toggleQuickOrder = (groupKey: string) => {
+    setQuickSequence((prev) => {
+      const idx = prev.indexOf(groupKey);
+      if (idx >= 0) return prev.filter((k) => k !== groupKey);
+      return [...prev, groupKey];
+    });
+  };
+
+  const applyQuickOrderAndExit = () => {
+    if (quickSequence.length === 0) {
+      setQuickOrderMode(false);
+      return;
+    }
+    const newOrden: Record<string, number> = {};
+    let counter = 1;
+    // First: clicked groups in sequence
+    for (const key of quickSequence) {
+      const g = clientGroups.find((gr) => gr.key === key);
+      if (g) for (const v of g.ventas) newOrden[v.id] = counter;
+      counter++;
+    }
+    // Then: unclicked groups in current visual order
+    for (const g of clientGroups) {
+      if (!quickSequence.includes(g.key)) {
+        for (const v of g.ventas) newOrden[v.id] = counter;
+        counter++;
+      }
+    }
+    setOrden(newOrden);
+    setQuickSequence([]);
+    setQuickOrderMode(false);
+  };
+
+  const cancelQuickOrder = () => {
+    setQuickSequence([]);
+    setQuickOrderMode(false);
+  };
+
+  // Keyboard shortcuts while in quick mode
+  useEffect(() => {
+    if (!quickOrderMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelQuickOrder();
+      if (e.key === "Backspace" && (e.target as HTMLElement)?.tagName !== "INPUT") {
+        e.preventDefault();
+        setQuickSequence((prev) => prev.slice(0, -1));
+      }
+      if (e.key === "Enter" && (e.target as HTMLElement)?.tagName !== "INPUT") {
+        applyQuickOrderAndExit();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [quickOrderMode, quickSequence]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyPreviousOrder = async () => {
+    setApplyingPrevious(true);
+    try {
+      // Find the most recent hoja de ruta OTHER than the current active one
+      let query = supabase
+        .from("hoja_ruta")
+        .select("id, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (hojaRutaId) query = query.neq("id", hojaRutaId);
+      const { data: hojas } = await query;
+      const lastHoja = hojas?.[0];
+      if (!lastHoja) {
+        showOrderToast("No hay hoja de ruta anterior para copiar");
+        return;
+      }
+      const { data: items } = await supabase
+        .from("hoja_ruta_items")
+        .select("orden, ventas:venta_id(cliente_id)")
+        .eq("hoja_ruta_id", lastHoja.id)
+        .order("orden");
+      if (!items || items.length === 0) {
+        showOrderToast("La hoja anterior no tiene items");
+        return;
+      }
+      // Build cliente_id -> min(orden) map from previous hoja
+      const clientePos: Record<string, number> = {};
+      for (const it of items as any[]) {
+        const cid = it.ventas?.cliente_id;
+        if (cid && clientePos[cid] === undefined) clientePos[cid] = it.orden;
+      }
+      // Apply to current groups; unmatched go at end in current relative order
+      const matched: { key: string; pos: number }[] = [];
+      const unmatched: string[] = [];
+      for (const g of clientGroups) {
+        const pos = g.clienteId ? clientePos[g.clienteId] : undefined;
+        if (pos !== undefined) matched.push({ key: g.key, pos });
+        else unmatched.push(g.key);
+      }
+      matched.sort((a, b) => a.pos - b.pos);
+      const finalOrder = [...matched.map((m) => m.key), ...unmatched];
+      const newOrden: Record<string, number> = {};
+      let counter = 1;
+      for (const key of finalOrder) {
+        const g = clientGroups.find((gr) => gr.key === key);
+        if (g) for (const v of g.ventas) newOrden[v.id] = counter;
+        counter++;
+      }
+      setOrden(newOrden);
+      showOrderToast(`Orden aplicado: ${matched.length} coincidencias`);
+    } catch (err) {
+      console.error("Error aplicando orden anterior:", err);
+      showOrderToast("Error al cargar orden anterior");
+    } finally {
+      setApplyingPrevious(false);
+    }
+  };
+
+  const optimizeRoute = async () => {
+    const stops = clientGroups
+      .map((g) => ({
+        key: g.key,
+        address: [g.cliente?.domicilio, g.cliente?.localidad].filter(Boolean).join(", "),
+      }))
+      .filter((s) => s.address);
+    if (stops.length < 2) {
+      showOrderToast("Se necesitan al menos 2 paradas con dirección");
+      return;
+    }
+    setOptimizingRoute(true);
+    try {
+      const res = await fetch("/api/hoja-ruta/optimizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stops: stops.map((s) => ({ id: s.key, address: s.address })) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showOrderToast(data?.error || "Error optimizando ruta");
+        return;
+      }
+      const orderedKeys: string[] = data.orderedIds || [];
+      const noAddress = clientGroups.filter((g) => !stops.find((s) => s.key === g.key)).map((g) => g.key);
+      const finalOrder = [...orderedKeys, ...noAddress];
+      const newOrden: Record<string, number> = {};
+      let counter = 1;
+      for (const key of finalOrder) {
+        const g = clientGroups.find((gr) => gr.key === key);
+        if (g) for (const v of g.ventas) newOrden[v.id] = counter;
+        counter++;
+      }
+      setOrden(newOrden);
+      const failedCount = (data.failed || []).length;
+      showOrderToast(failedCount > 0 ? `Ruta optimizada (${failedCount} direcciones no ubicadas)` : "Ruta optimizada");
+    } catch (err) {
+      console.error("Error optimizando ruta:", err);
+      showOrderToast("Error de red al optimizar");
+    } finally {
+      setOptimizingRoute(false);
+    }
+  };
+
   const handleDragStart = (id: string) => setDragId(id);
   const handleDragOver = (e: React.DragEvent, id: string) => { e.preventDefault(); setDragOverId(id); };
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
@@ -2096,7 +2265,7 @@ export default function HojaDeRutaPage() {
       {viewMode === "list" && (
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div>
               <h2 className="text-lg font-semibold text-foreground">
                 Entregas del Dia
@@ -2118,6 +2287,64 @@ export default function HojaDeRutaPage() {
               Actualizar
             </Button>
           </div>
+
+          {/* Ordering toolbar */}
+          {clientGroups.length > 1 && (
+            <div className="mb-4 flex items-center gap-2 flex-wrap">
+              {!quickOrderMode ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setQuickSequence([]); setQuickOrderMode(true); }}
+                    className="border-primary/30 text-primary hover:bg-primary/5"
+                  >
+                    <List className="w-4 h-4 mr-1.5" />
+                    Ordenar rápido
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={applyPreviousOrder}
+                    disabled={applyingPrevious}
+                  >
+                    {applyingPrevious ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Clock className="w-4 h-4 mr-1.5" />}
+                    Usar orden anterior
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={optimizeRoute}
+                    disabled={optimizingRoute}
+                  >
+                    {optimizingRoute ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Route className="w-4 h-4 mr-1.5" />}
+                    Optimizar ruta
+                  </Button>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    También podés arrastrar o editar el número manualmente
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium">
+                    <span className="font-semibold">Modo rápido activo</span> — Clickeá los pedidos en orden de entrega ({quickSequence.length} seleccionados)
+                  </div>
+                  <Button size="sm" onClick={applyQuickOrderAndExit} disabled={quickSequence.length === 0}>
+                    <CheckCircle className="w-4 h-4 mr-1.5" />
+                    Listo
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={cancelQuickOrder}>
+                    Cancelar
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+          {orderToast && (
+            <div className="mb-3 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+              {orderToast}
+            </div>
+          )}
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -2143,27 +2370,42 @@ export default function HojaDeRutaPage() {
                 const tel = group.cliente?.telefono?.replace(/\D/g, "") || "";
                 const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
 
+                const quickPos = quickSequence.indexOf(group.key);
+                const isQuickSelected = quickPos >= 0;
                 return (
                   <Card
                     key={group.key}
-                    draggable
-                    onDragStart={() => handleDragStart(group.key)}
-                    onDragOver={(e) => handleDragOver(e, group.key)}
-                    onDrop={() => handleDrop(group.key)}
+                    draggable={!quickOrderMode}
+                    onDragStart={() => !quickOrderMode && handleDragStart(group.key)}
+                    onDragOver={(e) => !quickOrderMode && handleDragOver(e, group.key)}
+                    onDrop={() => !quickOrderMode && handleDrop(group.key)}
                     onDragEnd={handleDragEnd}
-                    className={`overflow-hidden cursor-grab active:cursor-grabbing transition-all ${estaPago ? "border-green-200" : "border-orange-200"} ${dragId === group.key ? "opacity-50 scale-95" : ""} ${dragOverId === group.key && dragId !== group.key ? "ring-2 ring-primary/50 scale-[1.01]" : ""}`}
+                    onClick={(e) => {
+                      if (!quickOrderMode) return;
+                      const t = e.target as HTMLElement;
+                      if (t.closest("button, a, input")) return;
+                      toggleQuickOrder(group.key);
+                    }}
+                    className={`overflow-hidden transition-all ${quickOrderMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${estaPago ? "border-green-200" : "border-orange-200"} ${dragId === group.key ? "opacity-50 scale-95" : ""} ${dragOverId === group.key && dragId !== group.key ? "ring-2 ring-primary/50 scale-[1.01]" : ""} ${isQuickSelected ? "ring-2 ring-primary bg-primary/5" : quickOrderMode ? "hover:ring-2 hover:ring-primary/30" : ""}`}
                   >
                     <CardContent className="p-0">
                       {/* Header row */}
                       <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b">
                         <div className="flex items-center gap-2">
+                          {quickOrderMode ? (
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isQuickSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground border-2 border-dashed border-muted-foreground/30"}`}>
+                              {isQuickSelected ? quickPos + 1 : "+"}
+                            </div>
+                          ) : (
                           <input
                             type="number"
                             min={1}
                             value={orden[group.ventas[0].id] ?? idx + 1}
                             onChange={(e) => handleOrdenChange(group.ventas[0].id, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
                             className="w-8 h-7 rounded-full bg-muted text-xs font-bold text-muted-foreground text-center border-0 focus:ring-2 focus:ring-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
+                          )}
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {group.ventas.map((v) => (
                               <span key={v.id} className="flex items-center gap-1">
