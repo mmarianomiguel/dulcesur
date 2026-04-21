@@ -64,6 +64,7 @@ interface Product {
   precioPorCaja: boolean;
   unidadesCaja: number;
   nombrePresentacion: string;
+  nombreUnidad: string;
   hayStock: boolean;
   id: string;
   categoria: string;
@@ -71,6 +72,7 @@ interface Product {
   fechaActualizacion: string;
   codigo: string;
   precioAnterior: number;
+  esCombo: boolean;
 }
 
 interface Filters {
@@ -254,7 +256,8 @@ export default function ListaPreciosPage() {
     mostrarBadge: boolean;
     captionModo: "auto" | "custom" | "oculto";
     captionCustom: string;
-  }>({ tipoOferta: "packUnidad", etiquetaBadge: "OFERTA DE LA SEMANA", mostrarBadge: true, captionModo: "auto", captionCustom: "" });
+    mostrarComponentesCombo: boolean;
+  }>({ tipoOferta: "packUnidad", etiquetaBadge: "OFERTA DE LA SEMANA", mostrarBadge: true, captionModo: "auto", captionCustom: "", mostrarComponentesCombo: false });
   const [listaGroupMode, setListaGroupMode] = useState<"none" | "categoria" | "subcategoria">("categoria");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -402,6 +405,7 @@ export default function ListaPreciosPage() {
         precioPorCaja: precioCaja > 0,
         unidadesCaja,
         nombrePresentacion: boxPres?.nombre || "Caja",
+        nombreUnidad: unitPres?.nombre || "",
         hayStock: p.stock > 0,
         id: p.id,
         categoria: dbCategoria || "Sin categoría",
@@ -409,6 +413,7 @@ export default function ListaPreciosPage() {
         fechaActualizacion: fechaAct,
         codigo: p.codigo || "",
         precioAnterior: p.precio_anterior || 0,
+        esCombo: Boolean((p as any).es_combo),
       };
     });
 
@@ -1148,6 +1153,20 @@ export default function ListaPreciosPage() {
           } catch {}
         }
 
+        // Pre-fetch combo_items para todos los combos seleccionados
+        const comboIds = selectedProducts.filter((p) => p.esCombo).map((p) => p.id);
+        const combosMap: Record<string, { nombre: string; cantidad: number }[]> = {};
+        if (comboIds.length > 0) {
+          const { data: items } = await supabase
+            .from("combo_items")
+            .select("combo_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+            .in("combo_id", comboIds);
+          (items || []).forEach((it: any) => {
+            if (!combosMap[it.combo_id]) combosMap[it.combo_id] = [];
+            combosMap[it.combo_id].push({ nombre: it.productos?.nombre || "", cantidad: it.cantidad });
+          });
+        }
+
         // Helper: parte un currency "$14.500,00" en { symbol, integer, decimals }
         const splitPrice = (n: number) => {
           const full = formatCurrency(n, true); // "$14.500,00"
@@ -1158,14 +1177,27 @@ export default function ListaPreciosPage() {
             decimals: m?.[3] ?? ",00",
           };
         };
+        // Conversión pt → mm (jsPDF pages son mm, pero font sizes van en pt)
+        const PT_TO_MM = 0.3528;
+        const CAP_FACTOR = 0.72; // cap height ≈ 72% del font size
 
         await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0) pdf.addPage();
           const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
           const boxPriceRaw = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
           const hasUnits = product.unidadesCaja > 0 && boxPriceRaw > 0;
-          const showPackUnidad = opts.tipoOferta === "packUnidad" && hasUnits;
-          const mainPrice = showPackUnidad ? boxPriceRaw : displayPrice;
+          const comboItems = product.esCombo ? (combosMap[product.id] || []) : [];
+          const comboTotalItems = comboItems.reduce((s, i) => s + (i.cantidad || 0), 0);
+          const showPackUnidad = opts.tipoOferta === "packUnidad" && (hasUnits || (product.esCombo && comboTotalItems > 0));
+          const mainPrice = product.esCombo
+            ? displayPrice
+            : (showPackUnidad ? boxPriceRaw : displayPrice);
+          // Precio unitario para el bloque "PRECIO POR UNIDAD":
+          // - Combo: precio total / total items del combo
+          // - Producto con caja: precioCaja / unidadesCaja (precio real por unidad en la caja)
+          const unitPriceReal = product.esCombo
+            ? (comboTotalItems > 0 ? mainPrice / comboTotalItems : 0)
+            : (hasUnits ? boxPriceRaw / product.unidadesCaja : displayPrice);
 
           // Márgenes generosos
           const lm = 20;
@@ -1243,11 +1275,26 @@ export default function ListaPreciosPage() {
           });
           cursorY += nameLines.length * nameLH + 4;
 
-          // ─── SUBTITLE PRESENTACIÓN ("22 g · Caja x 36 unidades") ───
-          const subParts: string[] = [];
-          if (product.nombrePresentacion) subParts.push(product.nombrePresentacion);
-          if (hasUnits) subParts.push(`Caja x ${product.unidadesCaja} unidades`);
-          const subtitle = subParts.join(" · ");
+          // ─── SUBTITLE PRESENTACIÓN ───
+          // Combo: "Combo x N productos"
+          // Producto con unidad distinta al caja: "200g · Caja x 30 unidades"
+          // Producto sin unidad definida o unidad = caja: "Caja x 30 unidades"
+          // Producto sin caja: nombreUnidad o nombrePresentacion
+          const normalize = (s: string) => (s || "").toLowerCase().replace(/\s+/g, "");
+          let subtitle = "";
+          if (product.esCombo) {
+            subtitle = comboTotalItems > 0 ? `Combo x ${comboTotalItems} productos` : "Combo";
+          } else if (hasUnits) {
+            const unit = (product.nombreUnidad || "").trim();
+            const unitIsLikeBox = unit && normalize(unit).includes("caja");
+            if (unit && !unitIsLikeBox) {
+              subtitle = `${unit} · Caja x ${product.unidadesCaja} unidades`;
+            } else {
+              subtitle = `Caja x ${product.unidadesCaja} unidades`;
+            }
+          } else {
+            subtitle = (product.nombreUnidad || product.nombrePresentacion || "").trim();
+          }
           if (subtitle) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(config.premium_tamañoSubtitulo);
@@ -1257,64 +1304,107 @@ export default function ListaPreciosPage() {
             cursorY += 14;
           }
 
-          // ─── PRECIO (negro sobre blanco, sin caja — tipográfico) ───
+          // ─── COMPONENTES DEL COMBO (opcional) ───
+          if (product.esCombo && opts.mostrarComponentesCombo && comboItems.length > 0) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(10);
+            pdf.setTextColor(90);
+            let compY = cursorY;
+            comboItems.slice(0, 8).forEach((c) => {
+              const line = `· ${c.cantidad}× ${c.nombre}`;
+              const lines = pdf.splitTextToSize(line, (rm - lm) / 2);
+              lines.forEach((ln: string) => {
+                pdf.text(ln, lm, compY);
+                compY += 4;
+              });
+            });
+            pdf.setTextColor(0);
+            cursorY = compY + 2;
+          }
+
+          // ─── PRECIO (negro sobre blanco, tipográfico — todo en una sola línea) ───
           const priceParts = splitPrice(mainPrice);
           const priceSize = config.premium_tamañoPrecio;
-          const priceY = cursorY + priceSize * 0.75 + 6;
+          const priceCapMM = priceSize * PT_TO_MM * CAP_FACTOR;
+          // priceY = baseline del número principal. Reservamos priceCapMM de altura arriba + margen.
+          const priceY = cursorY + priceCapMM + 8;
 
-          // Label pequeño arriba del precio (solo si packUnidad, para aclarar "LA CAJA")
-          if (showPackUnidad) {
+          // Label "LA CAJA" / "COMBO" arriba del precio
+          let priceLabel = "";
+          if (product.esCombo) priceLabel = "COMBO";
+          else if (showPackUnidad) priceLabel = "LA CAJA";
+          if (priceLabel) {
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(10);
+            pdf.setFontSize(11);
             pdf.setCharSpace(1.5);
             pdf.setTextColor(130);
-            pdf.text("LA CAJA", lm, cursorY + 2);
+            pdf.text(priceLabel, lm, cursorY + 3);
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
           }
 
-          // Dibujar precio: "$" chico + NÚMERO GRANDE + decimales superíndice
+          // Tamaños auxiliares
+          const symSize = priceSize * 0.45;
+          const decSize = priceSize * 0.36;
+          const symCapMM = symSize * PT_TO_MM * CAP_FACTOR;
+          const decCapMM = decSize * PT_TO_MM * CAP_FACTOR;
+
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(priceSize);
           pdf.setTextColor(0);
 
-          const numW = pdf.getTextWidth(priceParts.integer);
-          const symSize = priceSize * 0.35;
-          const decSize = priceSize * 0.28;
-          const symGap = priceSize * 0.08;
-
+          // Medir anchos (cambiar font antes de medir)
           pdf.setFontSize(symSize);
           const symW = pdf.getTextWidth(priceParts.symbol);
-          pdf.text(priceParts.symbol, lm, priceY - priceSize * 0.35);
-
           pdf.setFontSize(priceSize);
-          pdf.text(priceParts.integer, lm + symW + symGap, priceY);
-
+          const numW = pdf.getTextWidth(priceParts.integer);
           pdf.setFontSize(decSize);
-          pdf.text(priceParts.decimals, lm + symW + symGap + numW + 1, priceY - priceSize * 0.5);
+          const decW = pdf.getTextWidth(priceParts.decimals);
 
-          const totalPriceW = symW + symGap + numW + pdf.getTextWidth(priceParts.decimals) + 2;
+          const gapAfterSym = 2;
+          const gapAfterNum = 1;
 
-          // ─── PRECIO POR UNIDAD (solo si packUnidad) — al costado del precio principal ───
-          if (showPackUnidad) {
-            const pxuX = lm + totalPriceW + 14;
-            const pxuY = priceY - priceSize * 0.5;
+          // Dibujar: "$" baseline alineado al top del número; decimales igual
+          pdf.setFontSize(symSize);
+          pdf.text(priceParts.symbol, lm, priceY - (priceCapMM - symCapMM));
+          pdf.setFontSize(priceSize);
+          pdf.text(priceParts.integer, lm + symW + gapAfterSym, priceY);
+          pdf.setFontSize(decSize);
+          pdf.text(priceParts.decimals, lm + symW + gapAfterSym + numW + gapAfterNum, priceY - (priceCapMM - decCapMM));
+
+          const totalPriceW = symW + gapAfterSym + numW + gapAfterNum + decW;
+
+          // ─── PRECIO POR UNIDAD (si packUnidad o combo con componentes) ───
+          const showUnitBlock = (showPackUnidad && !product.esCombo) ||
+                                (product.esCombo && comboTotalItems > 0 && opts.tipoOferta === "packUnidad");
+          if (showUnitBlock) {
+            const pxuX = lm + totalPriceW + 16;
+            // Alineado con el top del precio principal
+            const pxuLabelY = priceY - priceCapMM + 2;
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(9);
             pdf.setCharSpace(1.2);
             pdf.setTextColor(130);
-            pdf.text("PRECIO POR UNIDAD", pxuX, pxuY);
+            pdf.text("PRECIO POR UNIDAD", pxuX, pxuLabelY);
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
+
+            // Precio unidad (con decimales si no es redondo)
+            const unitSize = config.premium_tamañoPrecioUnidad;
+            const unitRoundedEquals = Math.round(unitPriceReal) === unitPriceReal;
+            const unitStr = formatCurrency(unitPriceReal, !unitRoundedEquals);
+            const cuSize = unitSize * 0.45;
+
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(config.premium_tamañoPrecioUnidad);
-            const unitStr = formatCurrency(displayPrice, false);
-            pdf.text(unitStr, pxuX, pxuY + config.premium_tamañoPrecioUnidad * 0.48);
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(config.premium_tamañoPrecioUnidad * 0.45);
-            pdf.setTextColor(130);
+            pdf.setFontSize(unitSize);
+            // Medir al tamaño grande ANTES de cambiar
             const unitW = pdf.getTextWidth(unitStr);
-            pdf.text("c/u", pxuX + unitW + 2, pxuY + config.premium_tamañoPrecioUnidad * 0.48);
+            const unitBaseline = pxuLabelY + unitSize * PT_TO_MM * CAP_FACTOR + 4;
+            pdf.text(unitStr, pxuX, unitBaseline);
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(cuSize);
+            pdf.setTextColor(130);
+            pdf.text("c/u", pxuX + unitW + 2, unitBaseline);
             pdf.setTextColor(0);
           }
 
@@ -2409,6 +2499,21 @@ export default function ListaPreciosPage() {
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 )}
+              </div>
+
+              <div className="border border-border rounded-lg p-3 bg-accent/30">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={premiumOpts.mostrarComponentesCombo}
+                    onChange={(e) => setPremiumOpts((p) => ({ ...p, mostrarComponentesCombo: e.target.checked }))}
+                    className="accent-primary w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Mostrar componentes del combo</p>
+                    <p className="text-[11px] text-muted-foreground">Si el producto es un combo, lista los productos que lo integran debajo del subtítulo (hasta 8).</p>
+                  </div>
+                </label>
               </div>
 
               <details className="border-t border-border pt-4">
