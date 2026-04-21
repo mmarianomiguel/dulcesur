@@ -101,6 +101,12 @@ interface PdfConfig {
   premium_tamañoPrecioUnidad: number;
   premium_mostrarLogo: boolean;
   premium_mostrarWeb: boolean;
+  story_logoH: number;
+  story_tamañoBadge: number;
+  story_tamañoNombre: number;
+  story_tamañoSubtitulo: number;
+  story_tamañoPrecio: number;
+  story_tamañoPillUnidad: number;
   combinado_columnas: number;
   combinado_filas: number;
   combinado_tamañoNombre: number;
@@ -142,6 +148,7 @@ const DEFAULT_CONFIG: PdfConfig = {
   duo_columnas: 2, duo_filas: 4, duo_tamañoNombre: 11, duo_tamañoPrecio: 24,
   duo_mostrarLogo: true, duo_mostrarWeb: true, duo_mostrarFecha: true,
   premium_logoTamaño: 18, premium_tamañoCaption: 9, premium_tamañoNombre: 52, premium_tamañoSubtitulo: 15, premium_tamañoPrecio: 68, premium_tamañoPrecioUnidad: 28, premium_mostrarLogo: true, premium_mostrarWeb: true,
+  story_logoH: 110, story_tamañoBadge: 40, story_tamañoNombre: 80, story_tamañoSubtitulo: 30, story_tamañoPrecio: 88, story_tamañoPillUnidad: 32,
 };
 
 
@@ -1981,6 +1988,20 @@ export default function ListaPreciosPage() {
         });
       }
 
+      // Parte un numero en { symbol, integer, decimals } con separador de miles AR.
+      // No uso formatCurrency porque la locale AR inserta un \u00A0 (non-breaking space)
+      // que rompe los regex sueltos.
+      const splitPriceStory = (n: number) => {
+        const abs = Math.abs(n);
+        const intPart = Math.floor(abs);
+        const decPart = Math.round((abs - intPart) * 100);
+        return {
+          symbol: "$",
+          integer: intPart.toLocaleString("es-AR"),
+          decimals: `,${String(decPart).padStart(2, "0")}`,
+        };
+      };
+
       // Pre-cargar logo si existe
       let logoImg: HTMLImageElement | null = null;
       if (logoBase64) {
@@ -2008,7 +2029,7 @@ export default function ListaPreciosPage() {
 
         // ── TOP: Logo + date pill ──
         if (logoImg) {
-          const logoH = 110;
+          const logoH = config.story_logoH;
           const logoW = logoH * (logoImg.width / logoImg.height);
           ctx.drawImage(logoImg, 70, 90, logoW, logoH);
         }
@@ -2039,7 +2060,7 @@ export default function ListaPreciosPage() {
           ctx.rotate(-3 * Math.PI / 180);
           ctx.fillStyle = "#f4c828"; ctx.strokeStyle = "#222"; ctx.lineWidth = 3;
           const badgeText = `★  ${opts.etiquetaBadge.trim().toUpperCase()}`;
-          ctx.font = "900 40px Arial, sans-serif";
+          ctx.font = `900 ${config.story_tamañoBadge}px Arial, sans-serif`;
           const bw = ctx.measureText(badgeText).width + 60;
           const bh = 80;
           roundRect(ctx, 0, 0, bw, bh, 10);
@@ -2107,27 +2128,25 @@ export default function ListaPreciosPage() {
         ctx.shadowColor = "transparent";
         ctx.fillStyle = "#666"; ctx.font = "600 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
         ctx.fillText("PRECIO", tagW / 2, 18);
-        // Price with $ small
-        const priceStr = formatCurrency(mainPrice, true);
-        const pm = priceStr.match(/^(\$?)([\d\.]+)(,\d{2})?$/);
-        const symStr = (pm?.[1] || "$").trim() || "$";
-        const intStr = pm?.[2] || String(Math.round(mainPrice));
-        const decStr = pm?.[3] || "";
-        ctx.fillStyle = "#111"; ctx.font = "900 88px Arial"; ctx.textAlign = "left";
-        const intW = ctx.measureText(intStr).width;
-        ctx.font = "900 36px Arial";
-        const symW = ctx.measureText(symStr).width;
-        ctx.font = "900 32px Arial";
-        const decW = ctx.measureText(decStr).width;
+        // Price with $ chico + numero grande + decimales chicos (con separador de miles AR)
+        const price = splitPriceStory(mainPrice);
+        const mainSize = config.story_tamañoPrecio;
+        const smallSize = Math.round(mainSize * 0.4);
+        ctx.fillStyle = "#111"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+        ctx.font = `900 ${mainSize}px Arial`;
+        const intW = ctx.measureText(price.integer).width;
+        ctx.font = `900 ${smallSize}px Arial`;
+        const symW = ctx.measureText(price.symbol).width;
+        const decW = ctx.measureText(price.decimals).width;
         const totalTxtW = symW + 8 + intW + decW;
         const txtX = (tagW - totalTxtW) / 2;
-        ctx.font = "900 36px Arial";
-        ctx.textBaseline = "top";
-        ctx.fillText(symStr, txtX, 50);
-        ctx.font = "900 88px Arial";
-        ctx.fillText(intStr, txtX + symW + 8, 40);
-        ctx.font = "900 32px Arial";
-        ctx.fillText(decStr, txtX + symW + 8 + intW + 2, 50);
+        // "$" alineado al top del numero grande
+        ctx.font = `900 ${smallSize}px Arial`;
+        ctx.fillText(price.symbol, txtX, 50);
+        ctx.font = `900 ${mainSize}px Arial`;
+        ctx.fillText(price.integer, txtX + symW + 8, 40);
+        ctx.font = `900 ${smallSize}px Arial`;
+        ctx.fillText(price.decimals, txtX + symW + 8 + intW + 2, 50);
         // "LA CAJA × 36" / "COMBO × 24" / "POR UNIDAD"
         ctx.fillStyle = "#cc2c2c"; ctx.font = "900 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
         let tagLabel: string;
@@ -2143,7 +2162,7 @@ export default function ListaPreciosPage() {
 
         // ── Product name (bold uppercase, wrap 2 lines) ──
         ctx.fillStyle = "#111"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-        let nameSize = 80;
+        let nameSize = config.story_tamañoNombre;
         const nameY = 1160;
         const nameMaxW = W - 120;
         const nameUpper = displayName.toUpperCase();
@@ -2186,7 +2205,7 @@ export default function ListaPreciosPage() {
           subtitle = candidate && !/^(unidad(es)?|u|un\.?|pieza|item)$/i.test(candidate) ? candidate : "";
         }
         if (subtitle) {
-          ctx.fillStyle = "#777"; ctx.font = "500 30px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+          ctx.fillStyle = "#777"; ctx.font = `500 ${config.story_tamañoSubtitulo}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "top";
           ctx.fillText(subtitle, W / 2, nameEndY + 18);
         }
 
@@ -2195,7 +2214,7 @@ export default function ListaPreciosPage() {
                              (product.esCombo && opts.tipoOferta === "packUnidad" && comboTotalUnidades > 0);
         if (showUnitPill) {
           const pillTxt = `× UNIDAD  $ ${Math.round(unitPrice).toLocaleString("es-AR")}`;
-          ctx.font = "900 32px Arial";
+          ctx.font = `900 ${config.story_tamañoPillUnidad}px Arial`;
           const pw = ctx.measureText(pillTxt).width + 50;
           const ph = 72;
           const px = (W - pw) / 2, py = nameEndY + 70;
@@ -2779,6 +2798,36 @@ export default function ListaPreciosPage() {
                   </div>
                 </label>
               </div>
+
+              <details className="border-t border-border pt-4">
+                <summary className="text-sm font-medium cursor-pointer select-none">Tamaños (ajuste fino)</summary>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Logo ({config.story_logoH}px)</label>
+                    <input type="range" min={60} max={260} step={5} value={config.story_logoH} onChange={(e) => updateConfig("story_logoH", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Badge ({config.story_tamañoBadge}px)</label>
+                    <input type="range" min={24} max={72} step={1} value={config.story_tamañoBadge} onChange={(e) => updateConfig("story_tamañoBadge", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Subtítulo ({config.story_tamañoSubtitulo}px)</label>
+                    <input type="range" min={20} max={50} step={1} value={config.story_tamañoSubtitulo} onChange={(e) => updateConfig("story_tamañoSubtitulo", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Nombre del producto ({config.story_tamañoNombre}px)</label>
+                    <input type="range" min={48} max={130} step={2} value={config.story_tamañoNombre} onChange={(e) => updateConfig("story_tamañoNombre", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Precio ({config.story_tamañoPrecio}px)</label>
+                    <input type="range" min={56} max={140} step={2} value={config.story_tamañoPrecio} onChange={(e) => updateConfig("story_tamañoPrecio", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Pill unidad ({config.story_tamañoPillUnidad}px)</label>
+                    <input type="range" min={20} max={52} step={1} value={config.story_tamañoPillUnidad} onChange={(e) => updateConfig("story_tamañoPillUnidad", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                </div>
+              </details>
 
               <div className="text-xs text-muted-foreground border-t border-border pt-3">
                 💡 Si seleccionás varios productos, se descarga un PNG por cada uno. El navegador te puede pedir confirmar descargas múltiples.
