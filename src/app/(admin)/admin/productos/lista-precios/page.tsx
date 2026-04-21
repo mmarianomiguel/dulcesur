@@ -121,7 +121,7 @@ interface PdfConfig {
   poster_mostrarPrecioUnitario: boolean;
 }
 
-type PdfStyle = "combinado" | "duo" | "simple" | "poster" | "lista" | "variaciones" | "gondola";
+type PdfStyle = "combinado" | "duo" | "simple" | "poster" | "premium" | "lista" | "variaciones" | "gondola";
 type ConfigTab = "general" | PdfStyle;
 
 const DEFAULT_FILTERS: Filters = { search: "", categoria: "", subcategoria: "", marca: "", enOferta: "", cajaEnOferta: "", precioPorCaja: "", hayStock: "", fechaDesde: "", fechaHasta: "" };
@@ -240,6 +240,14 @@ export default function ListaPreciosPage() {
     mostrarOferta: "auto" | "si" | "no";
     precioMostrar: "unitario" | "caja" | "ambos";
   }>({ mostrarOferta: "auto", precioMostrar: "ambos" });
+  const [showPremiumConfig, setShowPremiumConfig] = useState(false);
+  const [premiumOpts, setPremiumOpts] = useState<{
+    tipoOferta: "simple" | "packUnidad";
+    etiquetaBadge: string;
+    mostrarBadge: boolean;
+    captionModo: "auto" | "custom" | "oculto";
+    captionCustom: string;
+  }>({ tipoOferta: "packUnidad", etiquetaBadge: "OFERTA DE LA SEMANA", mostrarBadge: true, captionModo: "auto", captionCustom: "" });
   const [listaGroupMode, setListaGroupMode] = useState<"none" | "categoria" | "subcategoria">("categoria");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -535,7 +543,7 @@ export default function ListaPreciosPage() {
   };
 
   // ─── PDF Generation ───
-  const generatePDF = async (style: PdfStyle, posterOverride?: typeof posterOpts) => {
+  const generatePDF = async (style: PdfStyle, posterOverride?: typeof posterOpts, premiumOverride?: typeof premiumOpts) => {
     setShowStylePicker(false);
     setGenerating(true);
     setGeneratingProgress({ done: 0, total: selected.size });
@@ -547,7 +555,7 @@ export default function ListaPreciosPage() {
       if (selectedProducts.length === 0) { setGenerating(false); return; }
 
       const { jsPDF } = await import("jspdf");
-      const isLandscape = style === "poster" || style === "gondola";
+      const isLandscape = style === "poster" || style === "gondola" || style === "premium";
       const pdf = new jsPDF({ orientation: isLandscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
@@ -1117,6 +1125,241 @@ export default function ListaPreciosPage() {
             }
             pdf.setTextColor(0);
           }
+        }, (done, total) => setGeneratingProgress({ done, total }));
+      }
+
+      if (style === "premium") {
+        // ── Cartel "Premium" A4 horizontal — pensado para impresión en B&N ──
+        const opts = premiumOverride ?? premiumOpts;
+        // QR
+        let qrDataUrl: string | null = null;
+        if (config.webUrl) {
+          try {
+            const QRCode = (await import("qrcode")).default;
+            const url = config.webUrl.startsWith("http") ? config.webUrl : `https://${config.webUrl}`;
+            qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 0, color: { dark: "#000000", light: "#ffffff" } });
+          } catch {}
+        }
+
+        // Helper: parte un currency "$14.500,00" en { symbol, integer, decimals }
+        const splitPrice = (n: number) => {
+          const full = formatCurrency(n, true); // "$14.500,00"
+          const m = full.match(/^([^\d]*)([\d\.]+)(,\d{2})?$/);
+          return {
+            symbol: (m?.[1] ?? "$").trim() || "$",
+            integer: m?.[2] ?? String(Math.round(n)),
+            decimals: m?.[3] ?? ",00",
+          };
+        };
+
+        await processInChunks(selectedProducts, 10, (product, idx) => {
+          if (idx > 0) pdf.addPage();
+          const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
+          const boxPriceRaw = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
+          const hasUnits = product.unidadesCaja > 0 && boxPriceRaw > 0;
+          const showPackUnidad = opts.tipoOferta === "packUnidad" && hasUnits;
+          const mainPrice = showPackUnidad ? boxPriceRaw : displayPrice;
+
+          // Márgenes generosos
+          const lm = 20;
+          const rm = pageW - 20;
+          const tm = 18;
+          const bm = pageH - 18;
+
+          // ─── TOP ROW: Logo izquierda + Badge derecha ───
+          if (config.poster_mostrarLogo && logoBase64) {
+            const logoH = 16;
+            const logoW = logoH * logoAspectRatio;
+            try { pdf.addImage(logoBase64, "PNG", lm, tm, logoW, logoH); } catch {}
+          }
+
+          if (opts.mostrarBadge && opts.etiquetaBadge.trim()) {
+            const badgeText = opts.etiquetaBadge.trim().toUpperCase();
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(10);
+            const badgeTextW = pdf.getTextWidth(badgeText);
+            const padX = 7;
+            const dotR = 1.4;
+            const dotGap = 3;
+            const badgeH = 9;
+            const badgeW = badgeTextW + padX * 2 + dotR * 2 + dotGap;
+            const badgeX = rm - badgeW;
+            const badgeY = tm + 2;
+            pdf.setFillColor(20, 20, 20);
+            pdf.roundedRect(badgeX, badgeY, badgeW, badgeH, badgeH / 2, badgeH / 2, "F");
+            // Dot (gris claro — visible en B&N)
+            pdf.setFillColor(200, 200, 200);
+            pdf.circle(badgeX + padX - 2, badgeY + badgeH / 2, dotR, "F");
+            pdf.setTextColor(255);
+            pdf.text(badgeText, badgeX + padX + dotR * 2 + dotGap - 2, badgeY + badgeH / 2 + 1.2);
+            pdf.setTextColor(0);
+          }
+
+          // ─── CAPTION (PASCUAS · STOCK LIMITADO tipo) ───
+          let cursorY = tm + 32;
+          let caption = "";
+          if (opts.captionModo === "custom") caption = opts.captionCustom.trim();
+          else if (opts.captionModo === "auto") {
+            const parts: string[] = [];
+            if (product.marca) parts.push(product.marca);
+            if (product.categoria) parts.push(product.categoria);
+            caption = parts.join(" · ");
+          }
+          if (caption) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(9);
+            pdf.setCharSpace(1.2);
+            pdf.setTextColor(120);
+            pdf.text(caption.toUpperCase(), lm, cursorY);
+            pdf.setCharSpace(0);
+            pdf.setTextColor(0);
+            cursorY += 6;
+          }
+
+          // ─── PRODUCT NAME (grande, bold) ───
+          pdf.setFont("helvetica", "bold");
+          const maxNameW = rm - lm;
+          // Auto-shrink si es muy largo
+          let nameSize = 52;
+          while (nameSize > 26) {
+            pdf.setFontSize(nameSize);
+            const testLines = pdf.splitTextToSize(product.nombre, maxNameW);
+            const tooWide = testLines.some((l: string) => pdf.getTextWidth(l) > maxNameW + 0.5);
+            if (testLines.length <= 2 && !tooWide) break;
+            nameSize -= 3;
+          }
+          pdf.setFontSize(nameSize);
+          const nameLines: string[] = pdf.splitTextToSize(product.nombre, maxNameW).slice(0, 2);
+          const nameLH = nameSize * 0.38;
+          nameLines.forEach((line: string, i: number) => {
+            pdf.text(line, lm, cursorY + nameLH + i * nameLH);
+          });
+          cursorY += nameLines.length * nameLH + 4;
+
+          // ─── SUBTITLE PRESENTACIÓN ("22 g · Caja x 36 unidades") ───
+          const subParts: string[] = [];
+          if (product.nombrePresentacion) subParts.push(product.nombrePresentacion);
+          if (hasUnits) subParts.push(`Caja x ${product.unidadesCaja} unidades`);
+          const subtitle = subParts.join(" · ");
+          if (subtitle) {
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(15);
+            pdf.setTextColor(110);
+            pdf.text(subtitle, lm, cursorY + 6);
+            pdf.setTextColor(0);
+            cursorY += 14;
+          }
+
+          // ─── PRICE BOX (negro con precio grande) ───
+          const priceBoxY = cursorY + 6;
+          const pbH = 34;
+          const priceParts = splitPrice(mainPrice);
+
+          // Medir ancho dinámico del precio
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(44);
+          const intW = pdf.getTextWidth(priceParts.integer);
+          const symW = 7;
+          const decW = 9;
+          const pbPadL = 6;
+          const pbPadR = 7;
+          const pbW = symW + intW + decW + pbPadL + pbPadR;
+
+          pdf.setFillColor(20, 20, 20);
+          pdf.rect(lm, priceBoxY, pbW, pbH, "F");
+
+          // "$" arriba izquierda del número
+          pdf.setTextColor(255);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(16);
+          pdf.text(priceParts.symbol, lm + pbPadL, priceBoxY + 14);
+          // Número grande
+          pdf.setFontSize(44);
+          pdf.text(priceParts.integer, lm + pbPadL + symW, priceBoxY + 22);
+          // Decimales arriba
+          pdf.setFontSize(14);
+          pdf.text(priceParts.decimals, lm + pbPadL + symW + intW + 1, priceBoxY + 13);
+          // Label "LA CAJA" / "POR UNIDAD" abajo a la derecha del box
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(8);
+          pdf.setCharSpace(1);
+          const boxLabel = showPackUnidad ? "LA CAJA" : "POR UNIDAD";
+          pdf.text(boxLabel, lm + pbW - pbPadR, priceBoxY + pbH - 3, { align: "right" });
+          pdf.setCharSpace(0);
+          pdf.setTextColor(0);
+
+          // ─── PRECIO POR UNIDAD (solo si packUnidad) ───
+          if (showPackUnidad) {
+            const pxuX = lm + pbW + 10;
+            const pxuY = priceBoxY + 5;
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(8);
+            pdf.setCharSpace(1);
+            pdf.setTextColor(120);
+            pdf.text("PRECIO POR UNIDAD", pxuX, pxuY + 6);
+            pdf.setCharSpace(0);
+            pdf.setTextColor(0);
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(24);
+            const unitStr = formatCurrency(displayPrice, false); // sin decimales para que sea más limpio
+            pdf.text(unitStr, pxuX, pxuY + 18);
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(11);
+            pdf.setTextColor(120);
+            const unitW = pdf.getTextWidth(unitStr);
+            pdf.text("c/u", pxuX + unitW + 2, pxuY + 18);
+            pdf.setTextColor(0);
+          }
+
+          // ─── DIVIDER + FOOTER ───
+          const dividerY = bm - 26;
+          pdf.setDrawColor(210);
+          pdf.setLineWidth(0.3);
+          pdf.line(lm, dividerY, rm, dividerY);
+
+          // Left: texto catálogo + URL
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(9.5);
+          pdf.setTextColor(110);
+          pdf.text("Mirá todo nuestro catálogo en", lm, dividerY + 9);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(14);
+          pdf.setTextColor(0);
+          pdf.text(`→  ${config.webUrl}`, lm, dividerY + 17);
+
+          // Right: QR + label vertical
+          if (qrDataUrl) {
+            const qrSize = 22;
+            const qrX = rm - qrSize;
+            const qrY = dividerY + 2;
+            try { pdf.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize); } catch {}
+            // Label vertical a la izquierda del QR
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(6.5);
+            pdf.setCharSpace(1);
+            pdf.setTextColor(130);
+            pdf.text("ESCANEÁ PARA VER MÁS", qrX - 2, qrY + qrSize - 1, { angle: 90 });
+            pdf.setCharSpace(0);
+            pdf.setTextColor(0);
+          }
+
+          // ─── CROP MARKS (esquinas sutiles) ───
+          const cmLen = 3;
+          const cmOff = 4;
+          pdf.setDrawColor(180);
+          pdf.setLineWidth(0.2);
+          // Top-left
+          pdf.line(lm - cmOff, tm, lm - cmOff + cmLen, tm);
+          pdf.line(lm - cmOff, tm, lm - cmOff, tm + cmLen);
+          // Top-right
+          pdf.line(rm + cmOff, tm, rm + cmOff - cmLen, tm);
+          pdf.line(rm + cmOff, tm, rm + cmOff, tm + cmLen);
+          // Bottom-left
+          pdf.line(lm - cmOff, bm, lm - cmOff + cmLen, bm);
+          pdf.line(lm - cmOff, bm, lm - cmOff, bm - cmLen);
+          // Bottom-right
+          pdf.line(rm + cmOff, bm, rm + cmOff - cmLen, bm);
+          pdf.line(rm + cmOff, bm, rm + cmOff, bm - cmLen);
         }, (done, total) => setGeneratingProgress({ done, total }));
       }
 
@@ -1926,6 +2169,35 @@ export default function ListaPreciosPage() {
               </button>
             </div>
             <div className="p-6 grid grid-cols-3 gap-4 max-w-4xl mx-auto overflow-y-auto">
+              {/* Premium — Cartel A4 diseño editorial */}
+              <button
+                onClick={() => { setShowStylePicker(false); setShowPremiumConfig(true); }}
+                className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left"
+              >
+                <div className="border border-border rounded-lg p-3 mb-3 bg-white aspect-[4/3] flex flex-col">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="w-5 h-2 bg-black rounded-sm"></div>
+                    <div className="flex items-center gap-0.5 bg-black rounded-full px-1 py-0.5">
+                      <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                      <span className="text-[3px] font-bold text-white">OFERTA</span>
+                    </div>
+                  </div>
+                  <p className="text-[3px] text-muted-foreground mt-1 tracking-wider">MARCA · CATEGORÍA</p>
+                  <p className="text-[8px] font-black leading-none mt-0.5">Producto Ejemplo</p>
+                  <p className="text-[3px] text-muted-foreground mt-0.5">200g · Caja x 12 unidades</p>
+                  <div className="flex items-end gap-1 mt-1 flex-1">
+                    <div className="bg-black text-white text-[8px] font-black px-1.5 py-0.5 leading-none rounded-sm">$1.200</div>
+                    <div className="text-[3px] text-muted-foreground leading-tight">PRECIO UNIDAD<br/><b className="text-black text-[5px]">$100</b> c/u</div>
+                  </div>
+                  <div className="border-t border-border mt-1 pt-0.5 flex justify-between items-end">
+                    <span className="text-[3px]">→ www.dulcesur.com</span>
+                    <div className="w-2.5 h-2.5 bg-muted-foreground/40 rounded-sm"></div>
+                  </div>
+                </div>
+                <p className="font-semibold text-sm">✨ Cartel Premium (B&amp;N)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Diseño editorial para imprimir en blanco y negro</p>
+              </button>
+
               {/* Poster — Cartel A4 por producto */}
               <button
                 onClick={() => { setShowStylePicker(false); setShowPosterConfig(true); }}
@@ -2024,6 +2296,127 @@ export default function ListaPreciosPage() {
                   Generar PDF Variaciones
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Premium Config Modal (pre-generación) */}
+      {showPremiumConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-border">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div>
+                <h2 className="text-lg font-semibold">Configurar Cartel Premium</h2>
+                <p className="text-xs text-muted-foreground">A4 horizontal · B&amp;N</p>
+              </div>
+              <button onClick={() => setShowPremiumConfig(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-5 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium mb-2">Tipo de oferta</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["simple", "Precio simple", "Solo precio unitario grande"],
+                    ["packUnidad", "Pack + unidad", "Precio por caja grande + precio unidad al costado"],
+                  ] as const).map(([val, label, desc]) => (
+                    <button
+                      key={val}
+                      onClick={() => setPremiumOpts((p) => ({ ...p, tipoOferta: val }))}
+                      className={`p-3 rounded-lg border text-left transition ${
+                        premiumOpts.tipoOferta === val ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold">{label}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium">Etiqueta del badge</label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={premiumOpts.mostrarBadge}
+                      onChange={(e) => setPremiumOpts((p) => ({ ...p, mostrarBadge: e.target.checked }))}
+                      className="accent-primary"
+                    />
+                    Mostrar
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  {["OFERTA DE LA SEMANA", "IMPERDIBLE", "NUEVO", "OFERTA"].map((preset) => (
+                    <button
+                      key={preset}
+                      disabled={!premiumOpts.mostrarBadge}
+                      onClick={() => setPremiumOpts((p) => ({ ...p, etiquetaBadge: preset }))}
+                      className={`px-3 py-2 rounded-lg border text-xs font-semibold transition disabled:opacity-50 ${
+                        premiumOpts.etiquetaBadge === preset ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  disabled={!premiumOpts.mostrarBadge}
+                  value={premiumOpts.etiquetaBadge}
+                  onChange={(e) => setPremiumOpts((p) => ({ ...p, etiquetaBadge: e.target.value }))}
+                  placeholder="O escribí el tuyo..."
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Texto superior (arriba del nombre)</label>
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {([
+                    ["auto", "Automático", "Marca · Categoría"],
+                    ["custom", "Personalizado", "Ej: Pascuas 2026"],
+                    ["oculto", "Oculto", "Sin texto"],
+                  ] as const).map(([val, label, desc]) => (
+                    <button
+                      key={val}
+                      onClick={() => setPremiumOpts((p) => ({ ...p, captionModo: val }))}
+                      className={`p-2.5 rounded-lg border text-left transition ${
+                        premiumOpts.captionModo === val ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold">{label}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+                {premiumOpts.captionModo === "custom" && (
+                  <input
+                    type="text"
+                    value={premiumOpts.captionCustom}
+                    onChange={(e) => setPremiumOpts((p) => ({ ...p, captionCustom: e.target.value }))}
+                    placeholder="Ej: PASCUAS 2026 · STOCK LIMITADO"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 px-6 py-4 border-t border-border shrink-0">
+              <button
+                onClick={() => setShowPremiumConfig(false)}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-accent transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setShowPremiumConfig(false); generatePDF("premium", undefined, premiumOpts); }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
+              >
+                Generar PDF
+              </button>
             </div>
           </div>
         </div>
