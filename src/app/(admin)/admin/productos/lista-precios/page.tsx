@@ -1208,22 +1208,49 @@ export default function ListaPreciosPage() {
           }
 
           // ─── COMPONENTES DEL COMBO (opcional) ───
+          // Hasta 4 en la columna izquierda; si hay más, pasan a la derecha
+          // con un separador vertical fino. Evita que el precio se baje mucho.
           if (product.esCombo && opts.mostrarComponentesCombo && comboItems.length > 0) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(10);
             pdf.setTextColor(90);
-            let compY = cursorY;
-            comboItems.slice(0, 8).forEach((c) => {
-              // Ej: "· 6× Papas Slices Ketchup 65g"  o  "· Alfajor Triple"
-              const line = `· ${c.cantidad > 1 ? c.cantidad + "× " : ""}${c.nombre}`;
-              const lines = pdf.splitTextToSize(line, (rm - lm) / 2);
-              lines.forEach((ln: string) => {
-                pdf.text(ln, lm, compY);
-                compY += 4;
+            const items = comboItems.slice(0, 10);
+            const col1 = items.slice(0, 4);
+            const col2 = items.slice(4);
+            const twoColumns = col2.length > 0;
+            const lineH = 4;
+            const colGap = 8;
+            const totalW = rm - lm;
+            const colWidth = twoColumns ? (totalW - colGap) / 2 : totalW / 2;
+
+            const drawColumn = (cItems: typeof comboItems, x: number): number => {
+              let y = cursorY;
+              cItems.forEach((c) => {
+                const line = `· ${c.cantidad > 1 ? c.cantidad + "× " : ""}${c.nombre}`;
+                const lines = pdf.splitTextToSize(line, colWidth);
+                lines.forEach((ln: string) => {
+                  pdf.text(ln, x, y);
+                  y += lineH;
+                });
               });
-            });
+              return y;
+            };
+
+            const col1EndY = drawColumn(col1, lm);
+            let finalY = col1EndY;
+            if (twoColumns) {
+              const col2X = lm + colWidth + colGap;
+              const col2EndY = drawColumn(col2, col2X);
+              finalY = Math.max(col1EndY, col2EndY);
+              // Separador vertical entre columnas
+              const sepX = lm + colWidth + colGap / 2;
+              pdf.setDrawColor(215);
+              pdf.setLineWidth(0.2);
+              pdf.line(sepX, cursorY - 3, sepX, finalY - 1);
+            }
+
             pdf.setTextColor(0);
-            cursorY = compY + 2;
+            cursorY = finalY + 2;
           }
 
           // ─── PRECIO (negro sobre blanco, tipográfico — todo en una sola línea) ───
