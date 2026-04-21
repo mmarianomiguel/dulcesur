@@ -1167,7 +1167,7 @@ export default function ListaPreciosPage() {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(config.premium_tamañoCaption);
             pdf.setCharSpace(1.2);
-            pdf.setTextColor(120);
+            pdf.setTextColor(90);
             pdf.text(caption.toUpperCase(), lm, cursorY);
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
@@ -1220,7 +1220,7 @@ export default function ListaPreciosPage() {
           if (subtitle) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(config.premium_tamañoSubtitulo);
-            pdf.setTextColor(110);
+            pdf.setTextColor(80);
             pdf.text(subtitle, lm, cursorY + 6);
             pdf.setTextColor(0);
             cursorY += 14;
@@ -1332,7 +1332,7 @@ export default function ListaPreciosPage() {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(9);
             pdf.setCharSpace(1.2);
-            pdf.setTextColor(130);
+            pdf.setTextColor(95);
             pdf.text("PRECIO POR UNIDAD", pxuX, pxuLabelY);
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
@@ -1350,7 +1350,7 @@ export default function ListaPreciosPage() {
 
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(cuSize);
-            pdf.setTextColor(130);
+            pdf.setTextColor(95);
             pdf.text("c/u", pxuX + unitW + 2, unitBaseline);
             pdf.setTextColor(0);
           }
@@ -1366,7 +1366,7 @@ export default function ListaPreciosPage() {
           if (config.premium_mostrarWeb) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(9.5);
-            pdf.setTextColor(110);
+            pdf.setTextColor(80);
             pdf.text("Mirá este producto en nuestra tienda online", lm, dividerY + 9);
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(14);
@@ -1374,25 +1374,28 @@ export default function ListaPreciosPage() {
             pdf.text(config.webUrl, lm, dividerY + 17);
           }
 
-          // Right: QR grande + CTA "ESCANEÁ Y COMPRÁ"
+          // Right: QR + CTA "ESCANEÁ Y COMPRÁ" (posicionado debajo del divisor)
           if (qrDataUrl) {
-            const qrSize = 32;
+            const qrSize = 26;
             const qrX = rm - qrSize;
-            const qrY = dividerY - (qrSize - 26) / 2;
+            const qrY = dividerY + 1;
             try { pdf.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize); } catch {}
-            // CTA a la izquierda del QR
-            const ctaX = qrX - 3;
+            // CTA a la izquierda del QR, posicionado con getTextWidth (sin align)
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(13);
+            pdf.setFontSize(12);
             pdf.setCharSpace(0.8);
             pdf.setTextColor(0);
-            pdf.text("ESCANEÁ", ctaX, qrY + 10, { align: "right" });
-            pdf.text("Y COMPRÁ", ctaX, qrY + 18, { align: "right" });
+            const ctaRight = qrX - 4;
+            const escaneaW = pdf.getTextWidth("ESCANEÁ");
+            const comprW = pdf.getTextWidth("Y COMPRÁ");
+            pdf.text("ESCANEÁ", ctaRight - escaneaW, qrY + 10);
+            pdf.text("Y COMPRÁ", ctaRight - comprW, qrY + 17);
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(8);
+            pdf.setFontSize(7.5);
             pdf.setCharSpace(0.3);
-            pdf.setTextColor(130);
-            pdf.text("en dulcesur.com", ctaX, qrY + 25, { align: "right" });
+            pdf.setTextColor(95);
+            const dulceW = pdf.getTextWidth("en dulcesur.com");
+            pdf.text("en dulcesur.com", ctaRight - dulceW, qrY + 23);
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
           }
