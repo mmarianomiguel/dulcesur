@@ -170,6 +170,8 @@ export default function HojaDeRutaPage() {
   const [orden, setOrden] = useState<Record<string, number>>({});
   const [savedOrdenLoaded, setSavedOrdenLoaded] = useState(false);
   const savedOrdenRef = useRef<Record<string, number>>({});
+  // Dirección del mayorista (punto de partida de la hoja de ruta)
+  const [empresaOrigen, setEmpresaOrigen] = useState<string | null>(null);
   const [filterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
   const [search, setSearch] = useState("");
   const [showAllPending, setShowAllPending] = useState(true);
@@ -356,6 +358,12 @@ export default function HojaDeRutaPage() {
     }
 
     // Initialize order sequence, preferring saved order from hoja_ruta_items
+    // IMPORTANT: Esperar a que el load de hoja_ruta_items termine para no pisar el orden guardado.
+    // Cuando savedOrdenLoaded pase a true, este useCallback cambia de ref y se vuelve a ejecutar.
+    if (!savedOrdenLoaded) {
+      setLoading(false);
+      return;
+    }
     const saved = savedOrdenRef.current;
     const newOrden: Record<string, number> = {};
     // Find the max saved orden to append new ventas after it
@@ -386,7 +394,7 @@ export default function HojaDeRutaPage() {
 
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, showAllPending]);
+  }, [selectedDate, showAllPending, savedOrdenLoaded]);
 
   useEffect(() => {
     fetchVentas();
@@ -426,6 +434,24 @@ export default function HojaDeRutaPage() {
         } else {
           setSavedOrdenLoaded(true);
         }
+      } else {
+        // No hay hoja activa: marcar como loaded para destrabar fetchVentas
+        setSavedOrdenLoaded(true);
+      }
+    })();
+  }, []);
+
+  // Cargar dirección del mayorista (origen de la hoja de ruta)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("empresa")
+        .select("domicilio")
+        .limit(1)
+        .maybeSingle();
+      if (data?.domicilio) {
+        // Agregamos ", Argentina" para que el geocoder priorice AR cuando el domicilio es genérico
+        setEmpresaOrigen(`${data.domicilio}, Argentina`);
       }
     })();
   }, []);
@@ -1248,12 +1274,19 @@ export default function HojaDeRutaPage() {
       showOrderToast("Se necesitan al menos 2 paradas con dirección");
       return;
     }
+    if (!empresaOrigen) {
+      showOrderToast("Configurá la dirección de la empresa en Configuración para optimizar la ruta");
+      return;
+    }
     setOptimizingRoute(true);
     try {
       const res = await fetch("/api/hoja-ruta/optimizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stops: stops.map((s) => ({ id: s.key, address: s.address })) }),
+        body: JSON.stringify({
+          stops: stops.map((s) => ({ id: s.key, address: s.address })),
+          origen: empresaOrigen,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1312,10 +1345,24 @@ export default function HojaDeRutaPage() {
       const ventaIds = filteredVentas.map((v) => v.id);
       if (ventaIds.length === 0) { setSavingRuta(false); return; }
 
-      // Build ordered list of venta IDs based on current clientGroups order
+      // Build ordered list of venta IDs based on the explicit `orden` state,
+      // with stable fallback to clientGroups visual order.
+      // Source of truth: `orden[v.id]` (modified by drag, quick order, manual input, optimize, previous order).
+      const groupPositions: Record<string, number> = {};
+      clientGroups.forEach((g, idx) => { groupPositions[g.key] = idx; });
+      const groupsRanked = [...clientGroups].sort((a, b) => {
+        const oa = orden[a.ventas[0].id];
+        const ob = orden[b.ventas[0].id];
+        if (oa !== undefined && ob !== undefined && oa !== ob) return oa - ob;
+        if (oa !== undefined && ob === undefined) return -1;
+        if (oa === undefined && ob !== undefined) return 1;
+        // desempate estable por posición visual actual
+        return (groupPositions[a.key] ?? 0) - (groupPositions[b.key] ?? 0);
+      });
+
       const orderedVentaIds: { venta_id: string; orden: number }[] = [];
       let counter = 1;
-      for (const group of clientGroups) {
+      for (const group of groupsRanked) {
         for (const v of group.ventas) {
           if (ventaIds.includes(v.id)) {
             orderedVentaIds.push({ venta_id: v.id, orden: counter });
@@ -1341,6 +1388,12 @@ export default function HojaDeRutaPage() {
             orden: item.orden,
           }))
         );
+        // Sincronizar cache local con lo que acabamos de persistir para que
+        // un futuro refetch no reviva un orden viejo.
+        const nuevoSaved: Record<string, number> = {};
+        orderedVentaIds.forEach((it) => { nuevoSaved[it.venta_id] = it.orden; });
+        savedOrdenRef.current = nuevoSaved;
+        setOrden((prev) => ({ ...prev, ...nuevoSaved }));
         setShowShareDialog(true);
       } else {
         // Create new hoja
@@ -1367,6 +1420,12 @@ export default function HojaDeRutaPage() {
             orden: item.orden,
           }))
         );
+
+        // Sincronizar cache local con el orden persistido
+        const nuevoSaved: Record<string, number> = {};
+        orderedVentaIds.forEach((it) => { nuevoSaved[it.venta_id] = it.orden; });
+        savedOrdenRef.current = nuevoSaved;
+        setOrden((prev) => ({ ...prev, ...nuevoSaved }));
 
         setHojaRutaId(hoja.id);
         setHojaToken(hoja.token_fijo);
