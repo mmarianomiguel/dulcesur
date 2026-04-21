@@ -255,7 +255,9 @@ export default function ListaPreciosPage() {
     mostrarRangoFechas: boolean;
     rangoFechas: string;
     mostrarImagen: boolean;
-  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true });
+    aplicarDescuento: boolean;
+    porcentajeDescuento: number;
+  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true, aplicarDescuento: false, porcentajeDescuento: 5 });
   const [showPremiumConfig, setShowPremiumConfig] = useState(false);
   const [premiumOpts, setPremiumOpts] = useState<{
     tipoOferta: "simple" | "packUnidad";
@@ -2110,12 +2112,18 @@ export default function ListaPreciosPage() {
         const comboTotalUnidades = comboItems.reduce((s, i) => s + i.cantidad, 0);
         const hasUnits = unidadesCaja > 0 && boxPrice > 0;
         const showPackUnidad = opts.tipoOferta === "packUnidad" && (hasUnits || (product.esCombo && comboTotalUnidades > 0));
-        const mainPrice = product.esCombo
+        const mainPriceOriginal = product.esCombo
           ? displayPrice
           : (showPackUnidad ? boxPrice : displayPrice);
-        const unitPrice = product.esCombo
-          ? (comboTotalUnidades > 0 ? mainPrice / comboTotalUnidades : 0)
+        const unitPriceOriginal = product.esCombo
+          ? (comboTotalUnidades > 0 ? mainPriceOriginal / comboTotalUnidades : 0)
           : (hasUnits ? boxPrice / unidadesCaja : displayPrice);
+        // Descuento configurable (reemplaza los precios mostrados)
+        const discountActive = opts.aplicarDescuento && opts.porcentajeDescuento > 0 && opts.porcentajeDescuento < 100;
+        const discountMult = discountActive ? 1 - opts.porcentajeDescuento / 100 : 1;
+        const mainPrice = mainPriceOriginal * discountMult;
+        const unitPrice = unitPriceOriginal * discountMult;
+        const mainPriceSaved = mainPriceOriginal - mainPrice;
 
         // ── Price tag (white rounded rect, slight rotation, shadow) ──
         ctx.save();
@@ -2123,11 +2131,29 @@ export default function ListaPreciosPage() {
         ctx.rotate(-2 * Math.PI / 180);
         ctx.shadowColor = "rgba(0,0,0,0.25)"; ctx.shadowBlur = 22; ctx.shadowOffsetY = 8;
         ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#222"; ctx.lineWidth = 4;
-        const tagW = 520, tagH = 170;
+        const tagW = 520, tagH = discountActive ? 210 : 170;
+        const priceYOffset = discountActive ? 38 : 0; // shift main price down cuando hay tachado
         roundRect(ctx, 0, 0, tagW, tagH, 10); ctx.fill(); ctx.stroke();
         ctx.shadowColor = "transparent";
         ctx.fillStyle = "#666"; ctx.font = "600 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
         ctx.fillText("PRECIO", tagW / 2, 18);
+        // Precio original tachado si hay descuento aplicado
+        if (discountActive) {
+          const origPrice = splitPriceStory(mainPriceOriginal);
+          const origText = `${origPrice.symbol}${origPrice.integer}${origPrice.decimals}`;
+          ctx.font = "600 26px Arial";
+          ctx.fillStyle = "#888";
+          ctx.textAlign = "center";
+          const origW = ctx.measureText(origText).width;
+          ctx.fillText(origText, tagW / 2, 48);
+          // Linea tachado
+          ctx.strokeStyle = "#888";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(tagW / 2 - origW / 2 - 3, 62);
+          ctx.lineTo(tagW / 2 + origW / 2 + 3, 62);
+          ctx.stroke();
+        }
         // Price with $ chico + numero grande + decimales chicos (con separador de miles AR)
         const price = splitPriceStory(mainPrice);
         const mainSize = config.story_tamañoPrecio;
@@ -2142,11 +2168,11 @@ export default function ListaPreciosPage() {
         const txtX = (tagW - totalTxtW) / 2;
         // "$" alineado al top del numero grande
         ctx.font = `900 ${smallSize}px Arial`;
-        ctx.fillText(price.symbol, txtX, 50);
+        ctx.fillText(price.symbol, txtX, 50 + priceYOffset);
         ctx.font = `900 ${mainSize}px Arial`;
-        ctx.fillText(price.integer, txtX + symW + 8, 40);
+        ctx.fillText(price.integer, txtX + symW + 8, 40 + priceYOffset);
         ctx.font = `900 ${smallSize}px Arial`;
-        ctx.fillText(price.decimals, txtX + symW + 8 + intW + 2, 50);
+        ctx.fillText(price.decimals, txtX + symW + 8 + intW + 2, 50 + priceYOffset);
         // "LA CAJA × 36" / "COMBO × 24" / "POR UNIDAD"
         ctx.fillStyle = "#cc2c2c"; ctx.font = "900 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
         let tagLabel: string;
@@ -2157,8 +2183,30 @@ export default function ListaPreciosPage() {
         } else {
           tagLabel = "POR UNIDAD";
         }
-        ctx.fillText(tagLabel, tagW / 2, 132);
+        ctx.fillText(tagLabel, tagW / 2, 132 + priceYOffset);
         ctx.restore();
+
+        // ── Sello rotado "−X%" si hay descuento (arriba-derecha del tag) ──
+        if (discountActive) {
+          ctx.save();
+          // Posicion: esquina sup-der del price tag, overlapping
+          ctx.translate(W / 2 + 370, frameY + frameH - 170);
+          ctx.rotate(12 * Math.PI / 180);
+          ctx.fillStyle = "#cc2c2c"; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 5;
+          ctx.shadowColor = "rgba(0,0,0,0.25)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+          const selloR = 68;
+          ctx.beginPath(); ctx.arc(0, 0, selloR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.shadowColor = "transparent";
+          // Borde dentado simulado con segundo circulo punteado (simplificacion)
+          ctx.setLineDash([6, 5]);
+          ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(0, 0, selloR - 10, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.font = "900 44px Arial";
+          ctx.fillText(`−${opts.porcentajeDescuento}%`, 0, 2);
+          ctx.restore();
+        }
 
         // ── Product name (bold uppercase, wrap 2 lines) ──
         ctx.fillStyle = "#111"; ctx.textAlign = "center"; ctx.textBaseline = "top";
@@ -2797,6 +2845,39 @@ export default function ListaPreciosPage() {
                     <p className="text-[11px] text-muted-foreground">Se toma de Cloudinary. Si el producto no tiene imagen, queda el frame vacío.</p>
                   </div>
                 </label>
+              </div>
+
+              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={storyOpts.aplicarDescuento}
+                    onChange={(e) => setStoryOpts((p) => ({ ...p, aplicarDescuento: e.target.checked }))}
+                    className="accent-primary w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Aplicar descuento solo para este cartel</p>
+                    <p className="text-[11px] text-muted-foreground">El precio mostrado es el precio ya descontado. Aparece el original tachado y un sello <b>−X%</b>. No modifica el precio en la base de datos.</p>
+                  </div>
+                </label>
+                {storyOpts.aplicarDescuento && (
+                  <div className="flex items-center gap-3 pl-7">
+                    <label className="text-xs text-muted-foreground">Porcentaje:</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={80}
+                      step={1}
+                      value={storyOpts.porcentajeDescuento}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, porcentajeDescuento: Math.max(0, Math.min(80, Number(e.target.value))) }))}
+                      className="w-20 border border-border rounded-md px-2 py-1 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <span className="text-sm">%</span>
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      Ej: {storyOpts.porcentajeDescuento}% sobre $10.000 = ${(10000 * (1 - storyOpts.porcentajeDescuento/100)).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <details className="border-t border-border pt-4">
