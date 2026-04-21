@@ -1009,37 +1009,38 @@ export default function ListaPreciosPage() {
           const boxPrice = product.precioCaja > 0 ? product.precioCaja : 0;
           const hasUnits = product.unidadesCaja > 0;
 
-          // ── Logo (centered at top) ──
-          let contentY = margin + 8;
+          // ── Logo (top-left corner) ──
+          let contentY = margin + 15;
           if (config.poster_mostrarLogo && logoBase64) {
             const posterLogoH = config.logoTamaño * 2.5;
             const posterLogoW = posterLogoH * logoAspectRatio;
-            const logoX = (pageW - posterLogoW) / 2;
-            try { pdf.addImage(logoBase64, "PNG", logoX, margin + 5, posterLogoW, posterLogoH); } catch {}
-            contentY = margin + 5 + posterLogoH + 8;
+            try { pdf.addImage(logoBase64, "PNG", margin + 5, margin + 5, posterLogoW, posterLogoH); } catch {}
+            // Content starts below the logo bottom (+small gap) or the default top, whichever is lower
+            contentY = Math.max(contentY, margin + 5 + posterLogoH + 6);
           }
 
-          // ── "OFERTA" badge (rounded dark pill) ──
-          const ofertaFontSize = 28;
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(ofertaFontSize);
-          const ofertaText = "OFERTA";
-          const ofertaTextW = pdf.getTextWidth(ofertaText);
-          const pillW = ofertaTextW + 30;
-          const pillH = 18;
-          const pillX = (pageW - pillW) / 2;
-          const pillY = contentY;
-          const pillR = pillH / 2;
-          // Draw rounded rect (pill shape)
-          pdf.setFillColor(20, 20, 20);
-          pdf.roundedRect(pillX, pillY, pillW, pillH, pillR, pillR, "F");
-          // Text inside pill
-          pdf.setTextColor(255, 255, 255);
-          pdf.text(ofertaText, pageW / 2, pillY + pillH / 2 + ofertaFontSize * 0.13, { align: "center" });
-          pdf.setTextColor(0);
+          // ── "OFERTA" badge (rounded dark pill) — solo si el producto está en oferta ──
+          let nameY = contentY + 10;
+          if (product.enOferta) {
+            const ofertaFontSize = 28;
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(ofertaFontSize);
+            const ofertaText = "OFERTA";
+            const ofertaTextW = pdf.getTextWidth(ofertaText);
+            const pillW = ofertaTextW + 30;
+            const pillH = 18;
+            const pillX = (pageW - pillW) / 2;
+            const pillY = contentY;
+            const pillR = pillH / 2;
+            pdf.setFillColor(20, 20, 20);
+            pdf.roundedRect(pillX, pillY, pillW, pillH, pillR, pillR, "F");
+            pdf.setTextColor(255, 255, 255);
+            pdf.text(ofertaText, pageW / 2, pillY + pillH / 2 + ofertaFontSize * 0.13, { align: "center" });
+            pdf.setTextColor(0);
+            nameY = pillY + pillH + 15;
+          }
 
           // ── Product name (centered) ──
-          const nameY = pillY + pillH + 15;
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.poster_tamañoNombre);
           const nameLines: string[] = pdf.splitTextToSize(product.nombre, pageW - margin * 4);
