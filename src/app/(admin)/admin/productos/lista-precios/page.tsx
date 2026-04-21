@@ -1078,9 +1078,15 @@ export default function ListaPreciosPage() {
         const PT_TO_MM = 0.3528;
         const CAP_FACTOR = 0.72; // cap height ≈ 72% del font size
 
-        // Parse sufijo "Caja xN Un" / "Caja x N unidades" del nombre cuando no hay caja cargada.
-        // Algunos productos tienen la info de caja en el titulo en lugar de en presentaciones.
-        const cajaSuffixRe = /\s+caja\s*x\s*(\d+)\s*(un|unid|unidades?|u)?\.?$/i;
+        // Parse sufijo "{Tipo} xN Un" del nombre cuando no hay caja cargada.
+        // Tipos reconocidos: Caja, Bulto, Display, Pack, Estuche.
+        const presSuffixRe = /\s+(caja|bulto|display|pack|estuche|sixpack|six\s*pack)\s*x\s*(\d+)\s*(un|unid|unidades?|u)?\.?$/i;
+        // Extrae la parte "tipo" de un nombre de presentacion (ej: "Caja x 20" -> "Caja")
+        const presBaseFrom = (nombre: string, fallback = "Caja"): string => {
+          const first = (nombre || "").split(/\s*x\s*\d/i)[0].trim();
+          return first || fallback;
+        };
+        const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
 
         await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0) pdf.addPage();
@@ -1088,15 +1094,18 @@ export default function ListaPreciosPage() {
           let boxPriceRaw = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
           let unidadesCaja = product.unidadesCaja;
           let displayName = product.nombre;
-          // Si el producto no tiene caja cargada pero el nombre tiene "Caja xN Un", extraer.
+          // Base por defecto desde la presentacion cargada en DB
+          let presBase = presBaseFrom(product.nombrePresentacion, "Caja");
+          // Si el producto no tiene caja cargada pero el nombre tiene "Caja xN Un" / "Bulto xN" / etc, extraer.
           if (!product.esCombo && (unidadesCaja === 0 || boxPriceRaw === 0)) {
-            const m = product.nombre.match(cajaSuffixRe);
+            const m = product.nombre.match(presSuffixRe);
             if (m) {
-              const n = parseInt(m[1], 10);
+              const n = parseInt(m[2], 10);
               if (n > 1) {
-                displayName = product.nombre.replace(cajaSuffixRe, "").trim();
+                displayName = product.nombre.replace(presSuffixRe, "").trim();
                 unidadesCaja = n;
                 boxPriceRaw = displayPriceRaw;
+                presBase = capitalize(m[1].replace(/\s+/g, ""));
               }
             }
           }
@@ -1209,7 +1218,7 @@ export default function ListaPreciosPage() {
               subtitle = "Combo";
             }
           } else if (hasUnits) {
-            subtitle = `Caja x ${unidadesCaja} unidades`;
+            subtitle = `${presBase} x ${unidadesCaja} unidades`;
           } else {
             const np = (product.nombrePresentacion || "").trim();
             const nu = (product.nombreUnidad || "").trim();
@@ -2115,16 +2124,27 @@ export default function ListaPreciosPage() {
         }
 
         // ── Display data (mismo enfoque que Premium: parsing del nombre + combos) ──
-        const cajaSuffixRe = /\s+caja\s*x\s*(\d+)\s*(un|unid|unidades?|u)?\.?$/i;
+        const presSuffixRe = /\s+(caja|bulto|display|pack|estuche|sixpack|six\s*pack)\s*x\s*(\d+)\s*(un|unid|unidades?|u)?\.?$/i;
+        const presBaseFrom = (nombre: string, fallback = "Caja"): string => {
+          const first = (nombre || "").split(/\s*x\s*\d/i)[0].trim();
+          return first || fallback;
+        };
+        const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
         const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
         let boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
         let unidadesCaja = product.unidadesCaja;
         let displayName = product.nombre;
+        let presBase = presBaseFrom(product.nombrePresentacion, "Caja");
         if (!product.esCombo && (unidadesCaja === 0 || boxPrice === 0)) {
-          const m = product.nombre.match(cajaSuffixRe);
+          const m = product.nombre.match(presSuffixRe);
           if (m) {
-            const n = parseInt(m[1], 10);
-            if (n > 1) { displayName = product.nombre.replace(cajaSuffixRe, "").trim(); unidadesCaja = n; boxPrice = displayPrice; }
+            const n = parseInt(m[2], 10);
+            if (n > 1) {
+              displayName = product.nombre.replace(presSuffixRe, "").trim();
+              unidadesCaja = n;
+              boxPrice = displayPrice;
+              presBase = capitalize(m[1].replace(/\s+/g, ""));
+            }
           }
         }
         const comboItems = product.esCombo ? (combosMap[product.id] || []) : [];
@@ -2199,7 +2219,7 @@ export default function ListaPreciosPage() {
         if (product.esCombo) {
           tagLabel = comboTotalUnidades > 0 ? `COMBO × ${comboTotalUnidades}` : "COMBO";
         } else if (hasUnits && showPackUnidad) {
-          tagLabel = `LA CAJA × ${unidadesCaja}`;
+          tagLabel = `${presBase.toUpperCase()} × ${unidadesCaja}`;
         } else {
           tagLabel = "POR UNIDAD";
         }
@@ -2265,7 +2285,7 @@ export default function ListaPreciosPage() {
             subtitle = "Combo";
           }
         } else if (hasUnits) {
-          subtitle = `Caja x ${unidadesCaja} unidades`;
+          subtitle = `${presBase} x ${unidadesCaja} unidades`;
         } else {
           const np = (product.nombrePresentacion || "").trim();
           const nu = (product.nombreUnidad || "").trim();
