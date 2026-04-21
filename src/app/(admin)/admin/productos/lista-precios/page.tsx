@@ -90,6 +90,12 @@ interface PdfConfig {
   porcentajeTransferencia: number;
   webUrl: string;
   logoTamaño: number;
+  premium_logoTamaño: number;
+  premium_tamañoCaption: number;
+  premium_tamañoNombre: number;
+  premium_tamañoSubtitulo: number;
+  premium_tamañoPrecio: number;
+  premium_tamañoPrecioUnidad: number;
   combinado_columnas: number;
   combinado_filas: number;
   combinado_tamañoNombre: number;
@@ -136,6 +142,7 @@ const DEFAULT_CONFIG: PdfConfig = {
   duo_columnas: 2, duo_filas: 4, duo_tamañoNombre: 11, duo_tamañoPrecio: 24,
   duo_mostrarLogo: true, duo_mostrarWeb: true, duo_mostrarFecha: true,
   poster_tamañoNombre: 36, poster_tamañoPrecio: 72, poster_mostrarLogo: true, poster_mostrarWeb: true, poster_mostrarPrecioUnitario: true,
+  premium_logoTamaño: 18, premium_tamañoCaption: 9, premium_tamañoNombre: 52, premium_tamañoSubtitulo: 15, premium_tamañoPrecio: 68, premium_tamañoPrecioUnidad: 28,
 };
 
 
@@ -1168,7 +1175,7 @@ export default function ListaPreciosPage() {
 
           // ─── TOP ROW: Logo izquierda + Badge derecha ───
           if (config.poster_mostrarLogo && logoBase64) {
-            const logoH = 16;
+            const logoH = config.premium_logoTamaño;
             const logoW = logoH * logoAspectRatio;
             try { pdf.addImage(logoBase64, "PNG", lm, tm, logoW, logoH); } catch {}
           }
@@ -1207,7 +1214,7 @@ export default function ListaPreciosPage() {
           }
           if (caption) {
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(9);
+            pdf.setFontSize(config.premium_tamañoCaption);
             pdf.setCharSpace(1.2);
             pdf.setTextColor(120);
             pdf.text(caption.toUpperCase(), lm, cursorY);
@@ -1219,9 +1226,9 @@ export default function ListaPreciosPage() {
           // ─── PRODUCT NAME (grande, bold) ───
           pdf.setFont("helvetica", "bold");
           const maxNameW = rm - lm;
-          // Auto-shrink si es muy largo
-          let nameSize = 52;
-          while (nameSize > 26) {
+          // Auto-shrink si es muy largo — empieza en tamaño configurado, baja si no entra
+          let nameSize = config.premium_tamañoNombre;
+          while (nameSize > 20) {
             pdf.setFontSize(nameSize);
             const testLines = pdf.splitTextToSize(product.nombre, maxNameW);
             const tooWide = testLines.some((l: string) => pdf.getTextWidth(l) > maxNameW + 0.5);
@@ -1243,71 +1250,71 @@ export default function ListaPreciosPage() {
           const subtitle = subParts.join(" · ");
           if (subtitle) {
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(15);
+            pdf.setFontSize(config.premium_tamañoSubtitulo);
             pdf.setTextColor(110);
             pdf.text(subtitle, lm, cursorY + 6);
             pdf.setTextColor(0);
             cursorY += 14;
           }
 
-          // ─── PRICE BOX (negro con precio grande) ───
-          const priceBoxY = cursorY + 6;
-          const pbH = 34;
+          // ─── PRECIO (negro sobre blanco, sin caja — tipográfico) ───
           const priceParts = splitPrice(mainPrice);
+          const priceSize = config.premium_tamañoPrecio;
+          const priceY = cursorY + priceSize * 0.75 + 6;
 
-          // Medir ancho dinámico del precio
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(44);
-          const intW = pdf.getTextWidth(priceParts.integer);
-          const symW = 7;
-          const decW = 9;
-          const pbPadL = 6;
-          const pbPadR = 7;
-          const pbW = symW + intW + decW + pbPadL + pbPadR;
+          // Label pequeño arriba del precio (solo si packUnidad, para aclarar "LA CAJA")
+          if (showPackUnidad) {
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(10);
+            pdf.setCharSpace(1.5);
+            pdf.setTextColor(130);
+            pdf.text("LA CAJA", lm, cursorY + 2);
+            pdf.setCharSpace(0);
+            pdf.setTextColor(0);
+          }
 
-          pdf.setFillColor(20, 20, 20);
-          pdf.rect(lm, priceBoxY, pbW, pbH, "F");
-
-          // "$" arriba izquierda del número
-          pdf.setTextColor(255);
+          // Dibujar precio: "$" chico + NÚMERO GRANDE + decimales superíndice
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(16);
-          pdf.text(priceParts.symbol, lm + pbPadL, priceBoxY + 14);
-          // Número grande
-          pdf.setFontSize(44);
-          pdf.text(priceParts.integer, lm + pbPadL + symW, priceBoxY + 22);
-          // Decimales arriba
-          pdf.setFontSize(14);
-          pdf.text(priceParts.decimals, lm + pbPadL + symW + intW + 1, priceBoxY + 13);
-          // Label "LA CAJA" / "POR UNIDAD" abajo a la derecha del box
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(8);
-          pdf.setCharSpace(1);
-          const boxLabel = showPackUnidad ? "LA CAJA" : "POR UNIDAD";
-          pdf.text(boxLabel, lm + pbW - pbPadR, priceBoxY + pbH - 3, { align: "right" });
-          pdf.setCharSpace(0);
+          pdf.setFontSize(priceSize);
           pdf.setTextColor(0);
 
-          // ─── PRECIO POR UNIDAD (solo si packUnidad) ───
+          const numW = pdf.getTextWidth(priceParts.integer);
+          const symSize = priceSize * 0.35;
+          const decSize = priceSize * 0.28;
+          const symGap = priceSize * 0.08;
+
+          pdf.setFontSize(symSize);
+          const symW = pdf.getTextWidth(priceParts.symbol);
+          pdf.text(priceParts.symbol, lm, priceY - priceSize * 0.35);
+
+          pdf.setFontSize(priceSize);
+          pdf.text(priceParts.integer, lm + symW + symGap, priceY);
+
+          pdf.setFontSize(decSize);
+          pdf.text(priceParts.decimals, lm + symW + symGap + numW + 1, priceY - priceSize * 0.5);
+
+          const totalPriceW = symW + symGap + numW + pdf.getTextWidth(priceParts.decimals) + 2;
+
+          // ─── PRECIO POR UNIDAD (solo si packUnidad) — al costado del precio principal ───
           if (showPackUnidad) {
-            const pxuX = lm + pbW + 10;
-            const pxuY = priceBoxY + 5;
+            const pxuX = lm + totalPriceW + 14;
+            const pxuY = priceY - priceSize * 0.5;
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(8);
-            pdf.setCharSpace(1);
-            pdf.setTextColor(120);
-            pdf.text("PRECIO POR UNIDAD", pxuX, pxuY + 6);
+            pdf.setFontSize(9);
+            pdf.setCharSpace(1.2);
+            pdf.setTextColor(130);
+            pdf.text("PRECIO POR UNIDAD", pxuX, pxuY);
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(24);
-            const unitStr = formatCurrency(displayPrice, false); // sin decimales para que sea más limpio
-            pdf.text(unitStr, pxuX, pxuY + 18);
+            pdf.setFontSize(config.premium_tamañoPrecioUnidad);
+            const unitStr = formatCurrency(displayPrice, false);
+            pdf.text(unitStr, pxuX, pxuY + config.premium_tamañoPrecioUnidad * 0.48);
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(11);
-            pdf.setTextColor(120);
+            pdf.setFontSize(config.premium_tamañoPrecioUnidad * 0.45);
+            pdf.setTextColor(130);
             const unitW = pdf.getTextWidth(unitStr);
-            pdf.text("c/u", pxuX + unitW + 2, pxuY + 18);
+            pdf.text("c/u", pxuX + unitW + 2, pxuY + config.premium_tamañoPrecioUnidad * 0.48);
             pdf.setTextColor(0);
           }
 
@@ -1317,7 +1324,7 @@ export default function ListaPreciosPage() {
           pdf.setLineWidth(0.3);
           pdf.line(lm, dividerY, rm, dividerY);
 
-          // Left: texto catálogo + URL
+          // Left: texto catálogo + URL (sin arrow, la fuente Helvetica no la soporta bien)
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(9.5);
           pdf.setTextColor(110);
@@ -1325,20 +1332,20 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(14);
           pdf.setTextColor(0);
-          pdf.text(`→  ${config.webUrl}`, lm, dividerY + 17);
+          pdf.text(config.webUrl, lm, dividerY + 17);
 
-          // Right: QR + label vertical
+          // Right: QR + caption horizontal abajo
           if (qrDataUrl) {
-            const qrSize = 22;
+            const qrSize = 24;
             const qrX = rm - qrSize;
-            const qrY = dividerY + 2;
+            const qrY = dividerY + 1;
             try { pdf.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize); } catch {}
-            // Label vertical a la izquierda del QR
+            // Caption horizontal debajo del QR
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(6.5);
-            pdf.setCharSpace(1);
+            pdf.setFontSize(7);
+            pdf.setCharSpace(0.3);
             pdf.setTextColor(130);
-            pdf.text("ESCANEÁ PARA VER MÁS", qrX - 2, qrY + qrSize - 1, { angle: 90 });
+            pdf.text("Escaneá para ver más", qrX + qrSize / 2, qrY + qrSize + 3.5, { align: "center" });
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
           }
@@ -2403,6 +2410,36 @@ export default function ListaPreciosPage() {
                   />
                 )}
               </div>
+
+              <details className="border-t border-border pt-4">
+                <summary className="text-sm font-medium cursor-pointer select-none">Tamaños (ajuste fino)</summary>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Logo ({config.premium_logoTamaño}mm)</label>
+                    <input type="range" min={8} max={40} step={1} value={config.premium_logoTamaño} onChange={(e) => updateConfig("premium_logoTamaño", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Caption ({config.premium_tamañoCaption}pt)</label>
+                    <input type="range" min={6} max={16} step={0.5} value={config.premium_tamañoCaption} onChange={(e) => updateConfig("premium_tamañoCaption", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Nombre del producto ({config.premium_tamañoNombre}pt)</label>
+                    <input type="range" min={28} max={80} step={1} value={config.premium_tamañoNombre} onChange={(e) => updateConfig("premium_tamañoNombre", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Subtítulo ({config.premium_tamañoSubtitulo}pt)</label>
+                    <input type="range" min={8} max={24} step={0.5} value={config.premium_tamañoSubtitulo} onChange={(e) => updateConfig("premium_tamañoSubtitulo", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Precio principal ({config.premium_tamañoPrecio}pt)</label>
+                    <input type="range" min={40} max={120} step={2} value={config.premium_tamañoPrecio} onChange={(e) => updateConfig("premium_tamañoPrecio", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Precio por unidad ({config.premium_tamañoPrecioUnidad}pt)</label>
+                    <input type="range" min={14} max={48} step={1} value={config.premium_tamañoPrecioUnidad} onChange={(e) => updateConfig("premium_tamañoPrecioUnidad", Number(e.target.value))} className="w-full accent-primary" />
+                  </div>
+                </div>
+              </details>
             </div>
             <div className="flex gap-2 px-6 py-4 border-t border-border shrink-0">
               <button
