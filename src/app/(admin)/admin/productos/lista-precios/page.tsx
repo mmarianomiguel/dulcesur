@@ -1154,8 +1154,9 @@ export default function ListaPreciosPage() {
         }
 
         // Pre-fetch combo_items para todos los combos seleccionados
+        // combo_items.cantidad = unidades directas del combo (no cajas internas).
         const comboIds = selectedProducts.filter((p) => p.esCombo).map((p) => p.id);
-        const combosMap: Record<string, { producto_id: string; nombre: string; cantidad: number; unidadesPorComponente: number }[]> = {};
+        const combosMap: Record<string, { producto_id: string; nombre: string; cantidad: number }[]> = {};
         if (comboIds.length > 0) {
           const { data: items } = await supabase
             .from("combo_items")
@@ -1163,14 +1164,10 @@ export default function ListaPreciosPage() {
             .in("combo_id", comboIds);
           (items || []).forEach((it: any) => {
             if (!combosMap[it.combo_id]) combosMap[it.combo_id] = [];
-            // Buscar el componente en la lista de productos ya cargada (tiene unidadesCaja)
-            const comp = products.find((p) => p.id === it.producto_id);
-            const unidadesPorComponente = (comp?.unidadesCaja && comp.unidadesCaja > 0) ? comp.unidadesCaja : 1;
             combosMap[it.combo_id].push({
               producto_id: it.producto_id,
               nombre: it.productos?.nombre || "",
               cantidad: it.cantidad,
-              unidadesPorComponente,
             });
           });
         }
@@ -1195,10 +1192,10 @@ export default function ListaPreciosPage() {
           const boxPriceRaw = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
           const hasUnits = product.unidadesCaja > 0 && boxPriceRaw > 0;
           const comboItems = product.esCombo ? (combosMap[product.id] || []) : [];
-          // Total de unidades: cada componente aporta (cantidad_en_combo × unidadesPorComponente)
-          // Ej: 3 productos × 8 unidades c/u = 24 unidades totales.
-          const comboTotalUnidades = comboItems.reduce((s, i) => s + (i.cantidad * i.unidadesPorComponente), 0);
-          const comboTotalProductos = comboItems.reduce((s, i) => s + i.cantidad, 0);
+          // comboTotalProductos = cantidad de componentes distintos (ej: 4 sabores)
+          // comboTotalUnidades = suma de cantidades (ej: 6+6+6+6 = 24 unidades)
+          const comboTotalProductos = comboItems.length;
+          const comboTotalUnidades = comboItems.reduce((s, i) => s + i.cantidad, 0);
           const showPackUnidad = opts.tipoOferta === "packUnidad" && (hasUnits || (product.esCombo && comboTotalUnidades > 0));
           const mainPrice = product.esCombo
             ? displayPrice
@@ -1328,13 +1325,8 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(90);
             let compY = cursorY;
             comboItems.slice(0, 8).forEach((c) => {
-              // Ej: "· 1× Papas Fritas Slices 200g (8 u c/u)"  o  "· 2× Alfajor Triple"
-              let line = `· ${c.cantidad > 1 ? c.cantidad + "× " : ""}${c.nombre}`;
-              if (c.unidadesPorComponente > 1) {
-                line += c.cantidad > 1
-                  ? ` (${c.unidadesPorComponente} u c/u)`
-                  : ` (${c.unidadesPorComponente} unidades)`;
-              }
+              // Ej: "· 6× Papas Slices Ketchup 65g"  o  "· Alfajor Triple"
+              const line = `· ${c.cantidad > 1 ? c.cantidad + "× " : ""}${c.nombre}`;
               const lines = pdf.splitTextToSize(line, (rm - lm) / 2);
               lines.forEach((ln: string) => {
                 pdf.text(ln, lm, compY);
