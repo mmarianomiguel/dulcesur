@@ -73,6 +73,7 @@ interface Product {
   codigo: string;
   precioAnterior: number;
   esCombo: boolean;
+  imagenUrl: string;
 }
 
 interface Filters {
@@ -240,6 +241,14 @@ export default function ListaPreciosPage() {
   const [showConfig, setShowConfig] = useState(false);
   const [configTab, setConfigTab] = useState<ConfigTab>("general");
   const [showStylePicker, setShowStylePicker] = useState(false);
+  const [showStoryConfig, setShowStoryConfig] = useState(false);
+  const [storyOpts, setStoryOpts] = useState<{
+    tipoOferta: "simple" | "packUnidad";
+    etiquetaBadge: string;
+    mostrarRangoFechas: boolean;
+    rangoFechas: string;
+    mostrarImagen: boolean;
+  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true });
   const [showPremiumConfig, setShowPremiumConfig] = useState(false);
   const [premiumOpts, setPremiumOpts] = useState<{
     tipoOferta: "simple" | "packUnidad";
@@ -405,6 +414,7 @@ export default function ListaPreciosPage() {
         codigo: p.codigo || "",
         precioAnterior: p.precio_anterior || 0,
         esCombo: Boolean((p as any).es_combo),
+        imagenUrl: (p as any).imagen_url || "",
       };
     });
 
@@ -1901,6 +1911,317 @@ export default function ListaPreciosPage() {
     a.click();
   };
 
+  // ─── Generador de Historia IG / Estado WhatsApp (1080×1920 PNG) ───
+  const generateStory = async (opts: typeof storyOpts) => {
+    setShowStylePicker(false);
+    setShowStoryConfig(false);
+    setGenerating(true);
+    setGeneratingProgress({ done: 0, total: selected.size });
+    await new Promise<void>((r) => setTimeout(r, 50));
+    try {
+      const selectedProducts = products.filter((_, i) => selected.has(i));
+      if (selectedProducts.length === 0) { setGenerating(false); return; }
+
+      const loadImage = (src: string, withCors = true): Promise<HTMLImageElement> =>
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          if (withCors) img.crossOrigin = "anonymous";
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("Failed to load " + src));
+          img.src = src;
+        });
+
+      const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      };
+
+      const dottedLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string) => {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 8]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.restore();
+      };
+
+      const weekRangeText = (): string => {
+        const now = new Date();
+        const dow = now.getDay() === 0 ? 6 : now.getDay() - 1; // lun=0
+        const start = new Date(now); start.setDate(now.getDate() - dow);
+        const end = new Date(start); end.setDate(start.getDate() + 6);
+        const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+        const m1 = meses[start.getMonth()], m2 = meses[end.getMonth()];
+        return m1 === m2
+          ? `${start.getDate()}—${end.getDate()} ${m2}`
+          : `${start.getDate()} ${m1}—${end.getDate()} ${m2}`;
+      };
+
+      const webBase = (config.webUrl.startsWith("http") ? config.webUrl : `https://${config.webUrl}`).replace(/\/$/, "");
+
+      // Pre-cargar logo si existe
+      let logoImg: HTMLImageElement | null = null;
+      if (logoBase64) {
+        try { logoImg = await loadImage(logoBase64, false); } catch {}
+      }
+
+      let doneCount = 0;
+      for (const product of selectedProducts) {
+        const W = 1080, H = 1920;
+        const canvas = document.createElement("canvas");
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext("2d")!;
+
+        // Background cream + subtle diagonal pattern
+        ctx.fillStyle = "#faf3e3";
+        ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.globalAlpha = 0.04;
+        ctx.strokeStyle = "#8a6a2a";
+        ctx.lineWidth = 2;
+        for (let i = -H; i < W; i += 22) {
+          ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + H, H); ctx.stroke();
+        }
+        ctx.restore();
+
+        // ── TOP: Logo + date pill ──
+        if (logoImg) {
+          const logoH = 110;
+          const logoW = logoH * (logoImg.width / logoImg.height);
+          ctx.drawImage(logoImg, 70, 90, logoW, logoH);
+        }
+
+        if (opts.mostrarRangoFechas) {
+          const dateTxt = (opts.rangoFechas.trim() || weekRangeText()).toUpperCase();
+          ctx.font = "600 34px Arial, sans-serif";
+          const tw = ctx.measureText(dateTxt).width;
+          const padX = 32, pillH = 62;
+          const pillW = tw + padX * 2;
+          const pillX = W - 70 - pillW;
+          const pillY = 115;
+          ctx.strokeStyle = "#222"; ctx.lineWidth = 3; ctx.fillStyle = "#ffffff";
+          roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#222";
+          ctx.textBaseline = "middle"; ctx.textAlign = "left";
+          ctx.fillText(dateTxt, pillX + padX, pillY + pillH / 2 + 2);
+        }
+
+        // Dotted divider under top row
+        dottedLine(ctx, 70, 250, W - 70, 250, "#b8a47a");
+
+        // ── Slanted badge ──
+        if (opts.etiquetaBadge.trim()) {
+          ctx.save();
+          ctx.translate(150, 345);
+          ctx.rotate(-3 * Math.PI / 180);
+          ctx.fillStyle = "#f4c828"; ctx.strokeStyle = "#222"; ctx.lineWidth = 3;
+          const badgeText = `★  ${opts.etiquetaBadge.trim().toUpperCase()}`;
+          ctx.font = "900 40px Arial, sans-serif";
+          const bw = ctx.measureText(badgeText).width + 60;
+          const bh = 80;
+          roundRect(ctx, 0, 0, bw, bh, 10);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#222"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(badgeText, bw / 2, bh / 2 + 2);
+          ctx.restore();
+        }
+
+        // ── Product image frame ──
+        const frameX = 100, frameY = 470, frameW = W - 200, frameH = 620;
+        if (opts.mostrarImagen) {
+          ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#222"; ctx.lineWidth = 5;
+          roundRect(ctx, frameX, frameY, frameW, frameH, 6);
+          ctx.fill(); ctx.stroke();
+          if (product.imagenUrl) {
+            try {
+              // Transformar URL Cloudinary a tamaño reducido
+              let imgSrc = product.imagenUrl;
+              if (imgSrc.includes("res.cloudinary.com")) {
+                imgSrc = imgSrc.replace("/upload/", "/upload/w_800,q_auto,f_png/");
+              }
+              const pImg = await loadImage(imgSrc);
+              const ratio = Math.min(frameW * 0.88 / pImg.width, frameH * 0.88 / pImg.height);
+              const iW = pImg.width * ratio;
+              const iH = pImg.height * ratio;
+              ctx.drawImage(pImg, frameX + (frameW - iW) / 2, frameY + (frameH - iH) / 2, iW, iH);
+            } catch {}
+          }
+        }
+
+        // ── Display data (aplica parsing "Caja xN Un" del nombre si hace falta) ──
+        const cajaSuffixRe = /\s+caja\s*x\s*(\d+)\s*(un|unid|unidades?|u)?\.?$/i;
+        const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
+        let boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
+        let unidadesCaja = product.unidadesCaja;
+        let displayName = product.nombre;
+        if (!product.esCombo && (unidadesCaja === 0 || boxPrice === 0)) {
+          const m = product.nombre.match(cajaSuffixRe);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > 1) { displayName = product.nombre.replace(cajaSuffixRe, "").trim(); unidadesCaja = n; boxPrice = displayPrice; }
+          }
+        }
+        const hasUnits = unidadesCaja > 0 && boxPrice > 0;
+        const showPackUnidad = opts.tipoOferta === "packUnidad" && hasUnits;
+        const mainPrice = showPackUnidad ? boxPrice : displayPrice;
+        const unitPrice = hasUnits ? boxPrice / unidadesCaja : displayPrice;
+
+        // ── Price tag (white rounded rect, slight rotation, shadow) ──
+        ctx.save();
+        ctx.translate(W / 2 - 80, frameY + frameH - 130);
+        ctx.rotate(-2 * Math.PI / 180);
+        ctx.shadowColor = "rgba(0,0,0,0.25)"; ctx.shadowBlur = 22; ctx.shadowOffsetY = 8;
+        ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#222"; ctx.lineWidth = 4;
+        const tagW = 520, tagH = 170;
+        roundRect(ctx, 0, 0, tagW, tagH, 10); ctx.fill(); ctx.stroke();
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = "#666"; ctx.font = "600 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        ctx.fillText("PRECIO", tagW / 2, 18);
+        // Price with $ small
+        const priceStr = formatCurrency(mainPrice, true);
+        const pm = priceStr.match(/^(\$?)([\d\.]+)(,\d{2})?$/);
+        const symStr = (pm?.[1] || "$").trim() || "$";
+        const intStr = pm?.[2] || String(Math.round(mainPrice));
+        const decStr = pm?.[3] || "";
+        ctx.fillStyle = "#111"; ctx.font = "900 88px Arial"; ctx.textAlign = "left";
+        const intW = ctx.measureText(intStr).width;
+        ctx.font = "900 36px Arial";
+        const symW = ctx.measureText(symStr).width;
+        ctx.font = "900 32px Arial";
+        const decW = ctx.measureText(decStr).width;
+        const totalTxtW = symW + 8 + intW + decW;
+        const txtX = (tagW - totalTxtW) / 2;
+        ctx.font = "900 36px Arial";
+        ctx.textBaseline = "top";
+        ctx.fillText(symStr, txtX, 50);
+        ctx.font = "900 88px Arial";
+        ctx.fillText(intStr, txtX + symW + 8, 40);
+        ctx.font = "900 32px Arial";
+        ctx.fillText(decStr, txtX + symW + 8 + intW + 2, 50);
+        // "LA CAJA × 36" or similar
+        ctx.fillStyle = "#cc2c2c"; ctx.font = "900 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        const tagLabel = product.esCombo ? `COMBO` : (hasUnits && showPackUnidad ? `LA CAJA × ${unidadesCaja}` : (hasUnits ? `POR UNIDAD` : `PRECIO`));
+        ctx.fillText(tagLabel, tagW / 2, 132);
+        ctx.restore();
+
+        // ── Product name (bold uppercase, wrap 2 lines) ──
+        ctx.fillStyle = "#111"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        let nameSize = 80;
+        const nameY = 1160;
+        const nameMaxW = W - 120;
+        const nameUpper = displayName.toUpperCase();
+        const wrap = (text: string, size: number): string[] => {
+          ctx.font = `900 ${size}px Arial`;
+          const words = text.split(/\s+/);
+          const lines: string[] = [];
+          let cur = "";
+          for (const w of words) {
+            const t = cur ? cur + " " + w : w;
+            if (ctx.measureText(t).width <= nameMaxW) cur = t;
+            else { if (cur) lines.push(cur); cur = w; }
+          }
+          if (cur) lines.push(cur);
+          return lines;
+        };
+        let nameLines = wrap(nameUpper, nameSize);
+        while (nameLines.length > 2 && nameSize > 44) { nameSize -= 4; nameLines = wrap(nameUpper, nameSize); }
+        ctx.font = `900 ${nameSize}px Arial`;
+        nameLines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, nameY + i * (nameSize + 6)));
+
+        const nameEndY = nameY + Math.min(nameLines.length, 2) * (nameSize + 6);
+
+        // ── Subtitle ──
+        const subParts: string[] = [];
+        if (product.esCombo) subParts.push("Combo");
+        if (product.nombreUnidad && !/^(unidad(es)?|u|un\.?|pieza)$/i.test(product.nombreUnidad)) subParts.push(product.nombreUnidad);
+        if (hasUnits) subParts.push(`Caja x ${unidadesCaja} unidades`);
+        const subtitle = subParts.join(" · ");
+        if (subtitle) {
+          ctx.fillStyle = "#777"; ctx.font = "500 30px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+          ctx.fillText(subtitle, W / 2, nameEndY + 18);
+        }
+
+        // ── Unit price pill (only if packUnidad & hasUnits) ──
+        if (showPackUnidad) {
+          const pillTxt = `× UNIDAD  $ ${Math.round(unitPrice).toLocaleString("es-AR")}`;
+          ctx.font = "900 32px Arial";
+          const pw = ctx.measureText(pillTxt).width + 50;
+          const ph = 72;
+          const px = (W - pw) / 2, py = nameEndY + 70;
+          ctx.fillStyle = "#111";
+          roundRect(ctx, px, py, pw, ph, ph / 2);
+          ctx.fill();
+          ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(pillTxt, W / 2, py + ph / 2 + 2);
+        }
+
+        // ── Dotted divider + footer ──
+        const footerY = 1600;
+        dottedLine(ctx, 70, footerY, W - 70, footerY, "#b8a47a");
+
+        ctx.fillStyle = "#cc2c2c"; ctx.font = "italic 700 40px 'Segoe Script','Brush Script MT',cursive"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+        ctx.fillText("¡mirá todo en la web!", 80, footerY + 30);
+        ctx.fillStyle = "#111"; ctx.font = "900 56px Arial";
+        ctx.fillText(config.webUrl, 80, footerY + 100);
+
+        // QR específico del producto
+        try {
+          const QRCode = (await import("qrcode")).default;
+          const productUrl = `${webBase}/productos/${productSlug(product.nombre, product.id)}`;
+          const qrDataUrl = await QRCode.toDataURL(productUrl, { width: 400, margin: 1, color: { dark: "#000000", light: "#ffffff" } });
+          const qrImg = await loadImage(qrDataUrl, false);
+          const qrSize = 200;
+          const qrX = W - 80 - qrSize;
+          const qrY = footerY + 30;
+          ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+          // "ESCANEÁ" vertical label
+          ctx.save();
+          ctx.translate(qrX - 14, qrY + qrSize);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillStyle = "#cc2c2c"; ctx.font = "900 22px Arial"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+          ctx.fillText("ESCANEÁ", 0, 0);
+          ctx.restore();
+        } catch {}
+
+        // Export to PNG blob
+        await new Promise<void>((resolve) => {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `historia-${productSlug(product.nombre, product.id)}.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(url), 1500);
+            }
+            resolve();
+          }, "image/png");
+        });
+
+        doneCount++;
+        setGeneratingProgress({ done: doneCount, total: selectedProducts.length });
+        // Pequeña pausa entre descargas para que el browser no las agrupe
+        if (doneCount < selectedProducts.length) {
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+    } finally {
+      setGenerating(false);
+      setGeneratingProgress(null);
+    }
+  };
+
   // ─── Toggle component ───
   const Toggle = ({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) => (
     <div>
@@ -2187,6 +2508,33 @@ export default function ListaPreciosPage() {
               </button>
             </div>
             <div className="p-6 grid grid-cols-3 gap-4 max-w-4xl mx-auto overflow-y-auto">
+              {/* Historia IG/WA — PNG 1080×1920 */}
+              <button
+                onClick={() => { setShowStylePicker(false); setShowStoryConfig(true); }}
+                className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left"
+              >
+                <div className="border border-border rounded-lg p-2 mb-3 aspect-[9/16] flex flex-col" style={{ background: "#faf3e3" }}>
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="w-4 h-2 bg-black rounded-sm"></div>
+                    <div className="border border-black rounded-full px-1 py-[1px]">
+                      <span className="text-[3px] font-bold">21—27 ABR</span>
+                    </div>
+                  </div>
+                  <div className="h-px border-t border-dashed border-muted-foreground/30 my-1"></div>
+                  <div className="bg-yellow-400 border border-black rounded-sm px-1.5 py-0.5 self-start text-[4px] font-black -rotate-3">★ OFERTA</div>
+                  <div className="border border-black bg-white flex-1 my-1 rounded-sm"></div>
+                  <p className="text-[6px] font-black text-center leading-tight">PRODUCTO EJEMPLO</p>
+                  <div className="bg-black text-white text-[3px] font-bold text-center rounded-full px-1 py-0.5 mt-0.5 self-center">× UNIDAD $420</div>
+                  <div className="h-px border-t border-dashed border-muted-foreground/30 my-1"></div>
+                  <div className="flex justify-between items-end">
+                    <span className="text-[3px] font-bold">www.dulcesur.com</span>
+                    <div className="w-2.5 h-2.5 bg-muted-foreground/40 rounded-sm"></div>
+                  </div>
+                </div>
+                <p className="font-semibold text-sm">📱 Historia IG / WhatsApp</p>
+                <p className="text-xs text-muted-foreground mt-0.5">PNG 1080×1920 con imagen, precio y QR al producto</p>
+              </button>
+
               {/* Premium — Cartel A4 diseño editorial */}
               <button
                 onClick={() => { setShowStylePicker(false); setShowPremiumConfig(true); }}
@@ -2292,6 +2640,121 @@ export default function ListaPreciosPage() {
                   Generar PDF Variaciones
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Story Config Modal (IG / WhatsApp) */}
+      {showStoryConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-border">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div>
+                <h2 className="text-lg font-semibold">Historia IG / Estado WhatsApp</h2>
+                <p className="text-xs text-muted-foreground">Genera un PNG 1080×1920 por producto seleccionado</p>
+              </div>
+              <button onClick={() => setShowStoryConfig(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-5 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium mb-2">Tipo de oferta</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["simple", "Precio simple", "Solo precio unitario"],
+                    ["packUnidad", "Pack + unidad", "Precio de caja grande + chip × unidad abajo"],
+                  ] as const).map(([val, label, desc]) => (
+                    <button
+                      key={val}
+                      onClick={() => setStoryOpts((p) => ({ ...p, tipoOferta: val }))}
+                      className={`p-3 rounded-lg border text-left transition ${storyOpts.tipoOferta === val ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                    >
+                      <p className="text-sm font-semibold">{label}</p>
+                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Etiqueta del badge</label>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  {["SÚPER OFERTA", "OFERTA", "2×1", "NUEVO", "COMBO", "IMPERDIBLE"].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setStoryOpts((p) => ({ ...p, etiquetaBadge: preset }))}
+                      className={`px-3 py-2 rounded-lg border text-xs font-semibold transition ${storyOpts.etiquetaBadge === preset ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={storyOpts.etiquetaBadge}
+                  onChange={(e) => setStoryOpts((p) => ({ ...p, etiquetaBadge: e.target.value }))}
+                  placeholder="O escribí la tuya (vacío = sin badge)"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium">Rango de fechas (arriba derecha)</label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={storyOpts.mostrarRangoFechas}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, mostrarRangoFechas: e.target.checked }))}
+                      className="accent-primary"
+                    />
+                    Mostrar
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  disabled={!storyOpts.mostrarRangoFechas}
+                  value={storyOpts.rangoFechas}
+                  onChange={(e) => setStoryOpts((p) => ({ ...p, rangoFechas: e.target.value }))}
+                  placeholder="Auto (semana actual) — o escribí: 21—27 ABR"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                />
+              </div>
+
+              <div className="border border-border rounded-lg p-3 bg-accent/30">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={storyOpts.mostrarImagen}
+                    onChange={(e) => setStoryOpts((p) => ({ ...p, mostrarImagen: e.target.checked }))}
+                    className="accent-primary w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Mostrar imagen del producto</p>
+                    <p className="text-[11px] text-muted-foreground">Se toma de Cloudinary. Si el producto no tiene imagen, queda el frame vacío.</p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="text-xs text-muted-foreground border-t border-border pt-3">
+                💡 Si seleccionás varios productos, se descarga un PNG por cada uno. El navegador te puede pedir confirmar descargas múltiples.
+              </div>
+            </div>
+            <div className="flex gap-2 px-6 py-4 border-t border-border shrink-0">
+              <button
+                onClick={() => setShowStoryConfig(false)}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-accent transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => generateStory(storyOpts)}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
+              >
+                Generar PNG ({selected.size})
+              </button>
             </div>
           </div>
         </div>
