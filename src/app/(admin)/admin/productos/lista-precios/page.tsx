@@ -1316,8 +1316,13 @@ export default function ListaPreciosPage() {
                                 (product.esCombo && comboTotalUnidades > 0 && opts.tipoOferta === "packUnidad");
           if (showUnitBlock) {
             const pxuX = lm + totalPriceW + 16;
-            // Alineado con el top del precio principal
-            const pxuLabelY = priceY - priceCapMM + 2;
+            const unitSize = config.premium_tamañoPrecioUnidad;
+            const unitCap = unitSize * PT_TO_MM * CAP_FACTOR;
+            // Alineado al BASELINE del precio principal (parte inferior),
+            // con el label justo arriba del numero unitario.
+            const unitBaseline = priceY;
+            const pxuLabelY = unitBaseline - unitCap - 3;
+
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(9);
             pdf.setCharSpace(1.2);
@@ -1327,7 +1332,6 @@ export default function ListaPreciosPage() {
             pdf.setTextColor(0);
 
             // Precio unidad (con decimales si no es redondo)
-            const unitSize = config.premium_tamañoPrecioUnidad;
             const unitRoundedEquals = Math.round(unitPriceReal) === unitPriceReal;
             const unitStr = formatCurrency(unitPriceReal, !unitRoundedEquals);
             const cuSize = unitSize * 0.45;
@@ -1336,7 +1340,6 @@ export default function ListaPreciosPage() {
             pdf.setFontSize(unitSize);
             // Medir al tamaño grande ANTES de cambiar
             const unitW = pdf.getTextWidth(unitStr);
-            const unitBaseline = pxuLabelY + unitSize * PT_TO_MM * CAP_FACTOR + 4;
             pdf.text(unitStr, pxuX, unitBaseline);
 
             pdf.setFont("helvetica", "normal");
