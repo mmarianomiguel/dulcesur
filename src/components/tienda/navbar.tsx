@@ -30,6 +30,13 @@ interface Categoria {
 
 const FALLBACK_LOGO = "https://res.cloudinary.com/dss3lnovd/image/upload/w_200,q_auto,f_auto/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png";
 
+// Inserta transformaciones Cloudinary en URLs crudas (thumbnails de búsqueda, etc.)
+// Evita servir originales sin optimizar en <img> que no pasan por next/image.
+function optimizeCloudinary(url: string | null | undefined, width = 80): string {
+  if (!url || !url.includes("res.cloudinary.com") || url.includes("/upload/w_") || url.includes("/upload/q_") || url.includes("/upload/f_")) return url || "";
+  return url.replace("/upload/", `/upload/w_${width},q_auto:eco,f_auto/`);
+}
+
 interface TiendaNavbarProps {
   initial?: {
     logoSrc?: string;
@@ -40,6 +47,8 @@ interface TiendaNavbarProps {
     horario_atencion_fin?: string;
     dias_atencion?: string[];
     categorias?: Categoria[];
+    subcatsMap?: Record<string, { id: string; nombre: string }[]>;
+    marcasMap?: Record<string, { id: string; nombre: string }[]>;
   };
 }
 
@@ -53,8 +62,8 @@ export default function TiendaNavbar({ initial }: TiendaNavbarProps = {}) {
   const router = useRouter();
   const { filtrarCategorias } = useCategoriasPermitidas();
   const [hoveredCat, setHoveredCat] = useState<string | null>(null);
-  const [subcatsMap, setSubcatsMap] = useState<Record<string, { id: string; nombre: string }[]>>({});
-  const [marcasMap, setMarcasMap] = useState<Record<string, { id: string; nombre: string }[]>>({});
+  const [subcatsMap, setSubcatsMap] = useState<Record<string, { id: string; nombre: string }[]>>(initial?.subcatsMap || {});
+  const [marcasMap, setMarcasMap] = useState<Record<string, { id: string; nombre: string }[]>>(initial?.marcasMap || {});
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [suggestions, setSuggestions] = useState<{ id: string; nombre: string; precio: number; imagen_url: string | null }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -125,43 +134,23 @@ export default function TiendaNavbar({ initial }: TiendaNavbarProps = {}) {
     });
   }, [initial]);
 
-  // Cargar subcategorías y marcas para el mega-menú
+  // Subcategorias + marcas vienen pre-computadas desde SSR (layout.tsx).
+  // Fallback client-side solo si no llegaron en `initial` (p. ej., navbar usado fuera de layout).
   useEffect(() => {
+    if ((initial?.subcatsMap && Object.keys(initial.subcatsMap).length > 0) ||
+        (initial?.marcasMap && Object.keys(initial.marcasMap).length > 0)) return;
     (async () => {
       const { data: subs } = await supabase
         .from("subcategorias")
         .select("id, nombre, categoria_id");
-
       const subsMap: Record<string, { id: string; nombre: string }[]> = {};
       (subs || []).forEach((s: any) => {
         if (!subsMap[s.categoria_id]) subsMap[s.categoria_id] = [];
         subsMap[s.categoria_id].push({ id: s.id, nombre: s.nombre });
       });
       setSubcatsMap(subsMap);
-
-      const { data: prodMarcas } = await supabase
-        .from("productos")
-        .select("categoria_id, marca_id, marcas(id, nombre)")
-        .eq("activo", true)
-        .eq("visibilidad", "visible")
-        .limit(500)
-        .not("marca_id", "is", null);
-
-      const mMap: Record<string, Map<string, string>> = {};
-      (prodMarcas || []).forEach((p: any) => {
-        if (!p.categoria_id || !p.marcas) return;
-        if (!mMap[p.categoria_id]) mMap[p.categoria_id] = new Map();
-        mMap[p.categoria_id].set(p.marcas.id, p.marcas.nombre);
-      });
-      const mResult: Record<string, { id: string; nombre: string }[]> = {};
-      for (const [catId, map] of Object.entries(mMap)) {
-        mResult[catId] = Array.from(map.entries())
-          .slice(0, 8)
-          .map(([id, nombre]) => ({ id, nombre }));
-      }
-      setMarcasMap(mResult);
     })();
-  }, []);
+  }, [initial]);
 
   useEffect(() => {
     return () => {
@@ -185,14 +174,16 @@ export default function TiendaNavbar({ initial }: TiendaNavbarProps = {}) {
     debounceRef.current = setTimeout(async () => {
       const q = val.trim();
       if (q.length < 2) return;
-      const { data } = await supabase
+      // Tokenizar: cada palabra >=2 chars se aplica como ILIKE encadenado (AND).
+      // Esto hace que "coca cola" matchee "Coca-Cola Light" y "Light Coca Cola".
+      const tokens = q.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
+      let query = supabase
         .from("productos")
         .select("id, nombre, precio, imagen_url")
         .eq("activo", true)
-        .eq("visibilidad", "visible")
-        .ilike("nombre", `%${q}%`)
-        .gt("stock", 0)
-        .limit(6);
+        .eq("visibilidad", "visible");
+      for (const t of tokens) query = query.ilike("nombre", `%${t}%`);
+      const { data } = await query.limit(6);
       setSuggestions(data || []);
       setShowSuggestions(true);
     }, 400);
@@ -352,7 +343,7 @@ export default function TiendaNavbar({ initial }: TiendaNavbarProps = {}) {
                       className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition"
                     >
                       {s.imagen_url ? (
-                        <img src={s.imagen_url} alt="" className="w-8 h-8 object-contain rounded" />
+                        <img src={optimizeCloudinary(s.imagen_url, 80)} alt="" className="w-8 h-8 object-contain rounded" loading="lazy" />
                       ) : (
                         <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">
                           <Search className="w-3 h-3 text-gray-300" />

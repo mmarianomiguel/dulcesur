@@ -434,8 +434,12 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
         query = query.eq("subcategoria_id", subcategoriaId);
       if (marcaParam)
         query = query.eq("marca_id", marcaParam);
-      if (searchQuery)
-        query = query.ilike("nombre", `%${searchQuery}%`);
+      if (searchQuery) {
+        // Tokenización: busca todas las palabras (AND) en cualquier orden.
+        // "coca cola light" matchea "Coca-Cola Light", "Light Coca Cola", etc.
+        const tokens = searchQuery.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
+        for (const t of tokens) query = query.ilike("nombre", `%${t}%`);
+      }
       if (precioMin) query = query.gte("precio", Number(precioMin));
       if (precioMax) query = query.lte("precio", Number(precioMax));
       // Hide out-of-stock products not updated in X days (unless filtering for sin_stock)

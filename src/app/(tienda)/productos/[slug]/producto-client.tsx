@@ -1040,7 +1040,7 @@ export default function ProductoClient({
               alt={producto.nombre}
               fill
               className="object-contain"
-              sizes="90vw"
+              sizes="(max-width: 768px) 90vw, 768px"
             />
           </div>
         </div>

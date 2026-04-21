@@ -1038,7 +1038,7 @@ function ImagenBannerBlock({ config }: { config: Record<string, any> }) {
         src={url}
         alt={config.alt || ""}
         fill
-        sizes="100vw"
+        sizes="(max-width: 1024px) 100vw, 1200px"
         priority
         className="object-cover"
       />

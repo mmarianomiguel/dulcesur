@@ -32,15 +32,35 @@ export default async function TiendaLayout({ children }: { children: React.React
   // SSR-fetch de config de tienda + empresa + categorías para evitar CLS
   // causado por el fetch cliente-side en navbar/footer.
   const sb = createServerSupabase();
-  const [tcRes, empRes, catsRes] = await Promise.all([
+  const [tcRes, empRes, catsRes, subsRes, prodMarcasRes] = await Promise.all([
     sb.from("tienda_config").select("nombre_tienda, logo_url, descripcion, footer_config, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion").limit(1).single(),
     sb.from("empresa").select("nombre, telefono, white_label").limit(1).single(),
     sb.from("categorias").select("id, nombre, restringida").order("nombre"),
+    sb.from("subcategorias").select("id, nombre, categoria_id"),
+    sb.from("productos").select("categoria_id, marca_id, marcas(id, nombre)").eq("activo", true).eq("visibilidad", "visible").not("marca_id", "is", null).limit(2000),
   ]);
 
   const tc: any = tcRes.data || {};
   const emp: any = empRes.data || {};
   const cats: any[] = catsRes.data || [];
+
+  // Pre-computa mapas para el mega-menú (antes se hacía client-side y bloqueaba el hover)
+  const subcatsMap: Record<string, { id: string; nombre: string }[]> = {};
+  (subsRes.data || []).forEach((s: any) => {
+    if (!subcatsMap[s.categoria_id]) subcatsMap[s.categoria_id] = [];
+    subcatsMap[s.categoria_id].push({ id: s.id, nombre: s.nombre });
+  });
+
+  const mTmp: Record<string, Map<string, string>> = {};
+  (prodMarcasRes.data || []).forEach((p: any) => {
+    if (!p.categoria_id || !p.marcas) return;
+    if (!mTmp[p.categoria_id]) mTmp[p.categoria_id] = new Map();
+    mTmp[p.categoria_id].set(p.marcas.id, p.marcas.nombre);
+  });
+  const marcasMap: Record<string, { id: string; nombre: string }[]> = {};
+  for (const [catId, map] of Object.entries(mTmp)) {
+    marcasMap[catId] = Array.from(map.entries()).slice(0, 8).map(([id, nombre]) => ({ id, nombre }));
+  }
 
   const wlLogo = emp?.white_label?.logo_url as string | undefined;
   const rawLogoUrl = tc?.logo_url || wlLogo || "";
@@ -57,6 +77,8 @@ export default async function TiendaLayout({ children }: { children: React.React
     horario_atencion_fin: tc?.horario_atencion_fin || "",
     dias_atencion: tc?.dias_atencion || [],
     categorias: cats,
+    subcatsMap,
+    marcasMap,
   };
 
   const fc = tc?.footer_config || {};

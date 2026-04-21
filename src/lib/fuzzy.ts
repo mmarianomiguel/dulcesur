@@ -22,9 +22,12 @@ function levenshtein(a: string, b: string): number {
  * Strategy: substring match first (fast path), then word-level Levenshtein
  * with tolerance based on word length.
  */
+const stripAccents = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
 export function fuzzyMatch(text: string, query: string): boolean {
-  const t = text.toLowerCase();
-  const q = query.toLowerCase().trim();
+  const t = stripAccents(text);
+  const q = stripAccents(query).trim();
   if (!q) return true;
   // Fast path: direct substring
   if (t.includes(q)) return true;
