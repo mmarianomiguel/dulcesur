@@ -1967,6 +1967,20 @@ export default function ListaPreciosPage() {
 
       const webBase = (config.webUrl.startsWith("http") ? config.webUrl : `https://${config.webUrl}`).replace(/\/$/, "");
 
+      // Pre-fetch combo_items de los combos seleccionados (mismo approach que Premium)
+      const comboIds = selectedProducts.filter((p) => p.esCombo).map((p) => p.id);
+      const combosMap: Record<string, { producto_id: string; nombre: string; cantidad: number }[]> = {};
+      if (comboIds.length > 0) {
+        const { data: items } = await supabase
+          .from("combo_items")
+          .select("combo_id, producto_id, cantidad, productos!combo_items_producto_id_fkey(nombre)")
+          .in("combo_id", comboIds);
+        (items || []).forEach((it: any) => {
+          if (!combosMap[it.combo_id]) combosMap[it.combo_id] = [];
+          combosMap[it.combo_id].push({ producto_id: it.producto_id, nombre: it.productos?.nombre || "", cantidad: it.cantidad });
+        });
+      }
+
       // Pre-cargar logo si existe
       let logoImg: HTMLImageElement | null = null;
       if (logoBase64) {
@@ -2057,7 +2071,7 @@ export default function ListaPreciosPage() {
           }
         }
 
-        // ── Display data (aplica parsing "Caja xN Un" del nombre si hace falta) ──
+        // ── Display data (mismo enfoque que Premium: parsing del nombre + combos) ──
         const cajaSuffixRe = /\s+caja\s*x\s*(\d+)\s*(un|unid|unidades?|u)?\.?$/i;
         const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
         let boxPrice = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
@@ -2070,10 +2084,17 @@ export default function ListaPreciosPage() {
             if (n > 1) { displayName = product.nombre.replace(cajaSuffixRe, "").trim(); unidadesCaja = n; boxPrice = displayPrice; }
           }
         }
+        const comboItems = product.esCombo ? (combosMap[product.id] || []) : [];
+        const comboTotalProductos = comboItems.length;
+        const comboTotalUnidades = comboItems.reduce((s, i) => s + i.cantidad, 0);
         const hasUnits = unidadesCaja > 0 && boxPrice > 0;
-        const showPackUnidad = opts.tipoOferta === "packUnidad" && hasUnits;
-        const mainPrice = showPackUnidad ? boxPrice : displayPrice;
-        const unitPrice = hasUnits ? boxPrice / unidadesCaja : displayPrice;
+        const showPackUnidad = opts.tipoOferta === "packUnidad" && (hasUnits || (product.esCombo && comboTotalUnidades > 0));
+        const mainPrice = product.esCombo
+          ? displayPrice
+          : (showPackUnidad ? boxPrice : displayPrice);
+        const unitPrice = product.esCombo
+          ? (comboTotalUnidades > 0 ? mainPrice / comboTotalUnidades : 0)
+          : (hasUnits ? boxPrice / unidadesCaja : displayPrice);
 
         // ── Price tag (white rounded rect, slight rotation, shadow) ──
         ctx.save();
@@ -2107,9 +2128,16 @@ export default function ListaPreciosPage() {
         ctx.fillText(intStr, txtX + symW + 8, 40);
         ctx.font = "900 32px Arial";
         ctx.fillText(decStr, txtX + symW + 8 + intW + 2, 50);
-        // "LA CAJA × 36" or similar
+        // "LA CAJA × 36" / "COMBO × 24" / "POR UNIDAD"
         ctx.fillStyle = "#cc2c2c"; ctx.font = "900 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-        const tagLabel = product.esCombo ? `COMBO` : (hasUnits && showPackUnidad ? `LA CAJA × ${unidadesCaja}` : (hasUnits ? `POR UNIDAD` : `PRECIO`));
+        let tagLabel: string;
+        if (product.esCombo) {
+          tagLabel = comboTotalUnidades > 0 ? `COMBO × ${comboTotalUnidades}` : "COMBO";
+        } else if (hasUnits && showPackUnidad) {
+          tagLabel = `LA CAJA × ${unidadesCaja}`;
+        } else {
+          tagLabel = "POR UNIDAD";
+        }
         ctx.fillText(tagLabel, tagW / 2, 132);
         ctx.restore();
 
@@ -2139,19 +2167,33 @@ export default function ListaPreciosPage() {
 
         const nameEndY = nameY + Math.min(nameLines.length, 2) * (nameSize + 6);
 
-        // ── Subtitle ──
-        const subParts: string[] = [];
-        if (product.esCombo) subParts.push("Combo");
-        if (product.nombreUnidad && !/^(unidad(es)?|u|un\.?|pieza)$/i.test(product.nombreUnidad)) subParts.push(product.nombreUnidad);
-        if (hasUnits) subParts.push(`Caja x ${unidadesCaja} unidades`);
-        const subtitle = subParts.join(" · ");
+        // ── Subtitle (misma logica que Premium) ──
+        let subtitle = "";
+        if (product.esCombo) {
+          if (comboTotalUnidades > 0 && comboTotalProductos !== comboTotalUnidades) {
+            subtitle = `Combo · ${comboTotalProductos} productos · ${comboTotalUnidades} unidades`;
+          } else if (comboTotalUnidades > 0) {
+            subtitle = `Combo × ${comboTotalUnidades} unidades`;
+          } else {
+            subtitle = "Combo";
+          }
+        } else if (hasUnits) {
+          subtitle = `Caja x ${unidadesCaja} unidades`;
+        } else {
+          const np = (product.nombrePresentacion || "").trim();
+          const nu = (product.nombreUnidad || "").trim();
+          const candidate = np || nu;
+          subtitle = candidate && !/^(unidad(es)?|u|un\.?|pieza|item)$/i.test(candidate) ? candidate : "";
+        }
         if (subtitle) {
           ctx.fillStyle = "#777"; ctx.font = "500 30px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
           ctx.fillText(subtitle, W / 2, nameEndY + 18);
         }
 
-        // ── Unit price pill (only if packUnidad & hasUnits) ──
-        if (showPackUnidad) {
+        // ── Unit price pill (si packUnidad con caja, o combo con componentes) ──
+        const showUnitPill = (showPackUnidad && !product.esCombo && hasUnits) ||
+                             (product.esCombo && opts.tipoOferta === "packUnidad" && comboTotalUnidades > 0);
+        if (showUnitPill) {
           const pillTxt = `× UNIDAD  $ ${Math.round(unitPrice).toLocaleString("es-AR")}`;
           ctx.font = "900 32px Arial";
           const pw = ctx.measureText(pillTxt).width + 50;
