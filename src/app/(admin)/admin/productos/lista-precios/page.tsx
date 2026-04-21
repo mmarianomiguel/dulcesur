@@ -1315,13 +1315,19 @@ export default function ListaPreciosPage() {
           const showUnitBlock = (showPackUnidad && !product.esCombo) ||
                                 (product.esCombo && comboTotalUnidades > 0 && opts.tipoOferta === "packUnidad");
           if (showUnitBlock) {
-            const pxuX = lm + totalPriceW + 16;
+            const sepX = lm + totalPriceW + 8;
+            const pxuX = lm + totalPriceW + 18;
             const unitSize = config.premium_tamañoPrecioUnidad;
             const unitCap = unitSize * PT_TO_MM * CAP_FACTOR;
             // Alineado al BASELINE del precio principal (parte inferior),
             // con el label justo arriba del numero unitario.
             const unitBaseline = priceY;
             const pxuLabelY = unitBaseline - unitCap - 3;
+
+            // Separador vertical fino entre precio principal y bloque unitario
+            pdf.setDrawColor(200);
+            pdf.setLineWidth(0.3);
+            pdf.line(sepX, priceY - priceCapMM + 1, sepX, priceY + 1);
 
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(9);
@@ -1368,17 +1374,25 @@ export default function ListaPreciosPage() {
             pdf.text(config.webUrl, lm, dividerY + 17);
           }
 
-          // Right: QR específico del producto + caption horizontal abajo
+          // Right: QR grande + CTA "ESCANEÁ Y COMPRÁ"
           if (qrDataUrl) {
-            const qrSize = 24;
+            const qrSize = 32;
             const qrX = rm - qrSize;
-            const qrY = dividerY + 1;
+            const qrY = dividerY - (qrSize - 26) / 2;
             try { pdf.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize); } catch {}
+            // CTA a la izquierda del QR
+            const ctaX = qrX - 3;
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(13);
+            pdf.setCharSpace(0.8);
+            pdf.setTextColor(0);
+            pdf.text("ESCANEÁ", ctaX, qrY + 10, { align: "right" });
+            pdf.text("Y COMPRÁ", ctaX, qrY + 18, { align: "right" });
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7);
+            pdf.setFontSize(8);
             pdf.setCharSpace(0.3);
             pdf.setTextColor(130);
-            pdf.text("Escaneá para ver este producto", qrX + qrSize / 2, qrY + qrSize + 3.5, { align: "center" });
+            pdf.text("en dulcesur.com", ctaX, qrY + 25, { align: "right" });
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
           }
