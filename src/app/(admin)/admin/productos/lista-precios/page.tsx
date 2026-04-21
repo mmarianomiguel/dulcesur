@@ -235,6 +235,11 @@ export default function ListaPreciosPage() {
   const [showConfig, setShowConfig] = useState(false);
   const [configTab, setConfigTab] = useState<ConfigTab>("general");
   const [showStylePicker, setShowStylePicker] = useState(false);
+  const [showPosterConfig, setShowPosterConfig] = useState(false);
+  const [posterOpts, setPosterOpts] = useState<{
+    mostrarOferta: "auto" | "si" | "no";
+    precioMostrar: "unitario" | "caja" | "ambos";
+  }>({ mostrarOferta: "auto", precioMostrar: "ambos" });
   const [listaGroupMode, setListaGroupMode] = useState<"none" | "categoria" | "subcategoria">("categoria");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -530,7 +535,7 @@ export default function ListaPreciosPage() {
   };
 
   // ─── PDF Generation ───
-  const generatePDF = async (style: PdfStyle) => {
+  const generatePDF = async (style: PdfStyle, posterOverride?: typeof posterOpts) => {
     setShowStylePicker(false);
     setGenerating(true);
     setGeneratingProgress({ done: 0, total: selected.size });
@@ -1019,9 +1024,12 @@ export default function ListaPreciosPage() {
             contentY = Math.max(contentY, margin + 5 + posterLogoH + 6);
           }
 
-          // ── "OFERTA" badge (rounded dark pill) — solo si el producto está en oferta ──
+          // ── "OFERTA" badge (rounded dark pill) — según override o auto ──
+          const showOferta = posterOverride
+            ? posterOverride.mostrarOferta === "si" || (posterOverride.mostrarOferta === "auto" && product.enOferta)
+            : product.enOferta;
           let nameY = contentY + 10;
-          if (product.enOferta) {
+          if (showOferta) {
             const ofertaFontSize = 28;
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(ofertaFontSize);
@@ -1056,10 +1064,20 @@ export default function ListaPreciosPage() {
           pdf.setFont("helvetica", "bold");
           pdf.setFontSize(config.poster_tamañoPrecio);
           pdf.setTextColor(0);
-          const mainPrice = hasUnits ? boxPrice : displayPrice;
+          const precioMostrar = posterOverride?.precioMostrar ?? "ambos";
+          let mainPrice: number;
+          let showFinalCU = false;
+          if (precioMostrar === "unitario") {
+            mainPrice = displayPrice;
+          } else if (precioMostrar === "caja") {
+            mainPrice = hasUnits ? boxPrice : displayPrice;
+          } else {
+            mainPrice = hasUnits ? boxPrice : displayPrice;
+            showFinalCU = hasUnits && config.poster_mostrarPrecioUnitario;
+          }
           pdf.text(String(`${formatCurrency(mainPrice)}`), pageW / 2, priceY, { align: "center" });
 
-          if (config.poster_mostrarPrecioUnitario && hasUnits) {
+          if (showFinalCU) {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(14);
             pdf.setTextColor(100);
@@ -1908,6 +1926,28 @@ export default function ListaPreciosPage() {
               </button>
             </div>
             <div className="p-6 grid grid-cols-3 gap-4 max-w-4xl mx-auto overflow-y-auto">
+              {/* Poster — Cartel A4 por producto */}
+              <button
+                onClick={() => { setShowStylePicker(false); setShowPosterConfig(true); }}
+                className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left"
+              >
+                <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30 aspect-[4/3] flex flex-col">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="w-4 h-2.5 bg-muted-foreground/30 rounded-sm"></div>
+                    <span className="text-[5px] font-black bg-black text-white px-1.5 py-0.5 rounded-full">OFERTA</span>
+                  </div>
+                  <p className="text-[6px] font-bold text-center leading-tight my-auto">Producto Ejemplo 22g x36</p>
+                  <p className="text-[14px] font-black text-center leading-none">$1.200</p>
+                  <p className="text-[4px] text-center text-muted-foreground mt-0.5">$33,33 Final c/u</p>
+                  <div className="flex justify-between items-end mt-auto pt-1 border-t border-border">
+                    <span className="text-[3px] text-muted-foreground">www.dulcesur.com</span>
+                    <div className="w-3 h-3 bg-muted-foreground/40 rounded-sm"></div>
+                  </div>
+                </div>
+                <p className="font-semibold text-sm">🪧 Cartel A4 (Poster)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Una hoja A4 apaisada por producto, con logo, precio grande y QR</p>
+              </button>
+
               {/* Góndola — Carteles para estantes */}
               <button onClick={() => generatePDF("gondola")} className="group border-2 border-border rounded-xl p-4 hover:border-primary transition-all text-left">
                 <div className="border border-border rounded-lg p-3 mb-3 bg-accent/30">
@@ -1984,6 +2024,92 @@ export default function ListaPreciosPage() {
                   Generar PDF Variaciones
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poster Config Modal (pre-generación) */}
+      {showPosterConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-border">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <h2 className="text-lg font-semibold">Configurar cartel A4</h2>
+              <button onClick={() => setShowPosterConfig(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-5 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium mb-2">Badge &quot;OFERTA&quot;</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ["auto", "Automático", "Solo si el producto tiene precio de oferta cargado"],
+                    ["si", "Siempre", "Mostrar en todos los carteles"],
+                    ["no", "Nunca", "No mostrar aunque el producto esté en oferta"],
+                  ] as const).map(([val, label, desc]) => (
+                    <button
+                      key={val}
+                      onClick={() => setPosterOpts((p) => ({ ...p, mostrarOferta: val }))}
+                      className={`p-2.5 rounded-lg border text-left transition ${
+                        posterOpts.mostrarOferta === val
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                      title={desc}
+                    >
+                      <p className="text-sm font-semibold">{label}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Qué precio mostrar en grande</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ["unitario", "Unitario", "Precio de la unidad suelta"],
+                    ["caja", "Por caja", "Precio del bulto completo"],
+                    ["ambos", "Ambos", "Precio de caja grande + Final c/u chico"],
+                  ] as const).map(([val, label, desc]) => (
+                    <button
+                      key={val}
+                      onClick={() => setPosterOpts((p) => ({ ...p, precioMostrar: val }))}
+                      className={`p-2.5 rounded-lg border text-left transition ${
+                        posterOpts.precioMostrar === val
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                      title={desc}
+                    >
+                      <p className="text-sm font-semibold">{label}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Si el producto no tiene caja cargada, se usa el precio unitario automáticamente.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-border text-xs text-muted-foreground">
+                💡 Para ajustes finos (tamaño de fuente, logo, etc.) usá el botón <b>Configuración</b> del toolbar antes de generar.
+              </div>
+            </div>
+            <div className="flex gap-2 px-6 py-4 border-t border-border shrink-0">
+              <button
+                onClick={() => setShowPosterConfig(false)}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-accent transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setShowPosterConfig(false); generatePDF("poster", posterOpts); }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
+              >
+                Generar PDF
+              </button>
             </div>
           </div>
         </div>
