@@ -1186,11 +1186,30 @@ export default function ListaPreciosPage() {
         const PT_TO_MM = 0.3528;
         const CAP_FACTOR = 0.72; // cap height ≈ 72% del font size
 
+        // Parse sufijo "Caja xN Un" / "Caja x N unidades" del nombre cuando no hay caja cargada.
+        // Algunos productos tienen la info de caja en el titulo en lugar de en presentaciones.
+        const cajaSuffixRe = /\s+caja\s*x\s*(\d+)\s*(un|unid|unidades?|u)?\.?$/i;
+
         await processInChunks(selectedProducts, 10, (product, idx) => {
           if (idx > 0) pdf.addPage();
-          const displayPrice = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
-          const boxPriceRaw = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
-          const hasUnits = product.unidadesCaja > 0 && boxPriceRaw > 0;
+          const displayPriceRaw = product.enOferta && product.precioOferta > 0 ? product.precioOferta : product.precioUnitario;
+          let boxPriceRaw = product.enOferta && product.cajaEnOferta && product.precioOfertaCaja > 0 ? product.precioOfertaCaja : product.precioCaja;
+          let unidadesCaja = product.unidadesCaja;
+          let displayName = product.nombre;
+          // Si el producto no tiene caja cargada pero el nombre tiene "Caja xN Un", extraer.
+          if (!product.esCombo && (unidadesCaja === 0 || boxPriceRaw === 0)) {
+            const m = product.nombre.match(cajaSuffixRe);
+            if (m) {
+              const n = parseInt(m[1], 10);
+              if (n > 1) {
+                displayName = product.nombre.replace(cajaSuffixRe, "").trim();
+                unidadesCaja = n;
+                boxPriceRaw = displayPriceRaw;
+              }
+            }
+          }
+          const displayPrice = displayPriceRaw;
+          const hasUnits = unidadesCaja > 0 && boxPriceRaw > 0;
           const comboItems = product.esCombo ? (combosMap[product.id] || []) : [];
           // comboTotalProductos = cantidad de componentes distintos (ej: 4 sabores)
           // comboTotalUnidades = suma de cantidades (ej: 6+6+6+6 = 24 unidades)
@@ -1205,7 +1224,7 @@ export default function ListaPreciosPage() {
           // - Producto con caja: precioCaja / unidadesCaja
           const unitPriceReal = product.esCombo
             ? (comboTotalUnidades > 0 ? mainPrice / comboTotalUnidades : 0)
-            : (hasUnits ? boxPriceRaw / product.unidadesCaja : displayPrice);
+            : (hasUnits ? boxPriceRaw / unidadesCaja : displayPrice);
 
           // Márgenes generosos
           const lm = 20;
@@ -1270,13 +1289,13 @@ export default function ListaPreciosPage() {
           let nameSize = config.premium_tamañoNombre;
           while (nameSize > 20) {
             pdf.setFontSize(nameSize);
-            const testLines = pdf.splitTextToSize(product.nombre, maxNameW);
+            const testLines = pdf.splitTextToSize(displayName, maxNameW);
             const tooWide = testLines.some((l: string) => pdf.getTextWidth(l) > maxNameW + 0.5);
             if (testLines.length <= 2 && !tooWide) break;
             nameSize -= 3;
           }
           pdf.setFontSize(nameSize);
-          const nameLines: string[] = pdf.splitTextToSize(product.nombre, maxNameW).slice(0, 2);
+          const nameLines: string[] = pdf.splitTextToSize(displayName, maxNameW).slice(0, 2);
           const nameLH = nameSize * 0.38;
           nameLines.forEach((line: string, i: number) => {
             pdf.text(line, lm, cursorY + nameLH + i * nameLH);
@@ -1284,11 +1303,10 @@ export default function ListaPreciosPage() {
           cursorY += nameLines.length * nameLH + 4;
 
           // ─── SUBTITLE PRESENTACIÓN ───
-          // Combo: "Combo x N productos"
-          // Producto con unidad distinta al caja: "200g · Caja x 30 unidades"
-          // Producto sin unidad definida o unidad = caja: "Caja x 30 unidades"
-          // Producto sin caja: nombreUnidad o nombrePresentacion
-          const normalize = (s: string) => (s || "").toLowerCase().replace(/\s+/g, "");
+          // Combo: "Combo · N productos · M unidades"
+          // Caja:  "Caja x N unidades — $X c/u"  (info unificada, sin "LA CAJA" arriba del precio)
+          // Unidad sola: nombrePresentacion si no es generico
+          const GENERIC_UNIT = /^(unidad(es)?|u|un\.?|pieza|item|gen[eé]rico)$/i;
           let subtitle = "";
           if (product.esCombo) {
             if (comboTotalUnidades > 0 && comboTotalProductos !== comboTotalUnidades) {
@@ -1299,15 +1317,13 @@ export default function ListaPreciosPage() {
               subtitle = "Combo";
             }
           } else if (hasUnits) {
-            const unit = (product.nombreUnidad || "").trim();
-            const unitIsLikeBox = unit && normalize(unit).includes("caja");
-            if (unit && !unitIsLikeBox) {
-              subtitle = `${unit} · Caja x ${product.unidadesCaja} unidades`;
-            } else {
-              subtitle = `Caja x ${product.unidadesCaja} unidades`;
-            }
+            subtitle = `Caja x ${unidadesCaja} unidades`;
           } else {
-            subtitle = (product.nombreUnidad || product.nombrePresentacion || "").trim();
+            const np = (product.nombrePresentacion || "").trim();
+            const nu = (product.nombreUnidad || "").trim();
+            const candidate = np || nu;
+            // Filtrar labels genericos ("Unidad", "Un", etc.)
+            subtitle = candidate && !GENERIC_UNIT.test(candidate) ? candidate : "";
           }
           if (subtitle) {
             pdf.setFont("helvetica", "normal");
@@ -1344,19 +1360,7 @@ export default function ListaPreciosPage() {
           // priceY = baseline del número principal. Reservamos priceCapMM de altura arriba + margen.
           const priceY = cursorY + priceCapMM + 8;
 
-          // Label "LA CAJA" / "COMBO" arriba del precio
-          let priceLabel = "";
-          if (product.esCombo) priceLabel = "COMBO";
-          else if (showPackUnidad) priceLabel = "LA CAJA";
-          if (priceLabel) {
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(11);
-            pdf.setCharSpace(1.5);
-            pdf.setTextColor(130);
-            pdf.text(priceLabel, lm, cursorY + 3);
-            pdf.setCharSpace(0);
-            pdf.setTextColor(0);
-          }
+          // (Sin etiqueta arriba del precio: redundante con el subtitulo que ya dice "Caja x N" o "Combo · ...")
 
           // Tamaños auxiliares
           const symSize = priceSize * 0.45;
