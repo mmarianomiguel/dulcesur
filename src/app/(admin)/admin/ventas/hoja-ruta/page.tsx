@@ -446,12 +446,13 @@ export default function HojaDeRutaPage() {
     (async () => {
       const { data } = await supabase
         .from("empresa")
-        .select("domicilio")
+        .select("domicilio, localidad")
         .limit(1)
         .maybeSingle();
       if (data?.domicilio) {
-        // Agregamos ", Argentina" para que el geocoder priorice AR cuando el domicilio es genérico
-        setEmpresaOrigen(`${data.domicilio}, Argentina`);
+        // Construir dirección completa con localidad para geocoding preciso
+        const partes = [data.domicilio, (data as any).localidad, "Argentina"].filter(Boolean);
+        setEmpresaOrigen(partes.join(", "));
       }
     })();
   }, []);
@@ -1305,7 +1306,11 @@ export default function HojaDeRutaPage() {
       }
       setOrden(newOrden);
       const failedCount = (data.failed || []).length;
-      showOrderToast(failedCount > 0 ? `Ruta optimizada (${failedCount} direcciones no ubicadas)` : "Ruta optimizada");
+      const durMin = data.duration ? Math.round(data.duration / 60) : null;
+      const distKm = data.distance ? (data.distance / 1000).toFixed(1) : null;
+      const resumen = durMin !== null && distKm !== null ? ` — ~${durMin} min · ${distKm} km` : "";
+      const warn = failedCount > 0 ? ` (${failedCount} direcciones no ubicadas)` : "";
+      showOrderToast(`Ruta optimizada${resumen}${warn}`);
     } catch (err) {
       console.error("Error optimizando ruta:", err);
       showOrderToast("Error de red al optimizar");
@@ -2720,16 +2725,22 @@ export default function HojaDeRutaPage() {
           </DialogHeader>
           {payVenta && (() => {
             const allVentas = payGroupVentas.length > 0 ? payGroupVentas : [payVenta];
+            const isVentaPagada = (vt: VentaRow) => {
+              const pagadoReal = Math.max(0, (pagadoPorVenta[vt.id] || 0) - (ncPorVenta[vt.id] || 0));
+              return pagadoReal >= vt.total - 0.01;
+            };
+            // Para cálculos excluir ventas ya cobradas completamente; se muestran en la lista pero no suman al total a cobrar.
+            const ventasPendientes = allVentas.filter((vt) => !isVentaPagada(vt));
             // v.total in DB already has NC deducted. Reconstruct original for display.
-            const totalNCGrupo = allVentas.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
-            // Real payments = pagadoPorVenta minus the NC portion
-            const totalPagadoReal = allVentas.reduce((s, vt) => {
+            const totalNCGrupo = ventasPendientes.reduce((s, vt) => s + (ncPorVenta[vt.id] || 0), 0);
+            // Real payments = pagadoPorVenta minus the NC portion (solo de ventas pendientes, para pagos parciales)
+            const totalPagadoReal = ventasPendientes.reduce((s, vt) => {
               const pagado = pagadoPorVenta[vt.id] || 0;
               const nc = ncPorVenta[vt.id] || 0;
               return s + Math.max(0, pagado - nc);
             }, 0);
             // Sum of v.total = what client actually owes (NC already applied)
-            const totalNeto = allVentas.reduce((s, vt) => s + vt.total, 0);
+            const totalNeto = ventasPendientes.reduce((s, vt) => s + vt.total, 0);
 
             // Base PRE-surcharge de transferencia (misma fórmula que listado/venta-detail-dialog).
             // Se reconstruye desde subtotal + descuento + recargo genérico + envío - NC.
@@ -2750,8 +2761,8 @@ export default function HojaDeRutaPage() {
               const nc = ncPorVenta[vt.id] || 0;
               return Math.max(0, baseConDescRecargo - nc);
             };
-            const basePreSurcharge = allVentas.reduce((s, vt) => s + basePerVenta(vt), 0);
-            const subtotalSinRecargo = allVentas.reduce((s, vt) => s + rawSubtotalOf(vt), 0);
+            const basePreSurcharge = ventasPendientes.reduce((s, vt) => s + basePerVenta(vt), 0);
+            const subtotalSinRecargo = ventasPendientes.reduce((s, vt) => s + rawSubtotalOf(vt), 0);
 
             // preDebeGrupo = base pre-surcharge menos pagos reales. El surcharge lo suma CobroVentaSection si corresponde.
             const preDebeGrupo = Math.max(0, basePreSurcharge - totalPagadoReal);
@@ -2763,12 +2774,18 @@ export default function HojaDeRutaPage() {
                   {allVentas.length === 1 ? (
                     <div className="flex justify-between"><span className="text-gray-500">Venta</span><span className="font-mono font-medium">{payVenta.numero}</span></div>
                   ) : (
-                    allVentas.map((v) => (
-                      <div key={v.id} className="flex justify-between">
-                        <span className="text-gray-500">#{v.numero}</span>
-                        <span className="font-medium">{formatCurrency(basePerVenta(v) + (ncPorVenta[v.id] || 0))}</span>
-                      </div>
-                    ))
+                    allVentas.map((v) => {
+                      const pagada = isVentaPagada(v);
+                      return (
+                        <div key={v.id} className="flex justify-between items-center">
+                          <span className="text-gray-500">#{v.numero}</span>
+                          <span className="flex items-center gap-2">
+                            <span className={pagada ? "text-gray-400 line-through" : "font-medium"}>{formatCurrency(basePerVenta(v) + (ncPorVenta[v.id] || 0))}</span>
+                            {pagada && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">✓ Pagado</span>}
+                          </span>
+                        </div>
+                      );
+                    })
                   )}
                   {(allVentas.length === 1 && (ncPorVenta[allVentas[0].id] || 0) > 0) && (
                     <div className="flex justify-between"><span className="text-red-600">Nota de Crédito</span><span className="text-red-600 font-medium">-{formatCurrency(ncPorVenta[allVentas[0].id])}</span></div>

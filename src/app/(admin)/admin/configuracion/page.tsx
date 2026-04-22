@@ -41,6 +41,7 @@ export default function EmpresaPage() {
       cuit: empresa.cuit,
       situacion_iva: empresa.situacion_iva,
       domicilio: empresa.domicilio,
+      localidad: empresa.localidad,
       telefono: empresa.telefono,
     }).eq("id", empresa.id);
     setSaving(false);
@@ -108,7 +109,12 @@ export default function EmpresaPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
                 <Label>Domicilio fiscal</Label>
-                <Input value={empresa?.domicilio || ""} onChange={(ev) => e("domicilio", ev.target.value)} />
+                <Input value={empresa?.domicilio || ""} onChange={(ev) => e("domicilio", ev.target.value)} placeholder="Ej: Eduardo Gutierrez 5157" />
+              </div>
+              <div className="space-y-2">
+                <Label>Localidad</Label>
+                <Input value={empresa?.localidad || ""} onChange={(ev) => e("localidad", ev.target.value)} placeholder="Ej: Longchamps, Buenos Aires" />
+                <p className="text-[11px] text-muted-foreground">Se usa como punto de partida para optimizar la ruta de entregas.</p>
               </div>
               <div className="space-y-2">
                 <Label>Teléfono</Label>

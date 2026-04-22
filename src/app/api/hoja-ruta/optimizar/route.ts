@@ -36,10 +36,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No se pudieron geocodificar suficientes direcciones", failed }, { status: 400 });
   }
 
-  let startCoords = valid[0].coords;
+  let startCoords: [number, number] | null = null;
   if (origen) {
-    const g = await geocode(origen);
-    if (g) startCoords = g;
+    startCoords = await geocode(origen);
+    if (!startCoords) {
+      return NextResponse.json({
+        error: `No se pudo ubicar la dirección de la empresa ("${origen}"). Revisá Configuración → Empresa → Domicilio y Localidad.`,
+      }, { status: 400 });
+    }
+  } else {
+    startCoords = valid[0].coords;
   }
 
   const body = {
@@ -62,11 +68,17 @@ export async function POST(req: NextRequest) {
   }
 
   const data = await res.json();
-  const steps: any[] = data?.routes?.[0]?.steps ?? [];
+  const route = data?.routes?.[0];
+  const steps: any[] = route?.steps ?? [];
   const orderedIds = steps
     .filter((step) => step.type === "job")
     .map((step) => valid[(step.job as number) - 1]?.id)
     .filter(Boolean) as string[];
 
-  return NextResponse.json({ orderedIds, failed });
+  return NextResponse.json({
+    orderedIds,
+    failed,
+    duration: route?.duration ?? null, // segundos
+    distance: route?.distance ?? null, // metros
+  });
 }

@@ -108,6 +108,7 @@ export interface Empresa {
   cuit: string | null;
   situacion_iva: string;
   domicilio: string | null;
+  localidad: string | null;
   telefono: string | null;
   email: string | null;
   punto_venta: string;
