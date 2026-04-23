@@ -607,7 +607,7 @@ export default function ProductoClient({
             })()}
             {boxOnlyDiscount > 0 && currentPresLabel === "Unidad" && (
               <p className="text-sm text-emerald-600 font-medium mt-1.5">
-                📦 {boxOnlyDiscount}% OFF comprando por {boxDiscountLabel}
+                📦 {Math.round(boxOnlyDiscount)}% OFF comprando por {boxDiscountLabel}
               </p>
             )}
             {producto.es_combo && comboComponentes.length > 0 && (() => {
