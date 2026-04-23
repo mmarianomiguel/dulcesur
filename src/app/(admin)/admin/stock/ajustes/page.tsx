@@ -340,16 +340,19 @@ export default function AjustesStockPage() {
           tipoMov = "ajuste_egreso";
         }
 
+        // En ajustes de stock permitimos stock negativo para poder registrar faltantes
+        // que luego se reponen al ingresar mercadería.
         const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
           p_producto_id: row.producto_id,
           p_change: delta,
+          p_allow_negative: true,
         });
 
         const stockAntes = stockResult?.stock_antes ?? prod.stock;
-        const stockDespues = stockResult?.stock_despues ?? Math.max(0, prod.stock + delta);
+        const stockDespues = stockResult?.stock_despues ?? (prod.stock + delta);
 
-        if (delta < 0 && stockAntes + delta < 0) {
-          showAdminToast(`Stock insuficiente en ${prod.nombre}. Se ajustó a 0 (faltaban ${-delta - stockAntes} unidades)`, "info");
+        if (delta < 0 && stockDespues < 0) {
+          showAdminToast(`${prod.nombre} queda con stock negativo (${stockDespues}). Se repone al ingresar mercadería.`, "info");
         }
 
         await supabase.from("ajuste_stock_items").insert({
