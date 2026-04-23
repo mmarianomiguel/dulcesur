@@ -2157,10 +2157,12 @@ export default function HojaDeRutaPage() {
                 .map((v) => [v.clientes?.domicilio, v.clientes?.localidad].filter(Boolean).join(", "))
                 .filter(Boolean);
               if (addresses.length === 0) return "#";
-              if (addresses.length === 1) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addresses[0])}`;
-              const origin = encodeURIComponent(addresses[0]);
-              const destination = encodeURIComponent(addresses[addresses.length - 1]);
-              const waypoints = addresses.slice(1, -1).map(encodeURIComponent).join("|");
+              // Punto de partida: domicilio del local. Si no hay, usa la primera parada.
+              const origin = encodeURIComponent(empresaOrigen || addresses[0]);
+              const stops = empresaOrigen ? addresses : addresses.slice(1);
+              if (stops.length === 0) return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${origin}`;
+              const destination = encodeURIComponent(stops[stops.length - 1]);
+              const waypoints = stops.slice(0, -1).map(encodeURIComponent).join("|");
               return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ""}`;
             })()}
             target="_blank"
