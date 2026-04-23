@@ -74,6 +74,12 @@ interface Product {
   precioAnterior: number;
   esCombo: boolean;
   imagenUrl: string;
+  // Descuento activo más favorable que ya tiene cargado el producto (tabla descuentos).
+  // Se computa al cargar productos. Se usa opcionalmente en el cartel historia.
+  descuentoPct: number; // 0 si no hay
+  descuentoPrecioFijo: number | null; // null si no es precio_fijo
+  descuentoNombre: string;
+  descuentoPresentacion: "unidad" | "caja" | "todas";
 }
 
 interface Filters {
@@ -258,7 +264,8 @@ export default function ListaPreciosPage() {
     aplicarDescuento: boolean;
     porcentajeDescuento: number;
     zoomImagen?: number;
-  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true, aplicarDescuento: false, porcentajeDescuento: 5, zoomImagen: 1 });
+    usarDescuentoReal: boolean;
+  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true, aplicarDescuento: false, porcentajeDescuento: 5, zoomImagen: 1, usarDescuentoReal: true });
   const [showPremiumConfig, setShowPremiumConfig] = useState(false);
   const [premiumOpts, setPremiumOpts] = useState<{
     tipoOferta: "simple" | "packUnidad";
@@ -369,11 +376,14 @@ export default function ListaPreciosPage() {
       return all;
     }
 
-    const [dbProducts, presentaciones, subcategorias] = await Promise.all([
+    const today = new Date().toISOString().split("T")[0];
+    const [dbProducts, presentaciones, subcategorias, descuentos] = await Promise.all([
       fetchAllRows("productos", "*, categorias(nombre), marcas(nombre)", (q: any) => q.eq("activo", true).order("nombre")),
       fetchAllRows("presentaciones", "*"),
       fetchAllRows("subcategorias", "id, nombre"),
+      fetchAllRows("descuentos", "*", (q: any) => q.eq("activo", true).lte("fecha_inicio", today)),
     ]);
+    const descuentosActivos = (descuentos as any[]).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today);
     const subcatMap: Record<string, string> = {};
     for (const sc of subcategorias) subcatMap[sc.id] = sc.nombre;
 
@@ -383,6 +393,39 @@ export default function ListaPreciosPage() {
       arr.push(p);
       presMap.set(p.producto_id, arr);
     });
+
+    // Helper: calcula el mejor descuento activo para un producto (excluye descuentos exclusivos de cliente).
+    const computeBestDiscount = (p: DBProducto, boxCantidad: number, unitPrecio: number) => {
+      let bestPct = 0;
+      let bestPrecioFijo: number | null = null;
+      let bestNombre = "";
+      let bestPresentacion: "unidad" | "caja" | "todas" = "todas";
+      for (const d of descuentosActivos) {
+        // Excluir descuentos exclusivos por cliente (no aplican a público general).
+        if (d.clientes_ids && d.clientes_ids.length > 0) continue;
+        if (d.productos_excluidos_ids && d.productos_excluidos_ids.includes(p.id)) continue;
+        if (d.excluir_combos && (p as any).es_combo) continue;
+        if (d.cantidad_minima && d.cantidad_minima > 0) continue; // solo fijos, no "desde N unidades"
+        let aplica = false;
+        if (d.aplica_a === "todos") aplica = true;
+        else if (d.aplica_a === "productos") aplica = (d.productos_ids || []).includes(p.id);
+        else if (d.aplica_a === "categorias") aplica = (d.categorias_ids || []).includes((p as any).categoria_id) || (!!(p as any).subcategoria_id && (d.categorias_ids || []).includes((p as any).subcategoria_id));
+        else if (d.aplica_a === "subcategorias") aplica = !!(p as any).subcategoria_id && (d.subcategorias_ids || []).includes((p as any).subcategoria_id);
+        else if (d.aplica_a === "marcas") aplica = !!(p as any).marca_id && (d.marcas_ids || []).includes((p as any).marca_id);
+        if (!aplica) continue;
+        let pct = Number(d.porcentaje);
+        if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && Number(d.precio_fijo) > 0 && unitPrecio > 0) {
+          pct = Math.max(0, Math.min(100, ((unitPrecio - Number(d.precio_fijo)) / unitPrecio) * 100));
+        }
+        if (pct > bestPct) {
+          bestPct = pct;
+          bestPrecioFijo = d.tipo_descuento === "precio_fijo" && d.precio_fijo != null ? Number(d.precio_fijo) : null;
+          bestNombre = d.nombre || "";
+          bestPresentacion = d.presentacion || "todas";
+        }
+      }
+      return { pct: bestPct, precioFijo: bestPrecioFijo, nombre: bestNombre, presentacion: bestPresentacion };
+    };
 
     const mapped: Product[] = dbProducts.map((p: DBProducto) => {
       const pres = presMap.get(p.id) || [];
@@ -402,6 +445,7 @@ export default function ListaPreciosPage() {
       const clasificacion = clasificarProducto(p.nombre);
 
       const fechaAct = p.fecha_actualizacion || "";
+      const descuento = computeBestDiscount(p, boxPres?.cantidad || 0, precioUnitario);
 
       return {
         nombre: p.nombre,
@@ -425,6 +469,10 @@ export default function ListaPreciosPage() {
         precioAnterior: p.precio_anterior || 0,
         esCombo: Boolean((p as any).es_combo),
         imagenUrl: (p as any).imagen_url || "",
+        descuentoPct: descuento.pct,
+        descuentoPrecioFijo: descuento.precioFijo,
+        descuentoNombre: descuento.nombre,
+        descuentoPresentacion: descuento.presentacion,
       };
     });
 
@@ -2167,11 +2215,39 @@ export default function ListaPreciosPage() {
         const unitPriceOriginal = product.esCombo
           ? (comboTotalUnidades > 0 ? mainPriceOriginal / comboTotalUnidades : 0)
           : (hasUnits ? boxPrice / unidadesCaja : displayPrice);
-        // Descuento configurable (reemplaza los precios mostrados)
-        const discountActive = opts.aplicarDescuento && opts.porcentajeDescuento > 0 && opts.porcentajeDescuento < 100;
-        const discountMult = discountActive ? 1 - opts.porcentajeDescuento / 100 : 1;
-        const mainPrice = mainPriceOriginal * discountMult;
-        const unitPrice = unitPriceOriginal * discountMult;
+        // Descuento configurable — dos fuentes posibles:
+        // 1) usarDescuentoReal: tomar el descuento cargado del producto (tabla descuentos).
+        // 2) aplicarDescuento: porcentaje ad-hoc definido en el modal.
+        // Si usarDescuentoReal está activo y el producto tiene descuento, prevalece sobre el manual.
+        const productoTieneDesc = product.descuentoPct > 0;
+        const usarReal = opts.usarDescuentoReal && productoTieneDesc;
+        const manualActive = !usarReal && opts.aplicarDescuento && opts.porcentajeDescuento > 0 && opts.porcentajeDescuento < 100;
+        const discountActive = usarReal || manualActive;
+        let mainPrice = mainPriceOriginal;
+        let unitPrice = unitPriceOriginal;
+        let discountPctShown = 0;
+        if (usarReal) {
+          discountPctShown = Math.round(product.descuentoPct);
+          if (product.descuentoPrecioFijo != null && product.descuentoPrecioFijo > 0) {
+            // precio_fijo es por unidad. Caja = precio_fijo * unidadesCaja.
+            if (showPackUnidad && hasUnits) {
+              mainPrice = product.descuentoPrecioFijo * unidadesCaja;
+              unitPrice = product.descuentoPrecioFijo;
+            } else {
+              mainPrice = product.descuentoPrecioFijo;
+              unitPrice = product.descuentoPrecioFijo;
+            }
+          } else {
+            const mult = 1 - product.descuentoPct / 100;
+            mainPrice = mainPriceOriginal * mult;
+            unitPrice = unitPriceOriginal * mult;
+          }
+        } else if (manualActive) {
+          const discountMult = 1 - opts.porcentajeDescuento / 100;
+          mainPrice = mainPriceOriginal * discountMult;
+          unitPrice = unitPriceOriginal * discountMult;
+          discountPctShown = opts.porcentajeDescuento;
+        }
         const mainPriceSaved = mainPriceOriginal - mainPrice;
 
         // ── Price tag (white rounded rect, slight rotation, shadow) ──
@@ -2253,7 +2329,7 @@ export default function ListaPreciosPage() {
           ctx.setLineDash([]);
           ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.font = "900 44px Arial";
-          ctx.fillText(`−${opts.porcentajeDescuento}%`, 0, 2);
+          ctx.fillText(`−${discountPctShown}%`, 0, 2);
           ctx.restore();
         }
 
@@ -2918,13 +2994,44 @@ export default function ListaPreciosPage() {
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
+                    checked={storyOpts.usarDescuentoReal}
+                    onChange={(e) => setStoryOpts((p) => ({ ...p, usarDescuentoReal: e.target.checked }))}
+                    className="accent-primary w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Usar descuento ya cargado del producto</p>
+                    <p className="text-[11px] text-muted-foreground">Si el producto tiene un descuento activo (tabla de descuentos), se aplica automáticamente al precio. Tiene prioridad sobre el descuento manual.</p>
+                    {(() => {
+                      const seleccionados = products.filter((_, i) => selected.has(i));
+                      const conDesc = seleccionados.filter((p) => p.descuentoPct > 0);
+                      if (seleccionados.length === 0) return null;
+                      if (conDesc.length === 0) return <p className="text-[11px] text-amber-700 mt-1">Ninguno de los {seleccionados.length} productos seleccionados tiene descuento activo.</p>;
+                      return (
+                        <div className="mt-2 space-y-0.5">
+                          {conDesc.slice(0, 3).map((p) => (
+                            <p key={p.id} className="text-[11px] text-emerald-700">
+                              ✓ {p.nombre} — {p.descuentoPrecioFijo != null ? `precio fijo $${p.descuentoPrecioFijo}` : `${Math.round(p.descuentoPct)}%`} ({p.descuentoNombre})
+                            </p>
+                          ))}
+                          {conDesc.length > 3 && <p className="text-[11px] text-muted-foreground">+ {conDesc.length - 3} más con descuento</p>}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </label>
+              </div>
+
+              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
                     checked={storyOpts.aplicarDescuento}
                     onChange={(e) => setStoryOpts((p) => ({ ...p, aplicarDescuento: e.target.checked }))}
                     className="accent-primary w-4 h-4"
                   />
                   <div className="flex-1">
-                    <p className="text-sm font-medium">Aplicar descuento solo para este cartel</p>
-                    <p className="text-[11px] text-muted-foreground">El precio mostrado es el precio ya descontado. Aparece el original tachado y un sello <b>−X%</b>. No modifica el precio en la base de datos.</p>
+                    <p className="text-sm font-medium">Aplicar descuento manual solo para este cartel</p>
+                    <p className="text-[11px] text-muted-foreground">Porcentaje ad-hoc para productos sin descuento cargado (o cuando no se usa el descuento real). No modifica el precio en la base de datos.</p>
                   </div>
                 </label>
                 {storyOpts.aplicarDescuento && (
