@@ -257,7 +257,8 @@ export default function ListaPreciosPage() {
     mostrarImagen: boolean;
     aplicarDescuento: boolean;
     porcentajeDescuento: number;
-  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true, aplicarDescuento: false, porcentajeDescuento: 5 });
+    zoomImagen?: number;
+  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true, aplicarDescuento: false, porcentajeDescuento: 5, zoomImagen: 1 });
   const [showPremiumConfig, setShowPremiumConfig] = useState(false);
   const [premiumOpts, setPremiumOpts] = useState<{
     tipoOferta: "simple" | "packUnidad";
@@ -1390,20 +1391,25 @@ export default function ListaPreciosPage() {
             const qrY = dividerY + 1;
             try { pdf.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize); } catch {}
             // CTA a la izquierda del QR, posicionado con getTextWidth (sin align)
+            // IMPORTANTE: jsPDF.getTextWidth NO contempla charSpace, hay que sumarlo manual.
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(12);
-            pdf.setCharSpace(0.8);
+            const ctaCharSpace = 0.8;
+            pdf.setCharSpace(ctaCharSpace);
             pdf.setTextColor(0);
             const ctaRight = qrX - 4;
-            const escaneaW = pdf.getTextWidth("ESCANEÁ");
-            const comprW = pdf.getTextWidth("Y COMPRÁ");
+            const widthWithSpacing = (text: string, cs: number) =>
+              pdf.getTextWidth(text) + Math.max(0, text.length - 1) * cs;
+            const escaneaW = widthWithSpacing("ESCANEÁ", ctaCharSpace);
+            const comprW = widthWithSpacing("Y COMPRÁ", ctaCharSpace);
             pdf.text("ESCANEÁ", ctaRight - escaneaW, qrY + 10);
             pdf.text("Y COMPRÁ", ctaRight - comprW, qrY + 17);
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(7.5);
-            pdf.setCharSpace(0.3);
+            const dulceCharSpace = 0.3;
+            pdf.setCharSpace(dulceCharSpace);
             pdf.setTextColor(95);
-            const dulceW = pdf.getTextWidth("en dulcesur.com");
+            const dulceW = widthWithSpacing("en dulcesur.com", dulceCharSpace);
             pdf.text("en dulcesur.com", ctaRight - dulceW, qrY + 23);
             pdf.setCharSpace(0);
             pdf.setTextColor(0);
@@ -2115,7 +2121,10 @@ export default function ListaPreciosPage() {
                 imgSrc = imgSrc.replace("/upload/", "/upload/w_800,q_auto,f_png/");
               }
               const pImg = await loadImage(imgSrc);
-              const ratio = Math.min(frameW * 0.88 / pImg.width, frameH * 0.88 / pImg.height);
+              // zoomImagen permite agrandar/reducir la imagen dentro del frame (límite 1.13 para no romper el recuadro).
+              const zoom = Math.max(0.6, Math.min(1.13, opts.zoomImagen ?? 1));
+              const fillFactor = 0.88 * zoom;
+              const ratio = Math.min(frameW * fillFactor / pImg.width, frameH * fillFactor / pImg.height);
               const iW = pImg.width * ratio;
               const iH = pImg.height * ratio;
               ctx.drawImage(pImg, frameX + (frameW - iW) / 2, frameY + (frameH - iH) / 2, iW, iH);
@@ -2872,7 +2881,7 @@ export default function ListaPreciosPage() {
                 />
               </div>
 
-              <div className="border border-border rounded-lg p-3 bg-accent/30">
+              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -2885,6 +2894,24 @@ export default function ListaPreciosPage() {
                     <p className="text-[11px] text-muted-foreground">Se toma de Cloudinary. Si el producto no tiene imagen, queda el frame vacío.</p>
                   </div>
                 </label>
+                {storyOpts.mostrarImagen && (
+                  <div className="pl-7 space-y-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs text-muted-foreground">Tamaño de imagen</label>
+                      <span className="text-xs font-medium text-foreground">{Math.round(((storyOpts.zoomImagen ?? 1)) * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.6}
+                      max={1.13}
+                      step={0.01}
+                      value={storyOpts.zoomImagen ?? 1}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, zoomImagen: Number(e.target.value) }))}
+                      className="w-full accent-primary"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Límite 113% para no romper el recuadro blanco.</p>
+                  </div>
+                )}
               </div>
 
               <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
