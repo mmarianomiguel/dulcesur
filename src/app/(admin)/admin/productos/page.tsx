@@ -3925,7 +3925,7 @@ export default function ProductosPage() {
                           </select>
                         </div>
                         <div>
-                          <Label className="text-[10px] text-muted-foreground">{discountForm.modalidad === "precio_fijo" ? "Precio $" : "Descuento %"}</Label>
+                          <Label className="text-[10px] text-muted-foreground">{discountForm.modalidad === "precio_fijo" ? "Precio por unidad $" : "Descuento %"}</Label>
                           {discountForm.modalidad === "precio_fijo" ? (
                             <Input type="number" min="1" step="1" placeholder="Ej: 450" value={discountForm.precio_fijo || ""} onChange={(e) => setDiscountForm({ ...discountForm, precio_fijo: Math.max(0, Number(e.target.value)) })} className="h-8 text-xs text-center" />
                           ) : (
@@ -3933,6 +3933,24 @@ export default function ProductosPage() {
                           )}
                         </div>
                       </div>
+                      {/* Preview de precios finales cuando es precio fijo */}
+                      {discountForm.modalidad === "precio_fijo" && discountForm.precio_fijo > 0 && (
+                        <div className="bg-white border border-emerald-200 rounded-md p-2 space-y-1">
+                          <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">Precio final que verá el cliente</p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Unidad</span>
+                              <span className="font-semibold">{formatCurrency(discountForm.precio_fijo)}</span>
+                            </div>
+                            {presentaciones.filter((p) => !p._deleted && p.cantidad > 1).map((box) => (
+                              <div key={box.nombre + box.cantidad} className="flex justify-between">
+                                <span className="text-muted-foreground truncate">{box.nombre} x{box.cantidad}</span>
+                                <span className="font-semibold">{formatCurrency(discountForm.precio_fijo * box.cantidad)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <Label className="text-[10px] text-muted-foreground">Aplica a</Label>
                         <select value={discountForm.tipo} onChange={(e) => setDiscountForm({ ...discountForm, tipo: e.target.value })} className="w-full h-8 text-xs border rounded-md px-2 bg-background">
