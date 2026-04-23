@@ -2581,15 +2581,22 @@ export default function ListadoVentasPage() {
       if (poFilterEstado !== "todos") {
         if (poFilterEstado === "entregado" ? (o.estado !== "entregado" && o.estado !== "cerrada") : o.estado !== poFilterEstado) return false;
       }
-      // Payment filter — includes Mixto orders that have the selected method
-      if (filterPayment !== "all") {
-        const pago = (o.forma_pago || o.metodo_pago || "").toLowerCase();
+      const pago = (o.forma_pago || o.metodo_pago || "").toLowerCase();
+      const isMixto = pago === "mixto";
+      const montoEf = (o as any).monto_efectivo || 0;
+      const montoTr = (o as any).monto_transferencia || 0;
+      const montoPagado = (o as any).monto_pagado ?? (o as any)._monto_pagado ?? 0;
+      const totalOrden = o.total || 0;
+      // Si hay filtro de banco, ignoramos la constrainta de forma de pago:
+      // basta con que la venta haya transferido a esa cuenta (Transferencia pura o Mixto con monto_transferencia > 0).
+      if (filterBanco !== "all") {
+        const alias = String((o as any).cuenta_transferencia_alias || "");
+        if (!alias.includes(filterBanco)) return false;
+        const tuvoTransferencia = pago === "transferencia" || (isMixto && montoTr > 0);
+        if (!tuvoTransferencia) return false;
+      } else if (filterPayment !== "all") {
+        // Payment filter — includes Mixto orders that have the selected method
         const target = filterPayment.toLowerCase();
-        const isMixto = pago === "mixto";
-        const montoEf = (o as any).monto_efectivo || 0;
-        const montoTr = (o as any).monto_transferencia || 0;
-        const montoPagado = (o as any).monto_pagado ?? (o as any)._monto_pagado ?? 0;
-        const totalOrden = o.total || 0;
         // For CC: a Mixto counts only if there's an unpaid residue (went to CC)
         const mixtoTuvoCC = isMixto && montoPagado < totalOrden * 0.99;
         let matches = false;
@@ -2599,11 +2606,6 @@ export default function ListadoVentasPage() {
         else if (target === "mixto") matches = isMixto;
         else matches = pago === target;
         if (!matches) return false;
-      }
-      // Banco filter — matches both "alias" and "Nombre — alias" formats
-      if (filterBanco !== "all") {
-        const alias = String((o as any).cuenta_transferencia_alias || "");
-        if (!alias.includes(filterBanco)) return false;
       }
       // Search filter
       if (searchClient) {
@@ -2832,8 +2834,8 @@ export default function ListadoVentasPage() {
               ))}
             </div>
 
-            {/* Banco — solo si es Transferencia o Mixto */}
-            {(filterPayment === "Transferencia" || filterPayment === "Mixto") && cuentasBancarias.length > 0 && (
+            {/* Banco — visible salvo que el filtro sea estrictamente Efectivo o Cta Cte (casos sin transferencia) */}
+            {filterPayment !== "Efectivo" && filterPayment !== "Cuenta Corriente" && cuentasBancarias.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap">
                 {[{ id: "all", label: "Todos" }, ...cuentasBancarias.map((c: any) => ({ id: c.alias || c.nombre, label: c.alias || c.nombre }))].map((banco) => (
                   <button
