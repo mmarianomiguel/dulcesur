@@ -272,15 +272,20 @@ export default function OfertasClient({ initialProductos, initialDescuentos, ini
             else if (d.aplica_a === "marcas") aplica = !!prod.marca_id && (d.marcas_ids || []).includes(prod.marca_id);
             if (!aplica) continue;
 
-            const pct = Number(d.porcentaje);
-            // Aplicar descuento sobre el precio de la presentación mayor
-            const precioBase = boxPres.precio > 0 ? boxPres.precio : prod.precio * boxPres.cantidad;
-            const precioConDesc = Math.round(precioBase * (1 - pct / 100));
+            // Precio fijo: se interpreta como precio por unidad — el precio final de la caja es precio_fijo × cantidad de la caja.
+            let precioConDesc: number;
+            if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && d.precio_fijo > 0) {
+              precioConDesc = Math.round(d.precio_fijo * boxPres.cantidad);
+            } else {
+              const pct = Number(d.porcentaje);
+              const precioBase = boxPres.precio > 0 ? boxPres.precio : prod.precio * boxPres.cantidad;
+              precioConDesc = Math.round(precioBase * (1 - pct / 100));
+            }
             // Calcular ahorro real vs comprar unidades sueltas
             const precioUnitRef = (unitPres?.precio || prod.precio) * boxPres.cantidad;
             const savePct = precioUnitRef > 0
               ? Math.round((1 - precioConDesc / precioUnitRef) * 100)
-              : pct;
+              : Number(d.porcentaje);
 
             if (savePct > mejorPct) {
               mejorPct = savePct;
