@@ -627,7 +627,7 @@ export default function VentasPage() {
       // Para presentaciones multi-unidad (cajas/bultos), el precio final es precio_fijo * unidades.
       const precioFijoPres = isPrecioFijo ? precioFijoUnidad! * presUnits : null;
       const autoDiscount = isPrecioFijo
-        ? Math.round(((presPrice - precioFijoPres!) / presPrice) * 100)
+        ? Math.round(((presPrice - precioFijoPres!) / presPrice) * 10000) / 100
         : rawDiscount;
       const discountedSubtotal = isPrecioFijo
         ? precioFijoPres!
@@ -2396,22 +2396,29 @@ export default function VentasPage() {
                         <div className="text-right w-20 lg:w-28 shrink-0">
                           <p className="text-xs lg:text-sm font-semibold">{formatCurrency(item.subtotal)}</p>
                           <p className="text-[10px] lg:text-xs text-muted-foreground">
-                            {item.discount > 0 ? (
-                              <><span className="line-through text-gray-400">{formatCurrency(item.price)}</span> <span className="text-emerald-600">{formatCurrency(item.price * (1 - item.discount / 100))}</span> c/u</>
-                            ) : (
-                              <>{formatCurrency(item.price)} c/u</>
-                            )}
+                            {(() => {
+                              // Usamos subtotal/qty en vez de recomputar con el porcentaje redondeado
+                              // para preservar el precio exacto (ej: precio fijo $560 no debe mostrarse como $559).
+                              const effectivePres = item.qty > 0 ? item.subtotal / item.qty : item.price;
+                              if (item.discount > 0) return (
+                                <><span className="line-through text-gray-400">{formatCurrency(item.price)}</span> <span className="text-emerald-600">{formatCurrency(effectivePres)}</span> c/u</>
+                              );
+                              return <>{formatCurrency(item.price)} c/u</>;
+                            })()}
                           </p>
                           {item.es_combo && item.comboItems && item.comboItems.length > 0 && (() => {
                             const totalUnits = item.comboItems.reduce((sum, ci) => sum + ci.cantidad, 0);
-                            const effectivePrice = item.price * (1 - (item.discount || 0) / 100);
+                            const effectivePres = item.qty > 0 ? item.subtotal / item.qty : item.price;
                             return totalUnits > 0 ? (
-                              <p className="text-[9px] lg:text-[10px] text-emerald-600">{formatCurrency(effectivePrice / totalUnits)} x unidad</p>
+                              <p className="text-[9px] lg:text-[10px] text-emerald-600">{formatCurrency(effectivePres / totalUnits)} x unidad</p>
                             ) : null;
                           })()}
-                          {!item.es_combo && item.unidades_por_presentacion > 1 && (
-                            <p className="text-[9px] lg:text-[10px] text-emerald-600">{formatCurrency(item.price * (1 - (item.discount || 0) / 100) / item.unidades_por_presentacion)} x unidad</p>
-                          )}
+                          {!item.es_combo && item.unidades_por_presentacion > 1 && (() => {
+                            const effectivePres = item.qty > 0 ? item.subtotal / item.qty : item.price;
+                            return (
+                              <p className="text-[9px] lg:text-[10px] text-emerald-600">{formatCurrency(effectivePres / item.unidades_por_presentacion)} x unidad</p>
+                            );
+                          })()}
                           {/* Descuento inline */}
                           <div className="flex items-center justify-end gap-0.5 mt-1" onClick={(e) => e.stopPropagation()}>
                             <span className="text-[10px] text-muted-foreground">Dto.</span>
