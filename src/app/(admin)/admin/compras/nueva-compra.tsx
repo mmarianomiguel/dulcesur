@@ -622,9 +622,10 @@ export default function NuevaCompra({
             orden_id: compra.id,
           });
 
-          // Update cost and price if modified
-          if (item.costo_unitario !== item.costo_original) {
-            if (item.actualizarPrecio && item.costo_original > 0) {
+          // Update cost and price ONLY if user explicitly opted in via "Actualizar precio".
+          // Si solo cambia el costo de esta compra pero no se activa actualizar, el costo del producto maestro se mantiene intacto.
+          if (item.costo_unitario !== item.costo_original && item.actualizarPrecio) {
+            if (item.costo_original > 0) {
               const marginRatio = item.precio_original / item.costo_original;
               const newPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * marginRatio);
               await supabase
@@ -673,14 +674,6 @@ export default function NuevaCompra({
                 costoAnterior: item.costo_original,
                 costoNuevo: item.costo_unitario,
               });
-            } else {
-              await supabase
-                .from("productos")
-                .update({
-                  costo: item.costo_unitario,
-                  fecha_actualizacion: todayString(),
-                })
-                .eq("id", item.producto_id);
             }
           }
         })

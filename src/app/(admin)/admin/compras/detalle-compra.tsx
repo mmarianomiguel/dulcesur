@@ -448,13 +448,8 @@ export default function DetalleCompra({
           .update({ precio_unitario: newPrice, subtotal: newSubtotal })
           .eq("id", item.id);
 
-        // Update product costo if changed
-        if (item.producto_id) {
-          await supabase
-            .from("productos")
-            .update({ costo: newPrice, fecha_actualizacion: todayString() })
-            .eq("id", item.producto_id);
-        }
+        // El costo de la compra no sobrescribe el costo del producto maestro.
+        // Si se desea actualizar el costo del producto, debe hacerse manualmente desde el módulo de productos.
       }
 
       // Recalculate compra total
