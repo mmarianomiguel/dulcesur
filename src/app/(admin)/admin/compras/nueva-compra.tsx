@@ -629,12 +629,14 @@ export default function NuevaCompra({
           const aplicarCosto = item.actualizarCosto && costoCambio;
           const aplicarPrecio = item.actualizarPrecio && item.costo_original > 0;
           if (aplicarCosto || aplicarPrecio) {
-            const productoUpdate: Record<string, any> = { fecha_actualizacion: todayString() };
+            // fecha_actualizacion solo se bumpea cuando cambia el PRECIO (es lo que usa "aumentos recientes").
+            const productoUpdate: Record<string, any> = {};
             let newPrecio = item.precio_original;
             if (aplicarCosto) {
               productoUpdate.costo = item.costo_unitario;
             }
             if (aplicarPrecio) {
+              productoUpdate.fecha_actualizacion = todayString();
               const marginRatio = item.precio_original / item.costo_original;
               newPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * marginRatio);
               productoUpdate.precio = newPrecio;

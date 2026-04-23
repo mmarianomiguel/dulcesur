@@ -577,9 +577,10 @@ export default function EditarPreciosPage() {
           const prod = productos.find((p) => p.id === id);
           updateData.precio = priceChanges[id];
           if (prod) updateData.precio_anterior = prod.precio;
+          // Solo bumpear fecha_actualizacion cuando cambia el precio
+          updateData.fecha_actualizacion = new Date().toISOString();
         }
         if (costoChanges[id] !== undefined) updateData.costo = costoChanges[id];
-        updateData.fecha_actualizacion = new Date().toISOString();
         updates.push(supabase.from("productos").update(updateData).eq("id", id).then());
 
         // Update presentation prices and costs proportionally
