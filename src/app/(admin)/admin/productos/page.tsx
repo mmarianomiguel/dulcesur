@@ -196,7 +196,7 @@ export default function ProductosPage() {
   const [priceHistory, setPriceHistory] = useState<{ id: string; precio_anterior: number; precio_nuevo: number; costo_anterior: number; costo_nuevo: number; usuario: string; created_at: string }[]>([]);
   const [productDiscounts, setProductDiscounts] = useState<any[]>([]);
   const [showDiscountForm, setShowDiscountForm] = useState(false);
-  const [discountForm, setDiscountForm] = useState({ nombre: "", porcentaje: 5, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
+  const [discountForm, setDiscountForm] = useState({ nombre: "", modalidad: "porcentaje" as "porcentaje" | "precio_fijo", porcentaje: 5, precio_fijo: 0, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
   const [savingDiscount, setSavingDiscount] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProductoWithRelations | null>(null);
   const [editTab, setEditTab] = useState<string>("info");
@@ -634,12 +634,26 @@ export default function ProductosPage() {
   };
 
   const saveProductDiscount = async () => {
-    if (!editingProduct || !discountForm.nombre || discountForm.porcentaje <= 0) return;
+    if (!editingProduct || !discountForm.nombre) {
+      showAdminToast("Falta el nombre del descuento", "error");
+      return;
+    }
+    const esPrecioFijo = discountForm.modalidad === "precio_fijo";
+    if (esPrecioFijo && discountForm.precio_fijo <= 0) {
+      showAdminToast("El precio fijo debe ser mayor a 0", "error");
+      return;
+    }
+    if (!esPrecioFijo && discountForm.porcentaje <= 0) {
+      showAdminToast("El porcentaje debe ser mayor a 0", "error");
+      return;
+    }
     setSavingDiscount(true);
     const today = new Date().toISOString().split("T")[0];
     const payload: Record<string, any> = {
       nombre: discountForm.nombre,
-      porcentaje: discountForm.porcentaje,
+      tipo_descuento: esPrecioFijo ? "precio_fijo" : "porcentaje",
+      porcentaje: esPrecioFijo ? 0 : discountForm.porcentaje,
+      precio_fijo: esPrecioFijo ? discountForm.precio_fijo : null,
       aplica_a: "productos",
       productos_ids: [editingProduct.id],
       categorias_ids: [],
@@ -653,11 +667,13 @@ export default function ProductosPage() {
       excluir_combos: false,
     };
     const { error } = await supabase.from("descuentos").insert(payload);
-    if (error) { showAdminToast("Error al crear descuento: " + error.message, "error"); }
-    else {
+    if (error) {
+      console.error("Error al crear descuento:", error, payload);
+      showAdminToast("Error al crear descuento: " + error.message, "error");
+    } else {
       showAdminToast("Descuento creado", "success");
       setShowDiscountForm(false);
-      setDiscountForm({ nombre: "", porcentaje: 5, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
+      setDiscountForm({ nombre: "", modalidad: "porcentaje", porcentaje: 5, precio_fijo: 0, tipo: "general", cantidad_minima: 0, fecha_inicio: "", fecha_fin: "" });
       await refreshProductDiscounts(editingProduct.id, form.categoria_id, form.subcategoria_id);
     }
     setSavingDiscount(false);
@@ -3902,18 +3918,32 @@ export default function ProductosPage() {
                           <Input placeholder="Ej: Promo x10 unidades" value={discountForm.nombre} onChange={(e) => setDiscountForm({ ...discountForm, nombre: e.target.value })} className="h-8 text-xs" />
                         </div>
                         <div>
-                          <Label className="text-[10px] text-muted-foreground">Descuento %</Label>
-                          <Input type="number" min="1" max="100" value={discountForm.porcentaje} onChange={(e) => setDiscountForm({ ...discountForm, porcentaje: Math.max(1, Math.min(100, Number(e.target.value))) })} className="h-8 text-xs text-center" />
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Tipo</Label>
-                          <select value={discountForm.tipo} onChange={(e) => setDiscountForm({ ...discountForm, tipo: e.target.value })} className="w-full h-8 text-xs border rounded-md px-2 bg-background">
-                            <option value="general">General</option>
-                            <option value="por_cantidad">Por cantidad mín.</option>
-                            <option value="solo_caja">Solo cajas</option>
-                            <option value="solo_unidad">Solo unidad</option>
+                          <Label className="text-[10px] text-muted-foreground">Modalidad</Label>
+                          <select value={discountForm.modalidad} onChange={(e) => setDiscountForm({ ...discountForm, modalidad: e.target.value as "porcentaje" | "precio_fijo" })} className="w-full h-8 text-xs border rounded-md px-2 bg-background">
+                            <option value="porcentaje">% Descuento</option>
+                            <option value="precio_fijo">Precio fijo</option>
                           </select>
                         </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">{discountForm.modalidad === "precio_fijo" ? "Precio $" : "Descuento %"}</Label>
+                          {discountForm.modalidad === "precio_fijo" ? (
+                            <Input type="number" min="1" step="1" placeholder="Ej: 450" value={discountForm.precio_fijo || ""} onChange={(e) => setDiscountForm({ ...discountForm, precio_fijo: Math.max(0, Number(e.target.value)) })} className="h-8 text-xs text-center" />
+                          ) : (
+                            <Input type="number" min="1" max="100" value={discountForm.porcentaje} onChange={(e) => setDiscountForm({ ...discountForm, porcentaje: Math.max(1, Math.min(100, Number(e.target.value))) })} className="h-8 text-xs text-center" />
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Aplica a</Label>
+                        <select value={discountForm.tipo} onChange={(e) => setDiscountForm({ ...discountForm, tipo: e.target.value })} className="w-full h-8 text-xs border rounded-md px-2 bg-background">
+                          <option value="general">General (cualquier presentación)</option>
+                          <option value="por_cantidad">Por cantidad mínima</option>
+                          <option value="solo_caja">Solo cajas / bultos</option>
+                          <option value="solo_unidad">Solo unidad suelta</option>
+                        </select>
+                        {discountForm.modalidad === "precio_fijo" && (
+                          <p className="text-[10px] text-muted-foreground mt-1">El precio fijo se aplica a la presentación elegida arriba.</p>
+                        )}
                       </div>
                       {discountForm.tipo === "por_cantidad" && (
                         <div className="flex items-center gap-2">
@@ -3924,7 +3954,7 @@ export default function ProductosPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                         <div><Label className="text-[10px] text-muted-foreground">Desde</Label><Input type="date" value={discountForm.fecha_inicio} onChange={(e) => setDiscountForm({ ...discountForm, fecha_inicio: e.target.value })} className="h-8 text-xs" /></div>
                         <div><Label className="text-[10px] text-muted-foreground">Hasta (opcional)</Label><Input type="date" value={discountForm.fecha_fin} onChange={(e) => setDiscountForm({ ...discountForm, fecha_fin: e.target.value })} className="h-8 text-xs" /></div>
-                        <Button type="button" size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700" onClick={saveProductDiscount} disabled={savingDiscount || !discountForm.nombre || discountForm.porcentaje <= 0}>
+                        <Button type="button" size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700" onClick={saveProductDiscount} disabled={savingDiscount || !discountForm.nombre || (discountForm.modalidad === "precio_fijo" ? discountForm.precio_fijo <= 0 : discountForm.porcentaje <= 0)}>
                           {savingDiscount ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                           Crear descuento
                         </Button>
@@ -3937,7 +3967,7 @@ export default function ProductosPage() {
                       .filter((d) => d.aplica_a === "productos" && (d.productos_ids || []).includes(editingProduct.id))
                       .map((d) => (
                         <div key={d.id} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-l-[3px] border-l-primary hover:bg-muted/30 transition-colors">
-                          <Badge className={`shrink-0 text-[10px] h-5 px-2 ${d.activo ? "bg-green-600 text-white" : "bg-gray-300 text-gray-600"}`}>{d.porcentaje}%</Badge>
+                          <Badge className={`shrink-0 text-[10px] h-5 px-2 ${d.activo ? "bg-green-600 text-white" : "bg-gray-300 text-gray-600"}`}>{d.tipo_descuento === "precio_fijo" && d.precio_fijo != null ? formatCurrency(d.precio_fijo) : `${d.porcentaje}%`}</Badge>
                           <span className={`text-xs font-medium flex-1 truncate ${!d.activo ? "line-through text-muted-foreground" : ""}`}>{d.nombre}</span>
                           {d.presentacion === "caja" && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">Cajas</Badge>}
                           {d.cantidad_minima && <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0 text-orange-600 border-orange-300">≥{d.cantidad_minima}</Badge>}
