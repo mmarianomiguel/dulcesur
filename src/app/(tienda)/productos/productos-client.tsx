@@ -375,7 +375,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       if (d.presentacion === "caja" && isUnit) continue;
       let effectivePercent = Number(d.porcentaje);
       if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && producto.precio > 0) {
-        effectivePercent = Math.max(0, Math.min(100, ((producto.precio - d.precio_fijo) / producto.precio) * 100));
+        effectivePercent = Math.round(Math.max(0, Math.min(100, ((producto.precio - d.precio_fijo) / producto.precio) * 100)));
       }
       if (d.aplica_a === "todos") {
         best = Math.max(best, effectivePercent);

@@ -621,14 +621,16 @@ export default function VentasPage() {
         return updated;
       }
       const rawDiscount = getProductDiscount(product, presName);
-      // rawDiscount < 0 significa precio fijo exacto (negado)
+      // rawDiscount < 0 significa precio fijo exacto POR UNIDAD (negado)
       const isPrecioFijo = rawDiscount < 0;
-      const precioFijoExacto = isPrecioFijo ? Math.abs(rawDiscount) : null;
+      const precioFijoUnidad = isPrecioFijo ? Math.abs(rawDiscount) : null;
+      // Para presentaciones multi-unidad (cajas/bultos), el precio final es precio_fijo * unidades.
+      const precioFijoPres = isPrecioFijo ? precioFijoUnidad! * presUnits : null;
       const autoDiscount = isPrecioFijo
-        ? Math.round(((presPrice - precioFijoExacto!) / presPrice) * 100)
+        ? Math.round(((presPrice - precioFijoPres!) / presPrice) * 100)
         : rawDiscount;
       const discountedSubtotal = isPrecioFijo
-        ? precioFijoExacto!
+        ? precioFijoPres!
         : presPrice * (1 - autoDiscount / 100);
       const newItems = [
         ...prev,

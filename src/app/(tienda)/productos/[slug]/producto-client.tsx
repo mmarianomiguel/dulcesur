@@ -184,7 +184,7 @@ export default function ProductoClient({
       if (d.presentacion === "caja" && isUnit) continue;
       let effectivePercent = Number(d.porcentaje);
       if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && prod.precio > 0) {
-        effectivePercent = Math.round(Math.max(0, Math.min(100, ((prod.precio - d.precio_fijo) / prod.precio) * 100)) * 100) / 100;
+        effectivePercent = Math.round(Math.max(0, Math.min(100, ((prod.precio - d.precio_fijo) / prod.precio) * 100)));
       }
       if (d.aplica_a === "todos") {
         best = Math.max(best, effectivePercent);
