@@ -113,7 +113,8 @@ export default function PedidosPage() {
         supabase.from("pedidos_tienda")
           .select("id, numero, created_at, estado, total, metodo_pago, monto_efectivo, monto_transferencia, pedido_tienda_items(id, nombre, presentacion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, producto_id)")
           .eq("cliente_auth_id", id)
-          .order("created_at", { ascending: false }),
+          .order("created_at", { ascending: false })
+          .limit(60),
       ]);
       if (authErr || !authRec) {
         localStorage.removeItem("cliente_auth");
@@ -122,19 +123,44 @@ export default function PedidosPage() {
       }
       const clienteId = authRec?.cliente_id;
 
-      // Phase 2: Fetch ventas (needs cliente_id)
-      let ventasData: any[] = [];
-      if (clienteId) {
-        const { data: vd } = await supabase
-          .from("ventas")
-          .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, subtotal, monto_pagado, monto_efectivo, monto_transferencia, recargo_porcentaje, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
-          .eq("cliente_id", clienteId)
-          .not("tipo_comprobante", "ilike", "Nota de Crédito%")
-          .not("tipo_comprobante", "ilike", "Nota de Débito%")
-          .order("fecha", { ascending: false });
-        ventasData = vd || [];
-      }
-      const allVentas: any[] = ventasData;
+      // Phase 2: En paralelo — ventas + queries que solo dependen de clienteId (no necesitan ventaIds).
+      // Antes ventas era secuencial, bloqueando las otras. Esto corta ~1 round-trip.
+      const numerosParaHistorial = (data || []).map((p: any) => p.numero);
+      const [
+        ventasResp,
+        ccHabersRespEarly,
+        saldoRespEarly,
+        estadoHistorialRespEarly,
+      ] = await Promise.all([
+        clienteId
+          ? supabase
+              .from("ventas")
+              .select("id, numero, tipo_comprobante, fecha, created_at, forma_pago, total, subtotal, monto_pagado, monto_efectivo, monto_transferencia, recargo_porcentaje, origen, estado, entregado, venta_items(descripcion, cantidad, precio_unitario, subtotal, presentacion, unidades_por_presentacion, descuento, producto_id)")
+              .eq("cliente_id", clienteId)
+              .not("tipo_comprobante", "ilike", "Nota de Crédito%")
+              .not("tipo_comprobante", "ilike", "Nota de Débito%")
+              .order("fecha", { ascending: false })
+              .limit(60)
+          : Promise.resolve({ data: [] }),
+        clienteId
+          ? supabase.from("cuenta_corriente")
+              .select("haber, forma_pago, created_at, venta_id")
+              .eq("cliente_id", clienteId)
+              .gt("haber", 0)
+              .eq("debe", 0)
+              .order("created_at", { ascending: true })
+          : Promise.resolve({ data: [] }),
+        clienteId
+          ? supabase.from("clientes").select("saldo").eq("id", clienteId).single()
+          : Promise.resolve({ data: { saldo: 0 } }),
+        numerosParaHistorial.length > 0
+          ? supabase.from("pedido_estado_historial")
+              .select("pedido_numero, estado, created_at")
+              .in("pedido_numero", numerosParaHistorial)
+              .order("created_at", { ascending: true })
+          : Promise.resolve({ data: [] }),
+      ]);
+      const allVentas: any[] = (ventasResp as any)?.data || [];
 
       // Phase 2: All venta-dependent queries in parallel
       const ventaIds = allVentas.map((v: any) => v.id);
@@ -166,36 +192,17 @@ export default function PedidosPage() {
             .in("venta_id", ventaIds)
         : Promise.resolve({ data: [] });
 
-      const ccHabersPromise = clienteId
-        ? supabase.from("cuenta_corriente")
-            .select("haber, forma_pago, created_at, venta_id")
-            .eq("cliente_id", clienteId)
-            .gt("haber", 0)
-            .eq("debe", 0)
-            .order("created_at", { ascending: true })
-        : Promise.resolve({ data: [] });
-
-      const saldoPromise = clienteId
-        ? supabase.from("clientes").select("saldo").eq("id", clienteId).single()
-        : Promise.resolve({ data: { saldo: 0 } });
-
-      const numerosParaHistorial = (data || []).map((p: any) => p.numero);
-      const historialPromise = numerosParaHistorial.length > 0
-        ? supabase.from("pedido_estado_historial")
-            .select("pedido_numero, estado, created_at")
-            .in("pedido_numero", numerosParaHistorial)
-            .order("created_at", { ascending: true })
-        : Promise.resolve({ data: [] });
+      // Las queries que solo dependían de clienteId o de los numeros de pedido ya se resolvieron en Phase 2 (en paralelo con ventas).
+      const allHabersData = (ccHabersRespEarly as any)?.data || [];
+      const cliData = (saldoRespEarly as any)?.data || { saldo: 0 };
+      const estadoHistorial = (estadoHistorialRespEarly as any)?.data || [];
 
       const [
         { data: ncsData },
         { data: movsData },
         { data: ccEntriesData },
         { data: cobroItemsData },
-        { data: allHabersData },
-        { data: cliData },
-        { data: estadoHistorial },
-      ] = await Promise.all([ncPromise, cajaPromise, ccPromise, cobroPromise, ccHabersPromise, saldoPromise, historialPromise]);
+      ] = await Promise.all([ncPromise, cajaPromise, ccPromise, cobroPromise]);
 
       // Agrupar historial por pedido
       const historialMap: Record<string, { estado: string; created_at: string }[]> = {};
