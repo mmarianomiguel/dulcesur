@@ -57,6 +57,7 @@ export interface CompraItem {
   descuento: number;
   subtotal: number;
   actualizarPrecio: boolean;
+  actualizarCosto: boolean;
   precio_nuevo_custom?: number;
 }
 

@@ -410,7 +410,8 @@ export default function NuevaCompra({
         precio_original: product.precio,
         descuento: 0,
         subtotal: calcSubtotal(costoUnit, cantidad, 0),
-        actualizarPrecio: true,
+        actualizarPrecio: false,
+        actualizarCosto: false,
       },
     ]);
     // Scroll to the newly added item after render
@@ -622,59 +623,65 @@ export default function NuevaCompra({
             orden_id: compra.id,
           });
 
-          // Update cost and price ONLY if user explicitly opted in via "Actualizar precio".
-          // Si solo cambia el costo de esta compra pero no se activa actualizar, el costo del producto maestro se mantiene intacto.
-          if (item.costo_unitario !== item.costo_original && item.actualizarPrecio) {
-            if (item.costo_original > 0) {
-              const marginRatio = item.precio_original / item.costo_original;
-              const newPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * marginRatio);
-              await supabase
-                .from("productos")
-                .update({
-                  costo: item.costo_unitario,
-                  precio: newPrecio,
-                  precio_anterior: item.precio_original,
-                  fecha_actualizacion: todayString(),
-                })
-                .eq("id", item.producto_id);
-
-              // Also update presentation prices proportionally
-              if (item.precio_original > 0) {
-                const priceRatio = newPrecio / item.precio_original;
-                const { data: prods } = await supabase
-                  .from("presentaciones")
-                  .select("id, precio, costo, cantidad")
-                  .eq("producto_id", item.producto_id);
-                await Promise.all(
-                  (prods || []).map(async (pres: any) => {
-                    const newPresPrecio = roundPrice(pres.precio * priceRatio);
-                    const newPresCosto =
-                      pres.costo > 0 ? Math.round(item.costo_unitario * pres.cantidad) : 0;
-                    const { error: presErr } = await supabase
-                      .from("presentaciones")
-                      .update({ precio: newPresPrecio, costo: newPresCosto })
-                      .eq("id", pres.id);
-                    if (presErr) {
-                      console.error("Error updating presentation:", pres.id, presErr);
-                      showAdminToast(
-                        `Error actualizando presentacion de ${item.nombre}: ${presErr.message}`,
-                        "error"
-                      );
-                    }
-                  })
-                );
-              }
-
-              preciosActualizados.push({
-                producto_id: item.producto_id,
-                nombre: item.nombre,
-                codigo: item.codigo,
-                precioAnterior: item.precio_original,
-                precioNuevo: newPrecio,
-                costoAnterior: item.costo_original,
-                costoNuevo: item.costo_unitario,
-              });
+          // Actualización de costo y/o precio del producto maestro — solo si el usuario optó explícitamente.
+          // actualizarCosto y actualizarPrecio son independientes: cualquier combinación es válida.
+          const costoCambio = item.costo_unitario !== item.costo_original;
+          const aplicarCosto = item.actualizarCosto && costoCambio;
+          const aplicarPrecio = item.actualizarPrecio && item.costo_original > 0;
+          if (aplicarCosto || aplicarPrecio) {
+            const productoUpdate: Record<string, any> = { fecha_actualizacion: todayString() };
+            let newPrecio = item.precio_original;
+            if (aplicarCosto) {
+              productoUpdate.costo = item.costo_unitario;
             }
+            if (aplicarPrecio) {
+              const marginRatio = item.precio_original / item.costo_original;
+              newPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * marginRatio);
+              productoUpdate.precio = newPrecio;
+              productoUpdate.precio_anterior = item.precio_original;
+            }
+            await supabase
+              .from("productos")
+              .update(productoUpdate)
+              .eq("id", item.producto_id);
+
+            // Actualizar presentaciones si cambió precio o costo
+            if (aplicarPrecio || aplicarCosto) {
+              const priceRatio = aplicarPrecio && item.precio_original > 0 ? newPrecio / item.precio_original : 1;
+              const { data: prods } = await supabase
+                .from("presentaciones")
+                .select("id, precio, costo, cantidad")
+                .eq("producto_id", item.producto_id);
+              await Promise.all(
+                (prods || []).map(async (pres: any) => {
+                  const presUpdate: Record<string, any> = {};
+                  if (aplicarPrecio) presUpdate.precio = roundPrice(pres.precio * priceRatio);
+                  if (aplicarCosto && pres.costo > 0) presUpdate.costo = Math.round(item.costo_unitario * pres.cantidad);
+                  if (Object.keys(presUpdate).length === 0) return;
+                  const { error: presErr } = await supabase
+                    .from("presentaciones")
+                    .update(presUpdate)
+                    .eq("id", pres.id);
+                  if (presErr) {
+                    console.error("Error updating presentation:", pres.id, presErr);
+                    showAdminToast(
+                      `Error actualizando presentacion de ${item.nombre}: ${presErr.message}`,
+                      "error"
+                    );
+                  }
+                })
+              );
+            }
+
+            preciosActualizados.push({
+              producto_id: item.producto_id,
+              nombre: item.nombre,
+              codigo: item.codigo,
+              precioAnterior: item.precio_original,
+              precioNuevo: aplicarPrecio ? newPrecio : item.precio_original,
+              costoAnterior: item.costo_original,
+              costoNuevo: aplicarCosto ? item.costo_unitario : item.costo_original,
+            });
           }
         })
       );
@@ -1404,9 +1411,23 @@ export default function NuevaCompra({
                           </span>
                         </span>
                       </div>
-                      {/* PVP inline expandible (mobile) */}
+                      {/* PVP y Costo inline expandibles (mobile) */}
                       {costoChanged && item.costo_original > 0 && (
-                        <div className="mt-1.5">
+                        <div className="mt-1.5 flex flex-wrap items-start gap-1.5">
+                          <button
+                            onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarCosto: !it.actualizarCosto } : it))}
+                            className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-md font-medium transition-colors ${
+                              item.actualizarCosto
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
+                            }`}
+                          >
+                            {item.actualizarCosto ? (
+                              <>Costo {formatCurrency(item.costo_original)} → {formatCurrency(item.costo_unitario)}</>
+                            ) : (
+                              <>Costo sin cambio</>
+                            )}
+                          </button>
                           <button
                             onClick={() =>
                               setPvpExpandedIdx(pvpExpandedIdx === idx ? null : idx)
@@ -1500,9 +1521,26 @@ export default function NuevaCompra({
                           </td>
                           <td className="py-2.5 px-2">
                             <div className="font-medium">{item.nombre}</div>
-                            {/* PVP inline expandible badge */}
+                            {/* Costo + PVP inline expandible badges */}
                             {costoChanged && item.costo_original > 0 && (
-                              <div className="mt-1.5">
+                              <div className="mt-1.5 flex flex-wrap items-start gap-1.5">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setItems((prev) => prev.map((it, i) => i === idx ? { ...it, actualizarCosto: !it.actualizarCosto } : it));
+                                  }}
+                                  className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-md font-medium transition-colors ${
+                                    item.actualizarCosto
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                      : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
+                                  }`}
+                                >
+                                  {item.actualizarCosto ? (
+                                    <>Costo {formatCurrency(item.costo_original)} → {formatCurrency(item.costo_unitario)}</>
+                                  ) : (
+                                    <>Costo sin cambio</>
+                                  )}
+                                </button>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();

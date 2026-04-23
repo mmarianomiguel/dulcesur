@@ -218,6 +218,7 @@ export default function ComprasPage() {
         descuento: 0,
         subtotal: ci.subtotal,
         actualizarPrecio: false,
+        actualizarCosto: false,
         imagen_url: prod?.imagen_url || null,
         stock_actual: prod?.stock || 0,
         cajas: 0,
