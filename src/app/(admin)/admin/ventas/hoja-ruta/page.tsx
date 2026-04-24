@@ -221,7 +221,7 @@ export default function HojaDeRutaPage() {
     let query = supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion), pedido_armado(orden_entrega, estado)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion), pedido_armado(orden_entrega, estado)"
       )
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -466,7 +466,7 @@ export default function HojaDeRutaPage() {
     const { data, error } = await supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", true)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -1269,8 +1269,9 @@ export default function HojaDeRutaPage() {
       .map((g) => ({
         key: g.key,
         address: [g.cliente?.domicilio, g.cliente?.localidad].filter(Boolean).join(", "),
+        mapsUrl: (g.cliente as any)?.maps_url || null,
       }))
-      .filter((s) => s.address);
+      .filter((s) => s.address || s.mapsUrl);
     if (stops.length < 2) {
       showOrderToast("Se necesitan al menos 2 paradas con dirección");
       return;
@@ -1285,7 +1286,7 @@ export default function HojaDeRutaPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          stops: stops.map((s) => ({ id: s.key, address: s.address })),
+          stops: stops.map((s) => ({ id: s.key, address: s.address, mapsUrl: s.mapsUrl })),
           origen: empresaOrigen,
         }),
       });

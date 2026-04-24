@@ -4,7 +4,7 @@ const ORS_KEY = process.env.OPENROUTESERVICE_API_KEY;
 const GEOCODE_URL = "https://api.openrouteservice.org/geocode/search";
 const OPTIMIZE_URL = "https://api.openrouteservice.org/optimization";
 
-type Stop = { id: string; address: string };
+type Stop = { id: string; address?: string; mapsUrl?: string | null };
 
 async function geocode(address: string): Promise<[number, number] | null> {
   const url = `${GEOCODE_URL}?api_key=${ORS_KEY}&text=${encodeURIComponent(address)}&boundary.country=AR&size=1`;
@@ -14,6 +14,50 @@ async function geocode(address: string): Promise<[number, number] | null> {
   const coords = data?.features?.[0]?.geometry?.coordinates;
   if (!coords || coords.length < 2) return null;
   return [coords[0], coords[1]];
+}
+
+// Extrae [lng, lat] de una URL de Google Maps. Soporta formatos @lat,lng, q=lat,lng, ll=lat,lng y ?daddr=lat,lng.
+// Si es short URL (maps.app.goo.gl o goo.gl/maps), sigue el redirect para obtener la URL completa.
+async function coordsFromMapsUrl(url: string): Promise<[number, number] | null> {
+  if (!url) return null;
+  let fullUrl = url.trim();
+  // Expandir short URL siguiendo redirects
+  if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(fullUrl)) {
+    try {
+      const res = await fetch(fullUrl, { method: "GET", redirect: "follow" });
+      fullUrl = res.url || fullUrl;
+    } catch {
+      return null;
+    }
+  }
+  // Patrones conocidos
+  const patterns = [
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/, // /@lat,lng,zoom/
+    /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/, // ?q=lat,lng
+    /[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/, // ?ll=lat,lng
+    /[?&]daddr=(-?\d+\.\d+),(-?\d+\.\d+)/, // ?daddr=lat,lng
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, // !3dlat!4dlng (formato place)
+  ];
+  for (const re of patterns) {
+    const m = fullUrl.match(re);
+    if (m) {
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[2]);
+      if (!isNaN(lat) && !isNaN(lng)) return [lng, lat]; // ORS espera [lng, lat]
+    }
+  }
+  return null;
+}
+
+async function resolveStop(stop: Stop): Promise<[number, number] | null> {
+  // Prioridad 1: coordenadas exactas del link de Google Maps del cliente.
+  if (stop.mapsUrl) {
+    const coords = await coordsFromMapsUrl(stop.mapsUrl);
+    if (coords) return coords;
+  }
+  // Fallback: geocoding por dirección.
+  if (stop.address) return geocode(stop.address);
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -26,11 +70,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Se necesitan al menos 2 paradas" }, { status: 400 });
   }
 
-  const geocoded = await Promise.all(
-    stops.map(async (s) => ({ id: s.id, coords: await geocode(s.address) }))
+  const resolved = await Promise.all(
+    stops.map(async (s) => ({ id: s.id, coords: await resolveStop(s) }))
   );
-  const valid = geocoded.filter((s): s is { id: string; coords: [number, number] } => s.coords !== null);
-  const failed = geocoded.filter((s) => s.coords === null).map((s) => s.id);
+  const valid = resolved.filter((s): s is { id: string; coords: [number, number] } => s.coords !== null);
+  const failed = resolved.filter((s) => s.coords === null).map((s) => s.id);
 
   if (valid.length < 2) {
     return NextResponse.json({ error: "No se pudieron geocodificar suficientes direcciones", failed }, { status: 400 });

@@ -974,6 +974,7 @@ export default function ProductosPage() {
             ? {
                 ...p,
                 codigo: payload.codigo as string,
+                codigos_adicionales: (payload.codigos_adicionales as string[]) || [],
                 nombre: payload.nombre as string,
                 categoria_id: payload.categoria_id as string,
                 subcategoria_id: payload.subcategoria_id as string,
