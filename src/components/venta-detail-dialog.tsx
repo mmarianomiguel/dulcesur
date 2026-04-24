@@ -759,10 +759,10 @@ export function VentaDetailDialog({
                                 {item.presentacion && item.presentacion !== "Unidad" && (
                                   <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary">{item.presentacion}</span>
                                 )}
-                                {item.stock !== undefined && (
-                                  <span className={`text-[10px] font-medium ${item.stock <= 0 ? "text-red-500" : item.stock < item.cantidad ? "text-amber-600" : "text-muted-foreground"}`}>
-                                    Stock: {item.stock}
-                                    {item.stock > 0 && item.stock < item.cantidad && " (insuficiente)"}
+                                {/* Solo mostramos stock si hay un problema real — es combo se omite (no tienen stock propio), y stock suficiente no necesita avisos. */}
+                                {item.stock !== undefined && !data.comboIds?.has(item.producto_id) && item.stock < item.cantidad && (
+                                  <span className={`text-[10px] font-medium ${item.stock <= 0 ? "text-red-500" : "text-amber-600"}`}>
+                                    {item.stock <= 0 ? "Sin stock" : `Stock insuficiente: ${item.stock} disp. / ${item.cantidad} ped.`}
                                   </span>
                                 )}
                               </div>
