@@ -354,7 +354,7 @@ export default function NuevaCompra({
       .from("productos")
       .select("id, codigo, nombre, stock, costo, precio, imagen_url")
       .eq("activo", true)
-      .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%`)
+      .or(`nombre.ilike.%${term}%,codigo.ilike.%${term}%,codigos_adicionales.cs.{${term}}`)
       .limit(10);
     let results = (data as ProductSearch[]) || [];
 

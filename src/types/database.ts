@@ -140,6 +140,7 @@ export interface Categoria {
 export interface Producto {
   id: string;
   codigo: string;
+  codigos_adicionales?: string[];
   nombre: string;
   categoria_id: string | null;
   stock: number;

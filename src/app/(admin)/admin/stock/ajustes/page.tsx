@@ -172,7 +172,7 @@ export default function AjustesStockPage() {
 
     const [{ data: aj }, { data: prods }, { data: presData }] = await Promise.all([
       ajQuery,
-      supabase.from("productos").select("id, codigo, nombre, stock, costo, unidad_medida, imagen_url").eq("activo", true).order("nombre").limit(10000),
+      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, stock, costo, unidad_medida, imagen_url").eq("activo", true).order("nombre").limit(10000),
       supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, costo, precio").gt("cantidad", 1).limit(5000),
     ]);
     setAjustes((aj as Ajuste[]) || []);
@@ -410,7 +410,7 @@ export default function AjustesStockPage() {
   };
 
   const filteredSearch = productos.filter(
-    (p) => norm(p.nombre).includes(norm(productSearch)) || norm(p.codigo).includes(norm(productSearch))
+    (p) => norm(p.nombre).includes(norm(productSearch)) || norm(p.codigo).includes(norm(productSearch)) || ((p as any).codigos_adicionales || []).some((c: string) => norm(c).includes(norm(productSearch)))
   );
 
   if (dialogOpen) {

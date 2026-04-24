@@ -348,6 +348,7 @@ export default function ProductosPage() {
   // Form state
   const [form, setForm] = useState({
     codigo: "",
+    codigos_adicionales: [] as string[],
     nombre: "",
     categoria_id: "",
     subcategoria_id: "",
@@ -412,7 +413,7 @@ export default function ProductosPage() {
       const allRows: any[] = [];
       let from = 0;
       while (true) {
-        const { data } = await supabase.from("productos").select("id, codigo, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, precio_oferta, precio_oferta_hasta, tags, fecha_sin_stock, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(from, from + PAGE_SIZE - 1);
+        const { data } = await supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, stock_minimo, stock_maximo, categoria_id, subcategoria_id, marca_id, imagen_url, es_combo, activo, unidad_medida, visibilidad, destacado, fecha_actualizacion, precio_oferta, precio_oferta_hasta, tags, fecha_sin_stock, categorias(nombre), marcas(nombre)").eq("activo", true).order("nombre").range(from, from + PAGE_SIZE - 1);
         if (!data || data.length === 0) break;
         allRows.push(...data);
         if (data.length < PAGE_SIZE) break;
@@ -544,6 +545,7 @@ export default function ProductosPage() {
       const parts = [
         p.nombre,
         p.codigo,
+        ...((p as any).codigos_adicionales || []),
         ...(presCodigoMap[p.id] || []).map((pr) => pr.codigo || ""),
         prodProvMap[p.id] || "",
         ...((p as any).tags || []),
@@ -578,6 +580,7 @@ export default function ProductosPage() {
   const resetForm = () => {
     setForm({
       codigo: "",
+      codigos_adicionales: [],
       nombre: "",
       categoria_id: "",
       subcategoria_id: "",
@@ -706,6 +709,7 @@ export default function ProductosPage() {
     setEditingProduct(p);
     setForm({
       codigo: p.codigo,
+      codigos_adicionales: ((p as any).codigos_adicionales || []) as string[],
       nombre: p.nombre,
       categoria_id: p.categoria_id || "",
       subcategoria_id: p.subcategoria_id || "",
@@ -809,6 +813,7 @@ export default function ProductosPage() {
 
       const payload: Record<string, unknown> = {
         codigo,
+        codigos_adicionales: (form.codigos_adicionales || []).map((c) => c.trim()).filter(Boolean),
         nombre,
         categoria_id: form.categoria_id || null,
         subcategoria_id: form.subcategoria_id || null,
@@ -1032,6 +1037,7 @@ export default function ProductosPage() {
     const newCode = `${p.codigo}-COPIA-${Date.now().toString(36).slice(-4).toUpperCase()}`;
     setForm({
       codigo: newCode,
+      codigos_adicionales: [],
       nombre: `${p.nombre} (Copia)`,
       categoria_id: p.categoria_id || "",
       subcategoria_id: p.subcategoria_id || "",
@@ -3470,6 +3476,31 @@ export default function ProductosPage() {
                         className="h-9"
                         placeholder="SKU-001"
                       />
+                      {/* Códigos adicionales (mismos stock/precio, distintos barcodes — ej: sabores) */}
+                      <div className="space-y-1 pt-1">
+                        <div className="flex flex-wrap gap-1">
+                          {(form.codigos_adicionales || []).map((c, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 text-[10px] font-mono bg-muted border rounded px-1.5 py-0.5">
+                              {c}
+                              <button type="button" onClick={() => setForm({ ...form, codigos_adicionales: form.codigos_adicionales.filter((_, j) => j !== i) })} className="hover:text-destructive">×</button>
+                            </span>
+                          ))}
+                        </div>
+                        <Input
+                          className="h-7 text-[11px] font-mono"
+                          placeholder="Código adicional + Enter"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const val = (e.target as HTMLInputElement).value.trim();
+                              if (val && !form.codigos_adicionales.includes(val) && val !== form.codigo) {
+                                setForm({ ...form, codigos_adicionales: [...form.codigos_adicionales, val] });
+                                (e.target as HTMLInputElement).value = "";
+                              }
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Nombre del producto</Label>
