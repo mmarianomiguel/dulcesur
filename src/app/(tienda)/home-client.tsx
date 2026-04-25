@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { showToast } from "@/components/tienda/toast";
@@ -323,6 +323,7 @@ function ProductosDestacadosBlock({
   masVendidos = [],
   nuevosIngresos = [],
   reingresos = [],
+  ofertasPool = [],
   activeDiscounts = [],
 }: {
   config: Record<string, any>;
@@ -334,6 +335,7 @@ function ProductosDestacadosBlock({
   masVendidos?: any[];
   nuevosIngresos?: any[];
   reingresos?: any[];
+  ofertasPool?: any[];
   activeDiscounts?: any[];
 }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
@@ -467,9 +469,19 @@ function ProductosDestacadosBlock({
   const nuevos = filterCats(nuevosIngresos);
   // Tab "De vuelta": SOLO reingresos (productos viejos que volvieron del 0).
   const reingresosFiltered = filterCats(reingresos);
-  // Tab "Ofertas": todos los productos con descuento aplicable + en stock.
+  // Tab "Ofertas": pool del server (catálogo amplio) + cualquier destacado adicional. Filtra a los que tengan descuento aplicable.
   // Orden: destacados primero, luego por mayor % de descuento.
-  const ofertas = filterCats(productos)
+  const ofertasSource = useMemo(() => {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const p of [...ofertasPool, ...productos]) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push(p);
+    }
+    return out;
+  }, [ofertasPool, productos]);
+  const ofertas = filterCats(ofertasSource)
     .map((p: any) => ({ ...p, _ofertaPct: computeBestDiscount(p) }))
     .filter((p: any) => p._ofertaPct > 0 && p.stock > 0)
     .sort((a: any, b: any) => {
@@ -477,7 +489,8 @@ function ProductosDestacadosBlock({
       const bDest = b.destacado ? 1 : 0;
       if (aDest !== bDest) return bDest - aDest;
       return b._ofertaPct - a._ofertaPct;
-    });
+    })
+    .slice(0, 24);
 
   const activeProds: any[] =
     activeTab === "ofertas" ? ofertas :
@@ -1303,6 +1316,7 @@ interface HomeClientProps {
   initialTopPresMap?: Record<string, any[]>;
   initialNuevosIngresos?: any[];
   initialReingresos?: any[];
+  initialOfertas?: any[];
   initialActiveDiscounts?: any[];
 }
 
@@ -1319,6 +1333,7 @@ export default function TiendaPage({
   initialTopPresMap = {},
   initialNuevosIngresos = [],
   initialReingresos = [],
+  initialOfertas = [],
   initialActiveDiscounts = [],
 }: HomeClientProps = {}) {
   const hasInitial = !!initialBloques;
@@ -1546,6 +1561,7 @@ export default function TiendaPage({
             masVendidos={initialTopVendidos}
             nuevosIngresos={initialNuevosIngresos}
             reingresos={initialReingresos}
+            ofertasPool={initialOfertas}
             activeDiscounts={initialActiveDiscounts}
           />
         );

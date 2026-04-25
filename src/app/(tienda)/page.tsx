@@ -380,27 +380,7 @@ export default async function TiendaHomePage() {
     });
   }
 
-  // Presentaciones para "Nuevos ingresos" y "Aumentos Recientes"
-  const extraIds = [
-    ...new Set([
-      ...nuevosIngresos.map((p: any) => p.id),
-      ...aumentos.map((p: any) => p.id),
-    ]),
-  ].filter((id) => !presMap[id] && !topPresMap[id]);
-
-  if (extraIds.length > 0) {
-    const { data: extraPresData } = await supabase
-      .from("presentaciones")
-      .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
-      .in("producto_id", extraIds)
-      .order("cantidad");
-    (extraPresData || []).forEach((p: any) => {
-      if (!topPresMap[p.producto_id]) topPresMap[p.producto_id] = [];
-      topPresMap[p.producto_id].push(p);
-    });
-  }
-
-  // Descuentos activos para que las cards muestren precio rebajado + badge.
+  // Descuentos activos para que las cards muestren precio rebajado + badge + tab Ofertas.
   const todayStr = new Date().toISOString().split("T")[0];
   const { data: descRows } = await supabase
     .from("descuentos")
@@ -409,6 +389,69 @@ export default async function TiendaHomePage() {
     .lte("fecha_inicio", todayStr)
     .or(`fecha_fin.is.null,fecha_fin.gte.${todayStr}`)
     .range(0, 4999);
+
+  // Cargar productos del tab "Ofertas": cualquier producto con descuento activo aplicable.
+  // Se calcula a partir de los IDs explícitos en descuentos.productos_ids o "todos"/categorias/marcas.
+  const productosOferta: any[] = [];
+  {
+    const idsExplicitos = new Set<string>();
+    const aplicaTodos = (descRows || []).some((d: any) => d.aplica_a === "todos" && (!d.clientes_ids || d.clientes_ids.length === 0));
+    const catsOferta = new Set<string>();
+    const subsOferta = new Set<string>();
+    const marcasOferta = new Set<string>();
+    for (const d of descRows || []) {
+      if (d.clientes_ids && d.clientes_ids.length > 0) continue;
+      if (d.aplica_a === "productos") (d.productos_ids || []).forEach((id: string) => idsExplicitos.add(id));
+      else if (d.aplica_a === "categorias") (d.categorias_ids || []).forEach((id: string) => catsOferta.add(id));
+      else if (d.aplica_a === "subcategorias") (d.subcategorias_ids || []).forEach((id: string) => subsOferta.add(id));
+      else if (d.aplica_a === "marcas") (d.marcas_ids || []).forEach((id: string) => marcasOferta.add(id));
+    }
+    // Si hay descuento "todos", traemos un sample amplio y filtramos en cliente. Si no, solo IDs específicos.
+    if (aplicaTodos || catsOferta.size > 0 || subsOferta.size > 0 || marcasOferta.size > 0) {
+      // Trae todos los activos visibles con stock — el cliente filtra por descuento aplicable.
+      const { data } = await supabase
+        .from("productos")
+        .select("id, nombre, precio, imagen_url, stock, activo, es_combo, precio_anterior, destacado, categoria_id, subcategoria_id, marca_id, categorias(id, nombre)")
+        .eq("activo", true).eq("visibilidad", "visible").gt("stock", 0)
+        .range(0, 999);
+      productosOferta.push(...(data || []));
+    } else if (idsExplicitos.size > 0) {
+      const { data } = await supabase
+        .from("productos")
+        .select("id, nombre, precio, imagen_url, stock, activo, es_combo, precio_anterior, destacado, categoria_id, subcategoria_id, marca_id, categorias(id, nombre)")
+        .eq("activo", true).eq("visibilidad", "visible").gt("stock", 0)
+        .in("id", [...idsExplicitos])
+        .range(0, 999);
+      productosOferta.push(...(data || []));
+    }
+  }
+
+  // Presentaciones para "Nuevos ingresos", "Reingresos", "Aumentos Recientes" y "Ofertas".
+  const extraIds = [
+    ...new Set([
+      ...nuevosIngresos.map((p: any) => p.id),
+      ...reingresos.map((p: any) => p.id),
+      ...aumentos.map((p: any) => p.id),
+      ...productosOferta.map((p: any) => p.id),
+    ]),
+  ].filter((id) => !presMap[id] && !topPresMap[id]);
+
+  if (extraIds.length > 0) {
+    // Chunkear para evitar URL too long con muchos IDs.
+    const CHUNK = 100;
+    for (let i = 0; i < extraIds.length; i += CHUNK) {
+      const chunk = extraIds.slice(i, i + CHUNK);
+      const { data: extraPresData } = await supabase
+        .from("presentaciones")
+        .select("id, producto_id, nombre, cantidad, precio, precio_oferta, sku")
+        .in("producto_id", chunk)
+        .order("cantidad");
+      (extraPresData || []).forEach((p: any) => {
+        if (!topPresMap[p.producto_id]) topPresMap[p.producto_id] = [];
+        topPresMap[p.producto_id].push(p);
+      });
+    }
+  }
 
   return (
     <HomeClient
@@ -424,6 +467,7 @@ export default async function TiendaHomePage() {
       initialTopPresMap={topPresMap}
       initialNuevosIngresos={nuevosIngresos}
       initialReingresos={reingresos}
+      initialOfertas={productosOferta}
       initialActiveDiscounts={descRows || []}
     />
   );
