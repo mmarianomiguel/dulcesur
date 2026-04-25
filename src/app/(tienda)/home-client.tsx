@@ -427,11 +427,12 @@ function ProductosDestacadosBlock({
 
   const destacados = filterCats(productos);
   const vendidos = filterCats((masVendidosLocal ?? masVendidos));
-  const nuevosTodo = filterCats(nuevosIngresos);
-  // Tab "De vuelta": subset de nuevos, solo los marcados como reingreso.
-  const reingresos = nuevosTodo.filter((p: any) => p._esReingreso);
-  // Tab "Nuevos": solo productos nuevos del catálogo (excluye reingresos, que tienen su tab propio).
-  const nuevos = nuevosTodo.filter((p: any) => !p._esReingreso);
+  // Tab "Nuevos": incluye TODOS los productos con ingreso reciente (nuevos del catálogo + reingresos),
+  // diferenciados por badge ("✨ Nuevo" vs "🔄 De vuelta"). Match con la expectativa del usuario:
+  // "compré algo, debería verlo en nuevos ingresos".
+  const nuevos = filterCats(nuevosIngresos);
+  // Tab "De vuelta": subset filtrado, solo reingresos. Para quien quiere ver únicamente eso.
+  const reingresos = nuevos.filter((p: any) => p._esReingreso);
 
   const activeProds: any[] =
     activeTab === "destacados" ? destacados :
