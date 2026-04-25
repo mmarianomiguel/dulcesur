@@ -363,6 +363,17 @@ function ProductosDestacadosBlock({
   const [animating, setAnimating] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
+  // Detectar viewport para que las flechas avancen de a 1 página visual
+  // (mobile = 2 cards, desktop = 4 cards) en vez de tener que clickear 2 veces en desktop.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
@@ -469,17 +480,22 @@ function ProductosDestacadosBlock({
     }
   }, [grupoActual, activeProds.length]);
 
+  // Step de avance: en mobile cada flecha avanza 2 cards (1 página mobile = 2 cards),
+  // en desktop avanza 4 cards (1 página desktop = 4 cards). grupoActual se cuenta de a 2 cards
+  // siempre, por eso desktop usa step=2 grupos.
+  const stepGrupo = isDesktop ? 2 : 1;
+
   // Función para avanzar con animación
   const irAlSiguiente = () => {
     if (animating) return;
     const tabKeys = tabs.map((t) => t.key);
     const currentTabIndex = tabKeys.indexOf(activeTab);
 
-    if (grupoActual < gruposMobile - 1) {
+    if (grupoActual + stepGrupo <= gruposMobile - 1) {
       setSlideDir("left");
       setAnimating(true);
       setTimeout(() => {
-        setGrupoActual((g) => g + 1);
+        setGrupoActual((g) => Math.min(gruposMobile - 1, g + stepGrupo));
         setAnimating(false);
       }, 220);
     } else if (currentTabIndex < tabKeys.length - 1) {
@@ -508,7 +524,7 @@ function ProductosDestacadosBlock({
       setSlideDir("right");
       setAnimating(true);
       setTimeout(() => {
-        setGrupoActual((g) => g - 1);
+        setGrupoActual((g) => Math.max(0, g - stepGrupo));
         setAnimating(false);
       }, 220);
     } else if (currentTabIndex > 0) {
