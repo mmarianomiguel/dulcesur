@@ -534,7 +534,20 @@ export default function DashboardPage() {
       supabase.from("clientes").select("id, nombre, saldo").eq("activo", true).range(0, 49999),
       supabase.from("proveedores").select("saldo").eq("activo", true).range(0, 9999),
       supabase.from("cuenta_corriente").select("cliente_id, debe, haber").range(0, 199999),
-      supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada").range(0, 49999),
+      // Paginar venta_items con join inner — el cap default de 1000 también afecta queries con join sin .in().
+      (async () => {
+        const PAGE = 1000;
+        const all: any[] = [];
+        let from = 0;
+        while (true) {
+          const { data } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada").range(from, from + PAGE - 1);
+          const rows = (data || []) as any[];
+          all.push(...rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
+        return { data: all };
+      })(),
     ]);
 
     // Start pedidos online fetch en paralelo con el procesamiento
@@ -609,6 +622,27 @@ export default function DashboardPage() {
     const regularVentaIds = periodSales.map((v) => v.id);
     const mixtoIds = periodSales.filter((v) => v.forma_pago === "Mixto").map((v) => v.id);
 
+    // Helper: paginar venta_items para evitar el cap silencioso de Supabase con .in() + joins.
+    const fetchAllVentaItems = async (ids: string[], cols: string) => {
+      if (ids.length === 0) return [] as any[];
+      const VENTAS_CHUNK = 50;
+      const PAGE = 1000;
+      const out: any[] = [];
+      for (let i = 0; i < ids.length; i += VENTAS_CHUNK) {
+        const chunk = ids.slice(i, i + VENTAS_CHUNK);
+        let from = 0;
+        while (true) {
+          const { data } = await supabase.from("venta_items").select(cols).in("venta_id", chunk).range(from, from + PAGE - 1);
+          const rows = (data || []) as any[];
+          out.push(...rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
+      }
+      return out;
+    };
+    const marginItemsAll = await fetchAllVentaItems(regularVentaIds, "cantidad, precio_unitario, descuento, costo_unitario");
+
     const [mixtoResult, marginResult, sinCostoResult] = await Promise.all([
       // Mixto payment breakdown
       mixtoIds.length > 0
@@ -617,10 +651,8 @@ export default function DashboardPage() {
             supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds).range(0, 49999),
           ])
         : Promise.resolve([{ data: [] }, { data: [] }] as any),
-      // Margin calculation
-      regularVentaIds.length > 0
-        ? supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", regularVentaIds).range(0, 99999)
-        : Promise.resolve({ data: [] }),
+      // Margin calculation — ya paginado arriba
+      Promise.resolve({ data: marginItemsAll }),
       // Items sin costo count
       regularVentaIds.length > 0
         ? supabase.from("venta_items").select("id", { count: "exact", head: true }).in("venta_id", regularVentaIds).or("costo_unitario.is.null,costo_unitario.eq.0")

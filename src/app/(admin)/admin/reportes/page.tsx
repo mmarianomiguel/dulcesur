@@ -158,17 +158,26 @@ export default function ReportesPage() {
     // Fetch venta items for profit calc
     if (vts && vts.length > 0) {
       const ids = vts.map((v: any) => v.id);
-      // Batch venta_items para evitar el cap default de 1000 rows de Supabase.
-      const itemsBatchSize = 200;
+      // Paginación explícita: chunks de 50 ventas y dentro de cada chunk
+      // leer páginas de 1000 hasta agotar. Esto evita caps silenciosos cuando .range()
+      // con .in() no se respeta correctamente sobre joins.
+      const VENTAS_CHUNK = 50;
+      const PAGE = 1000;
       const allItems: any[] = [];
-      for (let i = 0; i < ids.length; i += itemsBatchSize) {
-        const chunk = ids.slice(i, i + itemsBatchSize);
-        const { data: chunkItems } = await supabase
-          .from("venta_items")
-          .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, costo_unitario, productos(costo, nombre, categoria_id, subcategoria_id)")
-          .in("venta_id", chunk)
-          .range(0, 49999);
-        if (chunkItems) allItems.push(...chunkItems);
+      for (let i = 0; i < ids.length; i += VENTAS_CHUNK) {
+        const chunk = ids.slice(i, i + VENTAS_CHUNK);
+        let from = 0;
+        while (true) {
+          const { data: chunkItems } = await supabase
+            .from("venta_items")
+            .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, costo_unitario, productos(costo, nombre, categoria_id, subcategoria_id)")
+            .in("venta_id", chunk)
+            .range(from, from + PAGE - 1);
+          const rows = chunkItems || [];
+          allItems.push(...rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
       }
       const items = allItems;
       const { data: movs } = await supabase

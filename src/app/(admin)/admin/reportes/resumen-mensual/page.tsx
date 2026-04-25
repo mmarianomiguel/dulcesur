@@ -87,16 +87,23 @@ export default function ResumenMensualPage() {
     // Ganancia + Top productos — una sola query de venta_items (antes eran 2)
     if (vList.length > 0) {
       const ids = vList.map((v: any) => v.id);
-      // Batch para evitar el cap default de 1000 rows de Supabase.
-      const itemsBatchSize = 200;
+      // Paginación EXPLÍCITA: chunks de 50 ventas + páginas de 1000 hasta agotar.
+      const VENTAS_CHUNK = 50;
+      const PAGE = 1000;
       const items: any[] = [];
-      for (let i = 0; i < ids.length; i += itemsBatchSize) {
-        const chunk = ids.slice(i, i + itemsBatchSize);
-        const { data: chunkItems } = await supabase.from("venta_items")
-          .select("descripcion, cantidad, subtotal, precio_unitario, descuento, costo_unitario")
-          .in("venta_id", chunk)
-          .range(0, 49999);
-        if (chunkItems) items.push(...chunkItems);
+      for (let i = 0; i < ids.length; i += VENTAS_CHUNK) {
+        const chunk = ids.slice(i, i + VENTAS_CHUNK);
+        let from = 0;
+        while (true) {
+          const { data: chunkItems } = await supabase.from("venta_items")
+            .select("descripcion, cantidad, subtotal, precio_unitario, descuento, costo_unitario")
+            .in("venta_id", chunk)
+            .range(from, from + PAGE - 1);
+          const rows = chunkItems || [];
+          items.push(...rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
       }
 
       let sinCosto = 0;
@@ -216,15 +223,22 @@ export default function ResumenMensualPage() {
     // Rentabilidad por producto (top 10 by ganancia)
     if (vList.length > 0) {
       const ids = vList.map((v: any) => v.id);
-      const rentBatchSize = 200;
+      const VENTAS_CHUNK_RENT = 50;
+      const PAGE_RENT = 1000;
       const rentItems: any[] = [];
-      for (let i = 0; i < ids.length; i += rentBatchSize) {
-        const chunk = ids.slice(i, i + rentBatchSize);
-        const { data: chunkItems } = await supabase.from("venta_items")
-          .select("descripcion, cantidad, precio_unitario, descuento, costo_unitario")
-          .in("venta_id", chunk)
-          .range(0, 49999);
-        if (chunkItems) rentItems.push(...chunkItems);
+      for (let i = 0; i < ids.length; i += VENTAS_CHUNK_RENT) {
+        const chunk = ids.slice(i, i + VENTAS_CHUNK_RENT);
+        let from = 0;
+        while (true) {
+          const { data: chunkItems } = await supabase.from("venta_items")
+            .select("descripcion, cantidad, precio_unitario, descuento, costo_unitario")
+            .in("venta_id", chunk)
+            .range(from, from + PAGE_RENT - 1);
+          const rows = chunkItems || [];
+          rentItems.push(...rows);
+          if (rows.length < PAGE_RENT) break;
+          from += PAGE_RENT;
+        }
       }
       const prodRent: Record<string, { nombre: string; vendido: number; costo: number }> = {};
       for (const item of rentItems || []) {

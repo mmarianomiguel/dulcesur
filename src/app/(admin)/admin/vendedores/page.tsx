@@ -195,17 +195,25 @@ export default function VendedoresPage() {
     const itemsByVenta: Record<string, { producto_id: string | null; subtotal: number }[]> = {};
 
     if (ventaIds.length > 0) {
-      const batchSize = 200;
+      // Paginación EXPLÍCITA: chunks chicos (50 ventas) + páginas de 1000 hasta agotar.
+      // .range() con .in() sobre joins no se respeta de forma confiable y trunca silencioso.
+      const VENTAS_CHUNK = 50;
+      const PAGE = 1000;
       const allItems: { venta_id: string; producto_id: string | null; subtotal: number }[] = [];
-      for (let i = 0; i < ventaIds.length; i += batchSize) {
-        const batch = ventaIds.slice(i, i + batchSize);
-        // Supabase default cap = 1000 rows. Con ~10 items por venta y batches de 200, sin range nos comía la mitad.
-        const { data: items } = await supabase
-          .from("venta_items")
-          .select("venta_id, producto_id, subtotal")
-          .in("venta_id", batch)
-          .range(0, 49999);
-        if (items) allItems.push(...items);
+      for (let i = 0; i < ventaIds.length; i += VENTAS_CHUNK) {
+        const batch = ventaIds.slice(i, i + VENTAS_CHUNK);
+        let from = 0;
+        while (true) {
+          const { data: items } = await supabase
+            .from("venta_items")
+            .select("venta_id, producto_id, subtotal")
+            .in("venta_id", batch)
+            .range(from, from + PAGE - 1);
+          const rows = items || [];
+          allItems.push(...rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
       }
       for (const item of allItems) {
         if (!itemsByVenta[item.venta_id]) itemsByVenta[item.venta_id] = [];
@@ -326,17 +334,25 @@ export default function VendedoresPage() {
     const ventaIds = ventasData.map((v) => v.id);
     const itemsByVenta: Record<string, { producto_id: string | null; subtotal: number }[]> = {};
     if (ventaIds.length > 0) {
-      const batchSize = 200;
+      // Paginación EXPLÍCITA: chunks chicos (50 ventas) + páginas de 1000 hasta agotar.
+      // .range() con .in() sobre joins no se respeta de forma confiable y trunca silencioso.
+      const VENTAS_CHUNK = 50;
+      const PAGE = 1000;
       const allItems: { venta_id: string; producto_id: string | null; subtotal: number }[] = [];
-      for (let i = 0; i < ventaIds.length; i += batchSize) {
-        const batch = ventaIds.slice(i, i + batchSize);
-        // Supabase default cap = 1000 rows. Con ~10 items por venta y batches de 200, sin range nos comía la mitad.
-        const { data: items } = await supabase
-          .from("venta_items")
-          .select("venta_id, producto_id, subtotal")
-          .in("venta_id", batch)
-          .range(0, 49999);
-        if (items) allItems.push(...items);
+      for (let i = 0; i < ventaIds.length; i += VENTAS_CHUNK) {
+        const batch = ventaIds.slice(i, i + VENTAS_CHUNK);
+        let from = 0;
+        while (true) {
+          const { data: items } = await supabase
+            .from("venta_items")
+            .select("venta_id, producto_id, subtotal")
+            .in("venta_id", batch)
+            .range(from, from + PAGE - 1);
+          const rows = items || [];
+          allItems.push(...rows);
+          if (rows.length < PAGE) break;
+          from += PAGE;
+        }
       }
       for (const item of allItems) {
         if (!itemsByVenta[item.venta_id]) itemsByVenta[item.venta_id] = [];

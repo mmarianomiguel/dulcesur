@@ -83,7 +83,7 @@ export default function FacturacionLotePage() {
     if (dateFrom) query = query.gte("fecha", dateFrom);
     if (dateTo) query = query.lte("fecha", dateTo);
 
-    const { data } = await query;
+    const { data } = await query.range(0, 9999);
     setRemitos((data as unknown as RemitoRow[]) || []);
     setLoading(false);
   }, [filterCliente, dateFrom, dateTo]);
