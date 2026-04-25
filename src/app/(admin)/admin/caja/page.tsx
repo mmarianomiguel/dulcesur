@@ -501,7 +501,7 @@ export default function CajaPage() {
       allMovs = await cajaService.getByFecha(today);
     } else {
       // Fetch range: from apertura date to today
-      const { data } = await supabase.from("caja_movimientos").select("*").gte("fecha", fechaApertura).lte("fecha", today).order("created_at", { ascending: false });
+      const { data } = await supabase.from("caja_movimientos").select("*").gte("fecha", fechaApertura).lte("fecha", today).order("created_at", { ascending: false }).range(0, 49999);
       allMovs = (data || []) as CajaMovimiento[];
     }
     const all = allMovs;
@@ -576,7 +576,7 @@ export default function CajaPage() {
     } else {
       query = query.gte("fecha", fechaApertura).lte("fecha", today);
     }
-    const { data } = await query;
+    const { data } = await query.range(0, 49999);
     return data || [];
   }, [today, turno]);
   const { data: ccEntries, refetch: refetchCC } = useAsyncData({
@@ -653,10 +653,10 @@ export default function CajaPage() {
     setVentaDetail(v);
     setVentaDetailOpen(true);
     const [{ data: items }, { data: movs }, { data: ccRows }, { data: ncVentas }] = await Promise.all([
-      supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
-      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("referencia_id", v.id).order("created_at"),
-      supabase.from("cuenta_corriente").select("debe").eq("venta_id", v.id).gt("debe", 0),
-      supabase.from("ventas").select("id, numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)").eq("remito_origen_id", v.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
+      supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at").range(0, 4999),
+      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, referencia_id, referencia_tipo, created_at, cuenta_bancaria").eq("referencia_id", v.id).order("created_at").range(0, 999),
+      supabase.from("cuenta_corriente").select("debe").eq("venta_id", v.id).gt("debe", 0).range(0, 999),
+      supabase.from("ventas").select("id, numero, total, venta_items(descripcion, cantidad, precio_unitario, subtotal)").eq("remito_origen_id", v.id).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada").range(0, 999),
     ]);
     setVentaDetailItems(items || []);
     setVentaDetailNCs((ncVentas || []).map((nc: any) => ({
@@ -804,8 +804,8 @@ export default function CajaPage() {
     const fechaCierre = t.fecha_cierre || fecha;
 
     const [{ data: movs }, { data: vts }] = await Promise.all([
-      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").gte("fecha", fecha).lte("fecha", fechaCierre).order("hora", { ascending: false }),
-      supabase.from("ventas").select("id, numero, fecha, total, subtotal, descuento_porcentaje, recargo_porcentaje, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, monto_pagado, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }),
+      supabase.from("caja_movimientos").select("id, tipo, descripcion, metodo_pago, monto, hora, fecha, referencia_id, referencia_tipo, created_at, cuenta_bancaria").gte("fecha", fecha).lte("fecha", fechaCierre).order("hora", { ascending: false }).range(0, 49999),
+      supabase.from("ventas").select("id, numero, fecha, total, subtotal, descuento_porcentaje, recargo_porcentaje, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, monto_pagado, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }).range(0, 49999),
     ]);
 
     // Filter by turno time range using Date comparison

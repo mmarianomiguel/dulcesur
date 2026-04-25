@@ -529,7 +529,8 @@ export default function ClientesPage() {
           .select("referencia_id, metodo_pago, monto")
           .in("referencia_id", batch)
           .eq("referencia_tipo", "venta")
-          .eq("tipo", "ingreso");
+          .eq("tipo", "ingreso")
+          .range(0, 49999);
         for (const cm of cajaData || []) {
           if (!cm.referencia_id) continue;
           const arr = cajaByVenta.get(cm.referencia_id) || [];
@@ -768,7 +769,7 @@ export default function ClientesPage() {
       .order("created_at", { ascending: false });
     if (desde) cobrosQuery = cobrosQuery.gte("fecha", desde);
     if (hasta) cobrosQuery = cobrosQuery.lte("fecha", hasta);
-    const { data: cobrosData } = await cobrosQuery;
+    const { data: cobrosData } = await cobrosQuery.range(0, 9999);
     setCobrosCliente(cobrosData || []);
 
     setMovLoading(false);
@@ -787,7 +788,7 @@ export default function ClientesPage() {
 
     const { data: allVentas } = await supabase.from("ventas")
       .select("id, numero, total, subtotal, monto_pagado, tipo_comprobante, forma_pago, remito_origen_id")
-      .eq("cliente_id", clienteId).neq("estado", "anulada");
+      .eq("cliente_id", clienteId).neq("estado", "anulada").range(0, 49999);
     if (!allVentas) { showAdminToast("Error al recalcular", "error"); return; }
 
     // Build linked NC map with baked-in detection
@@ -939,7 +940,8 @@ export default function ClientesPage() {
       .select("id, cliente_id, fecha, total, monto_pagado, forma_pago, estado")
       .in("cliente_id", ids)
       .in("forma_pago", ["Cuenta Corriente", "Mixto", "Pendiente"])
-      .neq("estado", "anulada");
+      .neq("estado", "anulada")
+      .range(0, 49999);
     const hoy = todayARG();
     const resultado: Record<string, { cantFacturas: number; diasDeuda: number }> = {};
     for (const id of ids) {
@@ -1135,7 +1137,7 @@ export default function ClientesPage() {
       const allCuits = parsedRows.map((r) => r.cuit).filter(Boolean);
       const cuitMap = new Map<string, string>();
       if (allCuits.length > 0) {
-        const { data: byCuits } = await supabase.from("clientes").select("id, cuit").eq("activo", true).in("cuit", allCuits);
+        const { data: byCuits } = await supabase.from("clientes").select("id, cuit").eq("activo", true).in("cuit", allCuits).range(0, 49999);
         if (byCuits) byCuits.forEach((c) => { if (c.cuit) cuitMap.set(c.cuit, c.id); });
       }
 
@@ -1145,7 +1147,7 @@ export default function ClientesPage() {
         .map((r) => r.nombre);
       const nameMap = new Map<string, string>();
       if (nombresWithoutCuit.length > 0) {
-        const { data: byNames } = await supabase.from("clientes").select("id, nombre").eq("activo", true).in("nombre", nombresWithoutCuit);
+        const { data: byNames } = await supabase.from("clientes").select("id, nombre").eq("activo", true).in("nombre", nombresWithoutCuit).range(0, 49999);
         if (byNames) byNames.forEach((c) => nameMap.set(c.nombre, c.id));
       }
 
@@ -1653,10 +1655,10 @@ export default function ClientesPage() {
                   </Select>
                 </div>
                 <Button variant="outline" size="sm" onClick={async () => {
-                  const { data: allClients } = await supabase.from("clientes").select("id, nombre, saldo").eq("activo", true);
+                  const { data: allClients } = await supabase.from("clientes").select("id, nombre, saldo").eq("activo", true).range(0, 49999);
                   const issues: string[] = [];
                   for (const c of allClients || []) {
-                    const { data: ccRows } = await supabase.from("cuenta_corriente").select("debe, haber").eq("cliente_id", c.id);
+                    const { data: ccRows } = await supabase.from("cuenta_corriente").select("debe, haber").eq("cliente_id", c.id).range(0, 99999);
                     const ccSaldo = (ccRows || []).reduce((a: number, r: any) => a + (r.debe || 0) - (r.haber || 0), 0);
                     const diff = Math.abs(Math.round(c.saldo) - Math.round(ccSaldo));
                     if (diff > 1) issues.push(`${c.nombre}: saldo ${formatCurrency(c.saldo)} vs CC ${formatCurrency(ccSaldo)} (dif: ${formatCurrency(diff)})`);

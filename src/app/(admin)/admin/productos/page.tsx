@@ -622,7 +622,7 @@ export default function ProductosPage() {
   // ── Product Discount CRUD ──
   const refreshProductDiscounts = async (productId: string, catId?: string, subId?: string) => {
     try {
-      const { data: allDesc } = await supabase.from("descuentos").select("*").eq("activo", true);
+      const { data: allDesc } = await supabase.from("descuentos").select("*").eq("activo", true).range(0, 4999);
       const today = new Date().toISOString().split("T")[0];
       const applicable = (allDesc || []).filter((d: any) => {
         if (d.fecha_fin && d.fecha_fin < today) return false;
@@ -774,7 +774,7 @@ export default function ProductosPage() {
       setPriceHistory((ph || []) as any);
       setHistoryItems((sm || []) as any);
     });
-    supabase.from("descuentos").select("*").eq("activo", true)
+    supabase.from("descuentos").select("*").eq("activo", true).range(0, 4999)
       .then(({ data: allDesc }) => {
         setProductDiscounts((allDesc || []).filter((d: any) => {
           if (d.fecha_fin && d.fecha_fin < TODAY_STR) return false;

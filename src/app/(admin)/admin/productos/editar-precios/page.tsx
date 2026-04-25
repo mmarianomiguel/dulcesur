@@ -368,7 +368,7 @@ export default function EditarPreciosPage() {
         supabase.from("categorias").select("*").order("nombre"),
         supabase.from("subcategorias").select("*").order("nombre"),
         fetchAll("presentaciones", "id, producto_id, nombre, cantidad, precio, costo"),
-        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
+        supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today).range(0, 4999),
       ]);
       setProductos(prods);
       setMarcas(marcaRes.data ?? []);

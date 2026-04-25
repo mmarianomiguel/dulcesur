@@ -54,7 +54,8 @@ export default function ClientesMapaPage() {
       .select("id, nombre, domicilio, localidad, provincia, telefono, email, maps_url, saldo")
       .eq("activo", true)
       .not("domicilio", "is", null)
-      .order("nombre");
+      .order("nombre")
+      .range(0, 49999);
 
     const clientesConDir = (data || []).filter((c: any) => c.domicilio);
 

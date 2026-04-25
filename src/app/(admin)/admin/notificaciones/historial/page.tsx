@@ -151,11 +151,11 @@ export default function HistorialPage() {
       let userNames: Record<string, string> = {};
 
       if (clienteIds.length > 0) {
-        const { data: clientes } = await supabase.from("clientes").select("id, nombre").in("id", clienteIds);
+        const { data: clientes } = await supabase.from("clientes").select("id, nombre").in("id", clienteIds).range(0, 49999);
         (clientes || []).forEach((c: any) => { clienteNames[c.id] = c.nombre; });
       }
       if (userIds.length > 0) {
-        const { data: users } = await supabase.from("usuarios").select("id, nombre").in("id", userIds);
+        const { data: users } = await supabase.from("usuarios").select("id, nombre").in("id", userIds).range(0, 999);
         (users || []).forEach((u: any) => { userNames[u.id] = u.nombre; });
       }
 

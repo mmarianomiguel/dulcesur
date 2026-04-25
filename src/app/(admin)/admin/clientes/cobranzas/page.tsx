@@ -71,7 +71,8 @@ export default function CobranzasPage() {
       .select("id, nombre, cuit, saldo")
       .eq("activo", true)
       .gt("saldo", 0)
-      .order("saldo", { ascending: false });
+      .order("saldo", { ascending: false })
+      .range(0, 49999);
     setClients(data || []);
     setLoading(false);
   }, []);
@@ -100,7 +101,7 @@ export default function CobranzasPage() {
     if (from) q = q.gte("fecha", from);
     if (to) q = q.lte("fecha", to);
 
-    const { data: movData } = await q;
+    const { data: movData } = await q.range(0, 49999);
     setMovimientos((movData as CuentaMovimiento[]) || []);
 
     // If date filter, get saldo before period

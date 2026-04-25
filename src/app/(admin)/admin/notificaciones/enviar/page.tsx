@@ -105,7 +105,7 @@ export default function EnviarNotificacionPage() {
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     Promise.all([
       supabase.from("zona_entrega").select("id, nombre"),
-      supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", hoy).or(`fecha_fin.is.null,fecha_fin.gte.${hoy}`).order("nombre"),
+      supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", hoy).or(`fecha_fin.is.null,fecha_fin.gte.${hoy}`).order("nombre").range(0, 4999),
       supabase.from("tienda_config").select("horario_atencion_fin").limit(1).single(),
     ]).then(([zonaRes, descRes, cfgRes]) => {
       if (zonaRes.data) setZonas(zonaRes.data);

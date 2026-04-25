@@ -513,8 +513,8 @@ export default function DashboardPage() {
       { data: ultimasVentasRaw },
     ] = await Promise.all([
       supabase.from("tienda_config").select("recargo_transferencia, url_tienda").single(),
-      supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada"),
-      supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso"),
+      supabase.from("ventas").select("id, total, forma_pago, estado, tipo_comprobante").gte("fecha", start).lt("fecha", end).neq("estado", "anulada").range(0, 49999),
+      supabase.from("caja_movimientos").select("monto").gte("fecha", start).lt("fecha", end).eq("tipo", "egreso").range(0, 49999),
       supabase.from("turnos_caja").select("id, fecha_apertura, hora_apertura, efectivo_inicial, operador").eq("estado", "abierto").order("created_at", { ascending: false }).limit(1),
       supabase.from("ventas").select("id, numero, total, forma_pago, fecha, clientes(nombre)").neq("estado", "anulada").not("tipo_comprobante", "ilike", "Nota de Crédito%").not("tipo_comprobante", "ilike", "Nota de Débito%").order("created_at", { ascending: false }).limit(8),
     ]);
@@ -530,10 +530,10 @@ export default function DashboardPage() {
       { data: ccSums },
       { data: ventasCat },
     ] = await Promise.all([
-      supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true),
-      supabase.from("clientes").select("id, nombre, saldo").eq("activo", true),
-      supabase.from("proveedores").select("saldo").eq("activo", true),
-      supabase.from("cuenta_corriente").select("cliente_id, debe, haber"),
+      supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).range(0, 49999),
+      supabase.from("clientes").select("id, nombre, saldo").eq("activo", true).range(0, 49999),
+      supabase.from("proveedores").select("saldo").eq("activo", true).range(0, 9999),
+      supabase.from("cuenta_corriente").select("cliente_id, debe, haber").range(0, 199999),
       supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada").range(0, 49999),
     ]);
 
@@ -544,7 +544,7 @@ export default function DashboardPage() {
     const turnoActual = turnoData && turnoData.length > 0 ? turnoData[0] as any : null;
     setTurnoAbierto(turnoActual);
     if (turnoActual) {
-      supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").gte("fecha", turnoActual.fecha_apertura).then(({ data: cajaMov }) => {
+      supabase.from("caja_movimientos").select("metodo_pago, monto, tipo").gte("fecha", turnoActual.fecha_apertura).range(0, 49999).then(({ data: cajaMov }) => {
         let ef = 0, tr = 0;
         for (const m of cajaMov || []) {
           if (m.tipo === "ingreso") {
@@ -613,13 +613,13 @@ export default function DashboardPage() {
       // Mixto payment breakdown
       mixtoIds.length > 0
         ? Promise.all([
-            supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds),
-            supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds),
+            supabase.from("caja_movimientos").select("referencia_id, metodo_pago, monto").eq("tipo", "ingreso").eq("referencia_tipo", "venta").in("referencia_id", mixtoIds).range(0, 49999),
+            supabase.from("cuenta_corriente").select("venta_id, debe").in("venta_id", mixtoIds).range(0, 49999),
           ])
         : Promise.resolve([{ data: [] }, { data: [] }] as any),
       // Margin calculation
       regularVentaIds.length > 0
-        ? supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", regularVentaIds)
+        ? supabase.from("venta_items").select("cantidad, precio_unitario, descuento, costo_unitario").in("venta_id", regularVentaIds).range(0, 99999)
         : Promise.resolve({ data: [] }),
       // Items sin costo count
       regularVentaIds.length > 0
