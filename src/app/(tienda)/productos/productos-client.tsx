@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -562,6 +562,16 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   }, [productos, activeDiscounts, tiendaClienteId]);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  // Visual feedback: el botón "Agregar" muestra "✓ Agregado" por ~1.2s tras click.
+  const [justAdded, setJustAdded] = useState<Record<string, boolean>>({});
+  const justAddedTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const flashAdded = (id: string) => {
+    setJustAdded((p) => ({ ...p, [id]: true }));
+    if (justAddedTimers.current[id]) clearTimeout(justAddedTimers.current[id]);
+    justAddedTimers.current[id] = setTimeout(() => {
+      setJustAdded((p) => { const n = { ...p }; delete n[id]; return n; });
+    }, 1200);
+  };
 
   function getQty(id: string) {
     return quantities[id] ?? 1;
@@ -670,6 +680,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     const presInfo = presLabel && presLabel !== "Unidad" ? ` · ${presLabel}` : "";
     showToast(producto.nombre, { subtitle: `${canAdd} ${canAdd > 1 ? "unidades agregadas" : "agregado"} al carrito${presInfo}` });
     setQuantities((prev) => ({ ...prev, [producto.id]: 1 }));
+    flashAdded(producto.id);
   }
 
   function selectMarca(marca: Marca) {
@@ -1720,9 +1731,9 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="w-full bg-primary hover:bg-primary/90 active:scale-[0.98] text-white text-sm py-2.5 rounded-xl font-semibold transition-all shadow-sm shadow-primary/20"
+                            className={`w-full text-white text-sm py-2.5 rounded-xl font-semibold transition-all duration-200 shadow-sm active:scale-95 ${justAdded[producto.id] ? "bg-emerald-500 shadow-emerald-500/30" : "bg-primary hover:bg-primary/90 shadow-primary/20"}`}
                           >
-                            Agregar
+                            {justAdded[producto.id] ? "✓ Agregado" : "Agregar"}
                           </button>
                         </div>
                       ) : (
@@ -1882,9 +1893,9 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                           </div>
                           <button
                             onClick={() => addToCart(producto, qty)}
-                            className="flex-1 bg-gray-900 hover:bg-gray-800 active:scale-[0.98] text-white text-sm h-10 rounded-xl font-semibold transition-all"
+                            className={`flex-1 text-white text-sm h-10 rounded-xl font-semibold transition-all duration-200 active:scale-95 ${justAdded[producto.id] ? "bg-emerald-500" : "bg-gray-900 hover:bg-gray-800"}`}
                           >
-                            Agregar
+                            {justAdded[producto.id] ? "✓ Agregado" : "Agregar"}
                           </button>
                         </>
                       ) : (

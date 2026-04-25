@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
@@ -87,6 +87,11 @@ export default function ProductoClient({
     return unitIdx >= 0 ? unitIdx : 0;
   });
   const [cantidad, setCantidad] = useState(1);
+  // Visual feedback al agregar al carrito.
+  const [justAdded, setJustAdded] = useState(false);
+  const justAddedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [relJustAdded, setRelJustAdded] = useState<Record<string, boolean>>({});
+  const relJustAddedTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [relacionados, setRelacionados] = useState<Producto[]>(initialRelacionados);
   const [relPresentaciones, setRelPresentaciones] = useState<Record<string, Presentacion[]>>(initialRelPresentaciones);
   const [relSelectedPres, setRelSelectedPres] = useState<Record<string, number>>({});
@@ -388,6 +393,10 @@ export default function ProductoClient({
 
     addToCart(producto, price, presLabel, cantidad, disc > 0 ? currentPrice : undefined, disc > 0 ? disc : undefined, presQty, effectiveStock, cantidadMinima);
     setCantidad(1);
+    // Flash botón "Agregado" por 1.2s
+    setJustAdded(true);
+    if (justAddedTimer.current) clearTimeout(justAddedTimer.current);
+    justAddedTimer.current = setTimeout(() => setJustAdded(false), 1200);
   }
 
   function getRelPrice(prod: Producto) {
@@ -708,9 +717,9 @@ export default function ProductoClient({
               <button
                 onClick={handleAddToCart}
                 disabled={!canBuy}
-                className="flex-1 rounded-xl bg-primary py-3.5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`flex-1 rounded-xl py-3.5 text-sm font-bold uppercase tracking-wide text-white transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${justAdded ? "bg-emerald-500 shadow-emerald-500/30 shadow-md" : "bg-primary hover:bg-primary/90"}`}
               >
-                {canBuy ? `Agregar · ${formatCurrency((currentDiscount > 0 ? discountedPrice : currentPrice) * cantidad)}` : presQty > 1 ? "Stock insuficiente" : "Sin stock"}
+                {!canBuy ? (presQty > 1 ? "Stock insuficiente" : "Sin stock") : justAdded ? "✓ Agregado" : `Agregar · ${formatCurrency((currentDiscount > 0 ? discountedPrice : currentPrice) * cantidad)}`}
               </button>
             </div>
             <p className={"text-xs mt-2 " + stockColor}>
@@ -1004,11 +1013,14 @@ export default function ProductoClient({
                                 const relUnitsPerPres = selPres ? Number(selPres.cantidad) || 1 : 1;
                                 addToCart(rel, finalPrice, getRelLabel(rel), Math.min(qty, maxQty), relDiscount > 0 ? price : undefined, relDiscount > 0 ? relDiscount : undefined, relUnitsPerPres, rel.stock);
                                 setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
+                                setRelJustAdded((p) => ({ ...p, [rel.id]: true }));
+                                if (relJustAddedTimers.current[rel.id]) clearTimeout(relJustAddedTimers.current[rel.id]);
+                                relJustAddedTimers.current[rel.id] = setTimeout(() => setRelJustAdded((p) => { const n = { ...p }; delete n[rel.id]; return n; }), 1200);
                               }}
                               disabled={outOfStock}
-                              className={`flex-1 text-xs py-2 rounded-lg font-semibold transition-colors ${outOfStock ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white"}`}
+                              className={`flex-1 text-xs py-2 rounded-lg font-semibold transition-all duration-200 active:scale-95 ${outOfStock ? "bg-gray-200 text-gray-500 cursor-not-allowed" : relJustAdded[rel.id] ? "bg-emerald-500 text-white" : "bg-primary hover:bg-primary/90 text-white"}`}
                             >
-                              {outOfStock ? "Sin stock" : `Agregar ${formatCurrency((relDiscount > 0 ? relDiscountedPrice : price) * qty)}`}
+                              {outOfStock ? "Sin stock" : relJustAdded[rel.id] ? "✓ Agregado" : `Agregar ${formatCurrency((relDiscount > 0 ? relDiscountedPrice : price) * qty)}`}
                             </button>
                           </div>
                         );
