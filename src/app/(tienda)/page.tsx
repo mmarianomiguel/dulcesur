@@ -208,12 +208,12 @@ export default async function TiendaHomePage() {
     // Paginación EXPLÍCITA del cap default de 1000 (mismo bug que otros lugares).
     // Tomamos también cantidad_antes para distinguir REINGRESOS (de 0 → algo) de cargas continuas.
     const PAGE = 1000;
-    const movsAll: { producto_id: string; cantidad_antes: number; cantidad_despues: number }[] = [];
+    const movsAll: { producto_id: string; cantidad_antes: number; cantidad_despues: number; created_at: string }[] = [];
     let from = 0;
     while (true) {
       const { data: chunk } = await supabase
         .from("stock_movimientos")
-        .select("producto_id, cantidad_antes, cantidad_despues")
+        .select("producto_id, cantidad_antes, cantidad_despues, created_at")
         .in("tipo", ["compra", "ajuste_ingreso"])
         .gt("cantidad_despues", 0)
         .gt("created_at", haceNuevosDias.toISOString())
@@ -225,39 +225,54 @@ export default async function TiendaHomePage() {
     }
 
     // Candidato a reingreso: tuvo al menos un movimiento con cantidad_antes <= 0.
-    // Pero ojo: la primera compra de un producto NUEVO también queda con cantidad_antes = 0.
-    // Filtramos abajo con created_at — si el producto fue creado dentro del mismo período,
-    // es "Nuevo" del catálogo, no reingreso.
+    // Track también la fecha del movimiento más reciente por producto para ordenar después.
     const reingresoCandidate = new Set<string>();
     const allIds = new Set<string>();
+    const ultMovPorProd: Record<string, string> = {};
     for (const m of movsAll) {
       allIds.add(m.producto_id);
       if (Number(m.cantidad_antes) <= 0) reingresoCandidate.add(m.producto_id);
+      if (!ultMovPorProd[m.producto_id] || m.created_at > ultMovPorProd[m.producto_id]) {
+        ultMovPorProd[m.producto_id] = m.created_at;
+      }
     }
     const ids = [...allIds];
     if (ids.length === 0) return { data: [], reingresoSet: new Set<string>() };
 
-    const res = await supabase
-      .from("productos")
-      .select("id, nombre, precio, imagen_url, stock, activo, es_combo, created_at, updated_at, categorias(id, nombre)")
-      .eq("activo", true)
-      .eq("visibilidad", "visible")
-      .gt("stock", 0)
-      .in("id", ids)
-      .order("created_at", { ascending: false })
-      .limit(maxNuevos * 3); // traemos más porque vamos a filtrar
+    // Pre-filtro: solo IDs que sean candidatos válidos (nuevo del catálogo O reingreso) — evita traer
+    // los 130+ re-stocks normales y luego cortar arbitrariamente por límite.
     const cutoffMs = haceNuevosDias.getTime();
+    // Necesitamos saber el created_at de los productos para distinguir nuevos del catálogo, así que primero
+    // traemos solo eso (liviano) y luego filtramos.
+    const PAGE_PROD = 1000;
+    const allProds: any[] = [];
+    let pf = 0;
+    while (true) {
+      const { data: chunk } = await supabase
+        .from("productos")
+        .select("id, nombre, precio, imagen_url, stock, activo, es_combo, created_at, updated_at, categorias(id, nombre)")
+        .eq("activo", true)
+        .eq("visibilidad", "visible")
+        .gt("stock", 0)
+        .in("id", ids)
+        .range(pf, pf + PAGE_PROD - 1);
+      const rows = chunk || [];
+      allProds.push(...rows);
+      if (rows.length < PAGE_PROD) break;
+      pf += PAGE_PROD;
+    }
+
     const reingresoSet = new Set<string>();
-    // Filtrar: solo productos genuinamente nuevos del catálogo O reingresos reales.
-    // Excluye re-aprovisionamientos normales (producto viejo + cantidad_antes > 0).
-    const filtered = (res.data || []).filter((p: any) => {
+    const filtered = allProds.filter((p: any) => {
       const createdMs = p.created_at ? new Date(p.created_at).getTime() : 0;
       const esNuevoCatalogo = createdMs >= cutoffMs;
       const esReingresoReal = !esNuevoCatalogo && reingresoCandidate.has(p.id);
       if (esReingresoReal) reingresoSet.add(p.id);
       return esNuevoCatalogo || esReingresoReal;
-    }).slice(0, maxNuevos);
-    return { data: filtered, reingresoSet };
+    });
+    // Ordenar por la fecha del movimiento más reciente DESC (los recién comprados primero), no por created_at del producto.
+    filtered.sort((a: any, b: any) => (ultMovPorProd[b.id] || "").localeCompare(ultMovPorProd[a.id] || ""));
+    return { data: filtered.slice(0, maxNuevos), reingresoSet };
   })();
 
   // topVentasResult no depende de nada → se arranca junto al grupo crítico
