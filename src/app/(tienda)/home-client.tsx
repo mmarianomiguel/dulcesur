@@ -29,6 +29,7 @@ import {
   Milk,
   TrendingUp,
   RotateCw,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -339,28 +340,35 @@ function ProductosDestacadosBlock({
   const titulo = config.titulo_seccion || "Productos";
   const maxItems = 24;
 
+  // Tabs disponibles. "destacados" se reemplazó por "ofertas" (autollenado con productos en descuento).
+  const VALID_TABS = ["ofertas", "mas_vendidos", "nuevos", "reingresos"] as const;
+  type TabKeyValid = typeof VALID_TABS[number];
   const rawTabsConfig = (config.tabs as Array<{ key: string; activo: boolean }> | undefined);
   const defaultTabsConfig = [
-    { key: "destacados", activo: true },
-    { key: "mas_vendidos", activo: true },
     { key: "nuevos", activo: true },
     { key: "reingresos", activo: true },
+    { key: "ofertas", activo: true },
+    { key: "mas_vendidos", activo: true },
   ];
   const tabsConfig = Array.isArray(rawTabsConfig) && rawTabsConfig.length > 0
     ? (() => {
-        const filtered = rawTabsConfig.filter((t) => t && ["destacados", "mas_vendidos", "nuevos", "reingresos"].includes(t.key));
-        // Si la config existente no tiene "reingresos" (config vieja), lo agregamos por default activo.
-        if (!filtered.some((t) => t.key === "reingresos")) filtered.push({ key: "reingresos", activo: true });
+        // Migrar config vieja: "destacados" → "ofertas".
+        const remapped = rawTabsConfig.map((t) => t && t.key === "destacados" ? { ...t, key: "ofertas" } : t);
+        const filtered = remapped.filter((t) => t && (VALID_TABS as readonly string[]).includes(t.key));
+        // Asegurar que estén todos los tabs en la config (los faltantes se agregan activos).
+        for (const k of VALID_TABS) {
+          if (!filtered.some((t) => t.key === k)) filtered.push({ key: k, activo: true });
+        }
         return filtered;
       })()
     : defaultTabsConfig;
   const activeTabsConfig = tabsConfig.filter((t) => t.activo);
-  const rawTabDefecto = (config.tab_defecto as "destacados" | "mas_vendidos" | "nuevos" | "reingresos") ?? "destacados";
+  const rawTabDefecto = ((config.tab_defecto === "destacados" ? "ofertas" : config.tab_defecto) as TabKeyValid) ?? "nuevos";
   const tabDefecto = (activeTabsConfig.some((t) => t.key === rawTabDefecto)
     ? rawTabDefecto
-    : (activeTabsConfig[0]?.key ?? "destacados")) as "destacados" | "mas_vendidos" | "nuevos" | "reingresos";
+    : (activeTabsConfig[0]?.key ?? "nuevos")) as TabKeyValid;
   const intervalo = (config.carrusel_intervalo as number) ?? 0;
-  const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos" | "reingresos">(tabDefecto);
+  const [activeTab, setActiveTab] = useState<TabKeyValid>(tabDefecto);
   const [grupoActual, setGrupoActual] = useState(0);
   const [pausado, setPausado] = useState(false);
   const [slideDir, setSlideDir] = useState<"left" | "right" | null>(null);
@@ -427,15 +435,52 @@ function ProductosDestacadosBlock({
     return () => { cancelled = true; };
   }, [vendidosPeriodo]);
 
-  const destacados = filterCats(productos);
+  // Helper compartido para calcular el mejor descuento aplicable a un producto.
+  const computeBestDiscount = (prod: any, presLabel: string = "Unidad"): number => {
+    let bestPct = 0;
+    const isBox = presLabel !== "Unidad" && !presLabel.startsWith("Unidad");
+    for (const d of activeDiscounts) {
+      if (d.clientes_ids && d.clientes_ids.length > 0) continue;
+      if (d.cantidad_minima && d.cantidad_minima > 0) continue;
+      if (d.excluir_combos && prod.es_combo) continue;
+      if (d.productos_excluidos_ids?.includes(prod.id)) continue;
+      if (d.presentacion === "unidad" && isBox) continue;
+      if (d.presentacion === "caja" && !isBox) continue;
+      let aplica = false;
+      if (d.aplica_a === "todos") aplica = true;
+      else if (d.aplica_a === "productos") aplica = (d.productos_ids || []).includes(prod.id);
+      else if (d.aplica_a === "categorias") aplica = (d.categorias_ids || []).includes(prod.categoria_id) || (!!prod.subcategoria_id && (d.categorias_ids || []).includes(prod.subcategoria_id));
+      else if (d.aplica_a === "subcategorias") aplica = !!prod.subcategoria_id && (d.subcategorias_ids || []).includes(prod.subcategoria_id);
+      else if (d.aplica_a === "marcas") aplica = !!prod.marca_id && (d.marcas_ids || []).includes(prod.marca_id);
+      if (!aplica) continue;
+      let pct = Number(d.porcentaje) || 0;
+      if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && Number(d.precio_fijo) > 0 && prod.precio > 0) {
+        pct = Math.max(0, Math.min(100, ((prod.precio - Number(d.precio_fijo)) / prod.precio) * 100));
+      }
+      if (pct > bestPct) bestPct = pct;
+    }
+    return bestPct;
+  };
+
   const vendidos = filterCats((masVendidosLocal ?? masVendidos));
   // Tab "Nuevos": SOLO productos genuinamente nuevos del catálogo (created_at en últimos 7 días).
   const nuevos = filterCats(nuevosIngresos);
   // Tab "De vuelta": SOLO reingresos (productos viejos que volvieron del 0).
   const reingresosFiltered = filterCats(reingresos);
+  // Tab "Ofertas": todos los productos con descuento aplicable + en stock.
+  // Orden: destacados primero, luego por mayor % de descuento.
+  const ofertas = filterCats(productos)
+    .map((p: any) => ({ ...p, _ofertaPct: computeBestDiscount(p) }))
+    .filter((p: any) => p._ofertaPct > 0 && p.stock > 0)
+    .sort((a: any, b: any) => {
+      const aDest = a.destacado ? 1 : 0;
+      const bDest = b.destacado ? 1 : 0;
+      if (aDest !== bDest) return bDest - aDest;
+      return b._ofertaPct - a._ofertaPct;
+    });
 
   const activeProds: any[] =
-    activeTab === "destacados" ? destacados :
+    activeTab === "ofertas" ? ofertas :
     activeTab === "mas_vendidos" ? vendidos :
     activeTab === "reingresos" ? reingresosFiltered :
     nuevos;
@@ -450,16 +495,16 @@ function ProductosDestacadosBlock({
     Math.floor(grupoActual / 2) * GRUPO_SIZE_DESKTOP + GRUPO_SIZE_DESKTOP
   );
 
-  type TabKey = "destacados" | "mas_vendidos" | "nuevos" | "reingresos";
+  type TabKey = TabKeyValid;
   type TabEntry = { key: TabKey; label: string; icon: typeof Star; count: number };
   const allTabsMeta: Record<TabKey, { label: string; icon: typeof Star; count: number }> = {
-    destacados: { label: "Destacados", icon: Star, count: destacados.length },
+    ofertas: { label: "Ofertas", icon: Sparkles, count: ofertas.length },
     mas_vendidos: { label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
     nuevos: { label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
     reingresos: { label: "De vuelta en stock", icon: RotateCw, count: reingresosFiltered.length },
   };
-  // Orden fijo: Nuevos → De vuelta → Destacados → Más vendidos.
-  const ordenTabs: TabKey[] = ["nuevos", "reingresos", "destacados", "mas_vendidos"];
+  // Orden fijo: Nuevos → De vuelta → Ofertas → Más vendidos.
+  const ordenTabs: TabKey[] = ["nuevos", "reingresos", "ofertas", "mas_vendidos"];
   const tabs: TabEntry[] = ordenTabs.flatMap((key) => {
     const meta = allTabsMeta[key];
     if (!meta || meta.count <= 0) return [];
@@ -628,9 +673,9 @@ function ProductosDestacadosBlock({
               {activeTab === "reingresos" && !sinStock && (
                 <span className="bg-cyan-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">RE INGRESO</span>
               )}
-              {activeTab === "destacados" && !sinStock && (
-                <span className="bg-violet-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5">
-                  <Star className="w-2.5 h-2.5" /> Destacado
+              {activeTab === "ofertas" && !sinStock && (
+                <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5">
+                  🔥 -{Math.round(desc.pct)}% OFF
                 </span>
               )}
               {activeTab === "mas_vendidos" && !sinStock && (
@@ -638,7 +683,8 @@ function ProductosDestacadosBlock({
                   <TrendingUp className="w-2.5 h-2.5" /> Top
                 </span>
               )}
-              {hasDescuento && !sinStock && (
+              {/* En tabs distintos a "ofertas", si igual el producto tiene descuento, mostrar el badge para no perder la promo. */}
+              {activeTab !== "ofertas" && hasDescuento && !sinStock && (
                 <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">-{Math.round(desc.pct)}% OFF</span>
               )}
             </div>
@@ -873,7 +919,7 @@ function ProductosDestacadosBlock({
         {/* Ver todos */}
         {!loading && activeProds.length > 0 && (
           <div className="flex justify-end mt-3">
-            <Link href="/productos" className="text-sm font-semibold text-primary hover:underline flex items-center gap-1">
+            <Link href={activeTab === "ofertas" ? "/ofertas" : "/productos"} className="text-sm font-semibold text-primary hover:underline flex items-center gap-1">
               Ver todos <span aria-hidden>→</span>
             </Link>
           </div>
