@@ -376,8 +376,43 @@ function ProductosDestacadosBlock({
       return filtrarCategorias([p.categorias]).length > 0;
     }).slice(0, maxItems);
 
+  // Selector de período para "Más vendidos" — el cliente puede cambiarlo en runtime.
+  const [vendidosPeriodo, setVendidosPeriodo] = useState<7 | 30 | 90>(30);
+  const [masVendidosLocal, setMasVendidosLocal] = useState<any[] | null>(null);
+  const [vendidosLoading, setVendidosLoading] = useState(false);
+  useEffect(() => {
+    // Default 30 días == lo que vino del SSR. No refetcheamos.
+    if (vendidosPeriodo === 30) { setMasVendidosLocal(null); return; }
+    let cancelled = false;
+    (async () => {
+      setVendidosLoading(true);
+      const desde = new Date();
+      desde.setDate(desde.getDate() - vendidosPeriodo);
+      const { data: items } = await supabase
+        .from("venta_items")
+        .select("producto_id, cantidad")
+        .gte("created_at", desde.toISOString())
+        .limit(2000);
+      const ranking: Record<string, number> = {};
+      for (const it of items || []) {
+        if (it.producto_id) ranking[it.producto_id] = (ranking[it.producto_id] || 0) + Number(it.cantidad || 0);
+      }
+      const topIds = Object.entries(ranking).sort((a, b) => b[1] - a[1]).slice(0, 24).map((x) => x[0]);
+      if (topIds.length === 0) { if (!cancelled) { setMasVendidosLocal([]); setVendidosLoading(false); } return; }
+      const { data: prods } = await supabase
+        .from("productos")
+        .select("id, nombre, precio, imagen_url, activo, stock, es_combo, precio_anterior, fecha_actualizacion, created_at, updated_at, categorias(id, nombre)")
+        .eq("activo", true)
+        .eq("visibilidad", "visible")
+        .in("id", topIds);
+      const ordered = topIds.map((id) => (prods || []).find((p: any) => p.id === id)).filter(Boolean);
+      if (!cancelled) { setMasVendidosLocal(ordered); setVendidosLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [vendidosPeriodo]);
+
   const destacados = filterCats(productos);
-  const vendidos = filterCats(masVendidos);
+  const vendidos = filterCats((masVendidosLocal ?? masVendidos));
   const nuevos = filterCats(nuevosIngresos);
   // Tab "De vuelta": subset de nuevos, solo los marcados como reingreso.
   const reingresos = nuevos.filter((p: any) => p._esReingreso);
@@ -605,6 +640,27 @@ function ProductosDestacadosBlock({
           )}
         </div>
         <div className="w-12 h-0.5 bg-primary rounded-full mb-4" />
+
+        {/* Selector de período — solo visible en tab "Más vendidos" */}
+        {activeTab === "mas_vendidos" && (
+          <div className="flex items-center justify-end gap-1 mb-3 text-xs">
+            <span className="text-gray-500 mr-1">Período:</span>
+            {([7, 30, 90] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setVendidosPeriodo(d)}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                  vendidosPeriodo === d
+                    ? "bg-amber-500 text-white"
+                    : "bg-white text-gray-600 border border-gray-200 hover:border-amber-300"
+                }`}
+              >
+                {d === 7 ? "7 días" : d === 30 ? "30 días" : "90 días"}
+              </button>
+            ))}
+            {vendidosLoading && <span className="text-gray-400 ml-2 animate-pulse">cargando…</span>}
+          </div>
+        )}
 
         {/* Grid: scroll horizontal 2x2 en mobile con peek / 1x4 en desktop */}
         {loading ? (
