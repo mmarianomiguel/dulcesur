@@ -199,10 +199,12 @@ export default function VendedoresPage() {
       const allItems: { venta_id: string; producto_id: string | null; subtotal: number }[] = [];
       for (let i = 0; i < ventaIds.length; i += batchSize) {
         const batch = ventaIds.slice(i, i + batchSize);
+        // Supabase default cap = 1000 rows. Con ~10 items por venta y batches de 200, sin range nos comía la mitad.
         const { data: items } = await supabase
           .from("venta_items")
           .select("venta_id, producto_id, subtotal")
-          .in("venta_id", batch);
+          .in("venta_id", batch)
+          .range(0, 49999);
         if (items) allItems.push(...items);
       }
       for (const item of allItems) {
@@ -328,10 +330,12 @@ export default function VendedoresPage() {
       const allItems: { venta_id: string; producto_id: string | null; subtotal: number }[] = [];
       for (let i = 0; i < ventaIds.length; i += batchSize) {
         const batch = ventaIds.slice(i, i + batchSize);
+        // Supabase default cap = 1000 rows. Con ~10 items por venta y batches de 200, sin range nos comía la mitad.
         const { data: items } = await supabase
           .from("venta_items")
           .select("venta_id, producto_id, subtotal")
-          .in("venta_id", batch);
+          .in("venta_id", batch)
+          .range(0, 49999);
         if (items) allItems.push(...items);
       }
       for (const item of allItems) {
