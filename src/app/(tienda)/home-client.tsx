@@ -362,6 +362,7 @@ function ProductosDestacadosBlock({
   const [slideDir, setSlideDir] = useState<"left" | "right" | null>(null);
   const [animating, setAnimating] = useState(false);
   const touchStartX = useRef<number | null>(null);
+  const mobileScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
@@ -453,7 +454,20 @@ function ProductosDestacadosBlock({
     setGrupoActual(0);
     setSlideDir(null);
     setAnimating(false);
+    // Reset scroll en mobile cuando cambia tab.
+    if (mobileScrollRef.current) mobileScrollRef.current.scrollLeft = 0;
   }, [activeTab]);
+
+  // Sincronizar scroll mobile cuando grupoActual cambia desde fuera (botones flecha, autoplay).
+  useEffect(() => {
+    const el = mobileScrollRef.current;
+    if (!el || activeProds.length === 0) return;
+    const cardWidth = el.scrollWidth / activeProds.length;
+    const target = cardWidth * 2 * grupoActual;
+    if (Math.abs(el.scrollLeft - target) > 4) {
+      el.scrollTo({ left: target, behavior: "smooth" });
+    }
+  }, [grupoActual, activeProds.length]);
 
   // Función para avanzar con animación
   const irAlSiguiente = () => {
@@ -680,34 +694,30 @@ function ProductosDestacadosBlock({
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
           <>
-            {/* Mobile: 2 productos por grupo con animación de slide */}
-            <div className="md:hidden overflow-hidden">
-              <div
-                className="grid grid-cols-2 gap-3"
-                style={{
-                  transform: animating
-                    ? `translateX(${slideDir === "left" ? "-18%" : "18%"})`
-                    : "translateX(0)",
-                  opacity: animating ? 0.35 : 1,
-                  transition: "transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
-                  willChange: "transform, opacity",
-                }}
-                onTouchStart={(e) => {
-                  setPausado(true);
-                  touchStartX.current = e.touches[0].clientX;
-                }}
-                onTouchEnd={(e) => {
-                  if (touchStartX.current !== null) {
-                    const diff = touchStartX.current - e.changedTouches[0].clientX;
-                    if (diff > 50) irAlSiguiente();
-                    else if (diff < -50) irAlAnterior();
-                    touchStartX.current = null;
-                  }
-                  setTimeout(() => setPausado(false), 3000);
-                }}
-              >
-                {grupoProds.map((prod, idx) => renderProductCard(prod, idx < 4))}
-              </div>
+            {/* Mobile: scroll-snap nativo (1 card por viewport con peek de la siguiente) */}
+            <div
+              ref={mobileScrollRef}
+              className="md:hidden flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth -mx-4 px-4 pb-1"
+              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              onTouchStart={() => setPausado(true)}
+              onTouchEnd={() => setTimeout(() => setPausado(false), 3000)}
+              onScroll={(e) => {
+                // Sincronizar grupoActual con el scroll. Cada "grupo" = 2 cards.
+                const el = e.currentTarget;
+                if (activeProds.length === 0) return;
+                const cardWidth = el.scrollWidth / activeProds.length;
+                const idx = Math.round(el.scrollLeft / (cardWidth * 2));
+                if (idx !== grupoActual) setGrupoActual(idx);
+              }}
+            >
+              <style jsx>{`
+                div::-webkit-scrollbar { display: none; }
+              `}</style>
+              {activeProds.map((prod, idx) => (
+                <div key={prod.id} className="snap-start shrink-0" style={{ width: "calc((100% - 0.75rem) / 2)" }}>
+                  {renderProductCard(prod, idx < 4)}
+                </div>
+              ))}
             </div>
 
             {/* Desktop: grilla 1x4 normal */}
@@ -733,7 +743,15 @@ function ProductosDestacadosBlock({
                 {Array.from({ length: grupos }).map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => setGrupoActual(i)}
+                    onClick={() => {
+                      setGrupoActual(i);
+                      // Sincronizar scroll mobile cuando se clickea un dot.
+                      const el = mobileScrollRef.current;
+                      if (el && activeProds.length > 0) {
+                        const cardWidth = el.scrollWidth / activeProds.length;
+                        el.scrollTo({ left: cardWidth * 2 * i, behavior: "smooth" });
+                      }
+                    }}
                     className={`transition-all rounded-full ${
                       i === grupoActual
                         ? "w-6 h-2.5 bg-primary"
