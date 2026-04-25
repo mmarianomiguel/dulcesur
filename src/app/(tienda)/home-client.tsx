@@ -1254,13 +1254,14 @@ export default function TiendaPage({
             let prods: any[] | null = null;
 
             if (orden === "manual" || orden === "recientes") {
-              // Try featured products first
+              // Try featured products first — orden manual de admin (orden_destacado).
               const { data: featured } = await supabase
                 .from("productos")
                 .select(baseSelect)
                 .eq("activo", true)
                 .eq("visibilidad", "visible")
                 .eq("destacado", true)
+                .order("orden_destacado", { ascending: true, nullsFirst: false })
                 .order("nombre", { ascending: true })
                 .limit(maxItems);
 

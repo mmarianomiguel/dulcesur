@@ -62,12 +62,15 @@ export default async function TiendaHomePage() {
 
         let prods: any[] | null = null;
         if (orden === "manual" || orden === "recientes") {
+          // Orden: primero por orden_destacado (manual desde admin), después por nombre.
+          // nullsFirst: false para que los productos sin orden manual queden al final.
           const { data: featured } = await supabase
             .from("productos")
             .select(baseSelect)
             .eq("activo", true)
             .eq("visibilidad", "visible")
             .eq("destacado", true)
+            .order("orden_destacado", { ascending: true, nullsFirst: false })
             .order("nombre", { ascending: true })
             .limit(maxItems);
           if (featured && featured.length > 0) prods = featured;

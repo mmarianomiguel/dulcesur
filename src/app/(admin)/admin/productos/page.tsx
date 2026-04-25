@@ -73,6 +73,8 @@ import {
   MoreHorizontal,
   Printer,
   DollarSign,
+  ArrowUpDown,
+  GripVertical,
 } from "lucide-react";
 
 import { ImageUpload } from "@/components/image-upload";
@@ -207,6 +209,11 @@ export default function ProductosPage() {
   const [tiendaFilter, setTiendaFilter] = useState("all");
   const [comboFilter, setComboFilter] = useState("all");
   const [soloDestacado, setSoloDestacado] = useState(false);
+  // Dialog para reordenar destacados con drag & drop.
+  const [showReorderDialog, setShowReorderDialog] = useState(false);
+  const [reorderList, setReorderList] = useState<any[]>([]);
+  const [reorderDragId, setReorderDragId] = useState<string | null>(null);
+  const [savingReorder, setSavingReorder] = useState(false);
   const [sortBy, setSortBy] = useState("nombre_asc");
   const [page, setPage] = useState(1);
   // Combobox states
@@ -2502,6 +2509,29 @@ export default function ProductosPage() {
                   {products.filter((p: any) => p.destacado).length}/8
                 </span>
               </Button>
+              {products.filter((p: any) => p.destacado).length > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => {
+                    const dest = products
+                      .filter((p: any) => p.destacado)
+                      .sort((a: any, b: any) => {
+                        const oa = a.orden_destacado ?? 999999;
+                        const ob = b.orden_destacado ?? 999999;
+                        if (oa !== ob) return oa - ob;
+                        return a.nombre.localeCompare(b.nombre);
+                      });
+                    setReorderList(dest);
+                    setShowReorderDialog(true);
+                  }}
+                  title="Reordenar productos destacados (drag & drop)"
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="hidden sm:inline">Ordenar destacados</span>
+                </Button>
+              )}
               <Button
                 variant={comboFilter === "si" ? "default" : "outline"}
                 size="sm"
@@ -5644,6 +5674,70 @@ export default function ProductosPage() {
                 Aplicar cambios
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reordenar destacados — drag & drop */}
+      <Dialog open={showReorderDialog} onOpenChange={setShowReorderDialog}>
+        <DialogContent className="max-w-md p-0 gap-0 max-h-[85vh] flex flex-col">
+          <div className="px-4 py-3 border-b">
+            <h3 className="font-semibold text-base flex items-center gap-2"><ArrowUpDown className="w-4 h-4" /> Reordenar destacados</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Arrastrá los productos para cambiar el orden con el que aparecen en la tienda.</p>
+          </div>
+          <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+            {reorderList.map((p: any, idx: number) => (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={() => setReorderDragId(p.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (!reorderDragId || reorderDragId === p.id) return;
+                  setReorderList((prev) => {
+                    const fromIdx = prev.findIndex((x) => x.id === reorderDragId);
+                    const toIdx = prev.findIndex((x) => x.id === p.id);
+                    if (fromIdx < 0 || toIdx < 0) return prev;
+                    const next = [...prev];
+                    const [moved] = next.splice(fromIdx, 1);
+                    next.splice(toIdx, 0, moved);
+                    return next;
+                  });
+                  setReorderDragId(null);
+                }}
+                onDragEnd={() => setReorderDragId(null)}
+                className={`flex items-center gap-2 px-2 py-2 rounded-lg border bg-background hover:bg-muted/50 cursor-move transition ${reorderDragId === p.id ? "opacity-40" : ""}`}
+              >
+                <GripVertical className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-xs font-mono text-muted-foreground w-5 text-right">{idx + 1}</span>
+                {p.imagen_url ? <img src={p.imagen_url} alt="" className="w-8 h-8 rounded object-cover shrink-0" /> : <div className="w-8 h-8 rounded bg-muted shrink-0" />}
+                <span className="text-sm font-medium flex-1 truncate">{p.nombre}</span>
+              </div>
+            ))}
+            {reorderList.length === 0 && <p className="text-center text-xs text-muted-foreground py-8">No hay productos destacados</p>}
+          </div>
+          <div className="px-4 py-3 border-t flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowReorderDialog(false)}>Cancelar</Button>
+            <Button
+              disabled={savingReorder}
+              onClick={async () => {
+                setSavingReorder(true);
+                // Persistir orden_destacado por producto.
+                const updates = reorderList.map((p, idx) => supabase.from("productos").update({ orden_destacado: idx + 1 }).eq("id", p.id));
+                await Promise.all(updates);
+                // Actualizar state local también para que la UI no quede desincronizada.
+                setProducts((prev) => prev.map((pr: any) => {
+                  const newOrder = reorderList.findIndex((x) => x.id === pr.id);
+                  return newOrder >= 0 ? { ...pr, orden_destacado: newOrder + 1 } : pr;
+                }));
+                setSavingReorder(false);
+                setShowReorderDialog(false);
+                showAdminToast("Orden de destacados guardado", "success");
+              }}
+            >
+              {savingReorder && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Guardar orden
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
