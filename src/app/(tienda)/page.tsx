@@ -264,17 +264,27 @@ export default async function TiendaHomePage() {
       pf += PAGE_PROD;
     }
 
-    const reingresoSet = new Set<string>();
-    const filtered = allProds.filter((p: any) => {
+    // SEPARAR estrictamente:
+    // - "Nuevos": producto creado dentro del período (totalmente nuevo del catálogo).
+    // - "De vuelta": producto creado ANTES del período pero con cantidad_antes <= 0 en algún movimiento reciente.
+    const nuevosOnly: any[] = [];
+    const reingresosOnly: any[] = [];
+    for (const p of allProds) {
       const createdMs = p.created_at ? new Date(p.created_at).getTime() : 0;
-      const esNuevoCatalogo = createdMs >= cutoffMs;
-      const esReingresoReal = !esNuevoCatalogo && reingresoCandidate.has(p.id);
-      if (esReingresoReal) reingresoSet.add(p.id);
-      return esNuevoCatalogo || esReingresoReal;
-    });
-    // Ordenar por la fecha del movimiento más reciente DESC (los recién comprados primero), no por created_at del producto.
-    filtered.sort((a: any, b: any) => (ultMovPorProd[b.id] || "").localeCompare(ultMovPorProd[a.id] || ""));
-    return { data: filtered.slice(0, maxNuevos), reingresoSet };
+      if (createdMs >= cutoffMs) {
+        nuevosOnly.push(p);
+      } else if (reingresoCandidate.has(p.id)) {
+        reingresosOnly.push(p);
+      }
+    }
+    // Ordenar ambos por fecha del movimiento más reciente DESC.
+    const sortByMov = (a: any, b: any) => (ultMovPorProd[b.id] || "").localeCompare(ultMovPorProd[a.id] || "");
+    nuevosOnly.sort(sortByMov);
+    reingresosOnly.sort(sortByMov);
+    return {
+      data: nuevosOnly.slice(0, maxNuevos),
+      reingresos: reingresosOnly.slice(0, maxNuevos),
+    };
   })();
 
   // topVentasResult no depende de nada → se arranca junto al grupo crítico
@@ -317,16 +327,14 @@ export default async function TiendaHomePage() {
     topVentasResult,
   ]);
   const nuevosRaw = nuevosResult.data || [];
-  const reingresoSet = nuevosResult.reingresoSet || new Set<string>();
+  const reingresosRaw = nuevosResult.reingresos || [];
 
   const aumentos = (aumentosRaw || [])
     .filter((p: any) => Number(p.precio) > Number(p.precio_anterior))
     .slice(0, maxAumentosHome);
-  // Marcar cada producto con _esReingreso para distinguir badge en el cliente.
-  const nuevosIngresos = (nuevosRaw || []).slice(0, maxNuevos).map((p: any) => ({
-    ...p,
-    _esReingreso: reingresoSet.has(p.id),
-  }));
+  // Listas separadas para cada tab.
+  const nuevosIngresos = nuevosRaw.slice(0, maxNuevos);
+  const reingresos = reingresosRaw.slice(0, maxNuevos);
 
   // Presentaciones productos destacados
   const presMap: Record<string, any[]> = {};
@@ -415,6 +423,7 @@ export default async function TiendaHomePage() {
       initialTopVendidos={topVendidosProds}
       initialTopPresMap={topPresMap}
       initialNuevosIngresos={nuevosIngresos}
+      initialReingresos={reingresos}
       initialActiveDiscounts={descRows || []}
     />
   );

@@ -321,6 +321,7 @@ function ProductosDestacadosBlock({
   diasNuevo,
   masVendidos = [],
   nuevosIngresos = [],
+  reingresos = [],
   activeDiscounts = [],
 }: {
   config: Record<string, any>;
@@ -331,6 +332,7 @@ function ProductosDestacadosBlock({
   diasNuevo: number;
   masVendidos?: any[];
   nuevosIngresos?: any[];
+  reingresos?: any[];
   activeDiscounts?: any[];
 }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
@@ -391,7 +393,7 @@ function ProductosDestacadosBlock({
     }).slice(0, maxItems);
 
   // Selector de período para "Más vendidos" — el cliente puede cambiarlo en runtime.
-  const [vendidosPeriodo, setVendidosPeriodo] = useState<7 | 30 | 90>(30);
+  const [vendidosPeriodo, setVendidosPeriodo] = useState<7 | 30 | 90>(7);
   const [masVendidosLocal, setMasVendidosLocal] = useState<any[] | null>(null);
   const [vendidosLoading, setVendidosLoading] = useState(false);
   useEffect(() => {
@@ -427,17 +429,15 @@ function ProductosDestacadosBlock({
 
   const destacados = filterCats(productos);
   const vendidos = filterCats((masVendidosLocal ?? masVendidos));
-  // Tab "Nuevos": incluye TODOS los productos con ingreso reciente (nuevos del catálogo + reingresos),
-  // diferenciados por badge ("✨ Nuevo" vs "🔄 De vuelta"). Match con la expectativa del usuario:
-  // "compré algo, debería verlo en nuevos ingresos".
+  // Tab "Nuevos": SOLO productos genuinamente nuevos del catálogo (created_at en últimos 7 días).
   const nuevos = filterCats(nuevosIngresos);
-  // Tab "De vuelta": subset filtrado, solo reingresos. Para quien quiere ver únicamente eso.
-  const reingresos = nuevos.filter((p: any) => p._esReingreso);
+  // Tab "De vuelta": SOLO reingresos (productos viejos que volvieron del 0).
+  const reingresosFiltered = filterCats(reingresos);
 
   const activeProds: any[] =
     activeTab === "destacados" ? destacados :
     activeTab === "mas_vendidos" ? vendidos :
-    activeTab === "reingresos" ? reingresos :
+    activeTab === "reingresos" ? reingresosFiltered :
     nuevos;
 
   const GRUPO_SIZE_MOBILE = 2;
@@ -456,10 +456,11 @@ function ProductosDestacadosBlock({
     destacados: { label: "Destacados", icon: Star, count: destacados.length },
     mas_vendidos: { label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
     nuevos: { label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
-    reingresos: { label: "De vuelta en stock", icon: RotateCw, count: reingresos.length },
+    reingresos: { label: "De vuelta en stock", icon: RotateCw, count: reingresosFiltered.length },
   };
-  const tabs: TabEntry[] = activeTabsConfig.flatMap((t) => {
-    const key = t.key as TabKey;
+  // Orden fijo: Nuevos → De vuelta → Destacados → Más vendidos.
+  const ordenTabs: TabKey[] = ["nuevos", "reingresos", "destacados", "mas_vendidos"];
+  const tabs: TabEntry[] = ordenTabs.flatMap((key) => {
     const meta = allTabsMeta[key];
     if (!meta || meta.count <= 0) return [];
     return [{ key, ...meta }];
@@ -622,15 +623,15 @@ function ProductosDestacadosBlock({
                 <span className="bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">COMBO</span>
               )}
               {activeTab === "nuevos" && !sinStock && (
-                (prod as any)._esReingreso ? (
-                  <span className="bg-cyan-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1" title="Producto que volvió al stock">
-                    🔄 Ingresó · De vuelta
-                  </span>
-                ) : (
-                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1" title="Producto nuevo del catálogo">
-                    🆕 Ingresó · Nuevo
-                  </span>
-                )
+                <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">NUEVO</span>
+              )}
+              {activeTab === "reingresos" && !sinStock && (
+                <span className="bg-cyan-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">RE INGRESO</span>
+              )}
+              {activeTab === "destacados" && !sinStock && (
+                <span className="bg-violet-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5">
+                  <Star className="w-2.5 h-2.5" /> Destacado
+                </span>
               )}
               {activeTab === "mas_vendidos" && !sinStock && (
                 <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5">
@@ -1255,6 +1256,7 @@ interface HomeClientProps {
   initialTopVendidos?: any[];
   initialTopPresMap?: Record<string, any[]>;
   initialNuevosIngresos?: any[];
+  initialReingresos?: any[];
   initialActiveDiscounts?: any[];
 }
 
@@ -1270,6 +1272,7 @@ export default function TiendaPage({
   initialTopVendidos = [],
   initialTopPresMap = {},
   initialNuevosIngresos = [],
+  initialReingresos = [],
   initialActiveDiscounts = [],
 }: HomeClientProps = {}) {
   const hasInitial = !!initialBloques;
@@ -1496,6 +1499,7 @@ export default function TiendaPage({
             diasNuevo={diasNuevo}
             masVendidos={initialTopVendidos}
             nuevosIngresos={initialNuevosIngresos}
+            reingresos={initialReingresos}
             activeDiscounts={initialActiveDiscounts}
           />
         );
