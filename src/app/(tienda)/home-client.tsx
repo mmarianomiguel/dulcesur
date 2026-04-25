@@ -623,11 +623,13 @@ function ProductosDestacadosBlock({
               )}
               {activeTab === "nuevos" && !sinStock && (
                 (prod as any)._esReingreso ? (
-                  <span className="bg-cyan-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5" title="Volvió al stock">
-                    🔄 De vuelta
+                  <span className="bg-cyan-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1" title="Producto que volvió al stock">
+                    🔄 Ingresó · De vuelta
                   </span>
                 ) : (
-                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">✨ Nuevo</span>
+                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1" title="Producto nuevo del catálogo">
+                    🆕 Ingresó · Nuevo
+                  </span>
                 )
               )}
               {activeTab === "mas_vendidos" && !sinStock && (
