@@ -7,7 +7,7 @@ Sistema integrado de ecommerce y punto de venta (POS) para negocio mayorista/min
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui
 - **Backend**: Next.js API Routes, Supabase (PostgreSQL + Auth + Realtime)
 - **Integraciones**: Stripe (pagos), Cloudinary (imágenes), jsPDF (recibos), XLSX (Excel)
-- **Deploy**: VPS con webhook de git pull automático
+- **Deploy**: Vercel (auto-deploy desde push a main en GitHub)
 
 ## Estructura del proyecto
 ```
@@ -76,12 +76,12 @@ Sistema integrado de ecommerce y punto de venta (POS) para negocio mayorista/min
 
 ## Base de datos (Supabase PostgreSQL)
 Tablas principales:
-- **empresa**: Config de la empresa, datos fiscales, white-label, defaults
+- **empresa**: Config de la empresa, datos fiscales, white-label, defaults. Incluye `localidad` (usado por hoja-ruta para optimización).
 - **usuarios**: Usuarios del sistema con roles
-- **productos**: Catálogo con SKU, precios, costos, stock, unidades
+- **productos**: Catálogo con SKU, precios, costos, stock, unidades. Incluye `codigos_adicionales TEXT[]` (multi-barcode para mismo producto, ej: sabores rotativos).
 - **categorias / marcas**: Clasificación de productos
 - **presentaciones**: Variantes de producto (distintas unidades/precios)
-- **clientes**: Datos completos, situación IVA, zona de entrega, saldo
+- **clientes**: Datos completos, situación IVA, zona de entrega, saldo. Incluye `maps_url` (link Google Maps usado por hoja-ruta cuando la dirección no geocodifica bien).
 - **proveedores**: Proveedores con saldo
 - **ventas / venta_items**: Cabecera y detalle de ventas
 - **compras / compra_items**: Cabecera y detalle de compras
@@ -89,7 +89,11 @@ Tablas principales:
 - **cuenta_corriente**: Historial de transacciones por cliente
 - **zona_entrega**: Zonas de entrega con días configurables
 - **stock_movimientos**: Auditoría de cambios de stock
+- **descuentos**: Descuentos activos. Soporta `tipo_descuento: "porcentaje" | "precio_fijo"` + `precio_fijo` (interpretado como precio por unidad — se multiplica por cantidad de la presentación al vender caja).
 - **numeradores**: Numeración secuencial de comprobantes
+
+### RPCs importantes
+- `atomic_update_stock(uuid, numeric, boolean DEFAULT false)`: actualización atómica de stock con `FOR UPDATE`. El tercer parámetro `p_allow_negative` permite stock negativo (usado solo desde Ajustes de Stock para registrar faltantes que se reponen al ingresar mercadería). El resto de los flujos pasa solo 2 args y el cap en 0 se mantiene.
 
 ## Funcionalidades implementadas
 
@@ -119,7 +123,7 @@ Tablas principales:
 - `POST /api/usuarios` - Crear usuario (Supabase Auth + tabla)
 - `DELETE /api/usuarios` - Desactivar usuario (soft delete)
 - `POST /api/upload` - Subir imagen a Cloudinary
-- `POST /api/pull` - Webhook para git pull (deploy automático, requiere x-pull-secret)
+- `POST /api/hoja-ruta/optimizar` - Optimización de ruta vía OpenRouteService. Soporta `mapsUrl` por parada (extrae coords exactas del link de Google Maps).
 
 ## Variables de entorno requeridas
 ```
@@ -141,4 +145,20 @@ PULL_SECRET
 - Componentes UI con shadcn/ui, estilos con Tailwind
 - Auth: middleware protege /admin, redirige a /login si no autenticado
 - Moneda: ARS (peso argentino), formato con separador de miles punto y decimal coma
-- Siempre commitear y pushear después de cada cambio
+- Siempre commitear y pushear después de cada cambio (Vercel auto-deployea desde main)
+
+### REGLA CRÍTICA — Supabase row cap
+Supabase trunca a **1000 filas por defecto** cualquier `.select()` que no incluya `.range()`, `.limit()`, `.single()` o `.maybeSingle()`. **Falla en silencio**: no hay error, simplemente faltan datos.
+
+Sobre tablas que crecen (`venta_items`, `caja_movimientos`, `cuenta_corriente`, `stock_movimientos`, `cobros`, `cobro_items`, `precio_historial`, `pedidos_tienda`, `ventas` por período amplio, `clientes`/`productos` cuando se traen completos), **siempre** usar `.range(0, N)`. Convención de tamaños:
+- `4.999` para descuentos
+- `9.999` para combo_items / cobros
+- `49.999` para ventas o movimientos por período
+- `99.999-199.999` para totales globales (todos los CC)
+
+Si tenés que iterar muchos IDs en un `.in(...)`, batchear en chunks de ~200 y agregar range a cada chunk.
+
+### Otras notas
+- Hoja de ruta (`hoja-ruta/page.tsx`): el orden se persiste en `hoja_ruta_items` solo al apretar "Actualizar Ruta" / "Guardar y Compartir". Cambios locales no sincronizan al celular hasta apretar el botón.
+- Compras: el costo del producto maestro NO se actualiza salvo que el usuario marque explícitamente el chip "Costo" o "PVP" en el ítem (default off).
+- `fecha_actualizacion` en productos solo se bumpea cuando cambia el **precio** (no el costo), porque alimenta la página de "Aumentos recientes".
