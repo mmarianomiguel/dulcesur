@@ -22,7 +22,7 @@ export default async function TiendaHomePage() {
   ]);
 
   const blocks = (bloquesRes.data || []) as any[];
-  const diasNuevo: number = configRes.data?.dias_badge_nuevo ?? 7;
+  const diasNuevo: number = configRes.data?.dias_badge_nuevo ?? 5;
   const tipos = blocks.map((b) => b.tipo);
 
   // 2. Fetch categories and products in parallel based on block types
@@ -150,7 +150,7 @@ export default async function TiendaHomePage() {
   const bloqueUltimas = blocks.find((b: any) => b.tipo === "ultimas_unidades");
 
   const diasMasVendidos = bloqueMasVendidos?.config?.dias_atras ?? 30;
-  const diasNuevos = bloqueNuevos?.config?.dias_atras ?? 7;
+  const diasNuevos = bloqueNuevos?.config?.dias_atras ?? 5;
   const diasAumentos = bloqueAumentos?.config?.dias_atras ?? 3;
   const maxNuevos = bloqueNuevos?.config?.max_items ?? 16;
   const maxMasVendidos = bloqueMasVendidos?.config?.max_items ?? 8;
