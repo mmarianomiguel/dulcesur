@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
@@ -68,6 +68,7 @@ interface ProductoClientProps {
   relacionados: any[];
   relPresentaciones: Record<string, any[]>;
   activeDiscounts: any[];
+  reingresoIds?: string[];
 }
 
 export default function ProductoClient({
@@ -77,7 +78,9 @@ export default function ProductoClient({
   relacionados: initialRelacionados,
   relPresentaciones: initialRelPresentaciones,
   activeDiscounts: initialDiscounts,
+  reingresoIds = [],
 }: ProductoClientProps) {
+  const reingresoSet = useMemo(() => new Set<string>(reingresoIds), [reingresoIds]);
   const [producto, setProducto] = useState<Producto | null>(initialProducto);
   const [presentaciones, setPresentaciones] = useState<Presentacion[]>(initialPresentaciones);
   const [selectedPresIdx, setSelectedPresIdx] = useState(() => {
@@ -575,6 +578,13 @@ export default function ProductoClient({
                   ? <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-full">Precio actualizado</span>
                   : <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">Precio rebajado</span>;
               })()}
+              {/* Badge NUEVO o RE INGRESO en el detalle del producto principal */}
+              {producto.created_at && daysSinceAR(producto.created_at) <= 7 && (
+                <span className="bg-blue-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">NUEVO</span>
+              )}
+              {producto.created_at && daysSinceAR(producto.created_at) > 7 && reingresoSet.has(producto.id) && (
+                <span className="bg-cyan-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">RE INGRESO</span>
+              )}
             </div>
             {!clienteLoading && currentDiscount > 0 && (
               <div className="flex items-center gap-3 mt-1">
@@ -914,6 +924,11 @@ export default function ProductoClient({
                         {isNew && !relDiscount && !relVolHint && (
                           <span className="absolute top-2 left-2 z-10 bg-blue-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow">
                             NUEVO
+                          </span>
+                        )}
+                        {!isNew && reingresoSet.has(rel.id) && !relDiscount && !relVolHint && (
+                          <span className="absolute top-2 left-2 z-10 bg-cyan-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow">
+                            RE INGRESO
                           </span>
                         )}
                         {rel.imagen_url ? (

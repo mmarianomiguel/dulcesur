@@ -85,6 +85,44 @@ export default async function ProductosServerPage() {
     });
   }
 
+  // Re-ingresos: productos viejos del catálogo que volvieron del stock 0 en los últimos 5 días.
+  // Mismo período que el badge "Nuevos" del home.
+  const diasReingreso = 5;
+  const cutoffReingreso = new Date(Date.now() - diasReingreso * 24 * 60 * 60 * 1000).toISOString();
+  const cutoffNuevoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const reingresoIds: string[] = [];
+  {
+    const PAGE_SM = 1000;
+    let from = 0;
+    const movs: { producto_id: string }[] = [];
+    while (true) {
+      const { data: chunk } = await supabase
+        .from("stock_movimientos")
+        .select("producto_id")
+        .in("tipo", ["compra", "ajuste_ingreso"])
+        .gt("cantidad_despues", 0)
+        .lte("cantidad_antes", 0)
+        .gt("created_at", cutoffReingreso)
+        .range(from, from + PAGE_SM - 1);
+      const rows = (chunk || []) as { producto_id: string }[];
+      movs.push(...rows);
+      if (rows.length < PAGE_SM) break;
+      from += PAGE_SM;
+    }
+    const candidateIds = Array.from(new Set(movs.map((m) => m.producto_id)));
+    if (candidateIds.length > 0) {
+      // Excluir productos que YA son "nuevos del catálogo" (created_at reciente) — ahí va el badge NUEVO.
+      const { data: prodMeta } = await supabase
+        .from("productos")
+        .select("id, created_at")
+        .in("id", candidateIds);
+      for (const p of prodMeta || []) {
+        const createdMs = (p as any).created_at ? new Date((p as any).created_at).getTime() : 0;
+        if (createdMs < cutoffNuevoMs) reingresoIds.push((p as any).id);
+      }
+    }
+  }
+
   const initialData: InitialProductosData = {
     productos,
     categorias,
@@ -94,6 +132,7 @@ export default async function ProductosServerPage() {
     presentacionesMap,
     activeDiscounts,
     diasOcultarSinStock: dias,
+    reingresoIds,
   };
 
   return <ProductosPage initialData={initialData} />;

@@ -110,6 +110,34 @@ export default async function ProductoPage({ params }: { params: Promise<{ slug:
     });
   }
 
+  // Re-ingresos: chequear si el producto principal o alguno de los relacionados es un re-ingreso reciente.
+  const idsToCheck = [productId, ...related.map((r: any) => r.id)];
+  const cutoffReingresoIso = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const cutoffNuevoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const reingresoIds: string[] = [];
+  if (idsToCheck.length > 0) {
+    const { data: movs } = await supabase
+      .from("stock_movimientos")
+      .select("producto_id")
+      .in("producto_id", idsToCheck)
+      .in("tipo", ["compra", "ajuste_ingreso"])
+      .gt("cantidad_despues", 0)
+      .lte("cantidad_antes", 0)
+      .gt("created_at", cutoffReingresoIso)
+      .limit(500);
+    const cand = new Set<string>((movs || []).map((m: any) => m.producto_id));
+    // Excluir los productos creados recientemente (esos llevan badge NUEVO).
+    for (const id of cand) {
+      let createdMs = 0;
+      if (id === productId) createdMs = (prod as any).created_at ? new Date((prod as any).created_at).getTime() : 0;
+      else {
+        const r = related.find((x: any) => x.id === id);
+        createdMs = r?.created_at ? new Date(r.created_at).getTime() : 0;
+      }
+      if (createdMs && createdMs < cutoffNuevoMs) reingresoIds.push(id);
+    }
+  }
+
   return (
     <ProductoClient
       producto={prod as any}
@@ -118,6 +146,7 @@ export default async function ProductoPage({ params }: { params: Promise<{ slug:
       relacionados={related}
       relPresentaciones={relPresMap}
       activeDiscounts={activeDiscounts}
+      reingresoIds={reingresoIds}
     />
   );
 }

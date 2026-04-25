@@ -141,6 +141,7 @@ export interface InitialProductosData {
   presentacionesMap: Record<string, { nombre: string; cantidad: number; precio: number }[]>;
   activeDiscounts: any[];
   diasOcultarSinStock: number;
+  reingresoIds?: string[];
 }
 
 function cutoffARG(dias: number): string {
@@ -186,6 +187,8 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({}); // productId -> presentacion index
   const [cartUnits, setCartUnits] = useState<Record<string, number>>({}); // productId -> total units in cart
   const [diasOcultarSinStock, setDiasOcultarSinStock] = useState(initialData?.diasOcultarSinStock ?? 7);
+  // Set de IDs de productos en reingreso (badge "RE INGRESO" para productos viejos del catálogo que volvieron del 0).
+  const reingresoSet = useMemo(() => new Set<string>(initialData?.reingresoIds || []), [initialData?.reingresoIds]);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
   // Resolve tienda cliente_id for client-specific discounts
@@ -1592,10 +1595,16 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             {volHint.pct}% OFF x{volHint.minQty}+ {volHint.label}
                           </span>
                         );
-                        // "New" badge
+                        // "New" badge — productos creados en últimos 7 días
                         if (producto.created_at && daysSinceAR(producto.created_at) <= 7) return (
                           <span className="absolute top-2.5 left-2.5 bg-blue-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
                             NUEVO
+                          </span>
+                        );
+                        // "Re ingreso" badge — productos viejos que volvieron del stock 0 en últimos 5 días
+                        if (reingresoSet.has(producto.id)) return (
+                          <span className="absolute top-2.5 left-2.5 bg-cyan-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-md">
+                            RE INGRESO
                           </span>
                         );
                         return null;
