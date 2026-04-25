@@ -160,6 +160,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const { filtrarCategorias, permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
 
   const hasInitial = !!initialData;
+  // Si arrancamos con datos del server y no hay filtros en la URL, evitamos
+  // el refetch inmediato del cliente (que duplicaba el trabajo del SSR y agregaba ~500ms).
+  const skipFirstFetch = useRef<boolean>(
+    hasInitial && typeof window !== "undefined" && window.location.search === ""
+  );
   const [productos, setProductos] = useState<Producto[]>(initialData?.productos || []);
   const [categorias, setCategorias] = useState<Categoria[]>(initialData?.categorias || []);
   const [subcategorias, setSubcategorias] = useState<Subcategoria[]>([]);
@@ -406,6 +411,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
 
   // Fetch products
   useEffect(() => {
+    // Saltar el primer fetch si ya tenemos los datos del SSR (carga inicial sin filtros).
+    if (skipFirstFetch.current) {
+      skipFirstFetch.current = false;
+      return;
+    }
     async function load() {
       setLoading(true);
       let query = supabase
