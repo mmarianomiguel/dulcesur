@@ -159,11 +159,13 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
         <div className="flex items-center justify-between gap-6">
           <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-bold text-white leading-tight animate-fade-in-up">
+            {/* h1 sin animación de entrada — el algoritmo LCP requiere que el elemento principal
+                sea visible inmediatamente, sino reporta NO_LCP. */}
+            <h1 className="text-2xl md:text-3xl font-bold text-white leading-tight">
               {config.titulo || "Bienvenido a nuestra tienda"}
             </h1>
             {config.subtitulo && (
-              <p className="text-sm md:text-base text-white/85 mt-2 max-w-lg animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
+              <p className="text-sm md:text-base text-white/85 mt-2 max-w-lg">
                 {config.subtitulo}
               </p>
             )}
@@ -856,10 +858,19 @@ function ProductosDestacadosBlock({
                   setTimeout(() => setPausado(false), 3000);
                 }}
                 onScroll={(e) => {
+                  // Usar requestAnimationFrame + cachear scrollWidth (vía dataset) para evitar forced reflow.
                   const el = e.currentTarget;
                   if (activeProds.length === 0) return;
-                  const cardWidth = el.scrollWidth / activeProds.length;
-                  const idx = Math.round(el.scrollLeft / (cardWidth * 2));
+                  // scrollWidth lo leemos solo una vez por activeProds.length cambio (cacheado en dataset).
+                  let cachedSW = parseFloat(el.dataset.cachedSw || "");
+                  if (!cachedSW || el.dataset.cachedCount !== String(activeProds.length)) {
+                    cachedSW = el.scrollWidth;
+                    el.dataset.cachedSw = String(cachedSW);
+                    el.dataset.cachedCount = String(activeProds.length);
+                  }
+                  const cardWidth = cachedSW / activeProds.length;
+                  const scrollLeft = el.scrollLeft; // lectura única
+                  const idx = Math.round(scrollLeft / (cardWidth * 2));
                   if (idx !== grupoActual) setGrupoActual(idx);
                 }}
               >
