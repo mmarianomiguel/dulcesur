@@ -202,17 +202,37 @@ export default async function TiendaHomePage() {
   haceNuevosDias.setHours(0, 0, 0, 0);
 
   const nuevosPromise = (async () => {
-    const { data: movimientos } = await supabase
-      .from("stock_movimientos")
-      .select("producto_id")
-      .in("tipo", ["compra", "ajuste_ingreso"])
-      .gt("cantidad_despues", 0)
-      .gt("created_at", haceNuevosDias.toISOString());
+    // Paginación EXPLÍCITA del cap default de 1000 (mismo bug que otros lugares).
+    // Tomamos también cantidad_antes para distinguir REINGRESOS (de 0 → algo) de cargas continuas.
+    const PAGE = 1000;
+    const movsAll: { producto_id: string; cantidad_antes: number; cantidad_despues: number }[] = [];
+    let from = 0;
+    while (true) {
+      const { data: chunk } = await supabase
+        .from("stock_movimientos")
+        .select("producto_id, cantidad_antes, cantidad_despues")
+        .in("tipo", ["compra", "ajuste_ingreso"])
+        .gt("cantidad_despues", 0)
+        .gt("created_at", haceNuevosDias.toISOString())
+        .range(from, from + PAGE - 1);
+      const rows = chunk || [];
+      movsAll.push(...rows as any[]);
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
 
-    const ids = [...new Set((movimientos || []).map((m: any) => m.producto_id))];
-    if (ids.length === 0) return { data: [] };
+    // Re-ingreso = el producto tuvo al menos un movimiento donde cantidad_antes <= 0
+    // (es decir, estaba sin stock y volvió). Si no, es producto nuevo del catálogo.
+    const reingresoSet = new Set<string>();
+    const allIds = new Set<string>();
+    for (const m of movsAll) {
+      allIds.add(m.producto_id);
+      if (Number(m.cantidad_antes) <= 0) reingresoSet.add(m.producto_id);
+    }
+    const ids = [...allIds];
+    if (ids.length === 0) return { data: [], reingresoSet };
 
-    return supabase
+    const res = await supabase
       .from("productos")
       .select("id, nombre, precio, imagen_url, stock, activo, es_combo, created_at, updated_at, categorias(id, nombre)")
       .eq("activo", true)
@@ -221,6 +241,7 @@ export default async function TiendaHomePage() {
       .in("id", ids)
       .order("created_at", { ascending: false })
       .limit(maxNuevos);
+    return { data: res.data || [], reingresoSet };
   })();
 
   // topVentasResult no depende de nada → se arranca junto al grupo crítico
@@ -249,7 +270,7 @@ export default async function TiendaHomePage() {
     { data: aumentosRaw },
     { data: masVendidosData },
     { data: ultimasUnidadesData },
-    { data: nuevosRaw },
+    nuevosResult,
     { data: presData },
     { data: topVentaItems },
   ] = await Promise.all([
@@ -262,9 +283,15 @@ export default async function TiendaHomePage() {
     presPromise,
     topVentasResult,
   ]);
+  const nuevosRaw = nuevosResult.data || [];
+  const reingresoSet = nuevosResult.reingresoSet || new Set<string>();
 
   const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
-  const nuevosIngresos = (nuevosRaw || []).slice(0, maxNuevos);
+  // Marcar cada producto con _esReingreso para distinguir badge en el cliente.
+  const nuevosIngresos = (nuevosRaw || []).slice(0, maxNuevos).map((p: any) => ({
+    ...p,
+    _esReingreso: reingresoSet.has(p.id),
+  }));
 
   // Presentaciones productos destacados
   const presMap: Record<string, any[]> = {};

@@ -499,7 +499,13 @@ function ProductosDestacadosBlock({
                 <span className="bg-gradient-to-r from-primary to-rose-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">COMBO</span>
               )}
               {activeTab === "nuevos" && !sinStock && (
-                <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Nuevo</span>
+                (prod as any)._esReingreso ? (
+                  <span className="bg-cyan-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5" title="Volvió al stock">
+                    🔄 De vuelta
+                  </span>
+                ) : (
+                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">✨ Nuevo</span>
+                )
               )}
               {activeTab === "mas_vendidos" && !sinStock && (
                 <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-0.5">
