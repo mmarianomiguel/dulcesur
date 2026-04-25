@@ -619,11 +619,11 @@ function ProductosDestacadosBlock({
 
   return (
     <section
-      className="py-8 md:py-10 bg-gray-50/50"
+      className="py-8 md:py-10 bg-gray-50/50 overflow-x-clip"
       onMouseEnter={() => setPausado(true)}
       onMouseLeave={() => setPausado(false)}
     >
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4 overflow-x-clip">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
@@ -694,30 +694,31 @@ function ProductosDestacadosBlock({
           <div className="text-center py-12 text-gray-400 text-sm">No hay productos disponibles en esta sección</div>
         ) : (
           <>
-            {/* Mobile: scroll-snap nativo (1 card por viewport con peek de la siguiente) */}
-            <div
-              ref={mobileScrollRef}
-              className="md:hidden flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth -mx-4 px-4 pb-1"
-              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              onTouchStart={() => setPausado(true)}
-              onTouchEnd={() => setTimeout(() => setPausado(false), 3000)}
-              onScroll={(e) => {
-                // Sincronizar grupoActual con el scroll. Cada "grupo" = 2 cards.
-                const el = e.currentTarget;
-                if (activeProds.length === 0) return;
-                const cardWidth = el.scrollWidth / activeProds.length;
-                const idx = Math.round(el.scrollLeft / (cardWidth * 2));
-                if (idx !== grupoActual) setGrupoActual(idx);
-              }}
-            >
+            {/* Mobile: scroll-snap nativo (2 cards por viewport con peek). overflow-x-clip en padre evita scroll horizontal a la página. */}
+            <div className="md:hidden -mx-4 overflow-x-clip">
+              <div
+                ref={mobileScrollRef}
+                className="mobile-snap-scroller flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth px-4 pb-1"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                onTouchStart={() => setPausado(true)}
+                onTouchEnd={() => setTimeout(() => setPausado(false), 3000)}
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  if (activeProds.length === 0) return;
+                  const cardWidth = el.scrollWidth / activeProds.length;
+                  const idx = Math.round(el.scrollLeft / (cardWidth * 2));
+                  if (idx !== grupoActual) setGrupoActual(idx);
+                }}
+              >
+                {activeProds.map((prod, idx) => (
+                  <div key={prod.id} className="snap-start shrink-0" style={{ width: "calc((100vw - 2rem - 0.75rem) / 2)", maxWidth: "240px" }}>
+                    {renderProductCard(prod, idx < 4)}
+                  </div>
+                ))}
+              </div>
               <style jsx>{`
-                div::-webkit-scrollbar { display: none; }
+                .mobile-snap-scroller::-webkit-scrollbar { display: none; }
               `}</style>
-              {activeProds.map((prod, idx) => (
-                <div key={prod.id} className="snap-start shrink-0" style={{ width: "calc((100% - 0.75rem) / 2)" }}>
-                  {renderProductCard(prod, idx < 4)}
-                </div>
-              ))}
             </div>
 
             {/* Desktop: grilla 1x4 normal */}
