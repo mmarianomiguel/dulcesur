@@ -158,19 +158,27 @@ export default function ReportesPage() {
     // Fetch venta items for profit calc
     if (vts && vts.length > 0) {
       const ids = vts.map((v: any) => v.id);
-      const [{ data: items }, { data: movs }] = await Promise.all([
-        supabase
+      // Batch venta_items para evitar el cap default de 1000 rows de Supabase.
+      const itemsBatchSize = 200;
+      const allItems: any[] = [];
+      for (let i = 0; i < ids.length; i += itemsBatchSize) {
+        const chunk = ids.slice(i, i + itemsBatchSize);
+        const { data: chunkItems } = await supabase
           .from("venta_items")
           .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, costo_unitario, productos(costo, nombre, categoria_id, subcategoria_id)")
-          .in("venta_id", ids),
-        supabase
-          .from("caja_movimientos")
-          .select("referencia_id, referencia_tipo, metodo_pago, monto")
-          .eq("tipo", "ingreso")
-          .eq("referencia_tipo", "venta")
-          .in("referencia_id", ids),
-      ]);
-      setVentaItems((items || []) as any[]);
+          .in("venta_id", chunk)
+          .range(0, 49999);
+        if (chunkItems) allItems.push(...chunkItems);
+      }
+      const items = allItems;
+      const { data: movs } = await supabase
+        .from("caja_movimientos")
+        .select("referencia_id, referencia_tipo, metodo_pago, monto")
+        .eq("tipo", "ingreso")
+        .eq("referencia_tipo", "venta")
+        .in("referencia_id", ids)
+        .range(0, 49999);
+      setVentaItems(items as any[]);
       setCajaMovimientos((movs || []) as any[]);
 
       // Build NC items profit + description maps

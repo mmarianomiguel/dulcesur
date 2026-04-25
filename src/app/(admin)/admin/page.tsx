@@ -534,7 +534,7 @@ export default function DashboardPage() {
       supabase.from("clientes").select("id, nombre, saldo").eq("activo", true),
       supabase.from("proveedores").select("saldo").eq("activo", true),
       supabase.from("cuenta_corriente").select("cliente_id, debe, haber"),
-      supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada"),
+      supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada").range(0, 49999),
     ]);
 
     // Start pedidos online fetch en paralelo con el procesamiento
