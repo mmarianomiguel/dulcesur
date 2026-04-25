@@ -122,19 +122,30 @@ export default function ReportesPage() {
       .map((v: any) => ({ ...v, clientes: Array.isArray(v.clientes) ? v.clientes[0] || null : v.clientes })) as VentaRow[];
     setVentas(ventasList);
 
-    // Batch fetch NC deductions for non-NC sales
+    // Batch fetch NC deductions for non-NC sales — chunkear para evitar URL too long (400).
     const nonNcIds = ventasList.filter(v => !v.tipo_comprobante.toLowerCase().includes("nota de crédito")).map(v => v.id);
     if (nonNcIds.length > 0) {
-      const { data: ncsData } = await supabase
-        .from("ventas")
-        .select("remito_origen_id, total")
-        .in("remito_origen_id", nonNcIds)
-        .ilike("tipo_comprobante", "Nota de Crédito%")
-        .neq("estado", "anulada");
+      const ID_CHUNK = 100;
       const ncMap: Record<string, number> = {};
-      (ncsData || []).forEach((nc: any) => {
-        if (nc.remito_origen_id) ncMap[nc.remito_origen_id] = (ncMap[nc.remito_origen_id] || 0) + (nc.total || 0);
-      });
+      for (let i = 0; i < nonNcIds.length; i += ID_CHUNK) {
+        const chunk = nonNcIds.slice(i, i + ID_CHUNK);
+        let from = 0;
+        while (true) {
+          const { data: ncsData } = await supabase
+            .from("ventas")
+            .select("remito_origen_id, total")
+            .in("remito_origen_id", chunk)
+            .ilike("tipo_comprobante", "Nota de Crédito%")
+            .neq("estado", "anulada")
+            .range(from, from + 999);
+          const rows = ncsData || [];
+          rows.forEach((nc: any) => {
+            if (nc.remito_origen_id) ncMap[nc.remito_origen_id] = (ncMap[nc.remito_origen_id] || 0) + (nc.total || 0);
+          });
+          if (rows.length < 1000) break;
+          from += 1000;
+        }
+      }
       setNcPorVenta(ncMap);
     } else {
       setNcPorVenta({});
@@ -180,15 +191,28 @@ export default function ReportesPage() {
         }
       }
       const items = allItems;
-      const { data: movs } = await supabase
-        .from("caja_movimientos")
-        .select("referencia_id, referencia_tipo, metodo_pago, monto")
-        .eq("tipo", "ingreso")
-        .eq("referencia_tipo", "venta")
-        .in("referencia_id", ids)
-        .range(0, 49999);
+      // Caja movimientos también chunkeados (URL too long si .in() con muchos IDs).
+      const ID_CHUNK_CM = 100;
+      const allMovs: any[] = [];
+      for (let i = 0; i < ids.length; i += ID_CHUNK_CM) {
+        const chunk = ids.slice(i, i + ID_CHUNK_CM);
+        let from = 0;
+        while (true) {
+          const { data: movs } = await supabase
+            .from("caja_movimientos")
+            .select("referencia_id, referencia_tipo, metodo_pago, monto")
+            .eq("tipo", "ingreso")
+            .eq("referencia_tipo", "venta")
+            .in("referencia_id", chunk)
+            .range(from, from + 999);
+          const rows = movs || [];
+          allMovs.push(...rows);
+          if (rows.length < 1000) break;
+          from += 1000;
+        }
+      }
       setVentaItems(items as any[]);
-      setCajaMovimientos((movs || []) as any[]);
+      setCajaMovimientos(allMovs);
 
       // Build NC items profit + description maps
       const ncVentas = ventasList.filter(v => (v.tipo_comprobante || "").toLowerCase().includes("nota de crédito") && v.remito_origen_id);
