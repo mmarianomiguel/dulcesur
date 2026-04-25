@@ -205,6 +205,12 @@ export default async function TiendaHomePage() {
   const haceNuevosDias = new Date(ahoraAR);
   haceNuevosDias.setDate(haceNuevosDias.getDate() - diasNuevos);
   haceNuevosDias.setHours(0, 0, 0, 0);
+  // Reingresos duran menos que nuevos (4 días vs 5).
+  const diasReingresoHome = 4;
+  const haceReingresoDias = new Date(ahoraAR);
+  haceReingresoDias.setDate(haceReingresoDias.getDate() - diasReingresoHome);
+  haceReingresoDias.setHours(0, 0, 0, 0);
+  const cutoffReingresoMs = haceReingresoDias.getTime();
 
   const nuevosPromise = (async () => {
     // Paginación EXPLÍCITA del cap default de 1000 (mismo bug que otros lugares).
@@ -265,8 +271,8 @@ export default async function TiendaHomePage() {
     }
 
     // SEPARAR estrictamente:
-    // - "Nuevos": producto creado dentro del período (totalmente nuevo del catálogo).
-    // - "De vuelta": producto creado ANTES del período pero con cantidad_antes <= 0 en algún movimiento reciente.
+    // - "Nuevos": producto creado dentro del período (totalmente nuevo del catálogo). Dura `diasNuevos` (5).
+    // - "De vuelta": producto creado ANTES del período pero con cantidad_antes <= 0 en movimiento reciente. Dura `diasReingresoHome` (4).
     const nuevosOnly: any[] = [];
     const reingresosOnly: any[] = [];
     for (const p of allProds) {
@@ -274,7 +280,9 @@ export default async function TiendaHomePage() {
       if (createdMs >= cutoffMs) {
         nuevosOnly.push(p);
       } else if (reingresoCandidate.has(p.id)) {
-        reingresosOnly.push(p);
+        // Solo cuenta como reingreso si el último movimiento es DENTRO del período de reingresos (más corto que nuevos).
+        const ultMs = ultMovPorProd[p.id] ? new Date(ultMovPorProd[p.id]).getTime() : 0;
+        if (ultMs >= cutoffReingresoMs) reingresosOnly.push(p);
       }
     }
     // Ordenar ambos por fecha del movimiento más reciente DESC.

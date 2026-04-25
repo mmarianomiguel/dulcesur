@@ -87,7 +87,7 @@ export default async function ProductosServerPage() {
 
   // Re-ingresos: productos viejos del catálogo que volvieron del stock 0 en los últimos 5 días.
   // Mismo período que el badge "Nuevos" del home.
-  const diasReingreso = 5;
+  const diasReingreso = 4;
   const cutoffReingreso = new Date(Date.now() - diasReingreso * 24 * 60 * 60 * 1000).toISOString();
   const cutoffNuevoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const reingresoIds: string[] = [];

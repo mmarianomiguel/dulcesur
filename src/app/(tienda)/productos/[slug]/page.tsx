@@ -112,7 +112,7 @@ export default async function ProductoPage({ params }: { params: Promise<{ slug:
 
   // Re-ingresos: chequear si el producto principal o alguno de los relacionados es un re-ingreso reciente.
   const idsToCheck = [productId, ...related.map((r: any) => r.id)];
-  const cutoffReingresoIso = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const cutoffReingresoIso = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
   const cutoffNuevoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const reingresoIds: string[] = [];
   if (idsToCheck.length > 0) {
