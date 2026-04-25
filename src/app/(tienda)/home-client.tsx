@@ -321,6 +321,7 @@ function ProductosDestacadosBlock({
   diasNuevo,
   masVendidos = [],
   nuevosIngresos = [],
+  activeDiscounts = [],
 }: {
   config: Record<string, any>;
   productos: Producto[];
@@ -330,6 +331,7 @@ function ProductosDestacadosBlock({
   diasNuevo: number;
   masVendidos?: any[];
   nuevosIngresos?: any[];
+  activeDiscounts?: any[];
 }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
   const titulo = config.titulo_seccion || "Productos";
@@ -425,9 +427,11 @@ function ProductosDestacadosBlock({
 
   const destacados = filterCats(productos);
   const vendidos = filterCats((masVendidosLocal ?? masVendidos));
-  const nuevos = filterCats(nuevosIngresos);
+  const nuevosTodo = filterCats(nuevosIngresos);
   // Tab "De vuelta": subset de nuevos, solo los marcados como reingreso.
-  const reingresos = nuevos.filter((p: any) => p._esReingreso);
+  const reingresos = nuevosTodo.filter((p: any) => p._esReingreso);
+  // Tab "Nuevos": solo productos nuevos del catálogo (excluye reingresos, que tienen su tab propio).
+  const nuevos = nuevosTodo.filter((p: any) => !p._esReingreso);
 
   const activeProds: any[] =
     activeTab === "destacados" ? destacados :
@@ -546,14 +550,56 @@ function ProductosDestacadosBlock({
     return () => clearInterval(timer);
   }, [intervalo, pausado, grupoActual, activeTab, tabs.length]);
 
+  // Calcula el mejor descuento aplicable a un producto (excluye descuentos por cliente o cantidad mínima).
+  const getBestDiscount = (prod: any, presLabel: string): { pct: number; precioFijo: number | null } => {
+    let bestPct = 0;
+    let bestPrecioFijo: number | null = null;
+    const isBox = presLabel !== "Unidad" && !presLabel.startsWith("Unidad");
+    for (const d of activeDiscounts) {
+      if (d.clientes_ids && d.clientes_ids.length > 0) continue;
+      if (d.cantidad_minima && d.cantidad_minima > 0) continue;
+      if (d.excluir_combos && prod.es_combo) continue;
+      if (d.productos_excluidos_ids?.includes(prod.id)) continue;
+      if (d.presentacion === "unidad" && isBox) continue;
+      if (d.presentacion === "caja" && !isBox) continue;
+      let aplica = false;
+      if (d.aplica_a === "todos") aplica = true;
+      else if (d.aplica_a === "productos") aplica = (d.productos_ids || []).includes(prod.id);
+      else if (d.aplica_a === "categorias") aplica = (d.categorias_ids || []).includes(prod.categoria_id) || (!!prod.subcategoria_id && (d.categorias_ids || []).includes(prod.subcategoria_id));
+      else if (d.aplica_a === "subcategorias") aplica = !!prod.subcategoria_id && (d.subcategorias_ids || []).includes(prod.subcategoria_id);
+      else if (d.aplica_a === "marcas") aplica = !!prod.marca_id && (d.marcas_ids || []).includes(prod.marca_id);
+      if (!aplica) continue;
+      let pct = Number(d.porcentaje) || 0;
+      if (d.tipo_descuento === "precio_fijo" && d.precio_fijo != null && Number(d.precio_fijo) > 0 && prod.precio > 0) {
+        pct = Math.max(0, Math.min(100, ((prod.precio - Number(d.precio_fijo)) / prod.precio) * 100));
+      }
+      if (pct > bestPct) {
+        bestPct = pct;
+        bestPrecioFijo = d.tipo_descuento === "precio_fijo" && d.precio_fijo != null ? Number(d.precio_fijo) : null;
+      }
+    }
+    return { pct: bestPct, precioFijo: bestPrecioFijo };
+  };
+
   const renderProductCard = (prod: any, isPriority = false) => {
     const qty = getQty(prod.id);
     const sinStock = prod.stock <= 0;
     const pres = presMap[prod.id];
     const presIdx = selectedPres[prod.id] ?? 0;
     const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
-    const price = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
+    const presLabel = activePres?.nombre || "Unidad";
+    const presPrice = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
     const presUnits = activePres ? activePres.cantidad : 1;
+    // Aplicar descuento: precio_fijo es por unidad, si es presentación caja se multiplica por unidades.
+    const desc = getBestDiscount(prod, presLabel);
+    let price = presPrice;
+    let priceOriginal = presPrice;
+    if (desc.precioFijo != null) {
+      price = activePres ? Math.round(desc.precioFijo * presUnits) : desc.precioFijo;
+    } else if (desc.pct > 0) {
+      price = Math.round(presPrice * (1 - desc.pct / 100));
+    }
+    const hasDescuento = price < priceOriginal;
     const maxQty = Math.floor(prod.stock / Math.max(0.01, presUnits));
 
     return (
@@ -588,6 +634,9 @@ function ProductosDestacadosBlock({
                   <TrendingUp className="w-2.5 h-2.5" /> Top
                 </span>
               )}
+              {hasDescuento && !sinStock && (
+                <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">-{Math.round(desc.pct)}% OFF</span>
+              )}
             </div>
           </div>
           <div className="p-3">
@@ -604,7 +653,12 @@ function ProductosDestacadosBlock({
                 ))}
               </div>
             )}
-            <p className="text-base font-bold text-gray-900 mt-1.5">{formatCurrency(price)}</p>
+            <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
+              <p className="text-base font-bold text-gray-900">{formatCurrency(price)}</p>
+              {hasDescuento && (
+                <p className="text-xs text-gray-400 line-through">{formatCurrency(priceOriginal)}</p>
+              )}
+            </div>
           </div>
         </Link>
         <div className="px-3 pb-3 mt-auto">
@@ -721,8 +775,23 @@ function ProductosDestacadosBlock({
                 ref={mobileScrollRef}
                 className="mobile-snap-scroller flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth px-4 pb-1"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                onTouchStart={() => setPausado(true)}
-                onTouchEnd={() => setTimeout(() => setPausado(false), 3000)}
+                onTouchStart={(e) => {
+                  setPausado(true);
+                  touchStartX.current = e.touches[0].clientX;
+                }}
+                onTouchEnd={(e) => {
+                  // Auto-advance tab si el user intenta seguir swipeando al final del último grupo.
+                  const el = mobileScrollRef.current;
+                  if (el && touchStartX.current !== null) {
+                    const dx = touchStartX.current - e.changedTouches[0].clientX;
+                    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+                    const atStart = el.scrollLeft <= 4;
+                    if (dx > 50 && atEnd) irAlSiguiente();
+                    else if (dx < -50 && atStart) irAlAnterior();
+                  }
+                  touchStartX.current = null;
+                  setTimeout(() => setPausado(false), 3000);
+                }}
                 onScroll={(e) => {
                   const el = e.currentTarget;
                   if (activeProds.length === 0) return;
@@ -1183,6 +1252,7 @@ interface HomeClientProps {
   initialTopVendidos?: any[];
   initialTopPresMap?: Record<string, any[]>;
   initialNuevosIngresos?: any[];
+  initialActiveDiscounts?: any[];
 }
 
 export default function TiendaPage({
@@ -1197,6 +1267,7 @@ export default function TiendaPage({
   initialTopVendidos = [],
   initialTopPresMap = {},
   initialNuevosIngresos = [],
+  initialActiveDiscounts = [],
 }: HomeClientProps = {}) {
   const hasInitial = !!initialBloques;
   const [bloques, setBloques] = useState<Bloque[]>(initialBloques || []);
@@ -1422,6 +1493,7 @@ export default function TiendaPage({
             diasNuevo={diasNuevo}
             masVendidos={initialTopVendidos}
             nuevosIngresos={initialNuevosIngresos}
+            activeDiscounts={initialActiveDiscounts}
           />
         );
       case "banner_promo":

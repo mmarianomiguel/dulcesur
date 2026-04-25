@@ -373,6 +373,16 @@ export default async function TiendaHomePage() {
     });
   }
 
+  // Descuentos activos para que las cards muestren precio rebajado + badge.
+  const todayStr = new Date().toISOString().split("T")[0];
+  const { data: descRows } = await supabase
+    .from("descuentos")
+    .select("*")
+    .eq("activo", true)
+    .lte("fecha_inicio", todayStr)
+    .or(`fecha_fin.is.null,fecha_fin.gte.${todayStr}`)
+    .range(0, 4999);
+
   return (
     <HomeClient
       initialBloques={blocks}
@@ -386,6 +396,7 @@ export default async function TiendaHomePage() {
       initialTopVendidos={topVendidosProds}
       initialTopPresMap={topPresMap}
       initialNuevosIngresos={nuevosIngresos}
+      initialActiveDiscounts={descRows || []}
     />
   );
 }
