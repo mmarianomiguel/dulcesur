@@ -224,16 +224,18 @@ export default async function TiendaHomePage() {
       from += PAGE;
     }
 
-    // Re-ingreso = el producto tuvo al menos un movimiento donde cantidad_antes <= 0
-    // (es decir, estaba sin stock y volvió). Si no, es producto nuevo del catálogo.
-    const reingresoSet = new Set<string>();
+    // Candidato a reingreso: tuvo al menos un movimiento con cantidad_antes <= 0.
+    // Pero ojo: la primera compra de un producto NUEVO también queda con cantidad_antes = 0.
+    // Filtramos abajo con created_at — si el producto fue creado dentro del mismo período,
+    // es "Nuevo" del catálogo, no reingreso.
+    const reingresoCandidate = new Set<string>();
     const allIds = new Set<string>();
     for (const m of movsAll) {
       allIds.add(m.producto_id);
-      if (Number(m.cantidad_antes) <= 0) reingresoSet.add(m.producto_id);
+      if (Number(m.cantidad_antes) <= 0) reingresoCandidate.add(m.producto_id);
     }
     const ids = [...allIds];
-    if (ids.length === 0) return { data: [], reingresoSet };
+    if (ids.length === 0) return { data: [], reingresoSet: new Set<string>() };
 
     const res = await supabase
       .from("productos")
@@ -244,6 +246,14 @@ export default async function TiendaHomePage() {
       .in("id", ids)
       .order("created_at", { ascending: false })
       .limit(maxNuevos);
+    // Reingreso real = candidato Y created_at ANTERIOR al período nuevos (producto viejo que volvió).
+    const cutoffMs = haceNuevosDias.getTime();
+    const reingresoSet = new Set<string>();
+    for (const p of res.data || []) {
+      if (reingresoCandidate.has(p.id) && p.created_at && new Date(p.created_at).getTime() < cutoffMs) {
+        reingresoSet.add(p.id);
+      }
+    }
     return { data: res.data || [], reingresoSet };
   })();
 
