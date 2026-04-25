@@ -640,32 +640,37 @@ function ProductosDestacadosBlock({
       onMouseLeave={() => setPausado(false)}
     >
       <div className="max-w-7xl mx-auto px-4 overflow-x-clip">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Header — en mobile el título arriba y tabs abajo en scroll horizontal con todos los 4 tabs visibles. */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
           {!loading && tabs.length > 1 && (
-            <div className="relative flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
-              {tabs.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setSlideDir(tabs.findIndex(t => t.key === key) > tabs.findIndex(t => t.key === activeTab) ? "left" : "right");
-                    setActiveTab(key);
-                  }}
-                  className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                    activeTab === key
-                      ? "bg-gray-900 text-white shadow-sm"
-                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                  }`}
-                  style={{ transition: "background-color 0.2s ease, color 0.2s ease" }}
-                >
-                  <Icon className="w-3 h-3" />
-                  <span className="hidden sm:inline">{label}</span>
-                  <span className="sm:hidden">
-                    {key === "mas_vendidos" ? "Top" : key === "nuevos" ? "Nuevos" : key === "reingresos" ? "De vuelta" : label.split(" ")[0]}
-                  </span>
-                </button>
-              ))}
+            <div className="tabs-scroller -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto sm:overflow-visible" style={{ scrollbarWidth: "none" }}>
+              <div className="relative inline-flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+                {tabs.map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSlideDir(tabs.findIndex(t => t.key === key) > tabs.findIndex(t => t.key === activeTab) ? "left" : "right");
+                      setActiveTab(key);
+                    }}
+                    className={`relative shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      activeTab === key
+                        ? "bg-gray-900 text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    }`}
+                    style={{ transition: "background-color 0.2s ease, color 0.2s ease" }}
+                  >
+                    <Icon className="w-3 h-3" />
+                    <span className="hidden sm:inline">{label}</span>
+                    <span className="sm:hidden">
+                      {key === "mas_vendidos" ? "Top" : key === "nuevos" ? "Nuevos" : key === "reingresos" ? "De vuelta" : label.split(" ")[0]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <style jsx>{`
+                .tabs-scroller::-webkit-scrollbar { display: none; }
+              `}</style>
             </div>
           )}
         </div>
