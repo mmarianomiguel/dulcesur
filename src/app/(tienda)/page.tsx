@@ -166,6 +166,8 @@ export default async function TiendaHomePage() {
   cutoffAumentos.setHours(0, 0, 0, 0);
   const cutoffStr = cutoffAumentos.toISOString();
 
+  // Traemos hasta 50 cambios recientes y filtramos en JS solo los aumentos reales (precio > precio_anterior).
+  // PostgREST no permite comparar dos columnas directamente, así que el filtro fino se hace después.
   const aumentosPromise = supabase
     .from("productos")
     .select("id, nombre, precio, imagen_url, stock, precio_anterior, fecha_actualizacion, categorias(id, nombre, restringida)")
@@ -174,7 +176,7 @@ export default async function TiendaHomePage() {
     .gt("precio_anterior", 0)
     .gt("fecha_actualizacion", cutoffStr)
     .order("fecha_actualizacion", { ascending: false })
-    .limit(maxAumentosHome);
+    .limit(50);
 
   const masVendidosPromise = supabase
     .from("productos")
@@ -317,7 +319,9 @@ export default async function TiendaHomePage() {
   const nuevosRaw = nuevosResult.data || [];
   const reingresoSet = nuevosResult.reingresoSet || new Set<string>();
 
-  const aumentos = (aumentosRaw || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+  const aumentos = (aumentosRaw || [])
+    .filter((p: any) => Number(p.precio) > Number(p.precio_anterior))
+    .slice(0, maxAumentosHome);
   // Marcar cada producto con _esReingreso para distinguir badge en el cliente.
   const nuevosIngresos = (nuevosRaw || []).slice(0, maxNuevos).map((p: any) => ({
     ...p,
