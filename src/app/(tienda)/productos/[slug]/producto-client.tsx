@@ -396,7 +396,7 @@ export default function ProductoClient({
     // Flash botón "Agregado" por 1.2s
     setJustAdded(true);
     if (justAddedTimer.current) clearTimeout(justAddedTimer.current);
-    justAddedTimer.current = setTimeout(() => setJustAdded(false), 1200);
+    justAddedTimer.current = setTimeout(() => setJustAdded(false), 900);
   }
 
   function getRelPrice(prod: Producto) {
@@ -1015,7 +1015,7 @@ export default function ProductoClient({
                                 setRelQty((prev) => ({ ...prev, [rel.id]: 1 }));
                                 setRelJustAdded((p) => ({ ...p, [rel.id]: true }));
                                 if (relJustAddedTimers.current[rel.id]) clearTimeout(relJustAddedTimers.current[rel.id]);
-                                relJustAddedTimers.current[rel.id] = setTimeout(() => setRelJustAdded((p) => { const n = { ...p }; delete n[rel.id]; return n; }), 1200);
+                                relJustAddedTimers.current[rel.id] = setTimeout(() => setRelJustAdded((p) => { const n = { ...p }; delete n[rel.id]; return n; }), 900);
                               }}
                               disabled={outOfStock}
                               className={`flex-1 text-xs py-2 rounded-lg font-semibold transition-all duration-200 active:scale-95 ${outOfStock ? "bg-gray-200 text-gray-500 cursor-not-allowed" : relJustAdded[rel.id] ? "bg-emerald-500 text-white" : "bg-primary hover:bg-primary/90 text-white"}`}

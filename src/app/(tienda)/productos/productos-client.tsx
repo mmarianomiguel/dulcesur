@@ -570,7 +570,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
     if (justAddedTimers.current[id]) clearTimeout(justAddedTimers.current[id]);
     justAddedTimers.current[id] = setTimeout(() => {
       setJustAdded((p) => { const n = { ...p }; delete n[id]; return n; });
-    }, 1200);
+    }, 900);
   };
 
   function getQty(id: string) {
