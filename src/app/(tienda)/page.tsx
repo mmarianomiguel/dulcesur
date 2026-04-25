@@ -245,16 +245,19 @@ export default async function TiendaHomePage() {
       .gt("stock", 0)
       .in("id", ids)
       .order("created_at", { ascending: false })
-      .limit(maxNuevos);
-    // Reingreso real = candidato Y created_at ANTERIOR al período nuevos (producto viejo que volvió).
+      .limit(maxNuevos * 3); // traemos más porque vamos a filtrar
     const cutoffMs = haceNuevosDias.getTime();
     const reingresoSet = new Set<string>();
-    for (const p of res.data || []) {
-      if (reingresoCandidate.has(p.id) && p.created_at && new Date(p.created_at).getTime() < cutoffMs) {
-        reingresoSet.add(p.id);
-      }
-    }
-    return { data: res.data || [], reingresoSet };
+    // Filtrar: solo productos genuinamente nuevos del catálogo O reingresos reales.
+    // Excluye re-aprovisionamientos normales (producto viejo + cantidad_antes > 0).
+    const filtered = (res.data || []).filter((p: any) => {
+      const createdMs = p.created_at ? new Date(p.created_at).getTime() : 0;
+      const esNuevoCatalogo = createdMs >= cutoffMs;
+      const esReingresoReal = !esNuevoCatalogo && reingresoCandidate.has(p.id);
+      if (esReingresoReal) reingresoSet.add(p.id);
+      return esNuevoCatalogo || esReingresoReal;
+    }).slice(0, maxNuevos);
+    return { data: filtered, reingresoSet };
   })();
 
   // topVentasResult no depende de nada → se arranca junto al grupo crítico
