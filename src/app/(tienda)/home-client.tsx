@@ -28,6 +28,7 @@ import {
   Pill,
   Milk,
   TrendingUp,
+  RotateCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -339,17 +340,23 @@ function ProductosDestacadosBlock({
     { key: "destacados", activo: true },
     { key: "mas_vendidos", activo: true },
     { key: "nuevos", activo: true },
+    { key: "reingresos", activo: true },
   ];
   const tabsConfig = Array.isArray(rawTabsConfig) && rawTabsConfig.length > 0
-    ? rawTabsConfig.filter((t) => t && ["destacados", "mas_vendidos", "nuevos"].includes(t.key))
+    ? (() => {
+        const filtered = rawTabsConfig.filter((t) => t && ["destacados", "mas_vendidos", "nuevos", "reingresos"].includes(t.key));
+        // Si la config existente no tiene "reingresos" (config vieja), lo agregamos por default activo.
+        if (!filtered.some((t) => t.key === "reingresos")) filtered.push({ key: "reingresos", activo: true });
+        return filtered;
+      })()
     : defaultTabsConfig;
   const activeTabsConfig = tabsConfig.filter((t) => t.activo);
-  const rawTabDefecto = (config.tab_defecto as "destacados" | "mas_vendidos" | "nuevos") ?? "destacados";
+  const rawTabDefecto = (config.tab_defecto as "destacados" | "mas_vendidos" | "nuevos" | "reingresos") ?? "destacados";
   const tabDefecto = (activeTabsConfig.some((t) => t.key === rawTabDefecto)
     ? rawTabDefecto
-    : (activeTabsConfig[0]?.key ?? "destacados")) as "destacados" | "mas_vendidos" | "nuevos";
+    : (activeTabsConfig[0]?.key ?? "destacados")) as "destacados" | "mas_vendidos" | "nuevos" | "reingresos";
   const intervalo = (config.carrusel_intervalo as number) ?? 0;
-  const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos">(tabDefecto);
+  const [activeTab, setActiveTab] = useState<"destacados" | "mas_vendidos" | "nuevos" | "reingresos">(tabDefecto);
   const [grupoActual, setGrupoActual] = useState(0);
   const [pausado, setPausado] = useState(false);
   const [slideDir, setSlideDir] = useState<"left" | "right" | null>(null);
@@ -372,10 +379,13 @@ function ProductosDestacadosBlock({
   const destacados = filterCats(productos);
   const vendidos = filterCats(masVendidos);
   const nuevos = filterCats(nuevosIngresos);
+  // Tab "De vuelta": subset de nuevos, solo los marcados como reingreso.
+  const reingresos = nuevos.filter((p: any) => p._esReingreso);
 
   const activeProds: any[] =
     activeTab === "destacados" ? destacados :
     activeTab === "mas_vendidos" ? vendidos :
+    activeTab === "reingresos" ? reingresos :
     nuevos;
 
   const GRUPO_SIZE_MOBILE = 2;
@@ -388,12 +398,13 @@ function ProductosDestacadosBlock({
     Math.floor(grupoActual / 2) * GRUPO_SIZE_DESKTOP + GRUPO_SIZE_DESKTOP
   );
 
-  type TabKey = "destacados" | "mas_vendidos" | "nuevos";
+  type TabKey = "destacados" | "mas_vendidos" | "nuevos" | "reingresos";
   type TabEntry = { key: TabKey; label: string; icon: typeof Star; count: number };
   const allTabsMeta: Record<TabKey, { label: string; icon: typeof Star; count: number }> = {
     destacados: { label: "Destacados", icon: Star, count: destacados.length },
     mas_vendidos: { label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
     nuevos: { label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
+    reingresos: { label: "De vuelta en stock", icon: RotateCw, count: reingresos.length },
   };
   const tabs: TabEntry[] = activeTabsConfig.flatMap((t) => {
     const key = t.key as TabKey;
@@ -586,7 +597,7 @@ function ProductosDestacadosBlock({
                   <Icon className="w-3 h-3" />
                   <span className="hidden sm:inline">{label}</span>
                   <span className="sm:hidden">
-                    {key === "mas_vendidos" ? "Top" : key === "nuevos" ? "Nuevos" : label.split(" ")[0]}
+                    {key === "mas_vendidos" ? "Top" : key === "nuevos" ? "Nuevos" : key === "reingresos" ? "De vuelta" : label.split(" ")[0]}
                   </span>
                 </button>
               ))}
