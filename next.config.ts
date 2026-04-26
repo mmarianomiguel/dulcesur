@@ -7,8 +7,9 @@ const nextConfig: NextConfig = {
   compress: true,
   experimental: {
     optimizePackageImports: ["lucide-react", "recharts", "@base-ui/react", "date-fns"],
-    // Inline critical CSS para reducir render-blocking requests al primer paint.
-    optimizeCss: true,
+    // optimizeCss + critters tiene bugs conocidos que pueden romper la medición de LCP.
+    // Lo dejamos desactivado hasta que sea estable. critters queda instalado por si se reactiva.
+    // optimizeCss: true,
   },
   images: {
     loader: "custom",

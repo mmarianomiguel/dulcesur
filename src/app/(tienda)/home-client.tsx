@@ -147,7 +147,7 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
 
   return (
     <section
-      className="relative overflow-hidden min-h-[120px] md:min-h-[140px]"
+      className="relative overflow-hidden min-h-[180px] md:min-h-[180px]"
       style={{
         background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})`,
       }}
