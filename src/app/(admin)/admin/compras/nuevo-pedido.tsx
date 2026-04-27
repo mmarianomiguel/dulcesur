@@ -188,32 +188,28 @@ export default function NuevoPedido({
       }
       setSearchingProducts(true);
 
-      let query = supabase
-        .from("productos")
-        .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, imagen_url, producto_proveedores(proveedor_id, precio_proveedor), presentaciones(nombre, cantidad)")
-        .eq("activo", true)
-        .limit(20);
+      const orFilter = `nombre.ilike.%${term}%,codigo.ilike.%${term}%,codigos_adicionales.cs.{${term}}`;
 
-      if (selectedProveedorId) {
-        query = supabase
-          .from("productos")
-          .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, imagen_url, producto_proveedores!inner(proveedor_id, precio_proveedor), presentaciones(nombre, cantidad)")
-          .eq("activo", true)
-          .eq("producto_proveedores.proveedor_id", selectedProveedorId)
-          .limit(20);
-      }
+      const query = selectedProveedorId
+        ? supabase
+            .from("productos")
+            .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, imagen_url, producto_proveedores!inner(proveedor_id, precio_proveedor), presentaciones(nombre, cantidad)")
+            .eq("activo", true)
+            .eq("producto_proveedores.proveedor_id", selectedProveedorId)
+            .or(orFilter)
+            .limit(20)
+        : supabase
+            .from("productos")
+            .select("id, codigo, nombre, stock, stock_minimo, stock_maximo, costo, imagen_url, producto_proveedores(proveedor_id, precio_proveedor), presentaciones(nombre, cantidad)")
+            .eq("activo", true)
+            .or(orFilter)
+            .limit(20);
 
       const { data } = await query;
 
       if (data) {
-        const normalized = norm(term);
-        const filtered = (data as any[]).filter(
-          (p) =>
-            norm(p.nombre).includes(normalized) ||
-            norm(p.codigo || "").includes(normalized)
-        );
         setProductResults(
-          filtered.map((p) => {
+          (data as any[]).map((p) => {
             const pp = (p.producto_proveedores || []).find(
               (pp: any) => pp.proveedor_id === selectedProveedorId
             );

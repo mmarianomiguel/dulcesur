@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { norm } from "@/lib/utils";
 import { showAdminToast } from "@/components/admin-toast";
 import { todayARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
@@ -262,27 +261,26 @@ export default function DetallePedido({
       setSearchingProducts(true);
 
       const provId = detailPedido.proveedor_id;
-      let query = provId
+      const orFilter = `nombre.ilike.%${term}%,codigo.ilike.%${term}%,codigos_adicionales.cs.{${term}}`;
+      const query = provId
         ? supabase
             .from("productos")
             .select("id, codigo, nombre, stock, costo, imagen_url, producto_proveedores!inner(proveedor_id, precio_proveedor)")
             .eq("activo", true)
             .eq("producto_proveedores.proveedor_id", provId)
+            .or(orFilter)
             .limit(20)
         : supabase
             .from("productos")
             .select("id, codigo, nombre, stock, costo, imagen_url, producto_proveedores(proveedor_id, precio_proveedor)")
             .eq("activo", true)
+            .or(orFilter)
             .limit(20);
 
       const { data } = await query;
       if (data) {
-        const normalized = norm(term);
-        const filtered = (data as any[]).filter(
-          (p) => norm(p.nombre).includes(normalized) || norm(p.codigo || "").includes(normalized)
-        );
         setProductResults(
-          filtered.map((p) => {
+          (data as any[]).map((p) => {
             const pp = (p.producto_proveedores || []).find((pp: any) => pp.proveedor_id === provId);
             return {
               id: p.id, codigo: p.codigo || "", nombre: p.nombre,
