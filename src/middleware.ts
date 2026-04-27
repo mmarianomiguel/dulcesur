@@ -4,6 +4,22 @@ import { NextResponse, type NextRequest } from "next/server";
 const ADMIN_ROLES = ["admin", "vendedor", "cajero", "encargado"];
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Fast path: para /admin, si la cookie de rol ya fue verificada (2 min TTL) y
+  // el usuario sigue teniendo cookie de auth de Supabase, saltamos getUser() + query.
+  // Cuando el usuario hace logout, la SDK de Supabase borra las sb-*-auth-token,
+  // por lo que esta verificación cae al slow path y redirige a /login.
+  if (pathname.startsWith("/admin")) {
+    const roleCache = request.cookies.get("admin_role_verified");
+    const hasSupabaseAuth = request.cookies
+      .getAll()
+      .some((c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token"));
+    if (roleCache?.value && hasSupabaseAuth) {
+      return NextResponse.next({ request });
+    }
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -30,8 +46,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   // Block /login from public access — only authenticated admins or referer from /admin
   if (pathname === "/login") {

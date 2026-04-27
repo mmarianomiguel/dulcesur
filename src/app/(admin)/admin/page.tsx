@@ -522,15 +522,20 @@ export default function DashboardPage() {
     // Mostrá el dashboard con los datos críticos ya disponibles
     setLoading(false);
 
+    // ─── Productos: fire-and-forget — no bloquea el resto del procesamiento.
+    // Solo alimenta dos cards (Capital mercadería + Stock bajo); pueden hidratarse después.
+    supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).range(0, 49999).then(({ data: prods }) => {
+      setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo > 0 ? p.costo : p.precio), 0));
+      setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
+    });
+
     // ─── GRUPO 2: Queries secundarias en paralelo (sin bloquear la UI) ───
     const [
-      { data: prods },
       { data: allClients },
       { data: provs },
       { data: ccSums },
       { data: ventasCat },
     ] = await Promise.all([
-      supabase.from("productos").select("id, nombre, codigo, stock, stock_minimo, precio, costo").eq("activo", true).range(0, 49999),
       supabase.from("clientes").select("id, nombre, saldo").eq("activo", true).range(0, 49999),
       supabase.from("proveedores").select("saldo").eq("activo", true).range(0, 9999),
       supabase.from("cuenta_corriente").select("cliente_id, debe, haber").range(0, 199999),
@@ -589,9 +594,7 @@ export default function DashboardPage() {
     // ─── Expenses ───
     setGastosPeriodo((periodExpenses || []).reduce((a, e) => a + Math.abs(e.monto), 0));
 
-    // ─── Products: capital & low stock ───
-    setCapitalMercaderia((prods || []).reduce((a, p: any) => a + p.stock * (p.costo > 0 ? p.costo : p.precio), 0));
-    setLowStockProducts((prods || []).filter((p: any) => p.stock_minimo > 0 && p.stock <= p.stock_minimo).sort((a: any, b: any) => a.stock - b.stock).slice(0, 20) as any);
+    // ─── Products: capital & low stock ahora se hidratan via fire-and-forget arriba ───
 
     // ─── Clients: cuentas a cobrar + saldo mismatch (single query, used for both) ───
     setCuentasCobrar((allClients || []).reduce((a, c) => a + ((c.saldo || 0) > 0 ? c.saldo : 0), 0));
@@ -1190,10 +1193,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
-      ) : (
-        <>
+      {/* Render shell + cards inmediatamente; los valores se hidratan a medida que llegan las queries */}
+      <div className={loading ? "animate-pulse" : ""}>
           {/* ─── Stats (4 cards) ─── */}
           {isWidgetVisible("stats") && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1669,8 +1670,7 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-        </>
-      )}
+      </div>
 
       {/* Pedido Detail Dialog — Vista simple */}
       <Dialog open={pedidoDetailOpen} onOpenChange={setPedidoDetailOpen}>
