@@ -3657,9 +3657,16 @@ export default function ListadoVentasPage() {
                       }
 
                       if (ventaId) {
-                        // Compute pre-surcharge base from items (not stored total which may include surcharge)
-                        const rawBase = poEditItems.reduce((s, i) => s + i.precio_unitario * i.cantidad * (1 - (i.descuento || 0) / 100), 0) + (order.costo_envio || 0);
-                        const orderBase = rawBase > 0 ? rawBase : order.total;
+                        // Pre-surcharge base: leer subtotal directo de la venta para evitar
+                        // que poEditItems (estado React global, puede quedar stale entre pedidos)
+                        // contamine el cálculo. Si la venta no trae subtotal, caer al order.subtotal del card.
+                        const { data: ventaBaseRow } = await supabase
+                          .from("ventas")
+                          .select("subtotal")
+                          .eq("id", ventaId)
+                          .single();
+                        const subtotalVenta = (ventaBaseRow?.subtotal ?? order.subtotal ?? 0);
+                        const orderBase = subtotalVenta + (order.costo_envio || 0);
                         // If pedido already has the surcharge applied, do NOT add it again
                         const pedidoRecargo = Number((order as any).recargo_transferencia) || 0;
                         const alreadyHasRecargo = pedidoRecargo > 0;
