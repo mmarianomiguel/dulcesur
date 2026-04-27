@@ -1038,7 +1038,8 @@ export default function DashboardPage() {
   if (pedidoFilter === "envio") tabPedidos = tabPedidos.filter((p) => p.metodo_entrega === "envio");
   if (pedidoFilter === "retiro") tabPedidos = tabPedidos.filter((p) => p.metodo_entrega === "retiro");
 
-  const totalPedidos = tabPedidos.reduce((s, p) => s + p.total - (ncPorPedido[p.id] || 0), 0);
+  // p.total ya viene neto de NC (la creación de NC actualiza ventas.total). No restar otra vez.
+  const totalPedidos = tabPedidos.reduce((s, p) => s + p.total, 0);
   const countEnvio = pedidosOnline.filter((p) => p.metodo_entrega === "envio").length;
   const countRetiro = pedidosOnline.filter((p) => p.metodo_entrega === "retiro").length;
 
@@ -1449,7 +1450,7 @@ export default function DashboardPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              <span className="font-bold text-sm">{formatCurrency(p.total - (ncPorPedido[p.id] || 0))}</span>
+                              <span className="font-bold text-sm">{formatCurrency(p.total)}</span>
                               {(ncPorPedido[p.id] || 0) > 0 && <span className="block text-[10px] text-amber-600">NC -{formatCurrency(ncPorPedido[p.id])}</span>}
                             </TableCell>
                             <TableCell className="text-right">
@@ -1828,7 +1829,7 @@ export default function DashboardPage() {
                 <p className="text-sm text-emerald-800">
                   Pedido <span className="font-bold">#{deliveryConfirm.venta.numero}</span> de{" "}
                   <span className="font-bold">{(deliveryConfirm.venta as any).clientes?.nombre || "cliente"}</span> por{" "}
-                  <span className="font-bold">{formatCurrency(deliveryConfirm.venta.total - (ncPorPedido[deliveryConfirm.venta.id] || 0))}</span>
+                  <span className="font-bold">{formatCurrency(deliveryConfirm.venta.total)}</span>
                 </p>
                 {(ncPorPedido[deliveryConfirm.venta?.id] || 0) > 0 && <p className="text-xs text-amber-600 mt-1">Incluye NC -{formatCurrency(ncPorPedido[deliveryConfirm.venta.id])}</p>}
                 <p className="text-xs text-emerald-600 mt-1">Pago completo — listo para entregar</p>
