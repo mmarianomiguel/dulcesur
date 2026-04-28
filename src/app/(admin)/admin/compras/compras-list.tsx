@@ -308,8 +308,8 @@ export function ComprasList({
       {/* ── Filters ── */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex-1 max-w-md">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-wrap">
+            <div className="flex-1 sm:max-w-md w-full">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -371,7 +371,7 @@ export function ComprasList({
                     type="date"
                     value={purchaseFilterDay}
                     onChange={(e) => setPurchaseFilterDay(e.target.value)}
-                    className="w-40"
+                    className="w-full sm:w-40"
                   />
                 )}
                 {purchaseFilterMode === "month" && (
@@ -418,14 +418,14 @@ export function ComprasList({
                       type="date"
                       value={purchaseFilterFrom}
                       onChange={(e) => setPurchaseFilterFrom(e.target.value)}
-                      className="w-40"
+                      className="w-full sm:w-40"
                     />
                     <span className="text-muted-foreground text-sm">a</span>
                     <Input
                       type="date"
                       value={purchaseFilterTo}
                       onChange={(e) => setPurchaseFilterTo(e.target.value)}
-                      className="w-40"
+                      className="w-full sm:w-40"
                     />
                   </>
                 )}

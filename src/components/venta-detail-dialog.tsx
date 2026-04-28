@@ -213,14 +213,19 @@ export function VentaDetailDialog({
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [searchHighlight, setSearchHighlight] = useState(0);
   const [configRecargoPct, setConfigRecargoPct] = useState(0);
+  const [minQtyMayorista, setMinQtyMayorista] = useState(3);
+  const [multiPresInfo, setMultiPresInfo] = useState<Record<string, { hasMulti: boolean; stock: number }>>({});
   const configFetched = useRef(false);
 
-  // Fetch recargo_transferencia from config once
+  // Fetch recargo_transferencia + mínimo mayorista del config (una sola vez)
   useEffect(() => {
     if (configFetched.current) return;
     configFetched.current = true;
-    supabase.from("tienda_config").select("recargo_transferencia").limit(1).single()
-      .then(({ data: tc }) => { if (tc && (tc as any).recargo_transferencia > 0) setConfigRecargoPct((tc as any).recargo_transferencia); });
+    supabase.from("tienda_config").select("recargo_transferencia, minimo_unidades_mayorista").limit(1).single()
+      .then(({ data: tc }) => {
+        if (tc && (tc as any).recargo_transferencia > 0) setConfigRecargoPct((tc as any).recargo_transferencia);
+        if (tc && (tc as any).minimo_unidades_mayorista > 0) setMinQtyMayorista((tc as any).minimo_unidades_mayorista);
+      });
   }, []);
 
   // Reset state when dialog opens/closes
@@ -232,6 +237,36 @@ export function VentaDetailDialog({
       setSearchHighlight(0);
     }
   }, [open]);
+
+  // Fetch presentaciones + stock para detectar violaciones del mínimo mayorista
+  const itemsForCheck = (editable && editItems ? editItems : items) || [];
+  const productIdsKey = itemsForCheck
+    .map((i: any) => i.producto_id)
+    .filter(Boolean)
+    .join(",");
+  useEffect(() => {
+    if (!open) return;
+    const ids = productIdsKey.split(",").filter(Boolean);
+    if (ids.length === 0) { setMultiPresInfo({}); return; }
+    let cancelled = false;
+    (async () => {
+      const [{ data: presData }, { data: prodData }] = await Promise.all([
+        supabase.from("presentaciones").select("producto_id, cantidad").in("producto_id", ids),
+        supabase.from("productos").select("id, stock").in("id", ids),
+      ]);
+      if (cancelled) return;
+      const stockMap: Record<string, number> = {};
+      for (const p of prodData || []) stockMap[p.id] = p.stock || 0;
+      const hasMultiMap: Record<string, boolean> = {};
+      for (const pr of presData || []) {
+        if ((pr.cantidad || 0) > 1) hasMultiMap[pr.producto_id] = true;
+      }
+      const info: Record<string, { hasMulti: boolean; stock: number }> = {};
+      for (const pid of ids) info[pid] = { hasMulti: !!hasMultiMap[pid], stock: stockMap[pid] || 0 };
+      setMultiPresInfo(info);
+    })();
+    return () => { cancelled = true; };
+  }, [open, productIdsKey]);
 
 
   if (!data) return null;
@@ -284,6 +319,34 @@ export function VentaDetailDialog({
       })()
     : ncDisplay > 0 ? itemsSubtotal - ncDisplay + envio : data.total;
   const isEditable = editable && estado !== "entregado" && estado !== "cancelado";
+
+  // Items en violación del mínimo mayorista (presentación Unidad, < minQty, producto con caja, stock suficiente)
+  const minQtyViolations = (displayItems as any[]).filter((item) => {
+    const presUnits = item.unidades_por_presentacion || 1;
+    if (presUnits !== 1) return false;
+    if ((item.cantidad || 0) >= minQtyMayorista) return false;
+    const prodId = item.producto_id;
+    if (!prodId) return false;
+    const info = multiPresInfo[prodId];
+    if (!info) return false;
+    if (!info.hasMulti) return false;
+    if (info.stock < minQtyMayorista) return false;
+    return true;
+  });
+
+  const adjustEditItemsToMin = () => {
+    if (!editItems || !onEditItemsChange) return;
+    const updated = editItems.map((it) => {
+      const inViolation = minQtyViolations.some((v: any) => v.producto_id === it.producto_id && (v.presentacion || "Unidad") === (it.presentacion || "Unidad"));
+      if (!inViolation) return it;
+      const info = multiPresInfo[it.producto_id];
+      const targetQty = Math.min(minQtyMayorista, info?.stock ?? minQtyMayorista);
+      const newSubtotal = it.precio_unitario * targetQty * (1 - (it.descuento || 0) / 100);
+      return { ...it, cantidad: targetQty, subtotal: newSubtotal };
+    });
+    onEditItemsChange(updated);
+  };
+
   const canCobrar = editable && estado !== "cancelado";
   const hasCobro = (pagos || []).some(p => p.metodo !== "Pendiente de cobro" && !p.metodo.includes("Nota de Cr") && !p.metodo.includes("(a cobrar)"));
   // Calculate real payments total (excluding NCs and "Pendiente de cobro")
@@ -613,6 +676,43 @@ export function VentaDetailDialog({
                   </Button>
                 );
               })}
+            </div>
+          )}
+
+          {/* ═══ AVISO MÍNIMO MAYORISTA ═══ */}
+          {minQtyViolations.length > 0 && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4">
+              <div className="flex items-start gap-2 mb-2">
+                <span className="text-amber-500 text-base mt-0.5 shrink-0">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-xs sm:text-sm font-semibold text-amber-900">
+                    Productos con menos de {minQtyMayorista} unidades
+                  </p>
+                  <p className="text-[11px] sm:text-xs text-amber-700 mt-0.5">
+                    Los productos sueltos se venden mínimo {minQtyMayorista} unidades para los precios mayoristas:
+                  </p>
+                </div>
+              </div>
+              <ul className="space-y-0.5 mb-3 ml-7">
+                {minQtyViolations.map((v: any, i: number) => (
+                  <li key={`${v.producto_id}-${i}`} className="text-xs sm:text-sm text-amber-900">
+                    • <span className="font-medium">{cleanDesc(v.descripcion || v.nombre || "Producto")}</span>
+                    <span className="text-amber-700"> — {v.cantidad} {v.cantidad === 1 ? "unidad" : "unidades"}</span>
+                  </li>
+                ))}
+              </ul>
+              {isEditable && editItems && onEditItemsChange && (
+                <div className="ml-7">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100 bg-amber-100/50"
+                    onClick={adjustEditItemsToMin}
+                  >
+                    Ajustar todos al mínimo ({minQtyMayorista})
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 

@@ -678,11 +678,11 @@ export default function ReportesPage() {
 
         <TabsContent value="ventas" className="mt-4 space-y-4">
           {/* Ventas filters */}
-          <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Tipo</Label>
               <Select value={ventaTipo} onValueChange={(v) => setVentaTipo(v || "todos")}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Tipo" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   <SelectItem value="pedido_web">Pedido Web</SelectItem>
@@ -703,7 +703,7 @@ export default function ReportesPage() {
                     if (!e.target.value) setVentaClienteId("");
                   }}
                   onFocus={() => setShowClienteDropdown(true)}
-                  className="h-9 w-52 pl-8"
+                  className="h-9 w-full sm:w-52 pl-8"
                 />
                 {ventaClienteId && (
                   <button
@@ -715,7 +715,7 @@ export default function ReportesPage() {
                 )}
               </div>
               {showClienteDropdown && (
-                <div className="absolute z-50 top-full mt-1 w-52 bg-background border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                <div className="absolute z-50 top-full mt-1 left-0 right-0 sm:right-auto sm:w-52 bg-background border rounded-md shadow-lg max-h-48 overflow-y-auto">
                   <div
                     className="px-3 py-1.5 text-sm hover:bg-muted cursor-pointer text-muted-foreground"
                     onClick={() => { setVentaClienteId(""); setVentaClienteSearch(""); setShowClienteDropdown(false); }}
@@ -754,8 +754,8 @@ export default function ReportesPage() {
             </span>
           </div>
 
-          <div className="border rounded-lg overflow-hidden max-h-[600px] overflow-y-auto">
-            <table className="w-full text-sm">
+          <div className="border rounded-lg overflow-hidden max-h-[600px] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
               <thead className="sticky top-0 bg-background z-10">
                 <tr className="border-b bg-muted/50 text-muted-foreground">
                   <th className="w-8 py-2 px-2"></th>
@@ -1054,8 +1054,8 @@ export default function ReportesPage() {
             </div>
           )}
 
-          <div className="border rounded-lg overflow-hidden max-h-[600px] overflow-y-auto">
-            <table className="w-full text-sm">
+          <div className="border rounded-lg overflow-hidden max-h-[600px] overflow-y-auto overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
               <thead className="sticky top-0 bg-background z-10">
                 <tr className="border-b bg-muted/50 text-muted-foreground">
                   <th className="w-8 py-2 px-2"></th>

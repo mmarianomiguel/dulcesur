@@ -397,7 +397,7 @@ export default function AnticiposPage() {
                       <td className="p-3 text-center">{estadoBadge(a.estado)}</td>
                       <td className="p-3 text-right">
                         {a.estado === "Vigente" && (
-                          <div className="flex justify-end gap-2">
+                          <div className="flex flex-col sm:flex-row justify-end gap-1 sm:gap-2">
                             <Button
                               size="sm"
                               variant="outline"

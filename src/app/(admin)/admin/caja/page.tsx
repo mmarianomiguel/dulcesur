@@ -1430,7 +1430,7 @@ export default function CajaPage() {
         <>
           {/* Turno info bar */}
           {turno && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-background text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 rounded-2xl sm:rounded-full border border-border bg-background text-xs text-muted-foreground w-fit max-w-full">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
               <span>Turno #{turno.numero}</span>
               <span className="text-border">·</span>

@@ -167,7 +167,7 @@ export default function RankingClientesPage() {
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={periodo} onValueChange={(v) => { if (v) setPeriodo(v as any); }}>
-            <SelectTrigger className="w-[130px] h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[130px] h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="mes">Por Mes</SelectItem>
               <SelectItem value="anio">Por Año</SelectItem>
@@ -176,7 +176,7 @@ export default function RankingClientesPage() {
           </Select>
           {periodo !== "todo" && (
             <Select value={anio} onValueChange={(v) => { if (v) setAnio(v); }}>
-              <SelectTrigger className="w-[90px] h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[90px] h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map((y) => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
@@ -186,7 +186,7 @@ export default function RankingClientesPage() {
           )}
           {periodo === "mes" && (
             <Select value={mes} onValueChange={(v) => { if (v) setMes(v); }}>
-              <SelectTrigger className="w-[130px] h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[130px] h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MESES.map((m, i) => (
                   <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>

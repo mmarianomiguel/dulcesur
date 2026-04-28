@@ -2360,7 +2360,7 @@ export default function VentasPage() {
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-6 w-6 lg:h-7 lg:w-7"
+                                  className="h-8 w-8 lg:h-7 lg:w-7"
                                   onClick={(e) => { e.stopPropagation(); updateQty(item.id, item.qty - 1, item.presentacion === "Unidad"); }}
                                 >
                                   <Minus className="w-3 h-3" />
@@ -2378,14 +2378,14 @@ export default function VentasPage() {
                                   }}
                                   onBlur={(e) => { const v = Number(e.target.value); if (v > 0 && item.presentacion === "Unidad") updateQty(item.id, v, true); }}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="w-10 lg:w-14 h-6 lg:h-7 text-center text-xs lg:text-sm"
+                                  className="w-12 lg:w-14 h-8 lg:h-7 text-center text-xs lg:text-sm"
                                   min={displayStep}
                                   step={displayStep}
                                 />
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-6 w-6 lg:h-7 lg:w-7"
+                                  className="h-8 w-8 lg:h-7 lg:w-7"
                                   onClick={(e) => { e.stopPropagation(); updateQty(item.id, item.qty + 1, item.presentacion === "Unidad"); }}
                                 >
                                   <Plus className="w-3 h-3" />

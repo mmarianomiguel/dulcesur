@@ -174,7 +174,7 @@ export default function PagosConfigPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 max-w-xs">
+            <div className="flex items-center gap-3 max-w-sm">
               <Input
                 type="number"
                 min={0}
@@ -320,7 +320,7 @@ export default function PagosConfigPage() {
                             />
                           </div>
                         </div>
-                        <div className="max-h-48 overflow-y-auto p-1">
+                        <div className="max-h-[40vh] sm:max-h-48 overflow-y-auto p-1">
                           {proveedoresList.filter((p) => p.nombre.toLowerCase().includes(provSearchText.toLowerCase())).length === 0 ? (
                             <p className="text-center text-sm text-muted-foreground py-4">Sin resultados</p>
                           ) : proveedoresList.filter((p) => p.nombre.toLowerCase().includes(provSearchText.toLowerCase())).map((p) => (

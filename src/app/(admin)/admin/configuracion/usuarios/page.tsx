@@ -470,7 +470,7 @@ export default function UsuariosRolesPage() {
 
       {/* ─── Permissions Dialog ─── */}
       <Dialog open={permDialogOpen} onOpenChange={setPermDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[70vh] sm:max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Key className="w-5 h-5" />Permisos: {permRol?.nombre}</DialogTitle>
           </DialogHeader>

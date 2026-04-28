@@ -572,7 +572,7 @@ export default function ProveedoresPage() {
                       <th className="text-left py-3 px-4 font-medium">Contacto</th>
                       <th className="text-center py-3 px-4 font-medium">Productos</th>
                       <th className="text-right py-3 px-4 font-medium">Saldo</th>
-                      <th className="text-right py-3 px-4 font-medium w-52">Acciones</th>
+                      <th className="text-right py-3 px-4 font-medium">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -899,12 +899,12 @@ export default function ProveedoresPage() {
                       <p className="text-sm text-gray-400 text-center py-8">Sin movimientos en el período</p>
                     ) : (
                       <div className="overflow-x-auto border rounded-lg">
-                        <table className="w-full text-sm min-w-[500px]">
+                        <table className="w-full text-sm md:min-w-[500px]">
                           <thead>
                             <tr className="bg-gray-50 border-b">
                               <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-20">Fecha</th>
                               <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-16">Tipo</th>
-                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider">Concepto</th>
+                              <th className="text-left py-2 px-3 font-semibold text-[10px] uppercase tracking-wider hidden md:table-cell">Concepto</th>
                               <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Debe</th>
                               <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-24">Haber</th>
                               <th className="text-right py-2 px-3 font-semibold text-[10px] uppercase tracking-wider w-28">Saldo</th>
@@ -925,7 +925,7 @@ export default function ProveedoresPage() {
                                       {mov.tipo === "compra" ? "FC" : mov.tipo === "pago" ? "RE" : "AJ"}
                                     </Badge>
                                   </td>
-                                  <td className="py-2 px-3 text-xs text-gray-500">{cleanDesc(mov.descripcion)}</td>
+                                  <td className="py-2 px-3 text-xs text-gray-500 hidden md:table-cell">{cleanDesc(mov.descripcion)}</td>
                                   <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
                                     {mov.tipo === "compra" ? formatCurrency(Math.round(mov.monto)) : ""}
                                   </td>
@@ -939,7 +939,8 @@ export default function ProveedoresPage() {
                           </tbody>
                           <tfoot>
                             <tr className="bg-gray-50 border-t font-bold text-xs">
-                              <td className="py-2.5 px-3 uppercase tracking-wider" colSpan={3}>Totales</td>
+                              <td className="py-2.5 px-3 uppercase tracking-wider md:hidden" colSpan={2}>Totales</td>
+                              <td className="py-2.5 px-3 uppercase tracking-wider hidden md:table-cell" colSpan={3}>Totales</td>
                               <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(Math.round(totalDebe))}</td>
                               <td className="py-2.5 px-3 text-right tabular-nums text-emerald-600">{formatCurrency(Math.round(totalHaber))}</td>
                               <td className={`py-2.5 px-3 text-right tabular-nums ${saldoColor(saldoAct)}`}>{fmtSaldo(saldoAct)}</td>

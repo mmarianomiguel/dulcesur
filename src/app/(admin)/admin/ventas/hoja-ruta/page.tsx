@@ -172,6 +172,7 @@ export default function HojaDeRutaPage() {
   const savedOrdenRef = useRef<Record<string, number>>({});
   // Dirección del mayorista (punto de partida de la hoja de ruta)
   const [empresaOrigen, setEmpresaOrigen] = useState<string | null>(null);
+  const [empresaCoords, setEmpresaCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [filterEntrega] = useState<"todos" | "envio" | "retiro">("todos");
   const [search, setSearch] = useState("");
   const [showAllPending, setShowAllPending] = useState(true);
@@ -221,7 +222,7 @@ export default function HojaDeRutaPage() {
     let query = supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion), pedido_armado(orden_entrega, estado)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, provincia, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion), pedido_armado(orden_entrega, estado)"
       )
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -446,13 +447,18 @@ export default function HojaDeRutaPage() {
     (async () => {
       const { data } = await supabase
         .from("empresa")
-        .select("domicilio, localidad")
+        .select("domicilio, localidad, lat, lng")
         .limit(1)
         .maybeSingle();
       if (data?.domicilio) {
-        // Construir dirección completa con localidad para geocoding preciso
+        // Construir dirección completa con localidad para geocoding preciso (fallback)
         const partes = [data.domicilio, (data as any).localidad, "Argentina"].filter(Boolean);
         setEmpresaOrigen(partes.join(", "));
+      }
+      const lat = (data as any)?.lat;
+      const lng = (data as any)?.lng;
+      if (typeof lat === "number" && typeof lng === "number") {
+        setEmpresaCoords({ lat, lng });
       }
     })();
   }, []);
@@ -466,7 +472,7 @@ export default function HojaDeRutaPage() {
     const { data, error } = await supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, provincia, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", true)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -1268,7 +1274,13 @@ export default function HojaDeRutaPage() {
     const stops = clientGroups
       .map((g) => ({
         key: g.key,
-        address: [g.cliente?.domicilio, g.cliente?.localidad].filter(Boolean).join(", "),
+        address: [
+          g.cliente?.domicilio,
+          g.cliente?.localidad,
+          (g.cliente as any)?.provincia,
+        ]
+          .filter(Boolean)
+          .join(", "),
         mapsUrl: (g.cliente as any)?.maps_url || null,
       }))
       .filter((s) => s.address || s.mapsUrl);
@@ -1276,7 +1288,7 @@ export default function HojaDeRutaPage() {
       showOrderToast("Se necesitan al menos 2 paradas con dirección");
       return;
     }
-    if (!empresaOrigen) {
+    if (!empresaOrigen && !empresaCoords) {
       showOrderToast("Configurá la dirección de la empresa en Configuración para optimizar la ruta");
       return;
     }
@@ -1288,6 +1300,7 @@ export default function HojaDeRutaPage() {
         body: JSON.stringify({
           stops: stops.map((s) => ({ id: s.key, address: s.address, mapsUrl: s.mapsUrl })),
           origen: empresaOrigen,
+          origenCoords: empresaCoords,
         }),
       });
       const data = await res.json();
@@ -1296,8 +1309,20 @@ export default function HojaDeRutaPage() {
         return;
       }
       const orderedKeys: string[] = data.orderedIds || [];
-      const noAddress = clientGroups.filter((g) => !stops.find((s) => s.key === g.key)).map((g) => g.key);
-      const finalOrder = [...orderedKeys, ...noAddress];
+      const failedSet = new Set<string>(data.failed || []);
+      // Clientes sin dirección ni maps_url (no se mandaron al optimizador)
+      const noAddress = clientGroups
+        .filter((g) => !stops.find((s) => s.key === g.key))
+        .map((g) => g.key);
+      // Fallidas en el orden original de clientGroups
+      const failedKeys = clientGroups.map((g) => g.key).filter((k) => failedSet.has(k));
+      // Orden final: optimizadas → fallidas (al final, en su orden original) → sin dirección
+      const finalOrder = [...orderedKeys, ...failedKeys, ...noAddress];
+      // Defensivo: cualquier clientGroup no incluido cae al final
+      const seen = new Set(finalOrder);
+      for (const g of clientGroups) {
+        if (!seen.has(g.key)) finalOrder.push(g.key);
+      }
       const newOrden: Record<string, number> = {};
       let counter = 1;
       for (const key of finalOrder) {
@@ -1306,12 +1331,13 @@ export default function HojaDeRutaPage() {
         counter++;
       }
       setOrden(newOrden);
-      const failedCount = (data.failed || []).length;
+      const okCount = orderedKeys.length;
+      const failedCount = failedKeys.length;
       const durMin = data.duration ? Math.round(data.duration / 60) : null;
       const distKm = data.distance ? (data.distance / 1000).toFixed(1) : null;
       const resumen = durMin !== null && distKm !== null ? ` — ~${durMin} min · ${distKm} km` : "";
-      const warn = failedCount > 0 ? ` (${failedCount} direcciones no ubicadas)` : "";
-      showOrderToast(`Ruta optimizada${resumen}${warn}`);
+      const warn = failedCount > 0 ? ` · ${failedCount} sin ubicar (al final)` : "";
+      showOrderToast(`Ruta optimizada: ${okCount} paradas${resumen}${warn}`);
     } catch (err) {
       console.error("Error optimizando ruta:", err);
       showOrderToast("Error de red al optimizar");
@@ -1580,7 +1606,7 @@ export default function HojaDeRutaPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Nav Tabs */}
-      <div className="bg-muted rounded-xl p-1 inline-flex">
+      <div className="bg-muted rounded-xl p-1 inline-flex max-w-full overflow-x-auto">
         {navTabs.map((tab) => (
           <Link
             key={tab.href}
@@ -1607,7 +1633,7 @@ export default function HojaDeRutaPage() {
             <p className="text-sm text-muted-foreground hidden sm:block">Gestiona entregas pendientes, cobros y hoja de ruta</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {hojaToken && (
             <Button variant="outline" size="sm" onClick={() => setShowShareDialog(true)}>
               <ExternalLink className="w-4 h-4 mr-1.5" />
@@ -1643,8 +1669,8 @@ export default function HojaDeRutaPage() {
       </div>
 
       {/* Pendientes / Historial tabs */}
-      <div className="flex items-center justify-between">
-        <div className="bg-muted rounded-lg p-1 inline-flex">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="bg-muted rounded-lg p-1 inline-flex max-w-full overflow-x-auto">
           <button
             onClick={() => setActiveTab("pendientes")}
             className={`rounded-md px-5 py-2 text-sm transition-all ${
@@ -1665,7 +1691,7 @@ export default function HojaDeRutaPage() {
           </button>
         </div>
         {activeTab === "pendientes" && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
               <input
                 type="checkbox"
@@ -1892,7 +1918,7 @@ export default function HojaDeRutaPage() {
                       )}
 
                       {/* Day orders table — desktop */}
-                      <div className="overflow-x-auto hidden lg:block">
+                      <div className="overflow-x-auto hidden xl:block">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b text-left text-muted-foreground">
@@ -1975,7 +2001,7 @@ export default function HojaDeRutaPage() {
                       </div>
 
                       {/* Day orders — mobile cards */}
-                      <div className="lg:hidden space-y-2">
+                      <div className="xl:hidden space-y-2">
                         {dayVentas.map((venta) => {
                           const pagos = historialPagos[venta.id] || [];
                           const cobradoReal = pagos.filter(p => !p.metodo.includes("Nota de Cr")).reduce((a, p) => a + p.monto, 0);

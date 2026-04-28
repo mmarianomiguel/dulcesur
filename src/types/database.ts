@@ -109,6 +109,8 @@ export interface Empresa {
   situacion_iva: string;
   domicilio: string | null;
   localidad: string | null;
+  lat: number | null;
+  lng: number | null;
   telefono: string | null;
   email: string | null;
   punto_venta: string;

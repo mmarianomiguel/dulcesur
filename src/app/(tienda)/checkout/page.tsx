@@ -66,6 +66,7 @@ interface TiendaConfig {
   horario_atencion_inicio: string;
   horario_atencion_fin: string;
   dias_atencion: string[];
+  minimo_unidades_mayorista: number;
 }
 
 
@@ -235,6 +236,67 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const [stockFixes, setStockFixes] = useState<Record<string, { stock: number }> | null>(null);
   const [showItemsDetail, setShowItemsDetail] = useState(false);
+  // Mapa producto_id → { hasMulti: tiene presentación con cantidad > 1, stock: stock disponible }
+  // Usado para detectar violaciones del mínimo mayorista (cliente compra <3 unidades sueltas
+  // de un producto que también se vende por caja).
+  const [multiPresInfo, setMultiPresInfo] = useState<Record<string, { hasMulti: boolean; stock: number }>>({});
+  const [minQtyDismissed, setMinQtyDismissed] = useState(false);
+
+  // Carga info de presentaciones + stock para detectar violaciones del mínimo mayorista.
+  useEffect(() => {
+    const productIds = [...new Set(items.map((i) => i.id.split("_")[0]))];
+    if (productIds.length === 0) { setMultiPresInfo({}); return; }
+    let cancelled = false;
+    (async () => {
+      const [{ data: presData }, { data: prodData }] = await Promise.all([
+        supabase.from("presentaciones").select("producto_id, cantidad").in("producto_id", productIds),
+        supabase.from("productos").select("id, stock").in("id", productIds),
+      ]);
+      if (cancelled) return;
+      const stockMap: Record<string, number> = {};
+      for (const p of prodData || []) stockMap[p.id] = p.stock || 0;
+      const hasMultiMap: Record<string, boolean> = {};
+      for (const pr of presData || []) {
+        if ((pr.cantidad || 0) > 1) hasMultiMap[pr.producto_id] = true;
+      }
+      const info: Record<string, { hasMulti: boolean; stock: number }> = {};
+      for (const pid of productIds) {
+        info[pid] = { hasMulti: !!hasMultiMap[pid], stock: stockMap[pid] || 0 };
+      }
+      setMultiPresInfo(info);
+    })();
+    return () => { cancelled = true; };
+  }, [items]);
+
+  // Items del carrito que están en presentación "Unidad" (unidades_por_presentacion = 1),
+  // con cantidad < mínimo, stock suficiente, y producto que tiene otra presentación caja/pack.
+  const minQty = config?.minimo_unidades_mayorista ?? 3;
+  const minQtyViolations = items.filter((item) => {
+    const presUnits = item.unidades_por_presentacion || 1;
+    if (presUnits !== 1) return false; // Solo aplica a unidades sueltas (no medio carton, no cajas)
+    if (item.cantidad >= minQty) return false;
+    const prodId = item.id.split("_")[0];
+    const info = multiPresInfo[prodId];
+    if (!info) return false;
+    if (!info.hasMulti) return false; // Producto sin presentación de caja → no aplica
+    if (info.stock < minQty) return false; // Stock insuficiente, problema del comercio
+    return true;
+  });
+
+  const adjustMinQty = () => {
+    const updated = items.map((item) => {
+      const isViolation = minQtyViolations.some((v) => v.id === item.id);
+      if (!isViolation) return item;
+      const prodId = item.id.split("_")[0];
+      const info = multiPresInfo[prodId];
+      const targetQty = Math.min(minQty, info?.stock ?? minQty);
+      return { ...item, cantidad: targetQty };
+    });
+    setItems(updated);
+    localStorage.setItem("carrito", JSON.stringify(updated));
+    window.dispatchEvent(new Event("cart-updated"));
+    showToast(`Cantidades ajustadas al mínimo mayorista (${minQty})`);
+  };
 
   const adjustCart = () => {
     if (!stockFixes) return;
@@ -270,6 +332,7 @@ export default function CheckoutPage() {
         horario_atencion_inicio: data.horario_atencion_inicio ?? "08:00",
         horario_atencion_fin: data.horario_atencion_fin ?? "18:00",
         dias_atencion: data.dias_atencion ?? [],
+        minimo_unidades_mayorista: data.minimo_unidades_mayorista ?? 3,
       };
       setConfig(cfg);
       configRef.current = cfg;
@@ -1167,6 +1230,45 @@ export default function CheckoutPage() {
               Ajustar carrito automáticamente
             </button>
           )}
+          </div>
+        </div>
+      )}
+
+      {/* Aviso mínimo mayorista */}
+      {minQtyViolations.length > 0 && !minQtyDismissed && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5">
+          <div className="flex items-start gap-3 mb-3">
+            <span className="text-amber-500 text-lg mt-0.5 shrink-0">⚠️</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-900">Tenés productos con menos de {minQty} unidades</p>
+              <p className="text-xs text-amber-700 mt-1">
+                Los productos sueltos se venden mínimo {minQty} unidades para los precios mayoristas:
+              </p>
+            </div>
+          </div>
+          <ul className="space-y-1 mb-4 ml-8">
+            {minQtyViolations.map((v) => (
+              <li key={v.id} className="text-sm text-amber-900">
+                • <span className="font-medium">{v.nombre}</span>
+                <span className="text-amber-700"> — {v.cantidad} {v.cantidad === 1 ? "unidad" : "unidades"}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-col sm:flex-row gap-2 ml-8">
+            <button
+              type="button"
+              onClick={adjustMinQty}
+              className="bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+            >
+              Ajustar todos al mínimo ({minQty})
+            </button>
+            <button
+              type="button"
+              onClick={() => setMinQtyDismissed(true)}
+              className="bg-transparent border border-amber-300 text-amber-800 hover:bg-amber-100 text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+            >
+              Continuar igual
+            </button>
           </div>
         </div>
       )}
