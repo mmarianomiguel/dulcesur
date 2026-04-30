@@ -2250,23 +2250,22 @@ export default function ListaPreciosPage() {
           ctx.restore();
         }
 
-        // ── TOP: Logo centrado ──
+        // ── TOP: Logo + date pill ──
         if (logoImg) {
           const logoH = config.story_logoH;
           const logoW = logoH * (logoImg.width / logoImg.height);
-          ctx.drawImage(logoImg, (W - logoW) / 2, 80, logoW, logoH);
+          ctx.drawImage(logoImg, 70, 90, logoW, logoH);
         }
 
-        // Date pill arriba a la derecha (mantiene su lugar)
         if (opts.mostrarRangoFechas) {
           const dateTxt = (opts.rangoFechas.trim() || weekRangeText()).toUpperCase();
-          ctx.font = "600 30px Arial, sans-serif";
+          ctx.font = "600 34px Arial, sans-serif";
           const tw = ctx.measureText(dateTxt).width;
-          const padX = 26, pillH = 54;
+          const padX = 32, pillH = 62;
           const pillW = tw + padX * 2;
           const pillX = W - 70 - pillW;
-          const pillY = 100;
-          ctx.strokeStyle = "#222"; ctx.lineWidth = 2.5; ctx.fillStyle = "#ffffff";
+          const pillY = 115;
+          ctx.strokeStyle = "#222"; ctx.lineWidth = 3; ctx.fillStyle = "#ffffff";
           roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
           ctx.fill(); ctx.stroke();
           ctx.fillStyle = "#222";
@@ -2274,45 +2273,23 @@ export default function ListaPreciosPage() {
           ctx.fillText(dateTxt, pillX + padX, pillY + pillH / 2 + 2);
         }
 
-        // ── Título grande estilo "OFERTAS" ──
-        // Usa opts.etiquetaBadge como título principal. Si está vacío, no se dibuja.
-        const tituloPrincipal = opts.etiquetaBadge.trim().toUpperCase();
-        const accentColor = "#e91e63"; // pink/magenta — coincide con la estética del fondo rosa
-        if (tituloPrincipal) {
-          ctx.save();
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          // Auto-fit: arrancamos en 220px y achicamos si no entra
-          const maxTitleWidth = W - 160;
-          let tituloSize = 220;
-          ctx.font = `900 ${tituloSize}px "Arial Black", Impact, sans-serif`;
-          while (ctx.measureText(tituloPrincipal).width > maxTitleWidth && tituloSize > 90) {
-            tituloSize -= 8;
-            ctx.font = `900 ${tituloSize}px "Arial Black", Impact, sans-serif`;
-          }
-          // Outline blanco grueso (efecto sticker)
-          ctx.lineJoin = "round";
-          ctx.miterLimit = 2;
-          ctx.lineWidth = 18;
-          ctx.strokeStyle = "#ffffff";
-          ctx.strokeText(tituloPrincipal, W / 2, 290);
-          // Sombra debajo del fill (offset rosa más oscuro)
-          ctx.fillStyle = `${accentColor}33`;
-          ctx.fillText(tituloPrincipal, W / 2 + 8, 290 + 8);
-          // Fill principal pink
-          ctx.fillStyle = accentColor;
-          ctx.fillText(tituloPrincipal, W / 2, 290);
-          ctx.restore();
+        // Dotted divider under top row
+        dottedLine(ctx, 70, 250, W - 70, 250, "#b8a47a");
 
-          // Subtítulo cursivo "¡imperdible!" — sutil, chico, color rosa con leve transparencia
+        // ── Slanted badge ──
+        if (opts.etiquetaBadge.trim()) {
           ctx.save();
-          ctx.translate(W / 2, 400);
+          ctx.translate(150, 345);
           ctx.rotate(-3 * Math.PI / 180);
-          ctx.font = `italic 500 44px "Brush Script MT", "Lucida Handwriting", cursive`;
-          ctx.fillStyle = `${accentColor}cc`; // 80% opacity
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("¡imperdible!", 0, 0);
+          ctx.fillStyle = "#f4c828"; ctx.strokeStyle = "#222"; ctx.lineWidth = 3;
+          const badgeText = `★  ${opts.etiquetaBadge.trim().toUpperCase()}`;
+          ctx.font = `900 ${config.story_tamañoBadge}px Arial, sans-serif`;
+          const bw = ctx.measureText(badgeText).width + 60;
+          const bh = 80;
+          roundRect(ctx, 0, 0, bw, bh, 10);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#222"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(badgeText, bw / 2, bh / 2 + 2);
           ctx.restore();
         }
 
