@@ -7,8 +7,9 @@ export const revalidate = 60;
 export default async function TiendaHomePage() {
   const supabase = createServerSupabase();
 
-  // 1. Fetch blocks + config in parallel
-  const [bloquesRes, configRes] = await Promise.all([
+  // 1. Fetch blocks + config + programación de hero activa en paralelo
+  const nowIso = new Date().toISOString();
+  const [bloquesRes, configRes, heroProgRes] = await Promise.all([
     supabase
       .from("pagina_inicio_bloques")
       .select("*")
@@ -19,9 +20,29 @@ export default async function TiendaHomePage() {
       .select("dias_badge_nuevo")
       .limit(1)
       .single(),
+    supabase
+      .from("hero_programaciones")
+      .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin")
+      .eq("activo", true)
+      .lte("fecha_desde", nowIso)
+      .gte("fecha_hasta", nowIso)
+      .order("prioridad", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const blocks = (bloquesRes.data || []) as any[];
+
+  // Si hay una programación activa, sobreescribe el config del bloque hero.
+  if (heroProgRes.data) {
+    const heroIdx = blocks.findIndex((b) => b.tipo === "hero");
+    if (heroIdx >= 0) {
+      blocks[heroIdx] = {
+        ...blocks[heroIdx],
+        config: { ...blocks[heroIdx].config, ...heroProgRes.data },
+      };
+    }
+  }
   const diasNuevo: number = configRes.data?.dias_badge_nuevo ?? 5;
   const tipos = blocks.map((b) => b.tipo);
 

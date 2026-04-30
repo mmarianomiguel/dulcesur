@@ -1134,6 +1134,12 @@ export default function PaginaInicioEditor() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/admin/configuracion/pagina-inicio/programaciones">
+            <Button variant="outline" size="sm">
+              <Megaphone className="w-3.5 h-3.5 mr-1.5" />
+              Plantillas y programaciones
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"
