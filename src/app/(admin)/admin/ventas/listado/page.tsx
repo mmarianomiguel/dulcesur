@@ -2221,9 +2221,9 @@ export default function ListadoVentasPage() {
             .eq("combo_id", item.producto_id);
           for (const ci of comboItems || []) {
             const compUnits = unitsToRestore * (ci as any).cantidad;
-            const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: (ci as any).producto_id, p_change: compUnits });
-            const stockAntes = (stockResult?.new_stock ?? 0) - compUnits;
-            const stockDespues = stockResult?.new_stock ?? 0;
+            const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: (ci as any).producto_id, p_change: compUnits });
+            const stockAntes = (stockResult?.stock_despues ?? 0) - compUnits;
+            const stockDespues = stockResult?.stock_despues ?? 0;
             await supabase.from("stock_movimientos").insert({
               producto_id: (ci as any).producto_id,
               tipo: "anulacion",
@@ -2237,9 +2237,9 @@ export default function ListadoVentasPage() {
           }
         } else {
           // Regular product: atomic stock update
-          const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: unitsToRestore });
-          const stockAntes = (stockResult?.new_stock ?? 0) - unitsToRestore;
-          const stockDespues = stockResult?.new_stock ?? 0;
+          const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: item.producto_id, p_change: unitsToRestore });
+          const stockAntes = (stockResult?.stock_despues ?? 0) - unitsToRestore;
+          const stockDespues = stockResult?.stock_despues ?? 0;
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id,
             tipo: "anulacion",
@@ -2344,9 +2344,9 @@ export default function ListadoVentasPage() {
             .eq("combo_id", item.producto_id);
           for (const ci of comboItems || []) {
             const compUnits = unitsToDecrement * (ci as any).cantidad;
-            const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: (ci as any).producto_id, p_change: -compUnits });
-            const stockAntes = (stockResult?.new_stock ?? 0) + compUnits;
-            const stockDespues = stockResult?.new_stock ?? 0;
+            const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: (ci as any).producto_id, p_change: -compUnits });
+            const stockAntes = (stockResult?.stock_despues ?? 0) + compUnits;
+            const stockDespues = stockResult?.stock_despues ?? 0;
             await supabase.from("stock_movimientos").insert({
               producto_id: (ci as any).producto_id,
               tipo: "Venta",
@@ -2360,9 +2360,9 @@ export default function ListadoVentasPage() {
           }
         } else {
           // Regular product: atomic stock update
-          const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: -unitsToDecrement });
-          const stockAntes = (stockResult?.new_stock ?? 0) + unitsToDecrement;
-          const stockDespues = stockResult?.new_stock ?? 0;
+          const { data: stockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: item.producto_id, p_change: -unitsToDecrement });
+          const stockAntes = (stockResult?.stock_despues ?? 0) + unitsToDecrement;
+          const stockDespues = stockResult?.stock_despues ?? 0;
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id,
             tipo: "Venta",

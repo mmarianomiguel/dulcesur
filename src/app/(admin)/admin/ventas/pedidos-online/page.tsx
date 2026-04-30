@@ -423,9 +423,10 @@ export default function PedidosOnlinePage() {
 
       for (const [productoId, diff] of Object.entries(stockDiffs)) {
         if (Math.abs(diff) < 0.001) continue;
-        const { data: stockDespues, error: rpcErr } = await supabase.rpc("atomic_update_stock", { p_product_id: productoId, p_change: diff });
+        const { data: stockResult, error: rpcErr } = await supabase.rpc("atomic_update_stock", { p_producto_id: productoId, p_change: diff });
         if (rpcErr) { errores.push(`Error stock ${productoId}: ${rpcErr.message}`); continue; }
-        const stockAntes = (stockDespues ?? 0) - diff;
+        const stockDespues = stockResult?.stock_despues ?? 0;
+        const stockAntes = stockResult?.stock_antes ?? (stockDespues - diff);
         await supabase.from("stock_movimientos").insert({
           producto_id: productoId, tipo: diff > 0 ? "Ajuste" : "Venta", cantidad: diff,
           cantidad_antes: stockAntes, cantidad_despues: stockDespues,
@@ -654,8 +655,9 @@ export default function PedidosOnlinePage() {
           for (const ci of comboItems || []) {
             const componentId = (ci as any).producto_id;
             const unitsToRestore = item.cantidad * (ci as any).cantidad;
-            const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: componentId, p_change: unitsToRestore });
-            const stockAntes = (newStock ?? 0) - unitsToRestore;
+            const { data: newStockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: componentId, p_change: unitsToRestore });
+            const newStock = newStockResult?.stock_despues ?? 0;
+            const stockAntes = newStock - unitsToRestore;
             await supabase.from("stock_movimientos").insert({
               producto_id: componentId, tipo: "anulacion", cantidad: unitsToRestore,
               cantidad_antes: stockAntes, cantidad_despues: newStock,
@@ -668,8 +670,9 @@ export default function PedidosOnlinePage() {
           // Regular product
           const upp = item.unidades_por_presentacion || 1;
           const unitsToRestore = item.cantidad * upp;
-          const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: unitsToRestore });
-          const stockAntes = (newStock ?? 0) - unitsToRestore;
+          const { data: newStockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: item.producto_id, p_change: unitsToRestore });
+          const newStock = newStockResult?.stock_despues ?? 0;
+          const stockAntes = newStock - unitsToRestore;
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id, tipo: "anulacion", cantidad: unitsToRestore,
             cantidad_antes: stockAntes, cantidad_despues: newStock,
@@ -697,8 +700,9 @@ export default function PedidosOnlinePage() {
           for (const ci of comboItems || []) {
             const componentId = (ci as any).producto_id;
             const unitsToDecrement = item.cantidad * (ci as any).cantidad;
-            const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: componentId, p_change: -unitsToDecrement });
-            const stockAntes = (newStock ?? 0) + unitsToDecrement;
+            const { data: newStockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: componentId, p_change: -unitsToDecrement });
+            const newStock = newStockResult?.stock_despues ?? 0;
+            const stockAntes = newStock + unitsToDecrement;
             await supabase.from("stock_movimientos").insert({
               producto_id: componentId, tipo: "Venta", cantidad: -unitsToDecrement,
               cantidad_antes: stockAntes, cantidad_despues: newStock,
@@ -711,8 +715,9 @@ export default function PedidosOnlinePage() {
           // Regular product
           const upp = item.unidades_por_presentacion || 1;
           const unitsToDecrement = item.cantidad * upp;
-          const { data: newStock } = await supabase.rpc("atomic_update_stock", { p_product_id: item.producto_id, p_change: -unitsToDecrement });
-          const stockAntes = (newStock ?? 0) + unitsToDecrement;
+          const { data: newStockResult } = await supabase.rpc("atomic_update_stock", { p_producto_id: item.producto_id, p_change: -unitsToDecrement });
+          const newStock = newStockResult?.stock_despues ?? 0;
+          const stockAntes = newStock + unitsToDecrement;
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id, tipo: "Venta", cantidad: -unitsToDecrement,
             cantidad_antes: stockAntes, cantidad_despues: newStock,

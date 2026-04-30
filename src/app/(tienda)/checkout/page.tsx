@@ -958,12 +958,12 @@ export default function CheckoutPage() {
           // Fallback: if RPC doesn't exist, decrement stock atomically
           for (const si of stockItems) {
             const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
-              p_product_id: si.producto_id,
+              p_producto_id: si.producto_id,
               p_change: -si.cantidad,
             });
             if (stockResult) {
-              const stockAntes = stockResult.old_stock ?? (stockResult.new_stock + si.cantidad);
-              const stockDespues = stockResult.new_stock ?? (stockAntes - si.cantidad);
+              const stockAntes = stockResult.stock_antes ?? 0;
+              const stockDespues = stockResult.stock_despues ?? (stockAntes - si.cantidad);
               if (stockDespues < 0) {
                 // Insufficient stock - rollback
                 await supabase.from("venta_items").delete().eq("venta_id", venta.id);
@@ -971,7 +971,7 @@ export default function CheckoutPage() {
                 await supabase.from("pedido_tienda_items").delete().eq("pedido_id", pedido.id);
                 await supabase.from("pedidos_tienda").delete().eq("id", pedido.id);
                 // Revert stock
-                await supabase.rpc("atomic_update_stock", { p_product_id: si.producto_id, p_change: si.cantidad });
+                await supabase.rpc("atomic_update_stock", { p_producto_id: si.producto_id, p_change: si.cantidad });
                 setErrors([`Stock insuficiente para ${si.descripcion}. Por favor revisá tu carrito.`]);
                 setSubmitting(false);
                 return;
