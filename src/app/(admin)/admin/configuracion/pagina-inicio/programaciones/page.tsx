@@ -63,7 +63,7 @@ interface HeroProgramacion {
   descuento_id: string | null;
 }
 
-interface ProductoLite { id: string; nombre: string; precio: number; imagen_url: string | null }
+interface ProductoLite { id: string; nombre: string; precio: number; precio_anterior: number | null; imagen_url: string | null }
 interface DescuentoLite { id: string; nombre: string; porcentaje: number | null; activo: boolean; fecha_inicio: string | null; fecha_fin: string | null }
 
 const PLACEHOLDER_RE = /\{([a-z_][a-z0-9_]*)\}/gi;
@@ -149,6 +149,7 @@ export default function ProgramacionesPage() {
   const [productosCache, setProductosCache] = useState<ProductoLite[]>([]);
   const [descuentosCache, setDescuentosCache] = useState<DescuentoLite[]>([]);
   const [productoSearch, setProductoSearch] = useState("");
+  const [productoSelected, setProductoSelected] = useState<ProductoLite | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -220,7 +221,7 @@ export default function ProgramacionesPage() {
     if (q.trim().length < 2) { setProductosCache([]); return; }
     const { data } = await supabase
       .from("productos")
-      .select("id, nombre, precio, imagen_url")
+      .select("id, nombre, precio, precio_anterior, imagen_url")
       .eq("activo", true)
       .eq("visibilidad", "visible")
       .ilike("nombre", `%${q}%`)
@@ -240,6 +241,7 @@ export default function ProgramacionesPage() {
     setProgProductoId(null);
     setProgDescuentoId(null);
     setProductoSearch("");
+    setProductoSelected(null);
     setEditingProg({
       id: "", template_id: null, tipo: "personalizado",
       titulo: "", subtitulo: "", boton_texto: "", boton_link: "",
@@ -262,8 +264,23 @@ export default function ProgramacionesPage() {
     setProgProductoId(p.producto_id);
     setProgDescuentoId(p.descuento_id);
     setProductoSearch("");
+    setProductoSelected(null);
     setEditingProg({ ...p });
     if (p.tipo === "oferta_descuento") ensureDescuentos();
+    if (p.tipo === "producto_destacado" && p.producto_id) {
+      // Hidratar el producto seleccionado para preview
+      supabase
+        .from("productos")
+        .select("id, nombre, precio, precio_anterior, imagen_url")
+        .eq("id", p.producto_id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setProductoSelected(data as ProductoLite);
+            setProductoSearch((data as any).nombre || "");
+          }
+        });
+    }
   };
 
   const onPickTemplate = (templateId: string) => {
@@ -273,6 +290,7 @@ export default function ProgramacionesPage() {
     setProgDescuentoId(null);
     setProductosCache([]);
     setProductoSearch("");
+    setProductoSelected(null);
     if (tpl?.tipo === "oferta_descuento") ensureDescuentos();
     if (tpl && editingProg) {
       const vals: Record<string, string> = {};
@@ -394,17 +412,33 @@ export default function ProgramacionesPage() {
         previewVals.nombre_descuento = d?.nombre || "(descuento auto)";
         previewVals.porcentaje = d?.porcentaje ? String(d.porcentaje) : "?";
       }
+      let prodInfo: any = null;
       if (tipo === "producto_destacado") {
-        const prod = productosCache.find((p) => p.id === progProductoId);
+        const prod = productoSelected || productosCache.find((p) => p.id === progProductoId);
         previewVals.nombre = prod?.nombre || "(producto)";
         previewVals.slug = prod?.id || "";
+        if (prod) {
+          const precio = Number(prod.precio || 0);
+          const precioAnt = Number(prod.precio_anterior || 0);
+          const tieneOferta = precioAnt > 0 && precioAnt > precio;
+          prodInfo = {
+            nombre: prod.nombre,
+            imagen_url: prod.imagen_url,
+            precio,
+            precio_anterior: precioAnt,
+            tiene_oferta: tieneOferta,
+            descuento_pct: tieneOferta ? Math.round(((precioAnt - precio) / precioAnt) * 100) : 0,
+          };
+        }
       }
       return {
+        tipo,
         titulo: fillPlaceholders(progTemplate.titulo, previewVals),
         subtitulo: fillPlaceholders(progTemplate.subtitulo, previewVals),
         boton_texto: fillPlaceholders(progTemplate.boton_texto, previewVals),
         color_inicio: editingProg.color_inicio,
         color_fin: editingProg.color_fin,
+        producto: prodInfo,
       };
     }
     return {
@@ -414,7 +448,7 @@ export default function ProgramacionesPage() {
       color_inicio: editingProg.color_inicio,
       color_fin: editingProg.color_fin,
     };
-  }, [editingProg, progTemplate, progValues, progAutoPct, progDescuentoId, descuentosCache, progProductoId, productosCache]);
+  }, [editingProg, progTemplate, progValues, progAutoPct, progDescuentoId, descuentosCache, progProductoId, productosCache, productoSelected]);
 
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-6xl">
@@ -653,7 +687,7 @@ export default function ProgramacionesPage() {
                             <button
                               key={p.id}
                               type="button"
-                              onClick={() => { setProgProductoId(p.id); setProductoSearch(p.nombre); setProductosCache([]); }}
+                              onClick={() => { setProgProductoId(p.id); setProductoSelected(p); setProductoSearch(p.nombre); setProductosCache([]); }}
                               className={`w-full text-left px-2 py-1.5 text-sm hover:bg-blue-50 flex items-center gap-2 ${progProductoId === p.id ? "bg-blue-100" : ""}`}
                             >
                               {p.imagen_url && <img src={p.imagen_url} alt="" className="w-8 h-8 rounded object-cover" />}
@@ -713,11 +747,42 @@ export default function ProgramacionesPage() {
               </div>
 
               {livePreview && (
-                <div className="rounded-lg p-4 text-white" style={{ background: `linear-gradient(135deg, ${livePreview.color_inicio}, ${livePreview.color_fin})` }}>
-                  <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">Vista previa</div>
-                  <div className="font-bold text-lg">{livePreview.titulo || "Título"}</div>
-                  <div className="text-sm opacity-90">{livePreview.subtitulo || "Subtítulo"}</div>
-                  {livePreview.boton_texto && <div className="inline-block mt-2 px-3 py-1 bg-white/20 rounded text-xs">{livePreview.boton_texto}</div>}
+                <div className="relative rounded-lg p-4 text-white overflow-hidden" style={{ background: `linear-gradient(135deg, ${livePreview.color_inicio}, ${livePreview.color_fin})` }}>
+                  <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                  <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-white/8 rounded-full blur-3xl pointer-events-none" />
+                  <div className="relative">
+                    <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">Vista previa</div>
+                    {livePreview.tipo === "producto_destacado" && livePreview.producto ? (
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          {livePreview.producto.tiene_oferta && (
+                            <span className="inline-block bg-yellow-400 text-gray-900 text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5 uppercase tracking-wide">
+                              ⚡ Oferta · {livePreview.producto.descuento_pct}% off
+                            </span>
+                          )}
+                          <div className="font-extrabold text-lg leading-tight line-clamp-2">{livePreview.titulo}</div>
+                          <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-xl font-bold">${livePreview.producto.precio.toLocaleString("es-AR")}</span>
+                            {livePreview.producto.tiene_oferta && (
+                              <span className="text-xs text-white/70 line-through">${livePreview.producto.precio_anterior.toLocaleString("es-AR")}</span>
+                            )}
+                          </div>
+                          {livePreview.boton_texto && <div className="inline-block mt-2 px-3 py-1 bg-white text-gray-900 rounded-full text-xs font-semibold">{livePreview.boton_texto} →</div>}
+                        </div>
+                        {livePreview.producto.imagen_url && (
+                          <div className="shrink-0 w-20 h-20 bg-white rounded-xl shadow-xl overflow-hidden flex items-center justify-center">
+                            <img src={livePreview.producto.imagen_url} alt="" className="max-w-full max-h-full object-contain p-1" />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="font-extrabold text-lg leading-tight">{livePreview.titulo || "Título"}</div>
+                        <div className="text-sm opacity-90">{livePreview.subtitulo || "Subtítulo"}</div>
+                        {livePreview.boton_texto && <div className="inline-block mt-2 px-3 py-1 bg-white/20 rounded text-xs">{livePreview.boton_texto}</div>}
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
