@@ -278,6 +278,22 @@ export default function ListaPreciosPage() {
   const [listaGroupMode, setListaGroupMode] = useState<"none" | "categoria" | "subcategoria">("categoria");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  // Fondo personalizado para el modo Story (persiste en localStorage)
+  const [fondoStoryBase64, setFondoStoryBase64] = useState<string | null>(() => {
+    try { return localStorage.getItem("listaPrecios-storyBg") || null; } catch { return null; }
+  });
+  const [fondoStoryOpacity, setFondoStoryOpacity] = useState<number>(() => {
+    try { const v = localStorage.getItem("listaPrecios-storyBgOpacity"); return v ? Number(v) : 0.6; } catch { return 0.6; }
+  });
+  useEffect(() => {
+    try {
+      if (fondoStoryBase64) localStorage.setItem("listaPrecios-storyBg", fondoStoryBase64);
+      else localStorage.removeItem("listaPrecios-storyBg");
+    } catch {}
+  }, [fondoStoryBase64]);
+  useEffect(() => {
+    try { localStorage.setItem("listaPrecios-storyBgOpacity", String(fondoStoryOpacity)); } catch {}
+  }, [fondoStoryOpacity]);
   // Sistema de 2 slots de logo persistidos en localStorage. Cada modo de PDF
   // recuerda qué slot prefiere (mapping en activeLogoByMode).
   type LogoSlot = { id: "slot1" | "slot2"; nombre: string; base64: string | null };
@@ -2172,17 +2188,57 @@ export default function ListaPreciosPage() {
         canvas.width = W; canvas.height = H;
         const ctx = canvas.getContext("2d")!;
 
-        // Background cream + subtle diagonal pattern
-        ctx.fillStyle = "#faf3e3";
-        ctx.fillRect(0, 0, W, H);
-        ctx.save();
-        ctx.globalAlpha = 0.04;
-        ctx.strokeStyle = "#8a6a2a";
-        ctx.lineWidth = 2;
-        for (let i = -H; i < W; i += 22) {
-          ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + H, H); ctx.stroke();
+        // Background: si hay fondo custom subido lo usamos, sino el patrón cream default
+        if (fondoStoryBase64) {
+          // Base blanca debajo (por si la imagen tiene transparencia)
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, W, H);
+          // Dibujar el fondo custom escalado a cover
+          try {
+            const bgImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+              const img = new window.Image();
+              img.crossOrigin = "anonymous";
+              img.onload = () => resolve(img);
+              img.onerror = reject;
+              img.src = fondoStoryBase64;
+            });
+            ctx.save();
+            ctx.globalAlpha = fondoStoryOpacity;
+            // Cover: escalar para que cubra todo W×H manteniendo aspect ratio
+            const imgRatio = bgImg.width / bgImg.height;
+            const canvasRatio = W / H;
+            let drawW: number, drawH: number, drawX: number, drawY: number;
+            if (imgRatio > canvasRatio) {
+              drawH = H;
+              drawW = H * imgRatio;
+              drawX = (W - drawW) / 2;
+              drawY = 0;
+            } else {
+              drawW = W;
+              drawH = W / imgRatio;
+              drawX = 0;
+              drawY = (H - drawH) / 2;
+            }
+            ctx.drawImage(bgImg, drawX, drawY, drawW, drawH);
+            ctx.restore();
+          } catch {
+            // Fallback al fondo default si la imagen falla
+            ctx.fillStyle = "#faf3e3";
+            ctx.fillRect(0, 0, W, H);
+          }
+        } else {
+          // Cream + subtle diagonal pattern (default)
+          ctx.fillStyle = "#faf3e3";
+          ctx.fillRect(0, 0, W, H);
+          ctx.save();
+          ctx.globalAlpha = 0.04;
+          ctx.strokeStyle = "#8a6a2a";
+          ctx.lineWidth = 2;
+          for (let i = -H; i < W; i += 22) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + H, H); ctx.stroke();
+          }
+          ctx.restore();
         }
-        ctx.restore();
 
         // ── TOP: Logo + date pill ──
         if (logoImg) {
@@ -2965,6 +3021,66 @@ export default function ListaPreciosPage() {
               </button>
             </div>
             <div className="p-6 space-y-5 overflow-y-auto">
+              {/* Fondo personalizado */}
+              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Fondo personalizado</p>
+                    <p className="text-[11px] text-muted-foreground">Subí una imagen (PNG/JPG) que se usa como base de la story.</p>
+                  </div>
+                  {fondoStoryBase64 && (
+                    <button
+                      onClick={() => setFondoStoryBase64(null)}
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-20 h-20 rounded-lg border border-dashed border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+                    {fondoStoryBase64 ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={fondoStoryBase64} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">Default</span>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <label className="cursor-pointer text-xs text-center inline-block border border-border rounded-md px-3 py-1.5 hover:bg-accent transition-colors">
+                      {fondoStoryBase64 ? "Cambiar imagen" : "Subir imagen"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const r = new FileReader();
+                          r.onload = () => setFondoStoryBase64(r.result as string);
+                          r.readAsDataURL(f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {fondoStoryBase64 && (
+                      <div>
+                        <label className="block text-[11px] text-muted-foreground mb-1">Opacidad ({Math.round(fondoStoryOpacity * 100)}%)</label>
+                        <input
+                          type="range"
+                          min={20}
+                          max={100}
+                          step={5}
+                          value={Math.round(fondoStoryOpacity * 100)}
+                          onChange={(e) => setFondoStoryOpacity(Number(e.target.value) / 100)}
+                          className="w-full accent-primary"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-2">Tipo de oferta</label>
                 <div className="grid grid-cols-2 gap-2">
