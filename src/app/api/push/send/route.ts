@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       body: ascii(lines.join("\n")),
       tag: `pedido-${numero}`,
       metodo_entrega,
-      url: "/admin/ventas/pedidos-online",
+      url: "/admin/ventas/listado",
     });
 
     // Get only admin/staff subscriptions (user_id linked, not tienda clients)
